@@ -208,6 +208,7 @@ The `IngestionPipeline` is instantiated per-user inside `UserManager._build_cont
 - Wallet credential hashes live in per-user settings. First valid Bearer request makes credentials mandatory. Revocation keeps intake closed. Never put credentials in URL query parameters or ordinary status responses.
 - OAuth state is opaque, single-use, expires after ten minutes, and is bound to the initiating web session. Telegram `/reauth` links to authenticated Settings.
 - Recovery CLI: `python -m scripts.backup --help`; see `docs/operations/backups.md`. Never copy live SQLite files for backup.
+- Pre-upgrade audit: `python -m scripts.db_audit DATABASE` opens an existing database read-only and reports integrity, foreign-key, missing-constraint, and migration findings. Run it on isolated restored copies before initialization. Retained source-event/outbox links to deleted transactions are informational, not orphans to clean up automatically. It never migrates or repairs data.
 
 ### Parser System
 

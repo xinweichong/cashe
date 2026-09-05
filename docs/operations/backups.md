@@ -41,6 +41,25 @@ python -m scripts.backup restore --key-file /secure/cashe-backup.key --snapshot 
 
 Restoration authenticates the archive, verifies every checksum and database, and rejects unsafe archive paths before publishing the directory. Restored files appear under `data/` and `protected/`. The test suite verifies restoration of committed WAL data and reopening through the current production migrations.
 
+Before opening restored databases through application initialization, run the read-only audit against the admin database and each user database:
+
+```sh
+python -m scripts.db_audit /secure/cashe-restore-drill/data/app.db
+python -m scripts.db_audit /secure/cashe-restore-drill/data/users/alice/expense_tracker.db
+```
+
+The audit opens an existing database with SQLite `mode=ro` and a consistent read transaction. It includes committed WAL data, runs integrity and declared foreign-key checks, and checks known application relationships whose constraints may be missing in older schemas. It never initializes the application schema, applies migrations, repairs rows, or enables foreign-key enforcement for application connections. SQLite may require access to WAL/shared-memory sidecars when inspecting a live database; an isolated restored copy is the preferred audit target.
+
+The JSON report contains schema identifiers and counts, without row IDs, financial values, raw evidence, or credentials. Exit codes are:
+
+- `0`: the implemented integrity/reference checks passed.
+- `1`: integrity/reference problems, absent finance tables, missing constraints, or unknown migration versions require review.
+- `2`: the database could not be read or its schema was not recognized. A mistyped path does not create a new database.
+
+`pending_migrations` reports upgrades without applying them. `retained_links_to_deleted_transactions` counts source observations and outbox records whose transactions were deleted; these links intentionally survive deletion and are informational. Do not delete them merely to clear an audit report. A clean audit does not validate monetary semantics, capture completeness, or application boot behavior.
+
+Review any issues against a representative isolated copy before planning repairs or consistently enabling foreign-key enforcement. Preserve the verified snapshot and record decisions about each orphan; the audit performs no automatic cleanup. Repeat the audit after an isolated upgrade and compare the results with the pre-upgrade report.
+
 Before a production cutover, boot the restored copy in an isolated environment with pollers, Telegram, webhooks, and external AI disabled. Check users, transaction counts, source-event links, and key reports. Preserve the current production data directory and post-snapshot source evidence for replay. Do not point production services at the restored directory until those checks pass.
 
 Automated tests use synthetic fixtures. A real OCI/R2 restore drill has not yet been performed by this implementation.

@@ -33,7 +33,7 @@ Working branch: `feature/cashe-next-level`, created from `develop` on 2026-09-05
 2. Explicit timestamp precision/payment identity and invalid Wallet capture are implemented in the continuations below. Legacy evidence remains conservatively unknown. Ambiguous candidates are preserved rather than merged; duplicate review/resolution is still pending.
 3. Configure OCI daily backup scheduling, protected R2 credentials, backup-age monitoring, and an external heartbeat; complete a real isolated restore/boot drill. Keep the encryption key off-host separately.
 4. Verify the Wallet credential upgrade on a real iPhone Shortcut, and OAuth/capture against a test Gmail account. Complete user migration before globally disabling legacy unauthenticated intake.
-5. Audit existing foreign-key orphans and validate upgrade/rollback against representative old production databases. Automated migration/recovery tests currently use synthetic data.
+5. A read-only database audit CLI is implemented below. Run it against representative old production snapshots and validate upgrade/rollback in isolation; automated migration/recovery/audit tests still use synthetic data.
 6. Complete shared monetary semantics, unresolved FX handling, and date/period consistency as the spending-facts interface is introduced. Float storage and indicative FX fallbacks remain in this slice.
 
 ## Subsequent phases remain open
@@ -84,3 +84,16 @@ Verification: **688 backend tests passed**, with the same four existing datetime
 - Source metadata remains excluded from public capture-issue responses. No existing transactions are rewritten or merged automatically. A duplicate-resolution interface is still required for preserved uncertain observations.
 
 Verification: **713 backend tests passed**, with the same four existing datetime deprecation warnings. Added 25 cases covering date-only arrival order, true midnight matches, legacy unknown evidence, comparable/conflicting payment identities, metadata replay, Wallet timestamp formats/hash compatibility, malformed UOB times, and migration preservation. `git diff --check` passed. The outbox and reconciliation continuations are committed together as a verified trust-foundation change; no production services or frontend files changed.
+
+
+## 2026-09-06 continuation — read-only pre-upgrade database audit
+
+The prior outbox and reconciliation work was committed as `7f35c18` (`feat: make ingestion follow-ups durable and reconciliation evidence explicit`). Subsequent verified slices are committed as they are completed.
+
+- Added `python -m scripts.db_audit DATABASE`, using only the standard library. It opens an existing user/admin database with `mode=ro`, enables query-only access, and checks a consistent read transaction without running application initialization.
+- Reports SQLite integrity and foreign-key violations, known missing relationship constraints (with orphan counts), absent feature tables, and applied/pending/unknown migration versions. Missing paths are rejected without creating a database.
+- Source observations and outbox links intentionally retained after transaction deletion are counted separately as informational evidence. No rows are repaired, deleted, or migrated.
+- JSON contains schema identifiers and counts, excluding row IDs, stored financial values, raw payloads, and credentials. Exit statuses distinguish passed checks (0), reviewable issues (1), and unreadable/unrecognized databases (2).
+- Added the pre-initialization audit procedure to `docs/operations/backups.md`. Production snapshot audits and real OCI/R2 restore/boot validation remain outstanding; this utility does not claim those operational checks are complete.
+
+Verification: **15 focused audit/backup tests passed**, including committed WAL orphans, byte-preserving closed-database reads, admin session references, undeclared constraints, implicit primary-key references, retained evidence, migration reporting, safe error output, and audit of an encrypted/restored synthetic snapshot before initialization. The preceding full backend baseline was 713 passing tests. `git diff --check` passed. This standalone operator slice changes no application runtime or frontend behavior and is committed on completion.
