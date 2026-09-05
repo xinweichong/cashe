@@ -248,3 +248,60 @@ async def test_wallet_upgrade_rotation_and_revocation(client, in_memory_db):
     storage.revoke_wallet_credential()
     assert (await client.post(_url(), json=payload, headers={"Authorization": "Bearer credential-two"})).status_code == 401
     assert (await client.post(_url(), json=payload)).status_code == 401
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(('body', 'status'), [
+    (b'{"merchant":"Private Merchant"}', 400),
+    (b'{"amount":12,"merchant":{}}', 422),
+    (b'{"amount":"secret-invalid-amount","merchant":"Private Merchant"}', 400),
+    (b'{"amount":"NaN","merchant":"Private Merchant"}', 400),
+    (b'{"amount":12,"merchant":" "}', 400),
+    (b'{broken-json', 422),
+    (b'\xff', 422),
+])
+async def test_invalid_wallet_request_is_retained(client, in_memory_db, body, status):
+    import base64
+    from src.ingestion import IngestionPipeline
+
+    response = await client.post(_url(), content=body)
+    assert response.status_code == status
+    assert 'secret-invalid-amount' not in response.text
+    storage = Storage(in_memory_db)
+    issues = storage.list_capture_issues()
+    assert len(issues) == 1
+    issue = issues[0]
+    assert issue['source'] == 'wallet_request'
+    assert issue['status'] == 'unrecognized'
+    assert 'payload' not in issue and 'source_id' not in issue
+    row = in_memory_db.execute('SELECT payload FROM source_events').fetchone()
+    assert base64.b64decode(row['payload']) == body
+    assert in_memory_db.execute('SELECT COUNT(*) FROM transactions').fetchone()[0] == 0
+    pipeline = IngestionPipeline(storage)
+    pipeline.retry_pending()
+    assert storage.list_capture_issues()[0]['attempts'] == 1
+    storage.retry_source_event(issue['id'])
+    pipeline.retry_pending()
+    assert storage.list_capture_issues()[0]['status'] == 'unrecognized'
+
+
+@pytest.mark.asyncio
+async def test_unauthorized_invalid_wallet_body_is_not_retained(client, in_memory_db):
+    storage = Storage(in_memory_db)
+    storage.revoke_wallet_credential()
+    response = await client.post(_url(), content=b'{broken')
+    assert response.status_code == 401
+    assert in_memory_db.execute('SELECT COUNT(*) FROM source_events').fetchone()[0] == 0
+
+
+@pytest.mark.asyncio
+async def test_wallet_raw_evidence_links_reformatted_duplicate(client, in_memory_db):
+    import json
+    payload = {'amount': 12.5, 'merchant': 'Cafe', 'date': '2026-09-06T12:00:00', 'extra': 'original evidence'}
+    first = await client.post(_url(), json=payload)
+    second = await client.post(_url(), content=json.dumps(payload, indent=2))
+    assert first.json()['transaction_id'] == second.json()['transaction_id']
+    assert second.json()['status'] == 'duplicate'
+    rows = in_memory_db.execute("SELECT * FROM source_events WHERE source = 'wallet_request'").fetchall()
+    assert len(rows) == 2
+    assert all(row['status'] == 'processed' and row['transaction_id'] == first.json()['transaction_id'] for row in rows)

@@ -182,3 +182,56 @@ def test_poison_events_stop_after_five_attempts(storage):
     event = storage.get_source_event('apple_wallet', 'bad-event')
     assert event['status'] == 'failed'
     assert event['attempts'] == 5
+
+
+def test_wallet_request_replays_after_commit_before_link(storage, monkeypatch):
+    import base64
+    import hashlib
+    body = b'{"amount":12.50,"merchant":"Cafe","date":"2026-09-06T12:00:00"}'
+    pipeline = IngestionPipeline(storage)
+    finish = storage.finish_source_event
+
+    def crash(event_id, status, *args, **kwargs):
+        if event_id == 1:
+            raise RuntimeError('crash before raw observation link')
+        return finish(event_id, status, *args, **kwargs)
+
+    monkeypatch.setattr(storage, 'finish_source_event', crash)
+    with pytest.raises(RuntimeError):
+        pipeline.ingest_wallet_request(body)
+    raw = storage.get_source_event('wallet_request', hashlib.sha256(body).hexdigest())
+    assert raw['status'] == 'pending'
+    assert base64.b64decode(raw['payload']) == body
+    monkeypatch.setattr(storage, 'finish_source_event', finish)
+    pipeline.retry_pending()
+    raw = storage.get_source_event('wallet_request', hashlib.sha256(body).hexdigest())
+    assert raw['status'] == 'processed'
+    assert storage.get_transaction(raw['transaction_id'])['merchant'] == 'Cafe'
+    assert storage._conn.execute('SELECT COUNT(*) FROM transactions').fetchone()[0] == 1
+
+
+def test_wallet_request_replays_before_parsing(storage):
+    import base64
+    import hashlib
+    body = b'{"amount":12.50,"merchant":"Cafe"}'
+    storage.record_source_event('wallet_request', hashlib.sha256(body).hexdigest(), base64.b64encode(body).decode())
+    IngestionPipeline(storage).retry_pending()
+    assert storage.list_capture_issues() == []
+    assert storage._conn.execute('SELECT COUNT(*) FROM transactions').fetchone()[0] == 1
+
+
+def test_wallet_raw_and_parsed_failures_have_bounded_retries(storage, monkeypatch):
+    pipeline = IngestionPipeline(storage)
+    calls = []
+
+    def fail(**kwargs):
+        calls.append(kwargs)
+        raise RuntimeError('storage unavailable')
+
+    monkeypatch.setattr(storage, 'insert_transaction', fail)
+    with pytest.raises(RuntimeError):
+        pipeline.ingest_wallet_request(b'{"amount":12.50,"merchant":"Cafe"}')
+    for _ in range(10):
+        pipeline.retry_pending()
+    assert len(calls) == 5
+    assert all(issue['attempts'] == 5 for issue in storage.list_capture_issues())

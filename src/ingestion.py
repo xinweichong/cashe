@@ -1,10 +1,13 @@
 import logging
 import json
+import base64
+import hashlib
 from dataclasses import asdict
 from typing import Optional, Callable
 
 from src.parsers.base import ParseResult
 from src.storage import Storage
+from src.wallet_capture import WalletPayloadError, parse_wallet_request
 
 logger = logging.getLogger(__name__)
 
@@ -45,10 +48,41 @@ class IngestionPipeline:
                 self.storage.finish_source_event(event["id"], "failed", error_code=type(exc).__name__)
                 raise
 
+    def ingest_wallet_request(self, body: bytes) -> tuple[Optional[dict], Optional[int]]:
+        """Retain authorized request bytes before validation; replay through ingestion."""
+        with self.storage.reconciliation_lock():
+            event = self.storage.record_source_event(
+                "wallet_request", hashlib.sha256(body).hexdigest(),
+                base64.b64encode(body).decode("ascii"),
+            )
+            if event["status"] == "processed":
+                return None, event["transaction_id"]
+            try:
+                result = parse_wallet_request(body)
+            except WalletPayloadError:
+                self.storage.finish_source_event(event["id"], "unrecognized", error_code="WalletPayloadError")
+                raise
+            try:
+                tx = self.ingest(result)
+                parsed_event = self.storage.get_source_event(result.source, result.source_id)
+                tx_id = parsed_event["transaction_id"]
+                self.storage.finish_source_event(event["id"], "processed", tx_id)
+                return tx, tx_id
+            except Exception as exc:
+                self.storage.finish_source_event(event["id"], "failed", error_code=type(exc).__name__)
+                raise
+
     def retry_pending(self) -> None:
         """Bounded retries for parsed observations, including Wallet-only users."""
         for event in self.storage.pending_source_events(None, limit=100):
+            current = self.storage.get_source_event(event["source"], event["source_id"])
+            # Replaying a raw request may already have retried its parsed event.
+            if current["status"] not in ("pending", "failed") or current["attempts"] != event["attempts"]:
+                continue
             try:
+                if event["source"] == "wallet_request":
+                    self.ingest_wallet_request(base64.b64decode(event["payload"], validate=True))
+                    continue
                 payload = json.loads(event["payload"])
                 historical = payload.pop("_historical", False)
                 self.ingest(ParseResult(**payload), historical=historical)
