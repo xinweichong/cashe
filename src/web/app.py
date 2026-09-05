@@ -7,9 +7,9 @@ import hashlib
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
+from datetime import date, datetime
 from functools import partial
-from typing import Optional
+from typing import Literal, Optional
 
 import bcrypt
 from fastapi import FastAPI, Request, Response, HTTPException, Depends, Query
@@ -21,7 +21,7 @@ from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 
 from src.config import local_now
 from src.web.auth import verify_password, create_session, verify_session, destroy_session
-from src.web.contracts import CaptureFollowup, CaptureIssue, QueuedResponse
+from src.web.contracts import CaptureFollowup, CaptureIssue, MonthSpendingFacts, QueuedResponse, SpendingEvidence
 from src.analytics import (
     load_summary,
     get_yoy_comparison,
@@ -62,6 +62,7 @@ def create_dashboard_app(
     exchange_service=None,
     host_base_url: str = "",
     llm_service=None,
+    timezone: str = "Asia/Singapore",
 ) -> FastAPI:
     app = FastAPI(title="Expense Tracker Dashboard")
     app.add_middleware(GZipMiddleware, minimum_size=500)
@@ -217,6 +218,25 @@ def create_dashboard_app(
         except ValueError as exc:
             raise HTTPException(status_code=404 if str(exc).endswith("not found") else 409, detail=str(exc))
         return QueuedResponse()
+
+    @app.get("/api/v2/spending/month", response_model=MonthSpendingFacts)
+    async def month_spending(as_of: date | None = None, storage=Depends(_get_storage)):
+        try:
+            return await _db(storage.get_month_spending_facts, as_of, timezone)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from None
+
+    @app.get("/api/v2/spending/evidence", response_model=SpendingEvidence)
+    async def spending_evidence(
+        start: date, end: date, category: str | None = None,
+        measure: Literal["spending", "income", "unresolved"] = "spending",
+        limit: int = Query(50, ge=1, le=100), offset: int = Query(0, ge=0),
+        storage=Depends(_get_storage),
+    ):
+        if end < start:
+            raise HTTPException(status_code=422, detail="End must not precede start")
+        return await _db(storage.get_spending_evidence, start, end, timezone=timezone,
+                         category=category, measure=measure, limit=limit, offset=offset)
 
     # ── Current user ──────────────────────────────────────────────────────────
 

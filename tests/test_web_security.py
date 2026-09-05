@@ -283,6 +283,10 @@ class TestCrossUserDataIsolation:
             assert r.status_code == 200
             alice_txs = r.json()
             assert any(t["merchant"] == "Secret Shop" for t in alice_txs)
+            facts = await ac.get('/api/v2/spending/month?as_of=2026-01-06')
+            assert facts.json()['current']['spending']['minor_units'] == 9900
+            evidence = await ac.get('/api/v2/spending/evidence?start=2026-01-01&end=2026-01-06')
+            assert evidence.json()['total'] == 1
 
         # Bob gets a fresh client (different session cookie jar)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
@@ -291,6 +295,10 @@ class TestCrossUserDataIsolation:
             assert r.status_code == 200
             bob_txs = r.json()
             assert not any(t["merchant"] == "Secret Shop" for t in bob_txs)
+            facts = await ac.get('/api/v2/spending/month?as_of=2026-01-06')
+            assert facts.json()['current']['spending']['minor_units'] == 0
+            evidence = await ac.get('/api/v2/spending/evidence?start=2026-01-01&end=2026-01-06')
+            assert evidence.json()['total'] == 0
 
 
 
@@ -413,3 +421,28 @@ async def test_capture_followup_api_omits_payload_and_requeues(authed_client, in
 async def test_capture_followup_api_requires_auth(client):
     assert (await client.get('/api/v2/capture/followups')).status_code == 401
     assert (await client.post('/api/v2/capture/followups/1/retry')).status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_spending_facts_api_requires_auth_and_valid_queries(client, authed_client):
+    assert (await client.get('/api/v2/spending/month')).status_code == 401
+    assert (await client.get('/api/v2/spending/evidence?start=2026-09-01&end=2026-09-06')).status_code == 401
+    assert (await authed_client.get('/api/v2/spending/month?as_of=invalid')).status_code == 422
+    assert (await authed_client.get('/api/v2/spending/month?as_of=0001-01-01')).status_code == 422
+    assert (await authed_client.get('/api/v2/spending/evidence?start=2026-09-06&end=2026-09-01')).status_code == 422
+    assert (await authed_client.get('/api/v2/spending/evidence?start=2026-09-01&end=2026-09-06&limit=101')).status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_spending_facts_evidence_omits_internal_columns(authed_client, in_memory_db):
+    storage = Storage(in_memory_db)
+    tx_id = storage.insert_transaction(source='manual', source_id='private-source-id', amount=12.5,
+                                       transaction_date='2026-09-05T12:00:00', raw_data='secret-email')
+    response = await authed_client.get('/api/v2/spending/month?as_of=2026-09-06')
+    assert response.status_code == 200
+    assert response.json()['current']['spending'] == {'minor_units': 1250, 'currency': 'SGD'}
+    response = await authed_client.get('/api/v2/spending/evidence?start=2026-09-01&end=2026-09-06')
+    assert response.status_code == 200
+    assert response.json()['items'][0]['id'] == tx_id
+    assert 'private-source-id' not in response.text and 'secret-email' not in response.text
+    assert 'raw_data' not in response.text and 'source_id' not in response.text

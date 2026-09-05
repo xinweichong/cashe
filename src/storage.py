@@ -41,6 +41,16 @@ class Storage:
         # The service worker must not hold the DB lock while waiting on Telegram.
         self.outbox_dispatch_lock = threading.Lock()
 
+    @_locked
+    def get_month_spending_facts(self, as_of=None, timezone="Asia/Singapore") -> dict:
+        from src.spending_facts import month_facts
+        return month_facts(self._conn, as_of, timezone)
+
+    @_locked
+    def get_spending_evidence(self, start, end, **filters) -> dict:
+        from src.spending_facts import spending_evidence
+        return spending_evidence(self._conn, start, end, **filters)
+
     @contextmanager
     def reconciliation_lock(self):
         """Serialize check-and-insert across the user's Wallet and Gmail inputs."""

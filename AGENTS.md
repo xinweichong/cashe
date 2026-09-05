@@ -210,6 +210,13 @@ The `IngestionPipeline` is instantiated per-user inside `UserManager._build_cont
 - Recovery CLI: `python -m scripts.backup --help`; see `docs/operations/backups.md`. Never copy live SQLite files for backup.
 - Pre-upgrade audit: `python -m scripts.db_audit DATABASE` opens an existing database read-only and reports integrity, foreign-key, missing-constraint, and migration findings. Run it on isolated restored copies before initialization. Retained source-event/outbox links to deleted transactions are informational, not orphans to clean up automatically. It never migrates or repairs data.
 
+### Shared spending facts
+
+- New reporting uses `src/spending_facts.py` through locked Storage wrappers. The additive authenticated `/api/v2/spending/month` and `/api/v2/spending/evidence` endpoints share classification, Decimal rounding, timezone projection, and evidence selection. See `docs/operations/spending-facts.md` for compatibility limits.
+- Report SGD integer minor units rounded per transaction; storage remains legacy floats until the audited migration. Never describe this compatibility calculation as a completed money migration.
+- Always expose partial/indicative status with known subtotals. Legacy foreign `1.0` rates are unresolved, not proof of conversion. Undated observations make comparisons unavailable. Missing income is absent, and negative recorded net flow is retained.
+- Use the response's separate comparison periods for evidence drill-downs: short previous months truncate the comparable current window, not the main month-to-date total.
+
 ### Parser System
 
 - Email parsers return `None` on non-match. `AppleWalletParser.parse()` raises `ValueError` on missing required fields (caught by the webhook route and converted to HTTP 400). The Gmail poller does not expect parser exceptions.

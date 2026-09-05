@@ -29,3 +29,54 @@ class CaptureFollowup(BaseModel):
     error_code: str | None
     created_at: str
     updated_at: str
+
+
+class Money(BaseModel):
+    minor_units: int
+    currency: Literal["SGD"] = "SGD"
+
+
+class SpendingPeriod(BaseModel):
+    start: str
+    end: str
+    spending: Money
+    income: Money | None
+    recorded_net_flow: Money | None
+    transaction_count: int
+    unresolved_count: int
+    indicative_count: int
+    status: Literal["complete", "indicative", "partial"]
+
+
+class CategoryChange(BaseModel):
+    category: str
+    change: Money
+
+
+class MonthSpendingFacts(BaseModel):
+    undated_count: int
+    as_of: str
+    timezone: str
+    money_basis: Literal["legacy_values_rounded_per_transaction"]
+    current: SpendingPeriod
+    comparison_current: SpendingPeriod
+    previous: SpendingPeriod
+    change: Money | None
+    category_changes: list[CategoryChange]
+
+
+class SpendingEvidenceItem(BaseModel):
+    id: int
+    merchant: str | None
+    category: str
+    type: str
+    date: str | None
+    amount: Money | None
+    conversion_status: Literal["native", "indicative", "unresolved"]
+
+
+class SpendingEvidence(BaseModel):
+    items: list[SpendingEvidenceItem]
+    total: int
+    limit: int
+    offset: int

@@ -459,6 +459,7 @@ def main():
         exchange_service=exchange_service,
         host_base_url=dashboard_url,
         llm_service=llm_service,
+        timezone=config.get("timezone", "Asia/Singapore"),
     )
 
     # Admin app (user management)

@@ -97,3 +97,15 @@ The prior outbox and reconciliation work was committed as `7f35c18` (`feat: make
 - Added the pre-initialization audit procedure to `docs/operations/backups.md`. Production snapshot audits and real OCI/R2 restore/boot validation remain outstanding; this utility does not claim those operational checks are complete.
 
 Verification: **15 focused audit/backup tests passed**, including committed WAL orphans, byte-preserving closed-database reads, admin session references, undeclared constraints, implicit primary-key references, retained evidence, migration reporting, safe error output, and audit of an encrypted/restored synthetic snapshot before initialization. The preceding full backend baseline was 713 passing tests. `git diff --check` passed. This standalone operator slice changes no application runtime or frontend behavior and is committed on completion.
+
+
+## 2026-09-06 continuation — shared monthly spending facts and evidence
+
+- Added `src/spending_facts.py` and per-user locked Storage wrappers, with typed authenticated `/api/v2/spending/month` and paginated `/api/v2/spending/evidence` endpoints. Production passes the configured timezone; legacy report consumers remain unchanged.
+- Month-to-date totals are separate from equal-elapsed comparison windows. Category contributions sum to the reported spending change, and evidence uses the same classification/conversion functions.
+- Native SGD calculations use Decimal and per-transaction half-up rounding into integer minor units. The explicit legacy money basis distinguishes this compatibility interface from the still-pending audited integer-storage migration.
+- Includes NULL-type expenses, subtracts explicitly classified refunds when received, and excludes explicit transfers. Existing income is not reinterpreted. Missing income is absent; negative recorded net flow remains visible when resolved.
+- Legacy stored foreign rates are indicative. Missing/invalid/non-positive or foreign `1.0` rates remain unresolved, with partial known subtotals and suppressed comparisons. Undated records are disclosed separately and available through unresolved evidence. Offset timestamps are projected into the configured calendar.
+- Public evidence excludes raw payloads and source IDs. `docs/operations/spending-facts.md` documents response semantics and limits, including source freshness, settlement precedence, splits/refund links, weekly reporting, FX provenance, and migration work that remain open.
+
+Verification: **745 backend tests passed**, with the same four existing datetime deprecation warnings. Added coverage for rounding, legacy NULL types, refunds/transfers, missing income, negative net flow, unresolved/indicative FX, leap/month/year boundaries, Singapore date projection, evidence pagination/reconciliation, input validation, privacy, and cross-user isolation. `git diff --check` passed. This additive API slice is committed before the planned 100,000-transaction benchmark; no production data or frontend files were changed.
