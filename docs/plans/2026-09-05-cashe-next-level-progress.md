@@ -29,8 +29,8 @@ Working branch: `feature/cashe-next-level`, created from `develop` on 2026-09-05
 
 ## Remaining trust work before the phase-1 exit gate
 
-1. Persist and retry post-commit notifications, recurring suggestions, and trip effects through an outbox. These still use the existing best-effort behavior; a transaction survives a crash but every follow-up is not yet guaranteed.
-2. Retain explicit timestamp precision/payment identity for reconciliation. Invalid Wallet observations are now captured before parsing (see continuation below). Ambiguous candidates are preserved rather than merged, but a duplicate-resolution UI is still pending.
+1. The transaction/recurring/trip outbox is implemented in the continuation below. The separate one-time Wallet setup greeting still uses best-effort delivery. Outbox delivery is at least once, with bounded automatic retries and explicit requeue after exhaustion.
+2. Explicit timestamp precision/payment identity and invalid Wallet capture are implemented in the continuations below. Legacy evidence remains conservatively unknown. Ambiguous candidates are preserved rather than merged; duplicate review/resolution is still pending.
 3. Configure OCI daily backup scheduling, protected R2 credentials, backup-age monitoring, and an external heartbeat; complete a real isolated restore/boot drill. Keep the encryption key off-host separately.
 4. Verify the Wallet credential upgrade on a real iPhone Shortcut, and OAuth/capture against a test Gmail account. Complete user migration before globally disabling legacy unauthenticated intake.
 5. Audit existing foreign-key orphans and validate upgrade/rollback against representative old production databases. Automated migration/recovery tests currently use synthetic data.
@@ -56,3 +56,31 @@ The first slice was subsequently committed by the user. On resuming on 2026-09-0
 - This completes the raw Wallet observation part of remaining item 2 only. The durable follow-up outbox is still the next major trust slice; timestamp/payment metadata, duplicate review, monetary semantics, and operational/device verification remain open.
 
 Verification: **674 backend tests passed**, with the same four existing datetime deprecation warnings; **46 focused Wallet/ingestion tests passed**. `git diff --check` passed. No frontend changes, commit, push, or deployment in this continuation.
+
+
+## 2026-09-06 continuation — durable ingestion follow-ups
+
+The Wallet capture slice was committed as `53d1dd6` (`feat: persist Wallet requests before validation and replay capture`) before starting this work.
+
+- Additive migration 2 introduces `ingestion_outbox`. New pipeline transactions and their trip, recurring-analysis, and transaction-notification jobs commit atomically; an outbox insertion failure rolls back the transaction. Existing transactions are not retroactively notified.
+- Trip jobs retain the capture-time trip ID and enlist idempotently. Deleted transactions or deleted destination trips are skipped. Historical capture creates no follow-ups.
+- Recurring analysis errors are retained for retry. Successful analysis and its suggestion job commit together, so retrying a failed suggestion does not require recalculating the pattern. Existing subscriptions suppress suggestions.
+- Gmail and Wallet transaction notifications share the pipeline callback. Telegram bridges return their send Futures; jobs complete only after the Future succeeds (30-second wait limit). Users with no linked Telegram remain silent; unavailable handlers leave jobs pending.
+- A per-user Storage dispatch lock serializes workers without holding the SQLite/reconciliation lock during delivery. The existing 120-second capture retry job also processes the outbox. Five recorded failures stop automatic processing; a crash before acknowledgement leaves the job eligible for replay.
+- Authenticated typed `GET /api/v2/capture/followups` and `POST /api/v2/capture/followups/{id}/retry` expose status and explicit recovery, excluding job payloads. The review UI remains a later slice.
+- Delivery is **at least once**, not exactly once: a crash after Telegram accepts a message but before SQLite acknowledges it can repeat the message. Tests explicitly verify this boundary. This worker assumes the existing one-process deployment and one Storage instance per user.
+- The separate first-Wallet onboarding greeting remains best-effort. Manual/Telegram transaction commands still need the planned shared command interface; this slice covers the existing Gmail/Wallet ingestion pipeline.
+
+Verification: **688 backend tests passed**, with the same four existing datetime deprecation warnings. Coverage includes transaction/outbox rollback, disk reopen after commit, deduplicated replay, failed Telegram Futures, recurring-analysis/suggestion recovery, capture-time trip assignment, bounded/manual retries, historical suppression, deletion, concurrent workers, post-send crash replay, and authenticated payload-free APIs. `git diff --check` passed. No frontend changes or production services touched. The outbox continuation was committed together with reconciliation metadata on the next resume.
+
+
+## 2026-09-06 continuation — explicit reconciliation evidence
+
+- Additive migration 3 stores `timestamp_precision`, `payment_identity_kind`, and `payment_identity` on source observations. Existing rows keep their payloads/IDs and receive `unknown` precision; historical evidence is not guessed from midnight timestamps.
+- Parsed observations use evidence format/parser version 2 and retain metadata across pending-event replay. Defaults keep old serialized ParseResults readable.
+- UOB card purchases and accumulated transit declare date-only precision while retaining their existing midnight transaction strings. Timed UOB alerts declare minute precision; malformed times remain unknown. DBS PayLah declares minute precision when time is supplied and uses `local_now()` for its inferred year; the omitted-year limitation remains.
+- Wallet records second/minute/date/unknown precision according to the supplied timestamp and preserves normalized card labels as `wallet_card_label`. UOB card suffixes and incoming PayNow account suffixes use separate namespaces. Wallet source hashing remains unchanged, including its empty card slot.
+- Cross-source matching requires explicit minute/second evidence on both sides. Genuine midnight purchases still match; date-only, malformed, and legacy unknown observations remain separate in either arrival order. Conflicting identifiers within the same namespace exclude candidates; incomparable or missing identifiers do not override the existing time/merchant/amount/currency/type checks.
+- Source metadata remains excluded from public capture-issue responses. No existing transactions are rewritten or merged automatically. A duplicate-resolution interface is still required for preserved uncertain observations.
+
+Verification: **713 backend tests passed**, with the same four existing datetime deprecation warnings. Added 25 cases covering date-only arrival order, true midnight matches, legacy unknown evidence, comparable/conflicting payment identities, metadata replay, Wallet timestamp formats/hash compatibility, malformed UOB times, and migration preservation. `git diff --check` passed. The outbox and reconciliation continuations are committed together as a verified trust-foundation change; no production services or frontend files changed.

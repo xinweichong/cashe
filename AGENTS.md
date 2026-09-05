@@ -187,15 +187,19 @@ Steps in order:
 3. Exchange rate lookup (skipped if currency is SGD)
 4. Categorization (`categorizer.reload_overrides()` then `categorizer.categorize()`)
 5. `storage.insert_transaction()`
-6. `storage.auto_assign_to_active_trip(tx_id)` (best-effort, never raises)
-7. `RecurringDetector.run()` (best-effort, never raises)
-8. Returns the stored transaction dict with `_match_source` key added
+6. Commit trip, recurring-analysis, and transaction-notification jobs in `ingestion_outbox` atomically with the transaction. Historical capture creates no follow-up jobs; trip jobs retain the trip active at capture time.
+7. Dispatch follow-ups outside the reconciliation/DB lock. `RecurringDetector.detect()` errors remain retryable; successful detection atomically queues a suggestion. Telegram callbacks return the send Future, which must complete before acknowledgement.
+8. Return the stored transaction dict with `_match_source` key added. Follow-up failures do not undo capture. The existing 120-second capture worker also retries outbox jobs, stopping after five recorded failures. Authenticated `/api/v2/capture/followups` list/retry endpoints expose no payloads.
+
+Outbox workers serialize per `Storage` in this single-process service. Delivery is at least once: a crash after Telegram accepts a message but before local acknowledgement can repeat the message. Never hold the storage reconciliation lock while dispatching follow-ups.
 
 The `IngestionPipeline` is instantiated per-user inside `UserManager._build_context()`.
 
 ### Capture trust foundation
 
-- `source_events` retains the original observation, parser version, status, attempts, and linked transaction. Raw payloads stay server-side.
+- `source_events` retains the original observation, parser version, status, attempts, linked transaction, timestamp precision, and namespaced payment identity. Raw payloads and payment metadata stay server-side.
+- Cross-source reconciliation requires explicit `minute`/`second` precision on both observations. `date` and `unknown` observations, including legacy evidence, remain separate even when transaction strings contain midnight. UOB card/transit date-only alerts retain their existing `T00:00:00` storage format but declare `date` precision.
+- Payment identity conflicts exclude a candidate only within the same namespace. `wallet_card_label`, `uob_card_last4`, and `uob_account_suffix` are different evidence types; never equate a Wallet label/device identity with a bank card suffix. Matching identifiers supplement the time/merchant/amount/currency/type checks, never replace them.
 - Gmail persists source events before advancing checkpoints. It captures configured senders independent of read status and never changes inbox labels.
 - Initial/resync history is bounded to 90 days, paginated with persisted progress. Expired history restarts bounded synchronization. Automatic processing retries stop after five failures; unrecognized events remain recorded.
 - Historical Gmail capture does not notify or join the currently active trip.
@@ -219,7 +223,7 @@ The `IngestionPipeline` is instantiated per-user inside `UserManager._build_cont
 
 - Apple Wallet hash uses `f"{merchant}:{amount}::{date}"` — the double colon is a deliberate empty card-field slot for backward compatibility with pre-card-name records. Do not add the card field into this hash.
 - Currency parsing precedence: ISO code prefix (`PLN 3.78`) → multi-char symbols (`S$`, `A$`, `HK$`, `RM`...) → single-char symbols (`£`, `€`...) → bare number defaults to SGD. Multi-char must be checked before single-char to avoid `S$` matching as `$`.
-- DBS PayLah! infers `datetime.now().year` because the email format omits the year. A December email processed in January will have the wrong year — this is a known limitation.
+- DBS PayLah! infers `local_now().year` because the email format omits the year. A December email processed in January will have the wrong year — this is a known limitation.
 - `UobParser` handles all UOB email formats in a single class (card purchase, accumulated transit, card reversal, PayNow received, one-time transfer, NETS QR payment, PayNow transfer sent). Source values: `uob_card`, `uob_paynow`, `uob_transfer`, `uob_nets`, `uob_paynow_sent`. Card reversals emit `tx_type="income"`. `uob_paynow` is incoming PayNow (income); `uob_paynow_sent` is outbound PayNow transfer (expense).
 
 ### Telegram Bot
@@ -240,7 +244,7 @@ The `IngestionPipeline` is instantiated per-user inside `UserManager._build_cont
 - `raw_data` for Apple Wallet transactions is `str(dict)` (Python `repr`), not valid JSON. Re-parsing requires `ast.literal_eval`, not `json.loads`.
 - DB path resolution: `DATA_DIR = "/data" if os.path.isdir("/data") else "data"`. Per-user DB: `{DATA_DIR}/users/{username}/expense_tracker.db`. Admin DB: `{DATA_DIR}/app.db`. The `EXPENSE_DB_PATH` env var overrides only the legacy single-user path, not per-user paths.
 - Legacy baseline migrations remain in `init_db`. New schema changes use ordered, transactional migrations in `src/migrations.py`; do not add new swallowed migration errors.
-- `RecurringDetector` runs inside `IngestionPipeline.ingest()` (both Gmail and Webhook paths). It looks back 90 days and is instantiated per-`UserContext` (stateful — reused across ingestion calls for the same user).
+- `RecurringDetector.detect()` runs through the ingestion outbox (both Gmail and Webhook paths). It looks back 90 days and is instantiated per-`UserContext` (stateful — reused across ingestion calls for the same user).
 - The `source` column has no `CHECK` constraint — invalid values insert silently. Valid values: `dbs_paylah`, `uob_card`, `uob_paynow`, `uob_paynow_sent`, `uob_transfer`, `uob_nets`, `apple_wallet`, `manual`, `cash`.
 
 ### Testing Conventions

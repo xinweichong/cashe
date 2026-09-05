@@ -1431,15 +1431,14 @@ class TelegramBotService:
             lambda f: logger.error("notify_text send failed: %s", f.exception()) if f.exception() else None
         )
 
-    def notify_transaction(self, tx_id: int, amount: float, merchant: str, category: Optional[str], match_source: str, source: str, username: Optional[str] = None) -> None:
+    def notify_transaction(self, tx_id: int, amount: float, merchant: str, category: Optional[str], match_source: str, source: str, username: Optional[str] = None):
         """Send a transaction notification. Called from the Gmail poller thread."""
         chat_id = self._resolve_chat_id(username)
         if not chat_id:
             logger.info("Cannot send notification: no chat_id registered (user must send /start)")
             return
         if not self._loop or not self.app:
-            logger.debug("Cannot notify: bot not started yet")
-            return
+            raise RuntimeError("Telegram bot not started")
         # Resolve the correct storage for this notification
         storage = self.storage
         if username and self.user_manager:
@@ -1450,24 +1449,20 @@ class TelegramBotService:
             self._async_notify(tx_id, amount, merchant, category, match_source, source, chat_id, storage),
             self._loop,
         )
-        fut.add_done_callback(
-            lambda f: logger.error("notify_transaction send failed: %s", f.exception()) if f.exception() else None
-        )
+        return fut
 
-    def notify_subscription_suggestion(self, username: str, merchant: str, frequency: str, avg_amount: float) -> None:
+    def notify_subscription_suggestion(self, username: str, merchant: str, frequency: str, avg_amount: float):
         """Suggest adding a detected recurring pattern as a subscription. Thread-safe bridge."""
         chat_id = self._resolve_chat_id(username)
         if not chat_id:
             return
         if not self._loop or not self.app:
-            return
+            raise RuntimeError("Telegram bot not started")
         fut = asyncio.run_coroutine_threadsafe(
             self._async_notify_subscription_suggestion(chat_id, merchant, frequency, avg_amount),
             self._loop,
         )
-        fut.add_done_callback(
-            lambda f: logger.error("notify_subscription_suggestion failed: %s", f.exception()) if f.exception() else None
-        )
+        return fut
 
     async def _async_notify_subscription_suggestion(
         self, chat_id: int, merchant: str, frequency: str, avg_amount: float

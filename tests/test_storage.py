@@ -251,44 +251,52 @@ class TestDuplicateCheck:
 
 class TestCrossSourceDedup:
     def test_find_cross_source_duplicate_match(self, storage):
-        storage.insert_transaction(
+        tx_id = storage.insert_transaction(
             source="apple_wallet", source_id="aw-1", amount=8.20,
             merchant="Ban Mian", transaction_date="2026-04-16T12:00:00",
         )
+        event = storage.record_source_event("apple_wallet", "evidence", "{}", timestamp_precision="second")
+        storage.finish_source_event(event["id"], "processed", tx_id)
         result = storage.find_cross_source_duplicate(
-            "Ban Mian", 8.20, "dbs_paylah", transaction_date="2026-04-16T12:01:00"
+            "Ban Mian", 8.20, "dbs_paylah", transaction_date="2026-04-16T12:01:00", timestamp_precision="minute"
         )
         assert result is not None
         assert result["source"] == "apple_wallet"
         assert result["amount"] == 8.20
 
     def test_find_cross_source_duplicate_case_insensitive(self, storage):
-        storage.insert_transaction(
+        tx_id = storage.insert_transaction(
             source="apple_wallet", source_id="aw-1", amount=8.20,
             merchant="Ban Mian", transaction_date="2026-04-16T12:00:00",
         )
+        event = storage.record_source_event("apple_wallet", "evidence", "{}", timestamp_precision="second")
+        storage.finish_source_event(event["id"], "processed", tx_id)
         result = storage.find_cross_source_duplicate(
-            "BAN MIAN", 8.20, "dbs_paylah", transaction_date="2026-04-16T12:01:00"
+            "BAN MIAN", 8.20, "dbs_paylah", transaction_date="2026-04-16T12:01:00", timestamp_precision="minute"
         )
         assert result is not None
 
     def test_find_cross_source_no_match_different_source(self, storage):
-        storage.insert_transaction(
+        tx_id = storage.insert_transaction(
             source="dbs_paylah", source_id="db-1", amount=8.20,
             merchant="Ban Mian", transaction_date="2026-04-16T12:00:00",
         )
+        event = storage.record_source_event("apple_wallet", "evidence", "{}", timestamp_precision="second")
+        storage.finish_source_event(event["id"], "processed", tx_id)
         result = storage.find_cross_source_duplicate(
-            "Ban Mian", 8.20, "dbs_paylah", transaction_date="2026-04-16T12:01:00"
+            "Ban Mian", 8.20, "dbs_paylah", transaction_date="2026-04-16T12:01:00", timestamp_precision="minute"
         )
         assert result is None
 
     def test_find_cross_source_no_match_different_amount(self, storage):
-        storage.insert_transaction(
+        tx_id = storage.insert_transaction(
             source="apple_wallet", source_id="aw-1", amount=8.20,
             merchant="Ban Mian", transaction_date="2026-04-16T12:00:00",
         )
+        event = storage.record_source_event("apple_wallet", "evidence", "{}", timestamp_precision="second")
+        storage.finish_source_event(event["id"], "processed", tx_id)
         result = storage.find_cross_source_duplicate(
-            "Ban Mian", 99.99, "dbs_paylah", transaction_date="2026-04-16T12:01:00"
+            "Ban Mian", 99.99, "dbs_paylah", transaction_date="2026-04-16T12:01:00", timestamp_precision="minute"
         )
         assert result is None
 
@@ -303,8 +311,10 @@ class TestCrossSourceDedup:
             (tx_id,),
         )
         storage._conn.commit()
+        event = storage.record_source_event("apple_wallet", "evidence", "{}", timestamp_precision="second")
+        storage.finish_source_event(event["id"], "processed", tx_id)
         result = storage.find_cross_source_duplicate(
-            "Ban Mian", 8.20, "dbs_paylah", transaction_date="2026-04-16T12:01:00"
+            "Ban Mian", 8.20, "dbs_paylah", transaction_date="2026-04-16T12:01:00", timestamp_precision="minute"
         )
         assert result is not None
 

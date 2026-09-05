@@ -50,6 +50,8 @@ class GmailPoller:
         self.on_transaction = on_transaction
         self.on_auth_error = on_auth_error
         self.pipeline = pipeline
+        if pipeline is not None and on_transaction is not None:
+            pipeline.on_transaction = on_transaction
         self._poll_interval = poll_interval
         self.service = None
         self._pending_flow = None
@@ -272,11 +274,6 @@ class GmailPoller:
                 continue
             if tx is not None:
                 transactions.append(tx)
-                if self.on_transaction and not historical:
-                    try:
-                        self.on_transaction(tx)
-                    except Exception as exc:
-                        logger.warning("Transaction notification failed: %s", type(exc).__name__)
         return transactions
 
     def force_poll(self) -> int:

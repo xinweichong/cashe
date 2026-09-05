@@ -40,7 +40,12 @@ def create_webhook_app(user_manager, bot=None) -> FastAPI:
 
         if pipeline is None:
             from src.ingestion import IngestionPipeline
-            pipeline = IngestionPipeline(storage, categorizer, exchange_service)
+            callback = getattr(ctx, "on_transaction", None)
+            def notify(tx):
+                if callback:
+                    return callback(tx["id"], tx["amount"], tx["merchant"],
+                                    tx["category"], tx["_match_source"], tx["source"])
+            pipeline = IngestionPipeline(storage, categorizer, exchange_service, on_transaction=notify)
         body = await request.body()
         try:
             tx_dict, tx_id = await run_in_threadpool(pipeline.ingest_wallet_request, body)
@@ -49,10 +54,6 @@ def create_webhook_app(user_manager, bot=None) -> FastAPI:
         if tx_dict is None:
             return {"status": "duplicate", "transaction_id": tx_id}
 
-        on_transaction = getattr(ctx, "on_transaction", None)
-        if on_transaction:
-            on_transaction(tx_dict["id"], tx_dict["amount"], tx_dict["merchant"],
-                           tx_dict["category"], tx_dict["_match_source"], tx_dict["source"])
         _maybe_notify_first_apple_wallet(storage, bot, username)
         return {"status": "ok", "transaction_id": tx_dict["id"]}
 

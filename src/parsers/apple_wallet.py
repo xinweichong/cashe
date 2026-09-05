@@ -83,13 +83,27 @@ class AppleWalletParser:
 
         # Parse date from Shortcut format (dd/MM/yyyy HH:mm:ss) to ISO format
         transaction_date = date_str
+        precision = "unknown"
         for fmt in self.DATE_FORMATS:
             try:
                 parsed = datetime.strptime(date_str, fmt)
                 transaction_date = parsed.strftime("%Y-%m-%dT%H:%M:%S")
+                precision = "second"
                 break
             except (ValueError, TypeError):
                 continue
+
+        if precision == "unknown" and isinstance(date_str, str):
+            try:
+                datetime.fromisoformat(date_str)
+                if re.fullmatch(r"\d{4}-\d{2}-\d{2}", date_str):
+                    precision = "date"
+                elif re.match(r"^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}", date_str):
+                    precision = "second"
+                elif re.match(r"^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}", date_str):
+                    precision = "minute"
+            except ValueError:
+                pass
 
         description = f"Apple Wallet - {card}" if card else "Apple Wallet"
 
@@ -100,6 +114,9 @@ class AppleWalletParser:
             merchant=merchant,
             description=description,
             transaction_date=transaction_date,
+            timestamp_precision=precision,
+            payment_identity_kind="wallet_card_label" if card and card.strip() else None,
+            payment_identity=" ".join(card.casefold().split()) if card and card.strip() else None,
             raw_data=str(payload),
             currency=currency,
         )

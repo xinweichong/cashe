@@ -2,6 +2,7 @@ import logging
 import json
 import base64
 import hashlib
+from concurrent.futures import Future
 from dataclasses import asdict
 from typing import Optional, Callable
 
@@ -21,12 +22,14 @@ class IngestionPipeline:
         categorizer=None,
         exchange_service=None,
         detector=None,
-        on_recurring_pattern: Optional[Callable[[str, str, float], None]] = None,
+        on_recurring_pattern: Optional[Callable] = None,
+        on_transaction: Optional[Callable] = None,
     ):
         self.storage = storage
         self.categorizer = categorizer
         self.exchange_service = exchange_service
         self._on_recurring_pattern = on_recurring_pattern
+        self.on_transaction = on_transaction
         # Allow injection of a RecurringDetector (or mock) for testing
         if detector is not None:
             self._detector = detector
@@ -35,10 +38,20 @@ class IngestionPipeline:
             self._detector = RecurringDetector(storage)
 
     def ingest(self, result: ParseResult, *, historical: bool = False) -> Optional[dict]:
+        tx = self._capture_parsed(result, historical=historical)
+        if tx is not None:
+            self.process_outbox(transaction_id=tx["id"])
+        return tx
+
+    def _capture_parsed(self, result: ParseResult, *, historical: bool = False) -> Optional[dict]:
         """Persist a ParseResult and return the stored transaction dict, or None on dedup."""
         with self.storage.reconciliation_lock():
             event = self.storage.record_source_event(
                 result.source, result.source_id, json.dumps({**asdict(result), "_historical": historical}),
+                parser_version="2",
+                timestamp_precision=result.timestamp_precision,
+                payment_identity_kind=result.payment_identity_kind,
+                payment_identity=result.payment_identity,
             )
             if event["status"] == "processed":
                 return None
@@ -49,6 +62,12 @@ class IngestionPipeline:
                 raise
 
     def ingest_wallet_request(self, body: bytes) -> tuple[Optional[dict], Optional[int]]:
+        tx, tx_id = self._capture_wallet(body)
+        if tx is not None:
+            self.process_outbox(transaction_id=tx_id)
+        return tx, tx_id
+
+    def _capture_wallet(self, body: bytes) -> tuple[Optional[dict], Optional[int]]:
         """Retain authorized request bytes before validation; replay through ingestion."""
         with self.storage.reconciliation_lock():
             event = self.storage.record_source_event(
@@ -63,7 +82,7 @@ class IngestionPipeline:
                 self.storage.finish_source_event(event["id"], "unrecognized", error_code="WalletPayloadError")
                 raise
             try:
-                tx = self.ingest(result)
+                tx = self._capture_parsed(result)
                 parsed_event = self.storage.get_source_event(result.source, result.source_id)
                 tx_id = parsed_event["transaction_id"]
                 self.storage.finish_source_event(event["id"], "processed", tx_id)
@@ -81,11 +100,11 @@ class IngestionPipeline:
                 continue
             try:
                 if event["source"] == "wallet_request":
-                    self.ingest_wallet_request(base64.b64decode(event["payload"], validate=True))
+                    self._capture_wallet(base64.b64decode(event["payload"], validate=True))
                     continue
                 payload = json.loads(event["payload"])
                 historical = payload.pop("_historical", False)
-                self.ingest(ParseResult(**payload), historical=historical)
+                self._capture_parsed(ParseResult(**payload), historical=historical)
             except Exception as exc:
                 # ingest records processing failures. Invalid persisted payloads
                 # also need an attempt count so they cannot retry indefinitely.
@@ -93,6 +112,7 @@ class IngestionPipeline:
                 if current["attempts"] == event["attempts"]:
                     self.storage.finish_source_event(event["id"], "failed", error_code=type(exc).__name__)
                 logger.warning("Source event retry failed: %s", type(exc).__name__)
+        self.process_outbox()
 
     def _ingest(self, result: ParseResult, event_id: int, *, historical: bool) -> Optional[dict]:
         # Same-source dedup (content-hash source_id)
@@ -106,6 +126,9 @@ class IngestionPipeline:
             result.merchant, result.amount, result.source,
             currency=result.currency, transaction_date=result.transaction_date,
             tx_type=result.tx_type,
+            timestamp_precision=result.timestamp_precision,
+            payment_identity_kind=result.payment_identity_kind,
+            payment_identity=result.payment_identity,
         )
         if dup:
             self.storage.finish_source_event(event_id, "processed", dup["id"])
@@ -123,6 +146,15 @@ class IngestionPipeline:
             self.categorizer.reload_overrides(self.storage.get_merchant_overrides())
             category, match_source = self.categorizer.categorize(result.merchant)
 
+        followups = []
+        if not historical:
+            if self.storage.get_setting("trips_enabled", "false") == "true":
+                active = self.storage.get_active_trip()
+                if active:
+                    followups.append(("trip", {"trip_id": active["id"]}))
+            followups.append(("recurring", {}))
+            followups.append(("notification", {"match_source": match_source}))
+
         try:
             tx_id = self.storage.insert_transaction(
                 source=result.source,
@@ -136,6 +168,7 @@ class IngestionPipeline:
                 exchange_rate=exchange_rate,
                 category=category,
                 tx_type=result.tx_type,
+                followups=followups,
             )
         except ValueError:
             existing = self.storage.get_transaction_by_source_id(result.source_id)
@@ -147,24 +180,67 @@ class IngestionPipeline:
         self.storage.finish_source_event(event_id, "processed", tx_id)
         logger.info("Stored transaction id=%s", tx_id)
 
-        try:
-            if not historical:
-                self.storage.auto_assign_to_active_trip(tx_id)
-        except Exception as e:
-            logger.warning("auto_assign_to_active_trip failed (best-effort): %s", e)
-
-        try:
-            rec = self._detector.detect_and_suggest(result.merchant, result.amount, tx_id)
-            if rec and self._on_recurring_pattern and not historical:
-                # Only suggest if no subscription already exists for this merchant
-                if not self.storage.find_subscription_by_merchant(result.merchant):
-                    self._on_recurring_pattern(
-                        result.merchant, rec["frequency"], rec["avg_amount"]
-                    )
-        except Exception as e:
-            logger.warning("Recurring suggestion failed (best-effort): %s", e)
-
         tx = self.storage.get_transaction(tx_id)
         if tx is not None:
             tx["_match_source"] = match_source
         return tx
+
+    def process_outbox(self, transaction_id: Optional[int] = None) -> None:
+        """Replay follow-ups outside the DB lock, with at-least-once delivery.
+
+        A shared per-storage worker lock serializes this single-process service.
+        Pending rows survive a crash, including a crash after remote delivery.
+        """
+        if not self.storage.outbox_dispatch_lock.acquire(blocking=False):
+            return
+        try:
+            jobs = self.storage.pending_ingestion_effects(transaction_id, limit=100)
+            for job in jobs:
+                self._run_effect(job)
+            # Recurring analysis persists its suggestion before any remote send.
+            for job in self.storage.pending_ingestion_effects(transaction_id, limit=100):
+                if job["kind"] == "suggestion" and job["attempts"] == 0:
+                    self._run_effect(job)
+        except Exception as exc:
+            # An unavailable DB leaves the job pending; capture already committed.
+            logger.warning("Ingestion outbox unavailable: %s", type(exc).__name__)
+        finally:
+            self.storage.outbox_dispatch_lock.release()
+
+    def _run_effect(self, job: dict) -> None:
+        try:
+            tx = self.storage.get_transaction(job["transaction_id"])
+            payload = json.loads(job["payload"])
+            suggestion = None
+            future = None
+            if tx is not None:
+                if job["kind"] == "trip":
+                    if self.storage.get_trip(payload["trip_id"]) is not None:
+                        self.storage.enlist_transaction(payload["trip_id"], tx["id"], added_by="auto")
+                elif job["kind"] == "recurring":
+                    rec = self._detector.detect(tx["merchant"], tx["amount"])
+                    if rec and not self.storage.find_subscription_by_merchant(tx["merchant"]):
+                        suggestion = {"merchant": tx["merchant"], "frequency": rec["frequency"],
+                                      "avg_amount": rec["avg_amount"]}
+                elif job["kind"] == "suggestion":
+                    if not self.storage.find_subscription_by_merchant(payload["merchant"]):
+                        if self._on_recurring_pattern is None:
+                            return
+                        future = self._on_recurring_pattern(
+                            payload["merchant"], payload["frequency"], payload["avg_amount"],
+                        )
+                elif job["kind"] == "notification":
+                    if self.on_transaction is None:
+                        return
+                    tx["_match_source"] = payload["match_source"]
+                    future = self.on_transaction(tx)
+            if isinstance(future, Future):
+                try:
+                    future.result(timeout=30)
+                except TimeoutError:
+                    future.cancel()
+                    raise
+            self.storage.finish_ingestion_effect(job["id"], suggestion=suggestion)
+        except Exception as exc:
+            self.storage.finish_ingestion_effect(job["id"], error_code=type(exc).__name__)
+            logger.warning("Ingestion follow-up failed: %s", type(exc).__name__)

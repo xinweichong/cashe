@@ -27,6 +27,27 @@ MIGRATIONS = (
         """CREATE INDEX idx_source_events_pending
            ON source_events(source, status, attempts, id)""",
     )),
+    (2, (
+        """CREATE TABLE ingestion_outbox (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            transaction_id INTEGER NOT NULL,
+            kind TEXT NOT NULL CHECK(kind IN ('trip', 'recurring', 'suggestion', 'notification')),
+            payload TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'failed', 'done')),
+            attempts INTEGER NOT NULL DEFAULT 0,
+            error_code TEXT,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(transaction_id, kind)
+        )""",
+        "CREATE INDEX idx_ingestion_outbox_pending ON ingestion_outbox(status, attempts, id)",
+    )),
+    (3, (
+        """ALTER TABLE source_events ADD COLUMN timestamp_precision TEXT NOT NULL DEFAULT 'unknown'
+           CHECK(timestamp_precision IN ('unknown', 'date', 'minute', 'second'))""",
+        "ALTER TABLE source_events ADD COLUMN payment_identity_kind TEXT",
+        "ALTER TABLE source_events ADD COLUMN payment_identity TEXT",
+    )),
 )
 
 

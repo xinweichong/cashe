@@ -1106,3 +1106,30 @@ class TestCashCommandConfirmation:
         assert "cash, caught." in text
         assert "Hawker — 3× this week." in text
 
+
+
+@pytest.mark.parametrize('notification', ['transaction', 'suggestion'])
+def test_notification_bridge_returns_send_future(in_memory_db, monkeypatch, notification):
+    from concurrent.futures import Future
+    from unittest.mock import MagicMock
+    import src.telegram_bot as module
+
+    bot = TelegramBotService(storage=Storage(in_memory_db), bot_token='test-token')
+    bot._resolve_chat_id = MagicMock(return_value=123)
+    bot._loop = MagicMock()
+    bot.app = MagicMock()
+    future = Future()
+    def submit(coroutine, loop):
+        coroutine.close()
+        assert loop is bot._loop
+        return future
+    monkeypatch.setattr(module.asyncio, 'run_coroutine_threadsafe', submit)
+    if notification == 'transaction':
+        result = bot.notify_transaction(1, 12.5, 'Cafe', None, 'default', 'apple_wallet')
+    else:
+        result = bot.notify_subscription_suggestion('alice', 'Cafe', 'monthly', 12.5)
+    assert result is future
+    assert not result.done()
+    future.set_exception(RuntimeError('send failed'))
+    with pytest.raises(RuntimeError, match='send failed'):
+        result.result()

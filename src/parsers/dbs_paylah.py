@@ -2,6 +2,7 @@ import re
 from datetime import datetime
 from typing import Optional
 from src.parsers.base import ParseResult
+from src.config import local_now
 
 
 class DbsPaylahParser:
@@ -37,7 +38,7 @@ class DbsPaylahParser:
             day = int(date_match.group(1))
             month_str = date_match.group(2)
             month = datetime.strptime(month_str, "%b").month
-            year = datetime.now().year
+            year = local_now().year
             hour = int(date_match.group(3))
             minute = int(date_match.group(4))
             transaction_date = f"{year}-{month:02d}-{day:02d}T{hour:02d}:{minute:02d}:00"
@@ -49,5 +50,6 @@ class DbsPaylahParser:
             merchant=merchant,
             description=email_body.strip(),
             transaction_date=transaction_date,
+            timestamp_precision="minute" if date_match else "unknown",
             raw_data=email_body,
         )

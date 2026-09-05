@@ -1,9 +1,6 @@
-import logging
 from datetime import datetime
 from typing import Optional
 from src.storage import Storage
-
-logger = logging.getLogger(__name__)
 
 
 class RecurringDetector:
@@ -41,11 +38,3 @@ class RecurringDetector:
         if not frequency:
             return None
         return {"frequency": frequency, "avg_amount": avg_amount, "occurrences": len(rows)}
-
-    def detect_and_suggest(self, merchant: str, amount: float, tx_id: int) -> Optional[dict]:
-        """Detect a recurring pattern and return the result — no DB write. Best-effort; logs on error."""
-        try:
-            return self.detect(merchant, amount)
-        except Exception as e:
-            logger.warning("Recurring detection failed for %s: %s", merchant, e)
-            return None

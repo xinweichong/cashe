@@ -387,3 +387,29 @@ async def test_capture_issue_api_omits_payload_and_requeues(authed_client, in_me
 async def test_capture_issue_api_requires_auth(client):
     assert (await client.get('/api/v2/capture/issues')).status_code == 401
     assert (await client.post('/api/v2/capture/issues/1/retry')).status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_capture_followup_api_omits_payload_and_requeues(authed_client, in_memory_db):
+    storage = Storage(in_memory_db)
+    storage.insert_transaction(source='manual', source_id='private-id', amount=12.5,
+                               followups=[('notification', {'match_source': 'private-keyword'})])
+    job = storage.pending_ingestion_effects()[0]
+    storage.finish_ingestion_effect(job['id'], error_code='RuntimeError')
+    response = await authed_client.get('/api/v2/capture/followups')
+    assert response.status_code == 200
+    assert response.json()[0]['status'] == 'failed'
+    assert 'private' not in response.text
+    assert 'payload' not in response.text
+    url = f"/api/v2/capture/followups/{job['id']}/retry"
+    assert (await authed_client.post(url)).json() == {'status': 'queued'}
+    assert storage.pending_ingestion_effects()[0]['attempts'] == 0
+    storage.finish_ingestion_effect(job['id'])
+    assert (await authed_client.post(url)).status_code == 409
+    assert (await authed_client.post('/api/v2/capture/followups/999/retry')).status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_capture_followup_api_requires_auth(client):
+    assert (await client.get('/api/v2/capture/followups')).status_code == 401
+    assert (await client.post('/api/v2/capture/followups/1/retry')).status_code == 401

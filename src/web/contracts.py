@@ -18,3 +18,14 @@ class CaptureIssue(BaseModel):
 
 class QueuedResponse(BaseModel):
     status: Literal["queued"] = "queued"
+
+
+class CaptureFollowup(BaseModel):
+    id: int
+    transaction_id: int
+    kind: Literal["trip", "recurring", "suggestion", "notification"]
+    status: Literal["pending", "failed"]
+    attempts: int
+    error_code: str | None
+    created_at: str
+    updated_at: str

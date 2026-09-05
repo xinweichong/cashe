@@ -1,5 +1,6 @@
 import calendar
 import functools
+import json
 import sqlite3
 import threading
 import secrets
@@ -37,6 +38,8 @@ class Storage:
         self._conn = connection
         self._conn.row_factory = sqlite3.Row
         self._lock = threading.RLock()
+        # The service worker must not hold the DB lock while waiting on Telegram.
+        self.outbox_dispatch_lock = threading.Lock()
 
     @contextmanager
     def reconciliation_lock(self):
@@ -46,11 +49,15 @@ class Storage:
 
     @_locked
     def record_source_event(self, source: str, source_id: str, payload: str,
-                            parser_version: str = "1") -> dict:
+                            parser_version: str = "1", *, timestamp_precision: str = "unknown",
+                            payment_identity_kind: Optional[str] = None,
+                            payment_identity: Optional[str] = None) -> dict:
         self._conn.execute(
             """INSERT OR IGNORE INTO source_events
-               (source, source_id, payload, parser_version) VALUES (?, ?, ?, ?)""",
-            (source, source_id, payload, parser_version),
+               (source, source_id, payload, parser_version, timestamp_precision,
+                payment_identity_kind, payment_identity) VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (source, source_id, payload, parser_version, timestamp_precision,
+             payment_identity_kind, payment_identity),
         )
         self._conn.commit()
         return self.get_source_event(source, source_id)
@@ -145,20 +152,73 @@ class Storage:
         transaction_date: Optional[str] = None,
         raw_data: Optional[str] = None,
         tx_type: str = "expense",
+        followups: Optional[list[tuple[str, dict]]] = None,
     ) -> int:
         try:
-            cursor = self._conn.execute(
-                """INSERT INTO transactions
-                   (source, source_id, amount, currency, exchange_rate, merchant, description,
-                    category, transaction_date, raw_data, type)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (source, source_id, amount, currency, exchange_rate, merchant, description,
-                 category, transaction_date, raw_data, tx_type),
-            )
-            self._conn.commit()
-            return cursor.lastrowid
+            with self._conn:
+                cursor = self._conn.execute(
+                    """INSERT INTO transactions
+                       (source, source_id, amount, currency, exchange_rate, merchant, description,
+                        category, transaction_date, raw_data, type)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (source, source_id, amount, currency, exchange_rate, merchant, description,
+                     category, transaction_date, raw_data, tx_type),
+                )
+                tx_id = cursor.lastrowid
+                for kind, payload in followups or []:
+                    self._conn.execute(
+                        "INSERT INTO ingestion_outbox(transaction_id, kind, payload) VALUES (?, ?, ?)",
+                        (tx_id, kind, json.dumps(payload)),
+                    )
+            return tx_id
         except sqlite3.IntegrityError:
-            raise ValueError(f"duplicate source_id: {source_id}")
+            if self.get_transaction_by_source_id(source_id) is not None:
+                raise ValueError(f"duplicate source_id: {source_id}") from None
+            raise
+
+    @_locked
+    def pending_ingestion_effects(self, transaction_id: Optional[int] = None, limit: int = 100) -> list[dict]:
+        return [dict(row) for row in self._conn.execute(
+            """SELECT * FROM ingestion_outbox WHERE status IN ('pending', 'failed') AND attempts < 5
+               AND (? IS NULL OR transaction_id = ?) ORDER BY id LIMIT ?""",
+            (transaction_id, transaction_id, limit),
+        ).fetchall()]
+
+    @_locked
+    def list_ingestion_effects(self, limit: int = 50) -> list[dict]:
+        return [dict(row) for row in self._conn.execute(
+            """SELECT id, transaction_id, kind, status, attempts, error_code, created_at, updated_at
+               FROM ingestion_outbox WHERE status != 'done' ORDER BY id DESC LIMIT ?""", (limit,),
+        ).fetchall()]
+
+    @_locked
+    def retry_ingestion_effect(self, effect_id: int) -> None:
+        row = self._conn.execute("SELECT status FROM ingestion_outbox WHERE id = ?", (effect_id,)).fetchone()
+        if row is None:
+            raise ValueError("Follow-up not found")
+        if row["status"] == 'done':
+            raise ValueError("Follow-up already completed")
+        self._conn.execute(
+            """UPDATE ingestion_outbox SET status = 'pending', attempts = 0, error_code = NULL,
+               updated_at = CURRENT_TIMESTAMP WHERE id = ?""", (effect_id,),
+        )
+        self._conn.commit()
+
+    @_locked
+    def finish_ingestion_effect(self, effect_id: int, *, error_code: Optional[str] = None,
+                                suggestion: Optional[dict] = None) -> None:
+        with self._conn:
+            if suggestion is not None:
+                self._conn.execute(
+                    """INSERT OR IGNORE INTO ingestion_outbox(transaction_id, kind, payload)
+                       SELECT transaction_id, 'suggestion', ? FROM ingestion_outbox WHERE id = ?""",
+                    (json.dumps(suggestion), effect_id),
+                )
+            self._conn.execute(
+                """UPDATE ingestion_outbox SET status = ?, attempts = attempts + 1,
+                   error_code = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?""",
+                ('failed' if error_code else 'done', error_code, effect_id),
+            )
 
     @_locked
     def get_transaction(self, tx_id: int) -> Optional[dict]:
@@ -504,9 +564,13 @@ class Storage:
         self, merchant: str, amount: float, source: str, within_minutes: int = 10,
         *, currency: str = "SGD", transaction_date: Optional[str] = None,
         tx_type: str = "expense",
+        timestamp_precision: str = "unknown",
+        payment_identity_kind: Optional[str] = None,
+        payment_identity: Optional[str] = None,
     ) -> Optional[dict]:
         """Match timed observations; ambiguous or date-only purchases stay separate."""
-        if not transaction_date or len(transaction_date) <= 10 or not merchant:
+        if (timestamp_precision not in ("minute", "second") or not transaction_date
+                or len(transaction_date) <= 10 or not merchant):
             return None
         rows = self._conn.execute(
             """SELECT * FROM transactions
@@ -514,12 +578,20 @@ class Storage:
                AND COALESCE(type, 'expense') = ?
                AND LOWER(TRIM(merchant)) = LOWER(TRIM(?))
                AND LENGTH(transaction_date) > 10
+               AND EXISTS (SELECT 1 FROM source_events e
+                   WHERE e.transaction_id = transactions.id AND e.status = 'processed'
+                   AND e.timestamp_precision IN ('minute', 'second'))
+               AND NOT EXISTS (SELECT 1 FROM source_events e
+                   WHERE e.transaction_id = transactions.id AND e.status = 'processed'
+                   AND e.payment_identity_kind = ? AND e.payment_identity IS NOT NULL
+                   AND ? IS NOT NULL AND e.payment_identity != ?)
                AND NOT EXISTS (SELECT 1 FROM source_events e
                    WHERE e.transaction_id = transactions.id AND e.source = ?
                    AND e.status = 'processed')
                AND ABS(julianday(transaction_date) - julianday(?)) * 86400 <= ?
                LIMIT 2""",
-            (amount, source, currency, tx_type, merchant, source, transaction_date,
+            (amount, source, currency, tx_type, merchant,
+             payment_identity_kind, payment_identity, payment_identity, source, transaction_date,
              within_minutes * 60 + 0.001),
         ).fetchall()
         return dict(rows[0]) if len(rows) == 1 else None

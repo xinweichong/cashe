@@ -19,6 +19,7 @@ def _result(**kwargs):
         merchant="Starbucks",
         currency="SGD",
         transaction_date="2026-04-15T09:00:00",
+        timestamp_precision="second",
     )
     defaults.update(kwargs)
     return ParseResult(**defaults)
@@ -66,12 +67,12 @@ class TestIngestionPipelineIngest:
         detector = MagicMock()
         pipeline = IngestionPipeline(storage, detector=detector)
         pipeline.ingest(_result())
-        detector.detect_and_suggest.assert_called_once()
+        detector.detect.assert_called_once()
 
     def test_suggestion_callback_fires_when_pattern_detected_and_no_subscription(self, storage, in_memory_db):
         """Suggestion callback is invoked when pattern found and no subscription exists."""
         detector = MagicMock()
-        detector.detect_and_suggest.return_value = {"frequency": "monthly", "avg_amount": 12.50}
+        detector.detect.return_value = {"frequency": "monthly", "avg_amount": 12.50}
         callback = MagicMock()
         pipeline = IngestionPipeline(storage, detector=detector, on_recurring_pattern=callback)
         pipeline.ingest(_result(merchant="Spotify"))
@@ -81,7 +82,7 @@ class TestIngestionPipelineIngest:
         """Suggestion callback is NOT invoked when a subscription already exists for the merchant."""
         storage.create_subscription(merchant="Spotify", frequency="monthly")
         detector = MagicMock()
-        detector.detect_and_suggest.return_value = {"frequency": "monthly", "avg_amount": 12.50}
+        detector.detect.return_value = {"frequency": "monthly", "avg_amount": 12.50}
         callback = MagicMock()
         pipeline = IngestionPipeline(storage, detector=detector, on_recurring_pattern=callback)
         pipeline.ingest(_result(merchant="Spotify"))
@@ -154,7 +155,7 @@ def test_backfill_does_not_join_active_trip_or_notify_suggestions(storage, monke
     monkeypatch.setattr(storage, "auto_assign_to_active_trip", assign)
     callback = MagicMock()
     detector = MagicMock()
-    detector.detect_and_suggest.return_value = {"frequency": "monthly", "avg_amount": 12.5}
+    detector.detect.return_value = {"frequency": "monthly", "avg_amount": 12.5}
     pipeline = IngestionPipeline(storage, detector=detector, on_recurring_pattern=callback)
     assert pipeline.ingest(_result(), historical=True) is not None
     assign.assert_not_called()

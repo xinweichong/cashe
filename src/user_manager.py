@@ -162,10 +162,11 @@ class UserManager:
         sender_filters = gmail_cfg.get("sender_filters", [])
 
         bot = self._bot
-        suggestion_callback = (
-            (lambda m, f, a: bot.notify_subscription_suggestion(username, m, f, a))
-            if bot is not None else None
-        )
+
+        def suggestion_callback(merchant, frequency, amount):
+            if bot is not None:
+                return bot.notify_subscription_suggestion(username, merchant, frequency, amount)
+
         poller = GmailPoller(
             credentials_path=credentials_path,
             token_path=token_path,
@@ -198,19 +199,14 @@ class UserManager:
     def _make_on_transaction(self, username: str, storage, categorizer):
         bot = self._bot
 
-        def on_transaction(tx_dict: dict) -> None:
+        def on_transaction(tx_dict: dict):
             if bot is None:
                 return
-            try:
-                tx_id = tx_dict["id"]
-                amount = float(tx_dict.get("amount", 0))
-                merchant = tx_dict.get("merchant", "")
-                category = tx_dict.get("category")
-                source = tx_dict.get("source", "")
-                # Pipeline-ingested transactions are already categorized — treat as "ingest"
-                bot.notify_transaction(tx_id, amount, merchant, category, "ingest", source, username=username)
-            except Exception as e:
-                logger.warning("notify_transaction failed for %s: %s", username, e)
+            return bot.notify_transaction(
+                tx_dict["id"], float(tx_dict["amount"]), tx_dict.get("merchant", ""),
+                tx_dict.get("category"), tx_dict.get("_match_source", "ingest"),
+                tx_dict.get("source", ""), username=username,
+            )
 
         return on_transaction
 

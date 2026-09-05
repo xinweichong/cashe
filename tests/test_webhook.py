@@ -207,13 +207,15 @@ class TestWebhookDedup:
     @pytest.mark.asyncio
     async def test_cross_source_duplicate_detected(self, in_memory_db):
         storage = Storage(connection=in_memory_db)
-        storage.insert_transaction(
+        tx_id = storage.insert_transaction(
             source="dbs_paylah",
             source_id="email-123",
             amount=8.20,
             merchant="BAN MIAN",
             transaction_date="2026-04-16T12:00:00",
         )
+        event = storage.record_source_event("dbs_paylah", "email-123", "{}", timestamp_precision="minute")
+        storage.finish_source_event(event["id"], "processed", tx_id)
         ctx = FakeContext(storage)
         app = create_webhook_app(FakeUserManager(ctx))
         transport = ASGITransport(app=app)
