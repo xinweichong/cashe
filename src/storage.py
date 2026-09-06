@@ -1,6 +1,7 @@
 import calendar
 import functools
 import json
+import re
 import sqlite3
 import threading
 import secrets
@@ -318,6 +319,18 @@ class Storage:
         tx = self.get_transaction(tx_id)
         if tx is None:
             raise ValueError(f"transaction {tx_id} not found")
+        if "type" in fields and fields["type"] not in ("expense", "income", "refund", "transfer"):
+            raise ValueError("Type must be expense, income, refund, or transfer")
+        if "transaction_date" in fields:
+            value = fields["transaction_date"]
+            if not isinstance(value, str) or not re.fullmatch(
+                r"\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,6})?)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)?)?", value
+            ):
+                raise ValueError("Transaction date must be an ISO date or timestamp")
+            try:
+                fields["transaction_date"] = datetime.fromisoformat(value).isoformat()
+            except ValueError:
+                raise ValueError("Transaction date must be a valid calendar date and time") from None
         merchant = fields.get("merchant", tx.get("merchant"))
         if remember_category and (
             not isinstance(merchant, str) or not merchant.strip()

@@ -205,3 +205,16 @@ Transaction provenance was committed as `8519f11`; this continuation started wit
 - All-history review scans the legacy ledger with bounded response pages; it is not an indexed queue or proof of capture completeness. Browser discovery again returned no connected browser (`[]`), so rendered and device acceptance remain pending. No production data or services were modified.
 
 Verification: **780 backend tests passed** (four existing datetime deprecation warnings), **57 frontend tests passed**, production build and `git diff --check` passed. Added all-history/evidence reconciliation, independent reason, timezone, pagination, correction/deletion, privacy/authentication, cross-user isolation, retry, and return-link coverage. Focused frontend lint passes except the existing `set-state-in-effect` finding in `TransactionsPage.tsx`, reproduced against committed HEAD. This verified review slice is committed separately.
+
+
+## 2026-09-06 continuation — date and classification corrections
+
+Unresolved spending review was committed as `8268f4f`; this continuation started with a clean working tree.
+
+- Transaction details now support explicit date/timestamp corrections and reclassification to spending or income. Existing refund/transfer labels are retained; this slice does not introduce their linking/workflows. Unknown classifications are visibly identified instead of displayed as expenses.
+- The date field accepts an extended ISO date or timestamp, preserving the full original value in the editor. Unchanged date/type fields are omitted from updates, including legacy NULL expense types. Cancel resets drafts; save failures keep them editable.
+- `Storage.update_transaction` validates explicit date/type changes before any write, so web and Telegram corrections share the check. Invalid calendar dates, times, offsets, null values, and classifications cannot partially update other fields or remembered category rules. The API returns 422 for invalid corrections/non-object request bodies.
+- Date-only corrections use the existing midnight ledger format. Supplied offsets and fractional seconds survive normalization; original payloads, source IDs, and observation timestamp precision stay untouched. Shared facts and Review reflect corrected dates/types through the existing cache invalidation path.
+- This is an incremental correction slice, not the full shared idempotent transaction-command interface or the money migration. Refund linking, transfer workflows, bulk correction/undo, and creation-path validation remain open. Browser discovery returned no connected browser (`[]`); rendered/device checks remain pending. No production services or data were modified.
+
+Verification: **798 backend tests passed** (four existing datetime deprecation warnings), **60 frontend tests passed**, production build and `git diff --check` passed. Tests cover atomic rejection, leap/calendar/time/offset validation, retained fractional seconds, review-to-facts correction, untouched source evidence, unchanged-field omission, cancel/reset, and failed-save draft retention. Focused lint reports only the previously documented `set-state-in-effect` finding in `TransactionDetail.tsx`; its test file passes lint. The verified correction slice is committed separately.

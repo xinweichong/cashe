@@ -579,9 +579,9 @@ def create_dashboard_app(
             raise HTTPException(status_code=404, detail="Transaction not found")
         body = await request.json()
         allowed = {"merchant", "amount", "currency", "exchange_rate", "category", "description", "transaction_date", "type"}
+        if not isinstance(body, dict):
+            raise HTTPException(status_code=422, detail="Correction must be an object")
         fields = {k: v for k, v in body.items() if k in allowed}
-        if "transaction_date" in fields:
-            fields["transaction_date"] = _normalise_transaction_date(fields["transaction_date"])
         if not fields:
             raise HTTPException(status_code=400, detail="No valid fields to update")
         remember = body.get("remember_category", False)

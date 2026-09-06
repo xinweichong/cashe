@@ -32,6 +32,8 @@ export function TransactionDetail({
   const [rememberCategory, setRememberCategory] = useState(false);
   const [category, setCategory] = useState(tx.category ?? '');
   const [description, setDescription] = useState(tx.description ?? '');
+  const [date, setDate] = useState(tx.transaction_date ?? '');
+  const [type, setType] = useState(tx.type ?? 'expense');
   const [exchangeRate, setExchangeRate] = useState(tx.exchange_rate ?? 1.0);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -44,8 +46,10 @@ export function TransactionDetail({
     setCategory(tx.category ?? '');
     setRememberCategory(false);
     setDescription(tx.description ?? '');
+    setDate(tx.transaction_date ?? '');
+    setType(tx.type ?? 'expense');
     setExchangeRate(tx.exchange_rate ?? 1.0);
-  }, [tx.merchant, tx.category, tx.description, tx.exchange_rate]);
+  }, [tx.merchant, tx.category, tx.description, tx.exchange_rate, tx.transaction_date, tx.type]);
 
   // Reset form + exit edit mode when switching to a different transaction
   useEffect(() => {
@@ -78,13 +82,18 @@ export function TransactionDetail({
   const handleSave = () => {
     setSaveError(null);
     const data: Partial<Transaction> & { remember_category?: boolean } = { merchant, category, remember_category: rememberCategory };
+    if (date !== (tx.transaction_date ?? '')) {
+      if (!date) { setSaveError('Choose a transaction date.'); return; }
+      data.transaction_date = date;
+    }
+    if (type !== (tx.type ?? 'expense')) data.type = type;
     if (isAppleWallet) data.description = description;
     if (tx.currency !== 'SGD') data.exchange_rate = exchangeRate;
     updateTx.mutate(
       { id: tx.id, data },
       {
         onSuccess: () => setEditing(false),
-        onError: () => setSaveError('Couldn\'t save — try again.'),
+        onError: () => setSaveError('Couldn\'t save. Check the date and transaction fields, then try again.'),
       },
     );
   };
@@ -221,7 +230,7 @@ export function TransactionDetail({
         {!editing && (
           <div className="space-y-3">
             <DetailRow label="Date" value={formatDateTime(tx.transaction_date)} />
-            <DetailRow label="Type" value={tx.type === 'income' ? 'Income' : 'Expense'} />
+            <DetailRow label="Type" value={({ expense: 'Spending', income: 'Income', refund: 'Refund', transfer: 'Transfer' } as Record<string, string>)[tx.type ?? 'expense'] ?? 'Needs classification'} />
             <DetailRow label="Source" value={sourceLabel} />
             {tx.description && !isAppleWallet && (
               <DetailRow label="Description" value={tx.description} />
@@ -262,6 +271,19 @@ export function TransactionDetail({
         {/* Edit mode */}
         {editing && (
           <div className="space-y-4">
+            <div>
+              <label htmlFor={`date-${tx.id}`} className="text-xs text-muted mb-1 block">Transaction date</label>
+              <Input id={`date-${tx.id}`} value={date} placeholder="YYYY-MM-DD" onChange={e => setDate(e.target.value)} aria-describedby={`date-help-${tx.id}`} />
+              <p id={`date-help-${tx.id}`} className="text-xs text-muted mt-1">Use YYYY-MM-DD or the full timestamp from the original record. Keep any existing time and timezone offset unless correcting them. Capture evidence stays unchanged.</p>
+            </div>
+            <div>
+              <label htmlFor={`type-${tx.id}`} className="text-xs text-muted mb-1 block">Transaction type</label>
+              <select id={`type-${tx.id}`} className="input-field min-h-11 w-full" value={type} onChange={e => setType(e.target.value)}>
+                {!['expense', 'income'].includes(type) && <option value={type} disabled>{type === 'refund' ? 'Refund' : type === 'transfer' ? 'Transfer' : 'Choose a classification'}</option>}
+                <option value="expense">Spending</option><option value="income">Income</option>
+              </select>
+              <p className="text-xs text-muted mt-1">Changes this record only. The category and future merchant rules are separate choices.</p>
+            </div>
             <div>
               <label className="text-xs text-muted mb-1 block">Merchant</label>
               <Input

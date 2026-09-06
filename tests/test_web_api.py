@@ -476,3 +476,69 @@ async def test_invalid_remember_choice_does_not_partially_edit(client, in_memory
     assert response.status_code == 422
     assert storage.get_transaction(tx_id) == original
     assert storage.get_merchant_overrides() == {}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('fields', [
+    {'transaction_date': None}, {'transaction_date': 123}, {'transaction_date': ''},
+    {'transaction_date': '2026-02-30'}, {'transaction_date': '2026-09-06T25:00:00'},
+    {'transaction_date': '2026-W36-7'}, {'transaction_date': '20260906'},
+    {'transaction_date': '2026-09-06T12:00:00+99:00'},
+    {'transaction_date': '2026-09-06T12:00:00+08:90'},
+    {'type': None}, {'type': 'cash'}, {'type': []},
+])
+async def test_invalid_date_or_type_correction_is_atomic(client, in_memory_db, fields):
+    storage = Storage(in_memory_db)
+    tx_id = storage.insert_transaction(source='manual', source_id='invalid-correction', amount=12, merchant='Cafe', category='Other')
+    original = storage.get_transaction(tx_id)
+    response = await client.put(f'/api/transactions/{tx_id}', json={
+        'merchant': 'Changed', 'category': 'Food', 'remember_category': True, **fields,
+    })
+    assert response.status_code == 422
+    assert storage.get_transaction(tx_id) == original
+    assert storage.get_merchant_overrides() == {}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('date_value,stored', [
+    ('2024-02-29', '2024-02-29T00:00:00'),
+    ('2026-09-06 12:30', '2026-09-06T12:30:00'),
+    ('2026-09-06T12:30:01+08:00', '2026-09-06T12:30:01+08:00'),
+    ('2026-09-06T12:30:01.123Z', '2026-09-06T12:30:01.123000+00:00'),
+])
+async def test_date_corrections_preserve_precision_and_offset(client, in_memory_db, date_value, stored):
+    storage = Storage(in_memory_db)
+    tx_id = storage.insert_transaction(source='manual', source_id='date-correction', amount=12)
+    response = await client.put(f'/api/transactions/{tx_id}', json={'transaction_date': date_value})
+    assert response.status_code == 200
+    assert response.json()['transaction_date'] == stored
+
+
+@pytest.mark.asyncio
+async def test_correcting_review_date_and_type_updates_facts_without_changing_evidence(client, in_memory_db):
+    from datetime import date
+    storage = Storage(in_memory_db)
+    tx_id = storage.insert_transaction(source='manual', source_id='review-correction', amount=12,
+                                       tx_type='unknown', transaction_date=None, raw_data='original payload')
+    event = storage.record_source_event('manual', 'original-id', 'original evidence')
+    storage.finish_source_event(event['id'], 'processed', tx_id)
+    original_event = storage.get_source_event('manual', 'original-id')
+    assert storage.get_spending_review()['total'] == 1
+    response = await client.put(f'/api/transactions/{tx_id}', json={
+        'transaction_date': '2026-08-31T18:00:00+00:00', 'type': 'income',
+    })
+    assert response.status_code == 200
+    assert storage.get_spending_review()['total'] == 0
+    facts = storage.get_month_spending_facts(date(2026, 9, 6))
+    assert facts['current']['income']['minor_units'] == 1200
+    assert facts['current']['spending']['minor_units'] == 0
+    assert storage.get_source_event('manual', 'original-id') == original_event
+    assert storage.get_transaction(tx_id)['raw_data'] == 'original payload'
+    assert storage.get_transaction(tx_id)['source_id'] == 'review-correction'
+
+
+@pytest.mark.asyncio
+async def test_correction_rejects_non_object_body(client, in_memory_db):
+    tx_id = Storage(in_memory_db).insert_transaction(source='manual', source_id='body', amount=12)
+    response = await client.put(f'/api/transactions/{tx_id}', json=['transaction_date'])
+    assert response.status_code == 422

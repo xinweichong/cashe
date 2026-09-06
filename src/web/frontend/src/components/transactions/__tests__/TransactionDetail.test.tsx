@@ -34,6 +34,42 @@ it('defaults to one transaction and submits an explicit future-rule choice', () 
 
 const transaction = { id: 1, merchant: 'Cafe', category: 'Food', amount: 12, currency: 'SGD', type: 'expense', source: 'manual', source_id: 'private-id', transaction_date: '2026-09-06T12:00:00' } as Transaction;
 
+it('submits explicit date and classification corrections and resets them on cancel', () => {
+  render(detail({ ...transaction, transaction_date: '', type: 'unknown' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+  fireEvent.change(screen.getByLabelText('Transaction date'), { target: { value: '2026-09-05' } });
+  fireEvent.change(screen.getByLabelText('Transaction type'), { target: { value: 'income' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+  expect(mutate.mock.calls[0][0].data).toMatchObject({ transaction_date: '2026-09-05', type: 'income', remember_category: false });
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+  expect(screen.getByLabelText('Transaction date')).toHaveValue('');
+  expect(screen.getByLabelText('Transaction type')).toHaveValue('unknown');
+});
+
+it('category-only edits do not rewrite timestamps or legacy classifications', () => {
+  render(detail({ ...transaction, transaction_date: '2026-09-06T12:30:45+08:00', type: null } as unknown as Transaction));
+  fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+  expect(screen.getByLabelText('Transaction date')).toHaveValue('2026-09-06T12:30:45+08:00');
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+  expect(mutate.mock.calls[0][0].data).not.toHaveProperty('transaction_date');
+  expect(mutate.mock.calls[0][0].data).not.toHaveProperty('type');
+});
+
+it('keeps a failed correction editable and prevents clearing an existing date', () => {
+  render(detail());
+  fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+  fireEvent.change(screen.getByLabelText('Transaction date'), { target: { value: '' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+  expect(mutate).not.toHaveBeenCalled();
+  expect(screen.getByText('Choose a transaction date.')).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText('Transaction date'), { target: { value: 'bad-date' } });
+  mutate.mockImplementation((_vars, callbacks) => callbacks.onError());
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+  expect(screen.getByLabelText('Transaction date')).toHaveValue('bad-date');
+  expect(screen.getByText(/Check the date and transaction fields/)).toBeInTheDocument();
+});
+
 function detail(tx = transaction, client = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
   return <QueryClientProvider client={client}><MemoryRouter><TransactionDetail transaction={tx} onClose={() => {}} /></MemoryRouter></QueryClientProvider>;
 }
