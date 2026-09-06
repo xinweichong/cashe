@@ -739,3 +739,10 @@ A finance app's most-repeated UI element is a number. One grammar, everywhere:
 - **Hero numerics** use `AnimatedCurrency` (§14) and keep cents.
 - **Percentages** round to whole (`toFixed(0)` + `%`).
 - Amounts in rows, tables, and KPIs are `font-mono` (§3.1).
+
+
+## Next experience navigation (opt-in)
+
+`home_briefing_enabled` now selects Home, Activity, Plan, and Explore in the sidebar and phone tabs. Settings and capture review live in the profile menu; Review is also linked from Home and Activity. Classic navigation remains available by turning off “New experience” in Settings. Old transaction, finance, analytics, and merchant URLs redirect with their suffix, query, and fragment intact. `/overview` retains the classic dashboard for comparison.
+
+Home and Explore use natural page scrolling. Activity retains independently scrolling list/detail panels; opening a detail keeps the parent mounted to preserve filters and drafts. Explore groups the existing analytics and merchant reports, whose financial calculations still await migration to shared spending facts. Plan currently hosts existing finance tools; the planned forecast and timeline are not complete. The four primary navigation targets and profile controls have a 44px minimum hit area. Browser/device accessibility checks remain pending.

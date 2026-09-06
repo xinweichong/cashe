@@ -4,6 +4,8 @@ import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-quer
 import { AuthProvider, useAuth } from '@/hooks/useAuth';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { LoginScreen } from '@/components/auth/LoginScreen';
+import { ExplorePage } from '@/pages/ExplorePage';
+import { LegacyRedirect } from '@/components/layout/LegacyRedirect';
 import { AppShell } from '@/components/layout/AppShell';
 import { SplashScreen } from '@/components/ui/SplashScreen';
 import { api } from '@/api/client';
@@ -120,18 +122,27 @@ function AppContent() {
       <CategoryColorLoader />
       <Routes>
         {/* Dashboard routes */}
-        <Route element={<AppShell />}>
+        <Route element={<AppShell newExperience={!!settings?.home_briefing_enabled} />}>
           <Route index element={settings?.home_briefing_enabled ? <HomePage /> : <OverviewPage />} />
+          <Route path="overview" element={<OverviewPage />} />
+          <Route path="activity" element={<TransactionsPage />} />
+          <Route path="activity/:transactionId" element={<TransactionsPage />} />
+          <Route path="plan" element={<FinancePage />} />
+          <Route path="explore" element={<ExplorePage />}>
+            <Route index element={<AnalyticsPage />} />
+            <Route path="merchants" element={settings?.home_briefing_enabled ? <LegacyRedirect from="/merchants" to="/explore/merchants" /> : <MerchantsPage />} />
+            <Route path="merchants/:merchantName" element={settings?.home_briefing_enabled ? <LegacyRedirect from="/merchants" to="/explore/merchants" /> : <MerchantsPage />} />
+          </Route>
           <Route path="home" element={<HomePage />} />
           <Route path="evidence" element={<EvidencePage />} />
           <Route path="review" element={<ReviewPage />} />
-          <Route path="transactions" element={<TransactionsPage />} />
-          <Route path="transactions/:transactionId" element={<TransactionsPage />} />
-          <Route path="analytics" element={<AnalyticsPage />} />
+          <Route path="transactions" element={settings?.home_briefing_enabled ? <LegacyRedirect from="/transactions" to="/activity" /> : <TransactionsPage />} />
+          <Route path="transactions/:transactionId" element={settings?.home_briefing_enabled ? <LegacyRedirect from="/transactions" to="/activity" /> : <TransactionsPage />} />
+          <Route path="analytics" element={settings?.home_briefing_enabled ? <LegacyRedirect from="/analytics" to="/explore" /> : <AnalyticsPage />} />
           <Route path="settings" element={<SettingsPage />} />
-          <Route path="merchants" element={<MerchantsPage />} />
-          <Route path="merchants/:merchantName" element={<MerchantsPage />} />
-          <Route path="finance" element={<FinancePage />} />
+          <Route path="merchants" element={settings?.home_briefing_enabled ? <LegacyRedirect from="/merchants" to="/explore/merchants" /> : <MerchantsPage />} />
+          <Route path="merchants/:merchantName" element={settings?.home_briefing_enabled ? <LegacyRedirect from="/merchants" to="/explore/merchants" /> : <MerchantsPage />} />
+          <Route path="finance" element={settings?.home_briefing_enabled ? <LegacyRedirect from="/finance" to="/plan" /> : <FinancePage />} />
           <Route path="trips" element={<Navigate to="/finance" replace />} />
         </Route>
       </Routes>

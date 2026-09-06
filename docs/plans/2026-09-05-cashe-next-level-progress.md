@@ -144,3 +144,14 @@ Verification: **56 focused spending-facts/API-security tests passed**, including
 - Existing OCI architecture and deployment remain unchanged. The browser skill was read and discovery attempted, but no browser was connected (`[]`). Visual, keyboard, phone/tablet, and real-device acceptance remain unverified; a browser connection was requested while implementation continues.
 
 Verification: **757 backend tests passed** with four existing deprecation warnings; **39 frontend tests passed**; production frontend build and `git diff --check` passed. The Home chunk is about 6.4 KB uncompressed and separate from the charts bundle. Tests cover response privacy/authentication, upcoming bounds/cancellation, atomic opt-in settings, review pagination/retry, failed/partial briefing states, and comparison evidence URLs. The slice is committed; it does not complete the full product plan or its external acceptance gates.
+
+
+## 2026-09-06 continuation — four-destination navigation
+
+- Extended the opt-in flag to Home, Activity, Plan, and Explore in desktop/tablet navigation, phone tabs, and command search. Classic mode remains the default and can be restored in Settings.
+- Added Profile menu access to Settings and capture review, with Review also reachable from Activity. Primary touch targets are at least 44px.
+- Legacy URLs redirect without losing detail suffixes, encoded merchant names, query strings, or fragments. Activity and merchant detail navigation stays on the selected route family. List/detail route transitions retain parent state, avoiding filter/draft resets.
+- Explore groups existing analytics and merchant drill-downs and permits natural scrolling. Plan currently hosts existing finance tools; shared-facts conversion of legacy reports and richer question-led exploration/planning are still pending.
+- Updated design and agent instructions to document the deliberate natural-scroll exception. Themes are the next separate slice.
+
+Verification: **44 frontend tests passed**; production build passed. Added navigation destination/active-parent and legacy deep-link preservation coverage. Backend behavior is unchanged (previous full baseline 757 passing). Browser connection remains unavailable, so visual/device acceptance is still pending.

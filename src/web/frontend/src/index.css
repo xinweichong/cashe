@@ -303,3 +303,12 @@ body {
     }
   }
 }
+
+/* Home and Explore scroll naturally; Activity keeps its list/detail panels. */
+.explore-page .page-grid-analytics {
+  height: auto;
+  overflow: visible;
+  display: block;
+}
+.explore-page .page-grid-analytics > * + * { margin-top: 1rem; }
+.explore-page .grid-scroll-panel { overflow: visible; }

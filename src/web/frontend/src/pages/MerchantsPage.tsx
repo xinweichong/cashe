@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
 import { api, type MerchantSummary } from '@/api/client';
@@ -30,6 +30,8 @@ const SORT_OPTIONS = [
 export function MerchantsPage() {
   const { merchantName } = useParams<{ merchantName?: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+  const merchantsPath = location.pathname.startsWith('/explore/') ? '/explore/merchants' : '/merchants';
 
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState('total_spent');
@@ -55,7 +57,7 @@ export function MerchantsPage() {
 
   const handleCloseProfile = () => {
     setSelectedMerchant(null);
-    navigate('/merchants');
+    navigate(`${merchantsPath}${location.search}`);
   };
 
   const handleRowClick = (m: MerchantSummary) => {
@@ -63,7 +65,7 @@ export function MerchantsPage() {
       handleCloseProfile();
     } else {
       setSelectedMerchant(m.merchant);
-      navigate(`/merchants/${encodeURIComponent(m.merchant)}`);
+      navigate(`${merchantsPath}/${encodeURIComponent(m.merchant)}${location.search}`);
     }
   };
 

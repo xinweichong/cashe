@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useInfiniteQuery, useQuery, keepPreviousData } from '@tanstack/react-query';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -19,6 +19,8 @@ const PAGE_SIZE = 20;
 
 export function TransactionsPage() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const activityPath = location.pathname.startsWith('/activity') ? '/activity' : '/transactions';
   const { transactionId } = useParams<{ transactionId?: string }>();
   const parsed = transactionId ? parseInt(transactionId, 10) : NaN;
   const selectedId = isNaN(parsed) ? undefined : parsed;
@@ -33,7 +35,7 @@ export function TransactionsPage() {
 
   const [searchParams, setSearchParams] = useSearchParams();
   const returnTo = searchParams.get('returnTo');
-  const closeDetail = () => navigate(returnTo?.startsWith('/evidence?') ? returnTo : '/transactions');
+  const closeDetail = () => navigate(returnTo?.startsWith('/evidence?') ? returnTo : `${activityPath}${location.search}`);
   useEffect(() => {
     if (searchParams.get('add') === '1') {
       setShowForm(true);
@@ -90,12 +92,12 @@ export function TransactionsPage() {
   const handleTransactionClick = useCallback(
     (tx: Transaction) => {
       if (selectedId === tx.id) {
-        navigate('/transactions');
+        navigate(`${activityPath}${location.search}`);
       } else {
-        navigate(`/transactions/${tx.id}`);
+        navigate(`${activityPath}/${tx.id}${location.search}`);
       }
     },
-    [selectedId, navigate],
+    [selectedId, navigate, activityPath, location.search],
   );
 
   return (
@@ -107,16 +109,19 @@ export function TransactionsPage() {
         <div className="flex items-start justify-between pb-5 border-b border-border">
           <div className="flex flex-col gap-1">
             <div className="text-xs uppercase tracking-[0.22em] text-muted font-mono font-semibold">
-              Transactions
+              {activityPath === '/activity' ? 'Activity' : 'Transactions'}
             </div>
             <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground font-display">
               Every dollar tracked.
             </h1>
           </div>
-          <Button size="sm" onClick={() => setShowForm(!showForm)}>
+          <div className="flex items-center gap-2">
+          <Link to="/review" className="min-h-11 inline-flex items-center px-2 text-sm text-teal">Review</Link>
+          <Button className="min-h-11" size="sm" onClick={() => setShowForm(!showForm)}>
             <Plus className="w-4 h-4 mr-1" />
             Add
           </Button>
+          </div>
         </div>
 
         <TransactionFilters

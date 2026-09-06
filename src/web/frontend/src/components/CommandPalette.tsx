@@ -1,3 +1,4 @@
+import { MAIN_DESTINATIONS } from '@/lib/navigation';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -23,7 +24,8 @@ const ITEM_CLASS =
   'flex items-center gap-2 px-3 py-2 text-sm rounded-md cursor-pointer ' +
   'text-foreground data-[selected=true]:bg-foreground/10';
 
-export function CommandPalette() {
+export function CommandPalette({ newExperience = false }: { newExperience?: boolean }) {
+  const pages = newExperience ? [...MAIN_DESTINATIONS, { to: '/settings', icon: Settings, label: 'Settings' }] : PAGES;
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
 
@@ -81,7 +83,7 @@ export function CommandPalette() {
                 Nothing matches.
               </Command.Empty>
               <Command.Group heading="Pages">
-                {PAGES.map(({ to, icon: Icon, label }) => (
+                {pages.map(({ to, icon: Icon, label }) => (
                   <Command.Item
                     key={to}
                     className={ITEM_CLASS}
@@ -95,7 +97,7 @@ export function CommandPalette() {
               <Command.Group heading="Actions">
                 <Command.Item
                   className={ITEM_CLASS}
-                  onSelect={() => run(() => navigate('/transactions?add=1'))}
+                  onSelect={() => run(() => navigate(`${newExperience ? '/activity' : '/transactions'}?add=1`))}
                 >
                   <Plus className="w-4 h-4 text-muted" />
                   Add transaction
@@ -108,7 +110,7 @@ export function CommandPalette() {
                       key={m}
                       className={ITEM_CLASS}
                       onSelect={() =>
-                        run(() => navigate(`/merchants/${encodeURIComponent(m)}`))
+                        run(() => navigate(`${newExperience ? '/explore/merchants' : '/merchants'}/${encodeURIComponent(m)}`))
                       }
                     >
                       <Store className="w-4 h-4 text-muted" />

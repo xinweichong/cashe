@@ -608,3 +608,8 @@ Default label vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `read
 ### Domain docs
 
 Single-context layout — `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+
+
+### Next experience navigation
+
+When `home_briefing_enabled` is true, primary navigation is Home `/`, Activity `/activity`, Plan `/plan`, Explore `/explore`. Settings and capture review are in Profile; merchant drill-downs use `/explore/merchants/:merchantName`. Legacy routes redirect with suffix/query/fragment preserved; classic mode remains the default. Home/Explore naturally scroll, overriding the universal desktop viewport-grid rule for these pages. Activity keeps independent list/detail scrolling and preserves parent component state across detail URLs. See docs/design-language.md “Next experience navigation”.

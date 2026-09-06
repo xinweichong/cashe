@@ -1,3 +1,5 @@
+import { MAIN_DESTINATIONS } from '@/lib/navigation';
+import { ProfileMenu } from './ProfileMenu';
 import { NavLink } from 'react-router-dom';
 import { LayoutDashboard, List, BarChart3, Store, Wallet, Settings, Lock, Command } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -6,7 +8,7 @@ import { api } from '@/api/client';
 import { CasheWordmark, CasheIcon } from '@/components/ui/Brand';
 import { springs } from '@/lib/animations';
 
-export function Sidebar() {
+export function Sidebar({ newExperience = false }: { newExperience?: boolean }) {
   const { data: settings } = useQuery({
     queryKey: ['settings'],
     queryFn: () => api.getSettings(),
@@ -18,7 +20,7 @@ export function Sidebar() {
     settings?.trips_enabled ||
     settings?.subscriptions_enabled;
 
-  const navItems = [
+  const navItems = newExperience ? MAIN_DESTINATIONS : [
     { to: '/', icon: LayoutDashboard, label: 'Overview' },
     { to: '/transactions', icon: List, label: 'Transactions' },
     { to: '/analytics', icon: BarChart3, label: 'Analytics' },
@@ -32,14 +34,15 @@ export function Sidebar() {
         <CasheWordmark size={22} className="hidden lg:inline-flex" />
       </div>
 
-      <nav className="flex-1 px-2 lg:px-3 space-y-1">
+      <nav aria-label="Main navigation" className="flex-1 px-2 lg:px-3 space-y-1">
         {navItems.map(({ to, icon: Icon, label }) => (
           <NavLink
             key={to}
+            aria-label={label}
             to={to}
             end={to === '/'}
             className={({ isActive }) =>
-              `relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors justify-center lg:justify-start ${
+              `relative min-h-11 flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors justify-center lg:justify-start ${
                 isActive
                   ? 'bg-teal/10 text-foreground font-medium'
                   : 'text-muted hover:text-foreground hover:bg-foreground/5'
@@ -62,10 +65,11 @@ export function Sidebar() {
           </NavLink>
         ))}
 
+        {!newExperience && <>
         <NavLink
           to="/finance"
           className={({ isActive }) =>
-            `relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors justify-center lg:justify-start ${
+            `relative min-h-11 flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors justify-center lg:justify-start ${
               isActive
                 ? 'bg-teal/10 text-foreground font-medium'
                 : 'text-muted hover:text-foreground hover:bg-foreground/5'
@@ -93,7 +97,7 @@ export function Sidebar() {
         <NavLink
           to="/settings"
           className={({ isActive }) =>
-            `relative flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors justify-center lg:justify-start ${
+            `relative min-h-11 flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors justify-center lg:justify-start ${
               isActive
                 ? 'bg-teal/10 text-foreground font-medium'
                 : 'text-muted hover:text-foreground hover:bg-foreground/5'
@@ -114,7 +118,9 @@ export function Sidebar() {
             </>
           )}
         </NavLink>
+        </>}
       </nav>
+      {newExperience && <div className="p-1 lg:p-3"><ProfileMenu /></div>}
 
       {/* ⌘K hint — desktop only */}
       <div className="hidden lg:flex items-center gap-2 px-4 py-4 border-t border-border/30 text-[11px] text-muted/60 font-mono">

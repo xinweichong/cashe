@@ -1,6 +1,7 @@
+import { MAIN_DESTINATIONS } from '@/lib/navigation';
 import { NavLink } from 'react-router-dom';
 import { LayoutDashboard, List, BarChart3, Store, Wallet, Settings } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { motion, useReducedMotion } from 'framer-motion';
 import { springs } from '@/lib/animations';
 
 const TABS = [
@@ -12,22 +13,24 @@ const TABS = [
   { to: '/settings',    icon: Settings,        label: 'Settings'     },
 ];
 
-export function BottomTabs() {
+export function BottomTabs({ newExperience = false }: { newExperience?: boolean }) {
+  const reduceMotion = useReducedMotion();
   return (
     <motion.nav
-      initial={{ y: 20, opacity: 0 }}
+      aria-label="Main navigation"
+      initial={reduceMotion ? false : { y: 20, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       transition={springs.expo}
       className="md:hidden fixed bottom-0 left-0 right-0 bg-card/80 backdrop-blur-sm border-t border-border z-50"
     >
       <div className="flex justify-around items-center h-16">
-        {TABS.map(({ to, icon: Icon, label }) => (
+        {(newExperience ? MAIN_DESTINATIONS : TABS).map(({ to, icon: Icon, label }) => (
           <NavLink
             key={to}
             to={to}
             end={to === '/'}
             className={({ isActive }) =>
-              `flex flex-col items-center gap-0.5 px-2 py-1.5 text-[10px] transition-colors relative ${
+              `min-h-11 min-w-11 flex flex-col items-center gap-0.5 px-2 py-1.5 text-[10px] transition-colors relative ${
                 isActive ? 'text-teal' : 'text-muted'
               }`
             }
