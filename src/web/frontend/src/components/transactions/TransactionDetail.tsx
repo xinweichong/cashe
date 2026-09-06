@@ -34,7 +34,9 @@ export function TransactionDetail({
   const [description, setDescription] = useState(tx.description ?? '');
   const [date, setDate] = useState(tx.transaction_date ?? '');
   const [type, setType] = useState(tx.type ?? 'expense');
-  const [exchangeRate, setExchangeRate] = useState(tx.exchange_rate ?? 1.0);
+  const [amount, setAmount] = useState(String(tx.amount));
+  const [currency, setCurrency] = useState(tx.currency ?? '');
+  const [exchangeRate, setExchangeRate] = useState(tx.exchange_rate == null ? '' : String(tx.exchange_rate));
   const [saveError, setSaveError] = useState<string | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
@@ -48,8 +50,10 @@ export function TransactionDetail({
     setDescription(tx.description ?? '');
     setDate(tx.transaction_date ?? '');
     setType(tx.type ?? 'expense');
-    setExchangeRate(tx.exchange_rate ?? 1.0);
-  }, [tx.merchant, tx.category, tx.description, tx.exchange_rate, tx.transaction_date, tx.type]);
+    setAmount(String(tx.amount));
+    setCurrency(tx.currency ?? '');
+    setExchangeRate(tx.exchange_rate == null ? '' : String(tx.exchange_rate));
+  }, [tx.merchant, tx.category, tx.description, tx.exchange_rate, tx.transaction_date, tx.type, tx.amount, tx.currency]);
 
   // Reset form + exit edit mode when switching to a different transaction
   useEffect(() => {
@@ -82,13 +86,24 @@ export function TransactionDetail({
   const handleSave = () => {
     setSaveError(null);
     const data: Partial<Transaction> & { remember_category?: boolean } = { merchant, category, remember_category: rememberCategory };
+    if (amount !== String(tx.amount)) {
+      if (!amount.trim() || !Number.isFinite(Number(amount)) || Number(amount) < 0) { setSaveError('Enter a non-negative amount.'); return; }
+      data.amount = Number(amount);
+    }
+    if (currency !== (tx.currency ?? '')) {
+      if (!/^[A-Z]{3}$/.test(currency)) { setSaveError('Use a three-letter currency code.'); return; }
+      data.currency = currency;
+    }
+    if (currency !== 'SGD' && (currency !== tx.currency || exchangeRate !== (tx.exchange_rate == null ? '' : String(tx.exchange_rate)))) {
+      if (exchangeRate.trim() && (!Number.isFinite(Number(exchangeRate)) || Number(exchangeRate) <= 0)) { setSaveError('Enter a positive exchange rate, or leave it blank.'); return; }
+      data.exchange_rate = exchangeRate.trim() ? Number(exchangeRate) : null;
+    }
     if (date !== (tx.transaction_date ?? '')) {
       if (!date) { setSaveError('Choose a transaction date.'); return; }
       data.transaction_date = date;
     }
     if (type !== (tx.type ?? 'expense')) data.type = type;
     if (isAppleWallet) data.description = description;
-    if (tx.currency !== 'SGD') data.exchange_rate = exchangeRate;
     updateTx.mutate(
       { id: tx.id, data },
       {
@@ -217,13 +232,13 @@ export function TransactionDetail({
         {/* Amount */}
         <div>
           <p className={`text-3xl font-bold ${tx.type === 'income' ? 'text-success' : ''}`}>
-            {tx.type === 'income' ? '+' : '-'}{formatCurrency(tx.amount, tx.currency)}
+            {tx.type === 'income' ? '+' : '-'}{/^[A-Z]{3}$/.test(tx.currency ?? '') ? formatCurrency(tx.amount, tx.currency) : `${tx.amount} · Currency unknown`}
           </p>
-          {tx.currency !== 'SGD' && tx.exchange_rate != null && (
+          {tx.currency !== 'SGD' && tx.exchange_rate != null && Number.isFinite(tx.exchange_rate) && tx.exchange_rate > 0 && tx.exchange_rate !== 1 && Number.isFinite(tx.amount) && tx.amount >= 0 ? (
             <p className="text-sm text-muted mt-1">
-              ≈ {formatCurrency(tx.amount * tx.exchange_rate)} SGD
+              ≈ {formatCurrency(tx.amount * tx.exchange_rate)} SGD · Indicative conversion
             </p>
-          )}
+          ) : tx.currency !== 'SGD' && <p className="text-sm text-warning mt-1">SGD conversion unresolved</p>}
         </div>
 
         {/* View mode: all fields */}
@@ -271,6 +286,15 @@ export function TransactionDetail({
         {/* Edit mode */}
         {editing && (
           <div className="space-y-4">
+            <div>
+              <label htmlFor={`amount-${tx.id}`} className="text-xs text-muted mb-1 block">Original amount</label>
+              <Input id={`amount-${tx.id}`} type="number" min="0" step="any" value={amount} onChange={e => setAmount(e.target.value)} />
+            </div>
+            <div>
+              <label htmlFor={`currency-${tx.id}`} className="text-xs text-muted mb-1 block">Currency</label>
+              <Input id={`currency-${tx.id}`} value={currency} maxLength={3} onChange={e => { setCurrency(e.target.value.toUpperCase()); setExchangeRate(''); }} />
+              <p className="text-xs text-muted mt-1">Changing currency clears the conversion. Enter a replacement rate only when known.</p>
+            </div>
             <div>
               <label htmlFor={`date-${tx.id}`} className="text-xs text-muted mb-1 block">Transaction date</label>
               <Input id={`date-${tx.id}`} value={date} placeholder="YYYY-MM-DD" onChange={e => setDate(e.target.value)} aria-describedby={`date-help-${tx.id}`} />
@@ -332,19 +356,21 @@ export function TransactionDetail({
                 </Select>
               </div>
             )}
-            {tx.currency !== 'SGD' && (
+            {currency !== 'SGD' && (
               <div>
-                <label className="text-xs text-muted mb-1 block">
-                  Exchange rate (1 {tx.currency} = ? SGD)
+                <label htmlFor={`rate-${tx.id}`} className="text-xs text-muted mb-1 block">
+                  Exchange rate (1 {currency} = ? SGD)
                 </label>
                 <Input
+                  id={`rate-${tx.id}`}
                   type="number"
                   value={exchangeRate}
-                  onChange={(e) => setExchangeRate(parseFloat(e.target.value) || 1)}
+                  onChange={(e) => setExchangeRate(e.target.value)}
                   className="bg-background border-border text-sm"
-                  step="0.0001"
+                  step="any"
                   min="0"
                 />
+                <p className="text-xs text-muted mt-1">Leave blank if unknown. A legacy rate of 1 stays unresolved in spending reports. Other retained rates are indicative, not statement settlement amounts.</p>
               </div>
             )}
           </div>

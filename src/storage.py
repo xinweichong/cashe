@@ -1,6 +1,7 @@
 import calendar
 import functools
 import json
+import math
 import re
 import sqlite3
 import threading
@@ -319,6 +320,27 @@ class Storage:
         tx = self.get_transaction(tx_id)
         if tx is None:
             raise ValueError(f"transaction {tx_id} not found")
+        for key in ("amount", "exchange_rate"):
+            if key not in fields or (key == "exchange_rate" and fields[key] is None):
+                continue
+            value = fields[key]
+            try:
+                number = float(value)
+            except (ValueError, TypeError, OverflowError):
+                raise ValueError(f"{key} must be a finite number") from None
+            if isinstance(value, bool) or not math.isfinite(number) or number < 0 or (key == "exchange_rate" and number == 0):
+                raise ValueError(f"{key} must be {'positive' if key == 'exchange_rate' else 'non-negative'} and finite")
+            fields[key] = number
+        if "currency" in fields:
+            currency = fields["currency"]
+            if not isinstance(currency, str) or not re.fullmatch(r"[A-Za-z]{3}", currency):
+                raise ValueError("Currency must be a three-letter code")
+            fields["currency"] = currency.upper()
+            if fields["currency"] != tx["currency"]:
+                if fields["currency"] == "SGD":
+                    fields["exchange_rate"] = 1.0
+                elif "exchange_rate" not in fields:
+                    fields["exchange_rate"] = None
         if "type" in fields and fields["type"] not in ("expense", "income", "refund", "transfer"):
             raise ValueError("Type must be expense, income, refund, or transfer")
         if "transaction_date" in fields:

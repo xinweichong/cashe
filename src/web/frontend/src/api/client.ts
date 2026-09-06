@@ -25,7 +25,7 @@ export interface Transaction {
   source_id: string;
   amount: number;
   currency: string;
-  exchange_rate: number;
+  exchange_rate: number | null;
   merchant: string | null;
   description: string | null;
   category: string | null;

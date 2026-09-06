@@ -40,6 +40,8 @@ Reasons can coexist. Missing dates alone do not imply missing FX. The response i
 
 This is an all-history scan using the legacy facts calculation, with bounded response pages. It is not an indexed queue or a completion audit, and does not include uncertain duplicates, unknown merchants, refund matches, or recurring suggestions yet.
 
+Monetary corrections in transaction details accept non-negative finite original amounts, three-letter currency codes, and positive finite rates. Blank rates are explicitly unknown (`NULL`), never replaced with `1`. Changing currency clears a stale foreign conversion unless a replacement is supplied; switching to SGD sets its native rate to `1`. A foreign rate of `1` remains unresolved under the legacy compatibility rules. Currency validation checks format, not registry membership. Invalid monetary updates reject all fields and any remembered merchant rule. These controls do not implement integer-money storage, settlement precedence, or migrate the remaining legacy reports and creation paths.
+
 ## Synthetic performance baseline
 
 Run the reproducible benchmark without providing any real database path:

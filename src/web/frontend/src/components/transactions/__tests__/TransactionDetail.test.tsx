@@ -74,6 +74,47 @@ function detail(tx = transaction, client = new QueryClient({ defaultOptions: { q
   return <QueryClientProvider client={client}><MemoryRouter><TransactionDetail transaction={tx} onClose={() => {}} /></MemoryRouter></QueryClientProvider>;
 }
 
+it('preserves unresolved conversions on unrelated edits and clears rates explicitly', () => {
+  render(detail({ ...transaction, currency: 'USD', exchange_rate: null }));
+  expect(screen.getByText('SGD conversion unresolved')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+  expect(screen.getByLabelText('Exchange rate (1 USD = ? SGD)')).toHaveValue(null);
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+  expect(mutate.mock.calls[0][0].data).not.toHaveProperty('exchange_rate');
+});
+
+it('clearing a known rate sends null without inventing a conversion', () => {
+  render(detail({ ...transaction, currency: 'USD', exchange_rate: 1.3 }));
+  fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+  fireEvent.change(screen.getByLabelText('Exchange rate (1 USD = ? SGD)'), { target: { value: '' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+  expect(mutate.mock.calls[0][0].data.exchange_rate).toBeNull();
+});
+
+it('currency changes clear stale rates and amount corrections submit the original value', () => {
+  render(detail({ ...transaction, currency: 'USD', exchange_rate: 1.3 }));
+  fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+  fireEvent.change(screen.getByLabelText('Currency'), { target: { value: 'eur' } });
+  fireEvent.change(screen.getByLabelText('Original amount'), { target: { value: '20.25' } });
+  expect(screen.getByLabelText('Exchange rate (1 EUR = ? SGD)')).toHaveValue(null);
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+  expect(mutate.mock.calls[0][0].data).toMatchObject({ currency: 'EUR', amount: 20.25, exchange_rate: null });
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+  expect(screen.getByLabelText('Currency')).toHaveValue('USD');
+  expect(screen.getByLabelText('Exchange rate (1 USD = ? SGD)')).toHaveValue(1.3);
+});
+
+it('rejects invalid amounts locally and allows unknown currencies to be repaired', () => {
+  render(detail({ ...transaction, currency: '' }));
+  expect(screen.getByText(/Currency unknown/)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+  fireEvent.change(screen.getByLabelText('Original amount'), { target: { value: '-1' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+  expect(mutate).not.toHaveBeenCalled();
+  expect(screen.getByText('Enter a non-negative amount.')).toBeInTheDocument();
+});
+
 it('shows linked Wallet and Gmail evidence without internal source IDs', async () => {
   provenance.mockResolvedValue({ transaction_id: 1, sources: [{ channel: 'apple_wallet', evidence_recorded: true }, { channel: 'gmail', evidence_recorded: true }] });
   render(detail());

@@ -143,7 +143,7 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
         .slice(0, 6)
         .map((t: Transaction) => ({
           date: t.transaction_date.slice(0, 10),
-          amount: Number((t.amount * t.exchange_rate).toFixed(2)),
+          amount: t.exchange_rate == null ? null : Number((t.amount * t.exchange_rate).toFixed(2)),
         }))
         .reverse(),
     [history],
@@ -339,7 +339,7 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
                           <option value="">Choose transaction…</option>
                           {linkCandidates.map((tx: Transaction) => (
                             <option key={tx.id} value={String(tx.id)}>
-                              {tx.transaction_date.slice(0, 10)} · S${(tx.amount * tx.exchange_rate).toFixed(2)} · {tx.merchant ?? '—'}
+                              {tx.transaction_date.slice(0, 10)} · {tx.exchange_rate == null ? 'Conversion unresolved' : `S$${(tx.amount * tx.exchange_rate).toFixed(2)}`} · {tx.merchant ?? '—'}
                             </option>
                           ))}
                         </select>
@@ -368,7 +368,7 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
                       >
                         <span className="text-xs text-muted">{tx.transaction_date.slice(0, 10)}</span>
                         <span className="text-xs font-medium text-foreground tabular-nums">
-                          S${(tx.amount * tx.exchange_rate).toFixed(2)}
+                          {tx.exchange_rate == null ? 'Conversion unresolved' : `S$${(tx.amount * tx.exchange_rate).toFixed(2)}`}
                         </span>
                       </div>
                     ))}
@@ -455,7 +455,7 @@ function UpcomingRow({ upcoming, recentTxs, onMatch, onDismiss }: UpcomingRowPro
           <option value="">Match to transaction…</option>
           {candidates.map((tx) => (
             <option key={tx.id} value={String(tx.id)}>
-              {tx.transaction_date.slice(0, 10)} · S${(tx.amount * tx.exchange_rate).toFixed(2)} · {tx.merchant ?? '—'}
+              {tx.transaction_date.slice(0, 10)} · {tx.exchange_rate == null ? 'Conversion unresolved' : `S$${(tx.amount * tx.exchange_rate).toFixed(2)}`} · {tx.merchant ?? '—'}
             </option>
           ))}
         </select>

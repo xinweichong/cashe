@@ -542,3 +542,61 @@ async def test_correction_rejects_non_object_body(client, in_memory_db):
     tx_id = Storage(in_memory_db).insert_transaction(source='manual', source_id='body', amount=12)
     response = await client.put(f'/api/transactions/{tx_id}', json=['transaction_date'])
     assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('fields', [
+    {'amount': None}, {'amount': True}, {'amount': -1}, {'amount': 'NaN'}, {'amount': '1e309'},
+    {'amount': []}, {'exchange_rate': 0}, {'exchange_rate': -1}, {'exchange_rate': True},
+    {'exchange_rate': 'Infinity'}, {'exchange_rate': ''}, {'currency': None}, {'currency': 'US'},
+    {'currency': 'U$D'},
+])
+async def test_invalid_monetary_correction_is_atomic(client, in_memory_db, fields):
+    storage = Storage(in_memory_db)
+    tx_id = storage.insert_transaction(source='manual', source_id='money-invalid', amount=12, merchant='Cafe')
+    original = storage.get_transaction(tx_id)
+    response = await client.put(f'/api/transactions/{tx_id}', json={
+        'merchant': 'Changed', 'category': 'Food', 'remember_category': True, **fields,
+    })
+    assert response.status_code == 422
+    assert storage.get_transaction(tx_id) == original
+    assert storage.get_merchant_overrides() == {}
+
+
+@pytest.mark.asyncio
+async def test_currency_correction_clears_old_rate_and_refreshes_facts(client, in_memory_db):
+    from datetime import date
+    storage = Storage(in_memory_db)
+    tx_id = storage.insert_transaction(source='manual', source_id='currency-change', amount=12, currency='USD', exchange_rate=1.3, transaction_date='2026-09-01')
+    response = await client.put(f'/api/transactions/{tx_id}', json={'currency': 'eur', 'amount': '20.25'})
+    assert response.status_code == 200
+    assert response.json()['currency'] == 'EUR'
+    assert response.json()['exchange_rate'] is None
+    assert storage.get_spending_review()['total'] == 1
+    response = await client.put(f'/api/transactions/{tx_id}', json={'exchange_rate': '1.5'})
+    assert response.status_code == 200
+    assert storage.get_spending_review()['total'] == 0
+    facts = storage.get_month_spending_facts(date(2026, 9, 6))
+    assert facts['current']['spending']['minor_units'] == 3038
+    assert facts['current']['status'] == 'indicative'
+    response = await client.put(f'/api/transactions/{tx_id}', json={'exchange_rate': None})
+    assert response.status_code == 200
+    assert storage.get_spending_review()['total'] == 1
+    response = await client.put(f'/api/transactions/{tx_id}', json={'currency': 'SGD', 'amount': 0})
+    assert response.status_code == 200
+    assert response.json()['exchange_rate'] == 1
+    assert storage.get_spending_review()['total'] == 0
+
+
+@pytest.mark.asyncio
+async def test_currency_correction_with_explicit_rate_and_unrelated_edit_preservation(client, in_memory_db):
+    storage = Storage(in_memory_db)
+    tx_id = storage.insert_transaction(source='manual', source_id='rate-preserve', amount=12, currency='USD', exchange_rate=None)
+    response = await client.put(f'/api/transactions/{tx_id}', json={'category': 'Food'})
+    assert response.status_code == 200
+    assert response.json()['exchange_rate'] is None
+    response = await client.put(f'/api/transactions/{tx_id}', json={'currency': 'EUR', 'exchange_rate': 1.5})
+    assert response.status_code == 200
+    assert response.json()['exchange_rate'] == 1.5
+    response = await client.put(f'/api/transactions/{tx_id}', json={'currency': 'EUR'})
+    assert response.json()['exchange_rate'] == 1.5
