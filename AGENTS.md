@@ -197,6 +197,7 @@ The `IngestionPipeline` is instantiated per-user inside `UserManager._build_cont
 
 ### Capture trust foundation
 
+- Authenticated `/api/v2/transactions/{id}/provenance` exposes only the transaction ID and grouped input channels with `evidence_recorded`. Group raw/parsed Wallet observations together and Gmail/bank observations together; only processed events linked to that transaction establish retained evidence. A legacy/manual recorded source alone is not retained capture evidence. Never expose payloads, source IDs, or payment identifiers through this interface.
 - `source_events` retains the original observation, parser version, status, attempts, linked transaction, timestamp precision, and namespaced payment identity. Raw payloads and payment metadata stay server-side.
 - Cross-source reconciliation requires explicit `minute`/`second` precision on both observations. `date` and `unknown` observations, including legacy evidence, remain separate even when transaction strings contain midnight. UOB card/transit date-only alerts retain their existing `T00:00:00` storage format but declare `date` precision.
 - Payment identity conflicts exclude a candidate only within the same namespace. `wallet_card_label`, `uob_card_last4`, and `uob_account_suffix` are different evidence types; never equate a Wallet label/device identity with a bank card suffix. Matching identifiers supplement the time/merchant/amount/currency/type checks, never replace them.

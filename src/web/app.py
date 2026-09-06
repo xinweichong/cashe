@@ -21,7 +21,7 @@ from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 
 from src.config import local_now
 from src.web.auth import verify_password, create_session, verify_session, destroy_session
-from src.web.contracts import CaptureFollowup, CaptureIssue, HomeBriefing, QueuedResponse, SpendingEvidence, SpendingFacts
+from src.web.contracts import CaptureFollowup, CaptureIssue, HomeBriefing, QueuedResponse, SpendingEvidence, SpendingFacts, TransactionProvenance
 from src.analytics import (
     load_summary,
     get_yoy_comparison,
@@ -503,6 +503,14 @@ def create_dashboard_app(
             media_type="text/csv",
             headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
+
+    @app.get("/api/v2/transactions/{tx_id}/provenance", response_model=TransactionProvenance)
+    async def get_transaction_provenance(tx_id: int, username: str = Depends(require_auth)):
+        storage = user_manager.get(username).storage
+        try:
+            return await _db(storage.get_transaction_provenance, tx_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
 
     @app.get("/api/transactions/{tx_id}")
     async def get_transaction(tx_id: int, username: str = Depends(require_auth)):

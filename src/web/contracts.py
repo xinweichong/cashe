@@ -20,6 +20,16 @@ class QueuedResponse(BaseModel):
     status: Literal["queued"] = "queued"
 
 
+class TransactionSource(BaseModel):
+    channel: Literal["apple_wallet", "gmail", "manual", "cash", "other"]
+    evidence_recorded: bool
+
+
+class TransactionProvenance(BaseModel):
+    transaction_id: int
+    sources: list[TransactionSource]
+
+
 class CaptureFollowup(BaseModel):
     id: int
     transaction_id: int

@@ -34,6 +34,14 @@ export interface Transaction {
   type: string;
 }
 
+export interface TransactionProvenance {
+  transaction_id: number;
+  sources: {
+    channel: 'apple_wallet' | 'gmail' | 'manual' | 'cash' | 'other';
+    evidence_recorded: boolean;
+  }[];
+}
+
 export interface Category {
   name: string;
   keywords: string | null;
@@ -313,6 +321,9 @@ export const api = {
 
   getTransaction: (id: number) =>
     request<Transaction>(`/api/transactions/${id}`),
+
+  getTransactionProvenance: (id: number) =>
+    request<TransactionProvenance>(`/api/v2/transactions/${id}/provenance`),
 
   createTransaction: (data: Partial<Transaction> & { source?: string }) =>
     request<Transaction>('/api/transactions', {

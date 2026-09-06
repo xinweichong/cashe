@@ -100,6 +100,33 @@ class Storage:
             yield
 
     @_locked
+    def get_transaction_provenance(self, tx_id: int) -> dict:
+        """Summarize retained evidence without exposing observation identifiers/payloads."""
+        tx = self._conn.execute("SELECT source FROM transactions WHERE id = ?", (tx_id,)).fetchone()
+        if tx is None:
+            raise ValueError("Transaction not found")
+
+        def channel(source):
+            if source in {"apple_wallet", "wallet_request"}:
+                return "apple_wallet"
+            if source in {"gmail", "dbs_paylah", "uob_card", "uob_paynow", "uob_paynow_sent",
+                          "uob_transfer", "uob_nets"}:
+                return "gmail"
+            return source if source in {"manual", "cash"} else "other"
+
+        # Raw and parsed observations describe the same input, not separate purchases.
+        sources = {channel(tx["source"]): False}
+        for row in self._conn.execute(
+            "SELECT DISTINCT source FROM source_events WHERE transaction_id = ? AND status = 'processed'",
+            (tx_id,),
+        ):
+            sources[channel(row["source"])] = True
+        return {"transaction_id": tx_id, "sources": [
+            {"channel": name, "evidence_recorded": recorded}
+            for name, recorded in sorted(sources.items())
+        ]}
+
+    @_locked
     def record_source_event(self, source: str, source_id: str, payload: str,
                             parser_version: str = "1", *, timestamp_precision: str = "unknown",
                             payment_identity_kind: Optional[str] = None,

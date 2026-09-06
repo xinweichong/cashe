@@ -179,3 +179,16 @@ Appearance was committed as `399a62d`.
 - Transaction detail edit/delete/close controls now have accessible names and 44px touch targets. Updated user and agent documentation for the intentionally changed learning behavior. Bulk corrections, rule-management redesign, and undo remain pending.
 
 Verification: **765 backend tests passed** (four existing deprecation warnings), **50 frontend tests passed**, and production build passed. Added atomic rollback, invalid scope, existing rule preservation, corrected-merchant scope, explicit Telegram remembering, and UI choice/reset coverage. A final focused Telegram run verifies removal of the unused helper argument. No production deployment or real data migration occurred.
+
+
+## 2026-09-06 continuation — transaction capture provenance
+
+Explicit category correction scope was committed as `b18fb2e`; this continuation started with a clean working tree.
+
+- Added typed authenticated `GET /api/v2/transactions/{id}/provenance`, using the session's per-user Storage. The response contains only the transaction ID and grouped input channels with a retained-evidence flag. Missing/deleted transactions return 404.
+- Raw and parsed Wallet observations collapse into one Wallet channel; Gmail observations and bank parser observations collapse into one Gmail channel. Only processed observations linked to that transaction establish retained evidence. Date-only purchases that reconciliation kept separate retain separate provenance.
+- Activity/classic transaction details show capture sources, explain when linked sources count as one transaction, and distinguish legacy/manual recorded sources from retained evidence. Loading, failure, retry, and selection changes have explicit states. Removed internal source IDs from the rendered detail view; legacy API response migration remains open.
+- No schema or transaction mutations are introduced. This is provenance display, not duplicate resolution: ambiguous duplicate review, shared transaction commands, bulk/undo, imports, and the money-storage migration remain pending.
+- Browser setup and troubleshooting found no connected browser (`[]`), so rendered/device acceptance remains unverified. No production data or services were touched.
+
+Verification: **774 backend tests passed** (four existing datetime deprecation warnings), **54 frontend tests passed**, production build and `git diff --check` passed. New tests cover cross-source capture, raw/parsed grouping, date-only separation, legacy/manual evidence absence, deleted transactions, authenticated response privacy, overlapping IDs across user databases, and UI loading/retry/selection states. Focused lint reports 12 pre-existing errors (11 `no-explicit-any` in `api/client.ts`, one `set-state-in-effect` in `TransactionDetail.tsx`); the same findings were reproduced against committed HEAD. The verified provenance slice is committed separately.

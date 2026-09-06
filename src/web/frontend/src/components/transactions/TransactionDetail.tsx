@@ -251,9 +251,9 @@ export function TransactionDetail({
               </div>
             )}
             <TripMembershipRow txId={tx.id} />
+            <TransactionSources txId={tx.id} />
             {/* Meta */}
             <div className="pt-2 border-t border-border space-y-2">
-              <DetailRow label="Source ID" value={tx.source_id} muted />
               <DetailRow label="Ingested" value={formatDateTime(tx.ingested_at)} muted />
             </div>
           </div>
@@ -329,6 +329,40 @@ export function TransactionDetail({
         )}
       </div>
     </div>
+  );
+}
+
+function TransactionSources({ txId }: { txId: number }) {
+  const { data, isPending, isError, refetch, isFetching } = useQuery({
+    queryKey: ['transaction-provenance', txId],
+    queryFn: () => api.getTransactionProvenance(txId),
+  });
+  const labels = { apple_wallet: 'Apple Wallet', gmail: 'Gmail', manual: 'Manual entry', cash: 'Cash entry', other: 'Other source' };
+
+  return (
+    <section aria-label="Capture sources" className="pt-3 border-t border-border space-y-2 text-sm">
+      <h3 className="font-medium">Capture sources</h3>
+      {isPending ? <p role="status" className="text-muted">Loading capture sources…</p> : isError ? (
+        <div>
+          <p role="status" className="text-muted">Couldn’t load capture sources.</p>
+          <Button variant="outline" className="min-h-11 mt-2" disabled={isFetching} onClick={() => void refetch()}>Retry sources</Button>
+        </div>
+      ) : data && (
+        <>
+          <ul className="space-y-2">
+            {data.sources.map((source) => (
+              <li key={source.channel}>
+                <span>{labels[source.channel]}</span>
+                <p className="text-xs text-muted">{source.evidence_recorded ? 'Capture evidence retained' : 'Recorded source only; no capture evidence retained'}</p>
+              </li>
+            ))}
+          </ul>
+          {data.sources.filter((source) => source.evidence_recorded).length > 1 && (
+            <p className="text-muted">These sources are linked to one transaction and counted once.</p>
+          )}
+        </>
+      )}
+    </section>
   );
 }
 
