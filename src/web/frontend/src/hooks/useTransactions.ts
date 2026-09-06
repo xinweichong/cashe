@@ -36,6 +36,8 @@ export function useCreateTransaction() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['transactions'] });
       qc.invalidateQueries({ queryKey: ['summary'] });
+      qc.invalidateQueries({ queryKey: ['home-briefing'] });
+      qc.invalidateQueries({ queryKey: ['spending-evidence'] });
       qc.invalidateQueries({ queryKey: ['balance'] });
     },
   });
@@ -66,6 +68,8 @@ export function useUpdateTransaction() {
       qc.invalidateQueries({ queryKey: ['transactions'] });
       qc.invalidateQueries({ queryKey: ['transaction', id] });
       qc.invalidateQueries({ queryKey: ['summary'] });
+      qc.invalidateQueries({ queryKey: ['home-briefing'] });
+      qc.invalidateQueries({ queryKey: ['spending-evidence'] });
     },
   });
 }
@@ -91,6 +95,8 @@ export function useDeleteTransaction() {
     onSettled: () => {
       qc.invalidateQueries({ queryKey: ['transactions'] });
       qc.invalidateQueries({ queryKey: ['summary'] });
+      qc.invalidateQueries({ queryKey: ['home-briefing'] });
+      qc.invalidateQueries({ queryKey: ['spending-evidence'] });
       qc.invalidateQueries({ queryKey: ['balance'] });
     },
   });

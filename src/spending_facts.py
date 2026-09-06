@@ -32,7 +32,7 @@ def week_periods(as_of: date) -> tuple[date, date, date, date]:
     return current_start, as_of, current_start - timedelta(days=7), as_of - timedelta(days=7)
 
 
-def _converted(row: dict) -> tuple[int | None, str]:
+def convert_legacy_sgd(row: dict) -> tuple[int | None, str]:
     try:
         amount = Decimal(str(row["amount"]))
         if not amount.is_finite() or amount < 0:
@@ -74,7 +74,7 @@ def _rows(conn, start: date, end: date, timezone: str) -> list[dict]:
             row["day"] = day
             row["type"] = row["type"] or "expense"
             row["category"] = row["category"] or "Other"
-            row["minor"], row["conversion_status"] = _converted(row)
+            row["minor"], row["conversion_status"] = convert_legacy_sgd(row)
             if day is None:
                 row["minor"], row["conversion_status"] = None, "unresolved"
             result.append(row)

@@ -32,6 +32,8 @@ export function TransactionsPage() {
   const { data: categories } = useCategories();
 
   const [searchParams, setSearchParams] = useSearchParams();
+  const returnTo = searchParams.get('returnTo');
+  const closeDetail = () => navigate(returnTo?.startsWith('/evidence?') ? returnTo : '/transactions');
   useEffect(() => {
     if (searchParams.get('add') === '1') {
       setShowForm(true);
@@ -169,7 +171,7 @@ export function TransactionsPage() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            onClick={() => navigate('/transactions')}
+            onClick={closeDetail}
           />
         )}
       </AnimatePresence>
@@ -186,7 +188,7 @@ export function TransactionsPage() {
           >
             <TransactionDetail
               transaction={selectedTransaction}
-              onClose={() => navigate('/transactions')}
+              onClose={closeDetail}
             />
           </motion.div>
         )}

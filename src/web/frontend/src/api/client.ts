@@ -1,6 +1,6 @@
 const BASE = '';
 
-async function request<T>(path: string, opts?: RequestInit): Promise<T> {
+export async function request<T>(path: string, opts?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     ...opts,
     headers: {
@@ -489,6 +489,7 @@ export const api = {
       trips_enabled: boolean;
       subscriptions_enabled: boolean;
       recurring_enabled: boolean;
+      home_briefing_enabled: boolean;
     }>('/api/settings'),
 
   updateSettings: (data: {
@@ -499,6 +500,7 @@ export const api = {
     trips_enabled?: boolean;
     subscriptions_enabled?: boolean;
     recurring_enabled?: boolean;
+    home_briefing_enabled?: boolean;
   }) =>
     request<{
       anomaly_multiplier: number;

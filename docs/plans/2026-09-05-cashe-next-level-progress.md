@@ -133,3 +133,14 @@ The reproducible performance baseline was committed as `4691690`.
 - Updated the spending-facts contract notes and agent instructions. Existing web/Telegram report consumers still need migration to the shared interface; the Home briefing, money-storage migration, and remaining production trust checks remain open.
 
 Verification: **56 focused spending-facts/API-security tests passed**, including existing monthly/evidence behavior and eight new weekly boundary, timezone, partial-FX, and authenticated-route cases. The preceding full backend suite passed 745 tests. `git diff --check` passed. No production services were touched. This verified weekly slice is committed separately.
+
+
+## 2026-09-06 continuation — opt-in Home briefing and capture review
+
+- Added typed authenticated `GET /api/v2/home`, composing shared monthly facts, five recent transactions, pending estimated subscription charges over 14 days, full capture/follow-up counts, and sanitized Gmail freshness. Matched/dismissed/cancelled/out-of-window charges are excluded; unknown amounts are explicit.
+- Added lazy-loaded `/home`, `/evidence`, and `/review` screens. Home has no Recharts import, presents partial/indicative subtotals and missing income correctly, and links category changes to each exact comparison period.
+- Evidence pagination preserves dates/category/measure in URLs. Transaction detail can return to the evidence URL; transaction mutations invalidate Home/evidence caches. Capture/follow-up review supports paginated listing and deliberate retry, with clear queue/error states.
+- Added `home_briefing_enabled` as an opt-in Settings flag, default off and validated atomically. `/home` is directly accessible for trial; enabling the flag uses Home as the start page. Existing navigation and report pages remain available pending the four-destination/theme slice.
+- Existing OCI architecture and deployment remain unchanged. The browser skill was read and discovery attempted, but no browser was connected (`[]`). Visual, keyboard, phone/tablet, and real-device acceptance remain unverified; a browser connection was requested while implementation continues.
+
+Verification: **757 backend tests passed** with four existing deprecation warnings; **39 frontend tests passed**; production frontend build and `git diff --check` passed. The Home chunk is about 6.4 KB uncompressed and separate from the charts bundle. Tests cover response privacy/authentication, upcoming bounds/cancellation, atomic opt-in settings, review pagination/retry, failed/partial briefing states, and comparison evidence URLs. The slice is committed; it does not complete the full product plan or its external acceptance gates.

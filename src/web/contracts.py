@@ -80,3 +80,28 @@ class SpendingEvidence(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class UpcomingCharge(BaseModel):
+    id: int
+    subscription_id: int
+    label: str
+    date: str
+    amount: Money | None
+
+
+class CaptureFreshness(BaseModel):
+    gmail_connected: bool
+    gmail_last_checked: str | None
+    gmail_needs_reconnection: bool
+
+
+class HomeBriefing(BaseModel):
+    facts: SpendingFacts
+    recent: list[SpendingEvidenceItem]
+    upcoming: list[UpcomingCharge]
+    upcoming_total: Money
+    upcoming_unknown_count: int
+    capture_issue_count: int
+    followup_issue_count: int
+    freshness: CaptureFreshness

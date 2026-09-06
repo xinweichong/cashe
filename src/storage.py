@@ -56,6 +56,43 @@ class Storage:
         from src.spending_facts import spending_evidence
         return spending_evidence(self._conn, start, end, **filters)
 
+    @_locked
+    def get_home_briefing(self, timezone="Asia/Singapore") -> dict:
+        from src.spending_facts import convert_legacy_sgd, money
+        today = local_now(timezone).date()
+        facts = self.get_month_spending_facts(today, timezone)
+        recent = []
+        for row in self.query_transactions(limit=5):
+            minor, status = convert_legacy_sgd(row)
+            recent.append({
+                "id": row["id"], "merchant": row["merchant"], "category": row["category"] or "Other",
+                "type": row["type"] or "expense", "date": row["transaction_date"],
+                "amount": money(minor) if minor is not None else None, "conversion_status": status,
+            })
+        upcoming = []
+        if self.get_setting("subscriptions_enabled", "false") == "true":
+            for row in self._conn.execute(
+                """SELECT u.id, u.expected_date, u.expected_amount, s.id AS subscription_id,
+                          COALESCE(s.label, s.merchant) AS label
+                   FROM upcoming_transactions u JOIN subscriptions s ON s.id = u.subscription_id
+                   WHERE u.status = 'pending' AND u.matched_transaction_id IS NULL
+                   AND s.status IN ('active', 'possibly_cancelled')
+                   AND DATE(u.expected_date) >= ? AND DATE(u.expected_date) <= ?
+                   ORDER BY u.expected_date, u.id""",
+                (today.isoformat(), (today + timedelta(days=13)).isoformat()),
+            ):
+                minor, _ = convert_legacy_sgd({"amount": row["expected_amount"], "currency": "SGD"})
+                upcoming.append({"id": row["id"], "subscription_id": row["subscription_id"],
+                                 "label": row["label"], "date": row["expected_date"],
+                                 "amount": money(minor) if minor is not None else None})
+        return {
+            "facts": facts, "recent": recent, "upcoming": upcoming,
+            "upcoming_total": money(sum(item["amount"]["minor_units"] for item in upcoming if item["amount"])),
+            "upcoming_unknown_count": sum(item["amount"] is None for item in upcoming),
+            "capture_issue_count": self._conn.execute("SELECT COUNT(*) FROM source_events WHERE status != 'processed'").fetchone()[0],
+            "followup_issue_count": self._conn.execute("SELECT COUNT(*) FROM ingestion_outbox WHERE status != 'done'").fetchone()[0],
+        }
+
     @contextmanager
     def reconciliation_lock(self):
         """Serialize check-and-insert across the user's Wallet and Gmail inputs."""
@@ -132,12 +169,12 @@ class Storage:
                 )
 
     @_locked
-    def list_capture_issues(self, limit: int = 50) -> list[dict]:
+    def list_capture_issues(self, limit: int = 50, offset: int = 0) -> list[dict]:
         return [dict(row) for row in self._conn.execute(
             """SELECT id, source, parser_version, status, transaction_id, attempts,
                       error_code, created_at, updated_at
                FROM source_events WHERE status != 'processed'
-               ORDER BY id DESC LIMIT ?""", (limit,),
+               ORDER BY id DESC LIMIT ? OFFSET ?""", (limit, offset),
         ).fetchall()]
 
     @_locked
@@ -200,10 +237,10 @@ class Storage:
         ).fetchall()]
 
     @_locked
-    def list_ingestion_effects(self, limit: int = 50) -> list[dict]:
+    def list_ingestion_effects(self, limit: int = 50, offset: int = 0) -> list[dict]:
         return [dict(row) for row in self._conn.execute(
             """SELECT id, transaction_id, kind, status, attempts, error_code, created_at, updated_at
-               FROM ingestion_outbox WHERE status != 'done' ORDER BY id DESC LIMIT ?""", (limit,),
+               FROM ingestion_outbox WHERE status != 'done' ORDER BY id DESC LIMIT ? OFFSET ?""", (limit, offset),
         ).fetchall()]
 
     @_locked

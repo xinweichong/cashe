@@ -1,0 +1,47 @@
+import { request } from './client';
+
+export interface Money { minor_units: number; currency: 'SGD' }
+export interface SpendingPeriod {
+  start: string; end: string; spending: Money; income: Money | null;
+  recorded_net_flow: Money | null; transaction_count: number;
+  unresolved_count: number; indicative_count: number;
+  status: 'complete' | 'indicative' | 'partial';
+}
+export interface SpendingFacts {
+  as_of: string; timezone: string; undated_count: number;
+  current: SpendingPeriod; comparison_current: SpendingPeriod; previous: SpendingPeriod;
+  change: Money | null; category_changes: { category: string; change: Money }[];
+}
+export interface EvidenceItem {
+  id: number; merchant: string | null; category: string; type: string; date: string | null;
+  amount: Money | null; conversion_status: 'native' | 'indicative' | 'unresolved';
+}
+export interface HomeBriefing {
+  facts: SpendingFacts; recent: EvidenceItem[];
+  upcoming: { id: number; subscription_id: number; label: string; date: string; amount: Money | null }[];
+  upcoming_total: Money; upcoming_unknown_count: number;
+  capture_issue_count: number; followup_issue_count: number;
+  freshness: { gmail_connected: boolean; gmail_last_checked: string | null; gmail_needs_reconnection: boolean };
+}
+export interface CaptureIssue {
+  id: number; source: string; status: string; attempts: number; error_code: string | null;
+}
+export interface FollowupIssue {
+  id: number; transaction_id: number; kind: string; status: string; attempts: number;
+}
+export const briefingApi = {
+  home: () => request<HomeBriefing>('/api/v2/home'),
+  evidence: (query: URLSearchParams) => request<{ items: EvidenceItem[]; total: number; limit: number; offset: number }>(`/api/v2/spending/evidence?${query}`),
+  captureIssues: (offset = 0) => request<CaptureIssue[]>(`/api/v2/capture/issues?limit=50&offset=${offset}`),
+  followups: (offset = 0) => request<FollowupIssue[]>(`/api/v2/capture/followups?limit=50&offset=${offset}`),
+  retryCapture: (id: number) => request(`/api/v2/capture/issues/${id}/retry`, { method: 'POST' }),
+  retryFollowup: (id: number) => request(`/api/v2/capture/followups/${id}/retry`, { method: 'POST' }),
+};
+export function formatMoney(value: Money): string {
+  return new Intl.NumberFormat('en-SG', { style: 'currency', currency: 'SGD', currencyDisplay: 'symbol' }).format(value.minor_units / 100);
+}
+export function evidenceLink(period: SpendingPeriod, category?: string, measure = 'spending'): string {
+  const query = new URLSearchParams({ start: period.start, end: period.end, measure });
+  if (category !== undefined) query.set('category', category);
+  return `/evidence?${query}`;
+}

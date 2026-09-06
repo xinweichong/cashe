@@ -21,7 +21,7 @@ from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 
 from src.config import local_now
 from src.web.auth import verify_password, create_session, verify_session, destroy_session
-from src.web.contracts import CaptureFollowup, CaptureIssue, QueuedResponse, SpendingEvidence, SpendingFacts
+from src.web.contracts import CaptureFollowup, CaptureIssue, HomeBriefing, QueuedResponse, SpendingEvidence, SpendingFacts
 from src.analytics import (
     load_summary,
     get_yoy_comparison,
@@ -196,8 +196,8 @@ def create_dashboard_app(
         }
 
     @app.get("/api/v2/capture/issues", response_model=list[CaptureIssue])
-    async def capture_issues(limit: int = Query(50, ge=1, le=100), storage=Depends(_get_storage)):
-        return await _db(storage.list_capture_issues, limit)
+    async def capture_issues(limit: int = Query(50, ge=1, le=100), offset: int = Query(0, ge=0), storage=Depends(_get_storage)):
+        return await _db(storage.list_capture_issues, limit, offset)
 
     @app.post("/api/v2/capture/issues/{event_id}/retry", response_model=QueuedResponse)
     async def retry_capture_issue(event_id: int, storage=Depends(_get_storage)):
@@ -208,8 +208,8 @@ def create_dashboard_app(
         return QueuedResponse()
 
     @app.get("/api/v2/capture/followups", response_model=list[CaptureFollowup])
-    async def capture_followups(limit: int = Query(50, ge=1, le=100), storage=Depends(_get_storage)):
-        return await _db(storage.list_ingestion_effects, limit)
+    async def capture_followups(limit: int = Query(50, ge=1, le=100), offset: int = Query(0, ge=0), storage=Depends(_get_storage)):
+        return await _db(storage.list_ingestion_effects, limit, offset)
 
     @app.post("/api/v2/capture/followups/{effect_id}/retry", response_model=QueuedResponse)
     async def retry_capture_followup(effect_id: int, storage=Depends(_get_storage)):
@@ -225,6 +225,18 @@ def create_dashboard_app(
             return await _db(storage.get_month_spending_facts, as_of, timezone)
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from None
+
+    @app.get("/api/v2/home", response_model=HomeBriefing)
+    async def home_briefing(username: str = Depends(require_auth)):
+        ctx = user_manager.get(username)
+        report = await _db(ctx.storage.get_home_briefing, timezone)
+        poller = ctx.poller
+        report["freshness"] = {
+            "gmail_connected": bool(poller and poller.service),
+            "gmail_last_checked": getattr(poller, "last_poll_at", None),
+            "gmail_needs_reconnection": bool(getattr(poller, "last_auth_error", None)),
+        }
+        return report
 
     @app.get("/api/v2/spending/week", response_model=SpendingFacts)
     async def week_spending(as_of: date | None = None, storage=Depends(_get_storage)):
@@ -897,6 +909,7 @@ def create_dashboard_app(
             "trips_enabled": await _db(storage.get_setting, "trips_enabled", "false") == "true",
             "subscriptions_enabled": await _db(storage.get_setting, "subscriptions_enabled", "false") == "true",
             "recurring_enabled": await _db(storage.get_setting, "recurring_enabled", "false") == "true",
+            "home_briefing_enabled": await _db(storage.get_setting, "home_briefing_enabled", "false") == "true",
             "category_colors_snapped_v2": await _db(storage.get_setting, "category_colors_snapped_v2", "false"),
         }
 
@@ -905,6 +918,12 @@ def create_dashboard_app(
         body = await request.json()
         errors = {}
         validated = {}
+
+        if "home_briefing_enabled" in body:
+            if not isinstance(body["home_briefing_enabled"], bool):
+                errors["home_briefing_enabled"] = "must be a boolean"
+            else:
+                validated["home_briefing_enabled"] = str(body["home_briefing_enabled"]).lower()
 
         if "anomaly_multiplier" in body:
             val = body["anomaly_multiplier"]

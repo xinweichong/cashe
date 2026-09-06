@@ -212,6 +212,8 @@ The `IngestionPipeline` is instantiated per-user inside `UserManager._build_cont
 
 ### Shared spending facts
 
+- Opt-in Home: `home_briefing_enabled` defaults off in Settings. `/api/v2/home` composes shared facts and sanitized capture freshness; `/home`, `/evidence`, and `/review` are lazy-loaded authenticated screens. Keep failed/stale/partial states explicit and invalidate Home/evidence queries after transaction mutations. Capture list APIs support `limit` and `offset`.
+
 - New reporting uses `src/spending_facts.py` through locked Storage wrappers. The additive authenticated `/api/v2/spending/month`, `/api/v2/spending/week`, and `/api/v2/spending/evidence` endpoints share classification, Decimal rounding, timezone projection, and evidence selection. See `docs/operations/spending-facts.md` for compatibility limits.
 - Report SGD integer minor units rounded per transaction; storage remains legacy floats until the audited migration. Never describe this compatibility calculation as a completed money migration.
 - Always expose partial/indicative status with known subtotals. Legacy foreign `1.0` rates are unresolved, not proof of conversion. Undated observations make comparisons unavailable. Missing income is absent, and negative recorded net flow is retained.

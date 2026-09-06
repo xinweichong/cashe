@@ -11,6 +11,9 @@ import { setCategoryColors, nearestSpectrum } from '@/lib/utils';
 import { ToastProvider } from '@/components/ui/toast';
 import { SPECTRUM_PALETTE } from '@/lib/chartTheme';
 
+const HomePage = lazy(() => import('@/pages/HomePage').then(m => ({ default: m.HomePage })));
+const EvidencePage = lazy(() => import('@/pages/EvidencePage').then(m => ({ default: m.EvidencePage })));
+const ReviewPage = lazy(() => import('@/pages/ReviewPage').then(m => ({ default: m.ReviewPage })));
 const OverviewPage = lazy(() => import('@/pages/OverviewPage').then(m => ({ default: m.OverviewPage })));
 const TransactionsPage = lazy(() => import('@/pages/TransactionsPage').then(m => ({ default: m.TransactionsPage })));
 const AnalyticsPage = lazy(() => import('@/pages/AnalyticsPage').then(m => ({ default: m.AnalyticsPage })));
@@ -91,8 +94,9 @@ function CategoryColorLoader() {
 function AppContent() {
   const { isAuthenticated, loading } = useAuth();
   const { data: currentUser, isLoading: userLoading } = useCurrentUser();
+  const { data: settings, isLoading: settingsLoading } = useQuery({ queryKey: ['settings'], queryFn: api.getSettings, enabled: isAuthenticated });
 
-  if (loading || (isAuthenticated && userLoading)) {
+  if (loading || (isAuthenticated && (userLoading || settingsLoading))) {
     return <SplashScreen />;
   }
 
@@ -117,7 +121,10 @@ function AppContent() {
       <Routes>
         {/* Dashboard routes */}
         <Route element={<AppShell />}>
-          <Route index element={<OverviewPage />} />
+          <Route index element={settings?.home_briefing_enabled ? <HomePage /> : <OverviewPage />} />
+          <Route path="home" element={<HomePage />} />
+          <Route path="evidence" element={<EvidencePage />} />
+          <Route path="review" element={<ReviewPage />} />
           <Route path="transactions" element={<TransactionsPage />} />
           <Route path="transactions/:transactionId" element={<TransactionsPage />} />
           <Route path="analytics" element={<AnalyticsPage />} />

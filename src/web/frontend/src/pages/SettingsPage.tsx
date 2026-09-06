@@ -200,7 +200,7 @@ export function SettingsPage() {
   };
 
   const toggleSetting = async (
-    key: 'budgets_enabled' | 'goals_enabled' | 'trips_enabled' | 'subscriptions_enabled' | 'recurring_enabled',
+    key: 'budgets_enabled' | 'goals_enabled' | 'trips_enabled' | 'subscriptions_enabled' | 'recurring_enabled' | 'home_briefing_enabled',
     val: boolean,
   ) => {
     await api.updateSettings({ [key]: val });
@@ -722,6 +722,7 @@ export function SettingsPage() {
           <PageCard title="Feature Toggles">
             <div className="divide-y divide-border">
               {([
+                { key: 'home_briefing_enabled' as const, label: 'Home briefing', desc: 'Try the new spending briefing as your start page' },
                 { key: 'budgets_enabled' as const, label: 'Budgets', desc: 'Set spending limits and track progress' },
                 { key: 'goals_enabled' as const, label: 'Goals', desc: 'Track savings targets and monthly progress' },
                 { key: 'trips_enabled' as const, label: 'Trips', desc: 'Group transactions by trip and track travel spend' },
@@ -734,6 +735,9 @@ export function SettingsPage() {
                     <p className="text-xs text-muted font-mono">{desc}</p>
                   </div>
                   <button
+                    role="switch"
+                    aria-checked={!!settings?.[key]}
+                    aria-label={label}
                     onClick={() => toggleSetting(key, !settings?.[key])}
                     className={`relative w-10 h-5 rounded-full transition-colors ${settings?.[key] ? 'toggle-on' : 'bg-foreground/20'}`}
                   >

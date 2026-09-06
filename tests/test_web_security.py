@@ -457,3 +457,66 @@ async def test_weekly_spending_api_auth_validation_and_periods(client, authed_cl
     assert response.status_code == 200
     assert response.json()['current']['start'] == '2025-12-29'
     assert response.json()['previous']['end'] == '2025-12-25'
+
+
+@pytest.mark.asyncio
+async def test_home_briefing_is_private_and_projects_safe_fields(client, authed_client, in_memory_db, monkeypatch):
+    from datetime import datetime
+    import src.storage as module
+    monkeypatch.setattr(module, 'local_now', lambda *args: datetime(2026, 9, 6))
+    storage = Storage(in_memory_db)
+    storage.insert_transaction(source='manual', source_id='private-source', amount=12.5,
+                               merchant='Cafe', transaction_date='2026-09-05T12:00:00', raw_data='secret-email')
+    storage.record_source_event('gmail', 'private-email', 'secret-raw-body')
+    assert (await client.get('/api/v2/home')).status_code == 401
+    response = await authed_client.get('/api/v2/home')
+    assert response.status_code == 200
+    data = response.json()
+    assert data['facts']['current']['spending']['minor_units'] == 1250
+    assert data['capture_issue_count'] == 1
+    assert data['recent'][0]['merchant'] == 'Cafe'
+    assert data['facts']['current']['income'] is None
+    assert data['freshness']['gmail_connected'] is False
+    assert 'private-source' not in response.text and 'secret-' not in response.text
+    assert 'raw_data' not in response.text
+
+
+@pytest.mark.asyncio
+async def test_home_upcoming_excludes_matched_cancelled_and_outside_window(authed_client, in_memory_db, monkeypatch):
+    from datetime import datetime
+    import src.storage as module
+    monkeypatch.setattr(module, 'local_now', lambda *args: datetime(2026, 9, 6))
+    storage = Storage(in_memory_db)
+    storage.set_setting('subscriptions_enabled', 'true')
+    sub = storage.create_subscription(merchant='Service', frequency='monthly')
+    storage.create_upcoming_transaction(sub, '2026-09-07', 10)
+    storage.create_upcoming_transaction(sub, '2026-09-08', None)
+    storage.create_upcoming_transaction(sub, '2026-09-20', 999)
+    old = storage.create_upcoming_transaction(sub, '2026-09-09', 999)
+    storage.dismiss_upcoming_transaction(old)
+    data = (await authed_client.get('/api/v2/home')).json()
+    assert len(data['upcoming']) == 2
+    assert data['upcoming_total']['minor_units'] == 1000
+    assert data['upcoming_unknown_count'] == 1
+    storage.update_subscription(sub, status='cancelled')
+    assert (await authed_client.get('/api/v2/home')).json()['upcoming'] == []
+
+
+@pytest.mark.asyncio
+async def test_home_flag_defaults_off_and_validates_atomically(authed_client):
+    assert (await authed_client.get('/api/settings')).json()['home_briefing_enabled'] is False
+    assert (await authed_client.put('/api/settings', json={'home_briefing_enabled': True, 'anomaly_multiplier': 99})).status_code == 422
+    assert (await authed_client.get('/api/settings')).json()['home_briefing_enabled'] is False
+    assert (await authed_client.put('/api/settings', json={'home_briefing_enabled': 'true'})).status_code == 422
+    assert (await authed_client.put('/api/settings', json={'home_briefing_enabled': True})).status_code == 200
+    assert (await authed_client.get('/api/settings')).json()['home_briefing_enabled'] is True
+
+
+@pytest.mark.asyncio
+async def test_capture_review_pagination(authed_client, in_memory_db):
+    storage = Storage(in_memory_db)
+    first = storage.record_source_event('gmail', 'first', '{}')
+    second = storage.record_source_event('gmail', 'second', '{}')
+    assert (await authed_client.get('/api/v2/capture/issues?limit=1')).json()[0]['id'] == second['id']
+    assert (await authed_client.get('/api/v2/capture/issues?limit=1&offset=1')).json()[0]['id'] == first['id']
+    assert (await authed_client.get('/api/v2/capture/issues?offset=-1')).status_code == 422
