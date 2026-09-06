@@ -746,3 +746,12 @@ A finance app's most-repeated UI element is a number. One grammar, everywhere:
 `home_briefing_enabled` now selects Home, Activity, Plan, and Explore in the sidebar and phone tabs. Settings and capture review live in the profile menu; Review is also linked from Home and Activity. Classic navigation remains available by turning off “New experience” in Settings. Old transaction, finance, analytics, and merchant URLs redirect with their suffix, query, and fragment intact. `/overview` retains the classic dashboard for comparison.
 
 Home and Explore use natural page scrolling. Activity retains independently scrolling list/detail panels; opening a detail keeps the parent mounted to preserve filters and drafts. Explore groups the existing analytics and merchant reports, whose financial calculations still await migration to shared spending facts. Plan currently hosts existing finance tools; the planned forecast and timeline are not complete. The four primary navigation targets and profile controls have a 44px minimum hit area. Browser/device accessibility checks remain pending.
+
+
+## Appearance preferences
+
+The application follows the system light/dark preference by default. Profile → Appearance offers System, Light, and Dark in both navigation modes. Only the appearance preference is stored locally (`cashe-appearance`); it contains no financial data. Theme changes update context and tokens without remounting forms.
+
+Dark muted text is now `#A8A1B5`. Light surfaces use background `#F6F5F8`, card `#FFFFFF`, foreground `#201C2C`, muted `#625C70`, and interactive teal `#007A63`. Brand gradients retain their spectrum and use dark `--color-on-brand` text. Primary and muted tokens meet 4.5:1 against neutral background/card/elevated surfaces in both themes; this is not a whole-interface accessibility certification. Category colors, opacity variants, charts, enlarged text, and device layouts still require rendered review.
+
+Charts consume `useChartTheme()` from `lib/chartTheme.ts`: axis, tooltip, cursor, legend, tracks, and text use centralized explicit hex colors for each theme. Never hardcode those colors in chart components. Framer Motion follows reduced-motion preference globally; CSS animations and transitions are suppressed when requested.

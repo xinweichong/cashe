@@ -23,7 +23,7 @@ export function AppShell({ newExperience = false }: { newExperience?: boolean })
         {/* Mobile-only top bar — hidden on md+ where sidebar provides branding */}
         <header className="md:hidden sticky top-0 z-40 h-12 shrink-0 bg-card/80 backdrop-blur-sm border-b border-border flex items-center px-4 gap-2">
           <CasheWordmark size={22} />
-          {newExperience && <div className="ml-auto"><ProfileMenu /></div>}
+          <div className="ml-auto"><ProfileMenu /></div>
         </header>
         <main className="flex-1 min-w-0 pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0 overflow-hidden">
           <AnimatePresence mode="wait" initial={false}>

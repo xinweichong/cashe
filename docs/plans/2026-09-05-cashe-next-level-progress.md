@@ -155,3 +155,15 @@ Verification: **757 backend tests passed** with four existing deprecation warnin
 - Updated design and agent instructions to document the deliberate natural-scroll exception. Themes are the next separate slice.
 
 Verification: **44 frontend tests passed**; production build passed. Added navigation destination/active-parent and legacy deep-link preservation coverage. Backend behavior is unchanged (previous full baseline 757 passing). Browser connection remains unavailable, so visual/device acceptance is still pending.
+
+
+## 2026-09-06 continuation — system/light/dark appearance
+
+The four-destination navigation slice was committed as `a55788c`.
+
+- Added system-default appearance with explicit light/dark choices in Profile, available in classic and new navigation. The local preference contains no financial data; storage denial does not prevent switching. System preference updates are observed live.
+- Added light semantic surfaces, readable interactive colors, stronger dark muted text, themed native select chevrons, and stable dark text on brand-gradient buttons. Corrected fixed dark surfaces in shared cards, branding, and transaction filters.
+- Chart axes, tooltips, legends, cursors, ring tracks, and neutral text now obtain centralized per-theme hex values through context. Theme switches update charts without remounting drafts.
+- Added global reduced-motion configuration and CSS handling, visible focus outlines, and matching browser theme-color metadata. Design and agent instructions document the new conventions.
+
+Verification: **49 frontend tests passed**, including system changes, preference restoration/override, unavailable storage, draft preservation, chart color updates, and normal-text AA contrast for primary/muted text on neutral surfaces. Production build and focused lint are checked before commit. Visual, category-color/opacity contrast, screen-reader, enlarged-text, and real-device acceptance remain pending; these unit checks do not certify the full design. Previous backend baseline remains 757 passing tests; this slice changes no backend behavior.

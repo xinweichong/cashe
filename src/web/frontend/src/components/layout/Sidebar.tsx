@@ -120,7 +120,7 @@ export function Sidebar({ newExperience = false }: { newExperience?: boolean }) 
         </NavLink>
         </>}
       </nav>
-      {newExperience && <div className="p-1 lg:p-3"><ProfileMenu /></div>}
+      <div className="p-1 lg:p-3"><ProfileMenu /></div>
 
       {/* ⌘K hint — desktop only */}
       <div className="hidden lg:flex items-center gap-2 px-4 py-4 border-t border-border/30 text-[11px] text-muted/60 font-mono">

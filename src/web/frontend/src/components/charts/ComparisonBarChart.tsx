@@ -2,14 +2,7 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
 import { formatCurrency } from '@/lib/utils';
-import {
-  CHART_AXIS_PROPS,
-  CHART_TOOLTIP_STYLE,
-  CHART_CURSOR_BAR,
-  CHART_LEGEND_STYLE,
-  COLOR_TEAL,
-  COLOR_MUTED_BAR,
-} from '@/lib/chartTheme';
+import { useChartTheme } from '@/lib/chartTheme';
 
 interface ComparisonData {
   category: string;
@@ -18,6 +11,7 @@ interface ComparisonData {
 }
 
 export function ComparisonBarChart({ data }: { data: ComparisonData[] }) {
+  const { CHART_AXIS_PROPS, CHART_TOOLTIP_STYLE, CHART_CURSOR_BAR, CHART_LEGEND_STYLE, COLOR_TEAL, COLOR_MUTED_BAR } = useChartTheme();
   return (
     <div className="w-full h-64">
       <ResponsiveContainer width="100%" height="100%">

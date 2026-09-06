@@ -109,8 +109,8 @@ export function TransactionFilters({
             className="px-3 py-1 rounded-full text-xs font-semibold font-mono uppercase tracking-[0.08em] transition-all duration-[150ms] whitespace-nowrap"
             style={
               category === 'all'
-                ? { color: '#EEEAF5', background: 'rgba(238,234,245,0.15)', border: '1px solid rgba(238,234,245,0.35)' }
-                : { color: '#7A7488', background: 'rgba(238,234,245,0.04)', border: '1px solid rgba(238,234,245,0.08)' }
+                ? { color: 'var(--color-foreground)', background: 'var(--color-card-hover)', border: '1px solid var(--color-muted)' }
+                : { color: 'var(--color-muted)', background: 'transparent', border: '1px solid var(--color-border)' }
             }
           >
             All

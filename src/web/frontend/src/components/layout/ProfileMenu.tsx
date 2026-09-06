@@ -1,8 +1,10 @@
+import { useTheme } from '@/hooks/useTheme';
 import { Link } from 'react-router-dom';
 import { CircleUserRound, Settings, ListChecks } from 'lucide-react';
-import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu';
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuRadioGroup, DropdownMenuRadioItem } from '@/components/ui/dropdown-menu';
 
 export function ProfileMenu() {
+  const { preference, setPreference } = useTheme();
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -18,6 +20,17 @@ export function ProfileMenu() {
         <DropdownMenuItem asChild className="min-h-11 focus:bg-foreground/10 focus:text-foreground">
           <Link to="/review"><ListChecks />Capture review</Link>
         </DropdownMenuItem>
+        <DropdownMenuSeparator className="bg-border" />
+        <DropdownMenuLabel>Appearance</DropdownMenuLabel>
+        <DropdownMenuRadioGroup value={preference} onValueChange={value => {
+          if (value === 'system' || value === 'light' || value === 'dark') setPreference(value);
+        }}>
+          {(['system', 'light', 'dark'] as const).map(value => (
+            <DropdownMenuRadioItem key={value} value={value} className="min-h-11 focus:bg-foreground/10 focus:text-foreground">
+              {value === 'system' ? 'Follow system' : value === 'light' ? 'Light' : 'Dark'}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
       </DropdownMenuContent>
     </DropdownMenu>
   );

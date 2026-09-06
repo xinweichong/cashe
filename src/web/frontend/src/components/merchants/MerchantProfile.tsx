@@ -8,7 +8,7 @@ import { api } from '@/api/client';
 import type { Transaction } from '@/api/client';
 import { Badge } from '@/components/ui/badge';
 import { ChartCard } from '@/components/ui/cards';
-import { CHART_AXIS_PROPS, CHART_TOOLTIP_STYLE, CHART_CURSOR_BAR, COLOR_TEAL } from '@/lib/chartTheme';
+import { useChartTheme } from '@/lib/chartTheme';
 import { X } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
 import { TAG_COLORS, ALL_TAGS, formatSGD } from '@/lib/merchants';
@@ -20,6 +20,7 @@ export function MerchantProfile({
   merchant: string;
   onClose: () => void;
 }) {
+  const { CHART_AXIS_PROPS, CHART_TOOLTIP_STYLE, CHART_CURSOR_BAR, COLOR_TEAL } = useChartTheme();
   const qc = useQueryClient();
 
   const { data: profile, isLoading } = useQuery({

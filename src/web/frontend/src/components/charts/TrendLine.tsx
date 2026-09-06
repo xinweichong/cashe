@@ -3,7 +3,7 @@ import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer,
 } from 'recharts';
 import { formatCurrency } from '@/lib/utils';
-import { CHART_AXIS_PROPS, CHART_TOOLTIP_STYLE, COLOR_TEAL, formatDateTick, formatDateLabel } from '@/lib/chartTheme';
+import { formatDateTick, formatDateLabel, useChartTheme } from '@/lib/chartTheme';
 
 interface TrendPoint {
   date: string;
@@ -11,6 +11,7 @@ interface TrendPoint {
 }
 
 export function TrendLine({ data }: { data: TrendPoint[] }) {
+  const { CHART_AXIS_PROPS, CHART_TOOLTIP_STYLE, COLOR_TEAL } = useChartTheme();
   const gradientId = useId().replace(/:/g, '');
 
   if (!data || data.length === 0) {

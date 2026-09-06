@@ -5,15 +5,7 @@ import {
 } from 'recharts';
 import { api } from '@/api/client';
 import { ChartCard } from '@/components/ui/cards';
-import {
-  CHART_AXIS_PROPS,
-  CHART_TOOLTIP_STYLE,
-  CHART_CURSOR_BAR,
-  CHART_LEGEND_STYLE,
-  COLOR_TEAL,
-  COLOR_CORAL,
-  COLOR_MUTED_BAR,
-} from '@/lib/chartTheme';
+import { COLOR_CORAL, useChartTheme } from '@/lib/chartTheme';
 
 type Mode = '6mo' | '12mo' | 'yoy';
 
@@ -23,6 +15,7 @@ function formatMonth(month: string): string {
 }
 
 export function IncomeExpenseBar() {
+  const { CHART_AXIS_PROPS, CHART_TOOLTIP_STYLE, CHART_CURSOR_BAR, CHART_LEGEND_STYLE, COLOR_TEAL, COLOR_MUTED_BAR } = useChartTheme();
   const [mode, setMode] = useState<Mode>('6mo');
   const isYoY = mode === 'yoy';
   const months = mode === '6mo' ? 6 : 12;

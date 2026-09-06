@@ -1,7 +1,7 @@
 import { formatCurrency, getPaceColor } from '@/lib/utils';
 import { motion } from 'framer-motion';
 import { springs } from '@/lib/animations';
-import { COLOR_TRACK } from '@/lib/chartTheme';
+import { useChartTheme } from '@/lib/chartTheme';
 
 interface VelocityData {
   current_mtd: number;
@@ -14,6 +14,7 @@ interface VelocityData {
 }
 
 export function VelocityRing({ data }: { data: VelocityData }) {
+  const { COLOR_TRACK } = useChartTheme();
   const { pace_percent, status, current_mtd, projected_total, last_month_total } = data;
   const radius = 60;
   const circumference = 2 * Math.PI * radius;

@@ -613,3 +613,8 @@ Single-context layout — `CONTEXT.md` + `docs/adr/` at the repo root. See `docs
 ### Next experience navigation
 
 When `home_briefing_enabled` is true, primary navigation is Home `/`, Activity `/activity`, Plan `/plan`, Explore `/explore`. Settings and capture review are in Profile; merchant drill-downs use `/explore/merchants/:merchantName`. Legacy routes redirect with suffix/query/fragment preserved; classic mode remains the default. Home/Explore naturally scroll, overriding the universal desktop viewport-grid rule for these pages. Activity keeps independent list/detail scrolling and preserves parent component state across detail URLs. See docs/design-language.md “Next experience navigation”.
+
+
+### Appearance
+
+System/light/dark preferences are supplied by `ThemeProvider` and selected in Profile. Theme changes must preserve drafts and mounted page state. Use semantic CSS tokens for HTML/SVG surfaces, `text-on-brand` over spectrum gradient buttons, and `useChartTheme()` for Recharts colors (explicit per-theme hex values centralized in `lib/chartTheme.ts`). Dark muted token is now `#A8A1B5`; light token overrides are in `index.css`. Neutral text contrast is tested; rendered/device accessibility validation remains required.

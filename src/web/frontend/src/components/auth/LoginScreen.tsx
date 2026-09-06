@@ -8,7 +8,7 @@ import { motion } from 'framer-motion';
 import { fadeUpVariants } from '@/lib/animations';
 
 const taglineStyle: React.CSSProperties = {
-  color: 'rgba(238, 234, 245, 0.68)',
+  color: 'var(--color-muted)',
   fontFamily: "'JetBrains Mono', 'SF Mono', monospace",
   fontSize: '13px',
   fontWeight: 600,

@@ -19,7 +19,7 @@ const SPARKLINE_COLOR: Record<StatColor, string> = {
   warm:    '#FBBF24',
   coral:   '#FF6B6B',
   mint:    '#34D399',
-  default: '#EEEAF5',
+  default: 'var(--color-foreground)',
 };
 
 const GLOW_CLASS: Record<Exclude<StatColor, 'mint' | 'default'>, string> = {

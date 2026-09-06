@@ -1,3 +1,5 @@
+import { MotionConfig } from 'framer-motion';
+import { ThemeProvider } from '@/hooks/ThemeProvider';
 import { lazy, Suspense, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
@@ -152,6 +154,8 @@ function AppContent() {
 
 export default function App() {
   return (
+    <MotionConfig reducedMotion="user">
+    <ThemeProvider>
     <QueryClientProvider client={queryClient}>
       <ToastProvider>
         <BrowserRouter>
@@ -173,5 +177,7 @@ export default function App() {
         </BrowserRouter>
       </ToastProvider>
     </QueryClientProvider>
+    </ThemeProvider>
+    </MotionConfig>
   );
 }

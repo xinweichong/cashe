@@ -1,6 +1,6 @@
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { getCategoryColor, formatCurrency } from '@/lib/utils';
-import { CHART_TOOLTIP_STYLE } from '@/lib/chartTheme';
+import { useChartTheme } from '@/lib/chartTheme';
 
 interface CategoryData {
   category: string;
@@ -8,6 +8,7 @@ interface CategoryData {
 }
 
 export function CategoryDonut({ data }: { data: CategoryData[] }) {
+  const { CHART_TOOLTIP_STYLE } = useChartTheme();
   if (!data || data.length === 0) {
     return (
       <div className="h-[220px] flex items-center justify-center text-muted text-sm">

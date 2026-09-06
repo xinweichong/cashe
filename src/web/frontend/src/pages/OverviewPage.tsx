@@ -19,7 +19,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { LoadFailed } from '@/components/ui/LoadFailed';
 import { ActiveTripCard } from '@/components/trips/ActiveTripCard';
 import { springs, staggerContainerVariants, staggerItemVariants, AnimatedCurrency } from '@/lib/animations';
-import { COLOR_HONEY, COLOR_TANGERINE, COLOR_CORAL, COLOR_TRACK, COLOR_FOREGROUND } from '@/lib/chartTheme';
+import { COLOR_HONEY, COLOR_TANGERINE, COLOR_CORAL, useChartTheme } from '@/lib/chartTheme';
 
 function toDateStr(d: Date): string {
   const y = d.getFullYear();
@@ -65,6 +65,7 @@ function getRangeLabel(date: string, period: Period): string {
 const PERIOD_OPTIONS: Period[] = ['day', 'week', 'month'];
 
 function HealthScoreCard() {
+  const { COLOR_TRACK, COLOR_FOREGROUND } = useChartTheme();
   const navigate = useNavigate();
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['health-score'],

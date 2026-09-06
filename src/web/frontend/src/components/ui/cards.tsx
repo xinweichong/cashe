@@ -87,7 +87,7 @@ interface HighlightCardProps {
 const HIGHLIGHT_CARD_STYLE: CSSProperties = {
   border: '1px solid rgba(0,212,170,.25)',
   background:
-    'radial-gradient(120% 100% at 0% 0%, rgba(0,212,170,.08) 0%, rgba(11,11,20,0) 50%), #161624',
+    'radial-gradient(120% 100% at 0% 0%, rgba(0,212,170,.08) 0%, rgba(11,11,20,0) 50%), var(--color-card)',
   boxShadow: '0 0 0 1px rgba(0,212,170,.18), 0 0 36px -8px rgba(0,212,170,.28)',
   borderRadius: '14px',
   padding: '20px',

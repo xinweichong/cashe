@@ -1,14 +1,16 @@
+import { useTheme } from '@/hooks/useTheme';
 import type { CSSProperties } from 'react';
 
 export const CHART_TOOLTIP_STYLE: CSSProperties = {
   background: '#161624',
+  color: '#EEEAF5',
   border: '1px solid #2A2A3F',
   borderRadius: '8px',
   fontSize: '13px',
 };
 
 export const CHART_AXIS_PROPS = {
-  tick: { fontSize: 11, fill: '#7A7488' },
+  tick: { fontSize: 11, fill: '#A8A1B5' },
   tickLine: false,
   axisLine: false,
 };
@@ -18,7 +20,7 @@ export const CHART_CURSOR_LINE = { stroke: '#2A2A3F', strokeWidth: 1 };
 
 export const CHART_LEGEND_STYLE: CSSProperties = {
   fontSize: '12px',
-  color: '#7A7488',
+  color: '#A8A1B5',
 };
 
 // Spectrum data colors
@@ -49,4 +51,22 @@ export function formatDateTick(v: string): string {
 /** Tooltip label: short date (e.g. "15 Apr") */
 export function formatDateLabel(v: unknown): string {
   return new Date(String(v)).toLocaleDateString('en-SG', { day: 'numeric', month: 'short' });
+}
+
+const DARK_CHART_THEME = {
+  CHART_TOOLTIP_STYLE, CHART_AXIS_PROPS, CHART_CURSOR_BAR, CHART_CURSOR_LINE,
+  CHART_LEGEND_STYLE, COLOR_MUTED_BAR, COLOR_TRACK, COLOR_FOREGROUND, COLOR_TEAL,
+};
+const LIGHT_CHART_THEME = {
+  CHART_TOOLTIP_STYLE: { ...CHART_TOOLTIP_STYLE, background: '#FFFFFF', color: '#201C2C', border: '1px solid #D9D5E1' },
+  CHART_AXIS_PROPS: { ...CHART_AXIS_PROPS, tick: { ...CHART_AXIS_PROPS.tick, fill: '#625C70' } },
+  CHART_CURSOR_BAR: { fill: '#EDEAF2' },
+  CHART_CURSOR_LINE: { ...CHART_CURSOR_LINE, stroke: '#D9D5E1' },
+  CHART_LEGEND_STYLE: { ...CHART_LEGEND_STYLE, color: '#625C70' },
+  COLOR_MUTED_BAR: '#82798F', COLOR_TRACK: '#D9D5E1', COLOR_FOREGROUND: '#201C2C', COLOR_TEAL: '#007A63',
+};
+
+/** Recharts receives explicit hex values and rerenders without remounting page state. */
+export function useChartTheme() {
+  return useTheme().resolved === 'light' ? LIGHT_CHART_THEME : DARK_CHART_THEME;
 }

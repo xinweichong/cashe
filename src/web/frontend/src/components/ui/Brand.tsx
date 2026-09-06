@@ -1,10 +1,10 @@
 import type { CSSProperties } from 'react';
 
 export const B1_WASH =
-  'linear-gradient(135deg, rgba(0,212,170,.38) 0%, rgba(11,11,20,.94) 35%, rgba(11,11,20,.98) 58%, rgba(234,88,12,.34) 82%, rgba(220,38,38,.3) 100%), #0B0B14';
+  'linear-gradient(135deg, rgba(0,212,170,.38) 0%, transparent 35%, transparent 58%, rgba(234,88,12,.34) 82%, rgba(220,38,38,.3) 100%), var(--color-background)';
 
 export const B2_WASH =
-  'linear-gradient(135deg, rgba(0,212,170,.08) 0%, transparent 30%, transparent 68%, rgba(234,88,12,.07) 86%, rgba(220,38,38,.06) 100%), #0B0B14';
+  'linear-gradient(135deg, rgba(0,212,170,.08) 0%, transparent 30%, transparent 68%, rgba(234,88,12,.07) 86%, rgba(220,38,38,.06) 100%), var(--color-background)';
 
 const WARM_GRADIENT = 'linear-gradient(135deg, #D97706, #EA580C 50%, #DC2626)';
 
@@ -18,7 +18,7 @@ const dollarStyle: CSSProperties = {
 };
 
 const tealStyle: CSSProperties = {
-  color: '#00D4AA',
+  color: 'var(--color-teal)',
 };
 
 interface CasheWordmarkProps {
@@ -56,7 +56,7 @@ export function CasheIcon({ size = 32, className }: CasheIconProps) {
     width: `${size}px`,
     height: `${size}px`,
     background: B1_WASH,
-    border: '1px solid #2A2A3F',
+    border: '1px solid var(--color-border)',
     borderRadius: '25.5%',
     boxShadow: '0 18px 40px -30px rgba(0,212,170,.85)',
     display: 'inline-flex',
@@ -101,7 +101,7 @@ export function CasheBrandLockup({ size = 160, className }: CasheBrandLockupProp
     width: `${size}px`,
     height: `${size}px`,
     background: B1_WASH,
-    border: '1px solid #2A2A3F',
+    border: '1px solid var(--color-border)',
     borderRadius: '25.5%',
     boxShadow: '0 18px 40px -30px rgba(0,212,170,.85)',
     display: 'inline-flex',

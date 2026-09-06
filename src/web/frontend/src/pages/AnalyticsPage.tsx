@@ -15,7 +15,7 @@ import { formatCurrency } from '@/lib/utils';
 import { AlertTriangle, TrendingUp } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { springs } from '@/lib/animations';
-import { COLOR_TRACK, COLOR_FOREGROUND } from '@/lib/chartTheme';
+import { useChartTheme } from '@/lib/chartTheme';
 
 const PILLAR_ORDER = [
   'savings_rate',
@@ -122,6 +122,7 @@ function AIInsightsCard() {
 }
 
 function HealthScoreBreakdown() {
+  const { COLOR_TRACK, COLOR_FOREGROUND } = useChartTheme();
   const [months, setMonths] = useState(1);
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['health-score', months],

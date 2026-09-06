@@ -4,12 +4,7 @@ import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recha
 import { Ban, Pencil, Trash2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ChartCard } from '@/components/ui/cards';
-import {
-  CHART_AXIS_PROPS,
-  CHART_CURSOR_BAR,
-  CHART_TOOLTIP_STYLE,
-  COLOR_TEAL,
-} from '@/lib/chartTheme';
+import { useChartTheme } from '@/lib/chartTheme';
 import { api, type Subscription, type Transaction, type UpcomingTransaction } from '@/api/client';
 import { SubscriptionForm } from './SubscriptionForm';
 
@@ -35,6 +30,7 @@ const FREQUENCY_MONTHLY_FACTOR: Record<Subscription['frequency'], number> = {
 };
 
 export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) {
+  const { CHART_AXIS_PROPS, CHART_CURSOR_BAR, CHART_TOOLTIP_STYLE, COLOR_TEAL } = useChartTheme();
   const qc = useQueryClient();
   const [showEdit, setShowEdit] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);

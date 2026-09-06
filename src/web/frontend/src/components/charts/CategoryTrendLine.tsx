@@ -3,16 +3,10 @@ import {
   LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
 import { formatCurrency, getCategoryColor } from '@/lib/utils';
-import {
-  CHART_AXIS_PROPS,
-  CHART_TOOLTIP_STYLE,
-  CHART_CURSOR_LINE,
-  CHART_LEGEND_STYLE,
-  formatDateTick,
-  formatDateLabel,
-} from '@/lib/chartTheme';
+import { formatDateTick, formatDateLabel, useChartTheme } from '@/lib/chartTheme';
 
 export function CategoryTrendLine({ data }: { data: Record<string, any>[] }) {
+  const { CHART_AXIS_PROPS, CHART_TOOLTIP_STYLE, CHART_CURSOR_LINE, CHART_LEGEND_STYLE } = useChartTheme();
   const categories = useMemo(() => {
     const cats = new Set<string>();
     data.forEach(d => Object.keys(d).filter(k => k !== 'date').forEach(k => cats.add(k)));
