@@ -600,3 +600,36 @@ async def test_currency_correction_with_explicit_rate_and_unrelated_edit_preserv
     assert response.json()['exchange_rate'] == 1.5
     response = await client.put(f'/api/transactions/{tx_id}', json={'currency': 'EUR'})
     assert response.json()['exchange_rate'] == 1.5
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('fields', [
+    {'amount': True}, {'amount': -1}, {'amount': 'NaN'}, {'amount': 'Infinity'},
+    {'amount': []}, {'currency': 'US'}, {'currency': None}, {'exchange_rate': 0},
+    {'exchange_rate': 'NaN'}, {'transaction_date': None}, {'transaction_date': ''},
+    {'transaction_date': '2026-02-30'}, {'source': 'apple_wallet'}, {'merchant': {}},
+])
+async def test_manual_creation_validation_leaves_no_rows(client, in_memory_db, fields):
+    response = await client.post('/api/transactions', json={'amount': 12, 'merchant': 'Cafe', **fields})
+    assert response.status_code == 400
+    assert Storage(in_memory_db).query_transactions(limit=50) == []
+
+
+@pytest.mark.asyncio
+async def test_manual_creation_unknown_fx_date_normalization_and_native_rate(client):
+    response = await client.post('/api/transactions', json={
+        'amount': '12.50', 'currency': 'usd', 'transaction_date': '2026-09-01',
+    })
+    assert response.status_code == 200
+    tx = response.json()
+    assert tx['currency'] == 'USD'
+    assert tx['amount'] == 12.5
+    assert tx['exchange_rate'] is None
+    assert tx['transaction_date'] == '2026-09-01T00:00:00'
+    assert tx['source_id'].startswith('manual_')
+    assert (await client.get('/api/v2/spending/review')).json()['total'] == 1
+    response = await client.post('/api/transactions', json={'amount': 0, 'source': 'cash'})
+    assert response.status_code == 200
+    assert response.json()['exchange_rate'] == 1
+    assert response.json()['source'] == 'cash'
+    assert (await client.post('/api/transactions', json=[])).status_code == 400

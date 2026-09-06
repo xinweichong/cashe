@@ -1,7 +1,6 @@
 import asyncio
 import logging
 import os
-import re
 import secrets
 import hashlib
 import time
@@ -29,14 +28,6 @@ from src.analytics import (
 
 logger = logging.getLogger(__name__)
 
-
-def _normalise_transaction_date(s: str) -> str:
-    """Normalise date strings to full ISO datetime."""
-    if re.match(r'^\d{4}-\d{2}-\d{2}$', s):
-        return s + "T00:00:00"
-    if re.match(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$', s):
-        return s + ":00"
-    return s
 
 SUMMARY_CACHE_DIR = os.environ.get(
     "SUMMARY_CACHE_DIR",
@@ -531,14 +522,11 @@ def create_dashboard_app(
     async def create_transaction(request: Request, username: str = Depends(require_auth)):
         storage = user_manager.get(username).storage
         body = await request.json()
+        if not isinstance(body, dict):
+            raise HTTPException(status_code=400, detail="Transaction must be an object")
         amount = body.get("amount")
         if amount is None:
             raise HTTPException(status_code=400, detail="amount is required")
-        try:
-            amount = float(amount)
-        except (TypeError, ValueError):
-            raise HTTPException(status_code=400, detail="amount must be a number")
-
         tx_type = body.get("type", "expense")
         if tx_type not in ("expense", "income"):
             raise HTTPException(status_code=400, detail="type must be 'expense' or 'income'")
@@ -549,12 +537,11 @@ def create_dashboard_app(
         description = body.get("description")
         category = body.get("category")
         currency = body.get("currency", "SGD")
-        exchange_rate = body.get("exchange_rate", 1.0)
-        transaction_date = body.get("transaction_date") or local_now().strftime("%Y-%m-%d %H:%M:%S")
-        transaction_date = _normalise_transaction_date(transaction_date)
+        exchange_rate = body.get("exchange_rate")
+        transaction_date = body.get("transaction_date", local_now(timezone).strftime("%Y-%m-%dT%H:%M:%S"))
 
         try:
-            tx_id = await _db(storage.insert_transaction,
+            tx_id = await _db(storage.create_manual_transaction,
                 source=source,
                 source_id=source_id,
                 amount=amount,
@@ -567,7 +554,7 @@ def create_dashboard_app(
                 tx_type=tx_type,
             )
         except ValueError as e:
-            raise HTTPException(status_code=409, detail=str(e))
+            raise HTTPException(status_code=409 if str(e).startswith("duplicate source_id:") else 400, detail=str(e))
 
         return await _db(storage.get_transaction, tx_id)
 

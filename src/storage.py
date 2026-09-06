@@ -1,8 +1,6 @@
 import calendar
 import functools
 import json
-import math
-import re
 import sqlite3
 import threading
 import secrets
@@ -11,6 +9,7 @@ from datetime import datetime, timedelta, timezone, date
 from typing import Optional
 
 from src.config import local_now
+from src.transaction_validation import normalize_transaction_fields
 
 _VALID_TYPES: frozenset[str] = frozenset({"needs", "wants", "neutral"})
 
@@ -314,45 +313,41 @@ class Storage:
         return dict(row) if row else None
 
     @_locked
+    def create_manual_transaction(self, *, source_id: str, amount, transaction_date,
+                                  source="manual", currency="SGD", exchange_rate=None,
+                                  merchant=None, description=None, category=None,
+                                  tx_type="expense") -> int:
+        if source not in ("manual", "cash"):
+            raise ValueError("Manual source must be manual or cash")
+        if tx_type not in ("expense", "income"):
+            raise ValueError("Manual type must be expense or income")
+        for value in (merchant, description, category):
+            if value is not None and not isinstance(value, str):
+                raise ValueError("Merchant, description, and category must be text")
+        fields = normalize_transaction_fields({
+            "amount": amount, "currency": currency, "exchange_rate": exchange_rate,
+            "transaction_date": transaction_date, "type": tx_type,
+        })
+        if fields["currency"] == "SGD":
+            fields["exchange_rate"] = 1.0
+        fields["tx_type"] = fields.pop("type")
+        return self.insert_transaction(source=source, source_id=source_id, merchant=merchant,
+                                       description=description, category=category, **fields)
+
+    @_locked
     def update_transaction(self, tx_id: int, *, remember_category: bool = False, **fields) -> None:
         if not fields:
             return
         tx = self.get_transaction(tx_id)
         if tx is None:
             raise ValueError(f"transaction {tx_id} not found")
-        for key in ("amount", "exchange_rate"):
-            if key not in fields or (key == "exchange_rate" and fields[key] is None):
-                continue
-            value = fields[key]
-            try:
-                number = float(value)
-            except (ValueError, TypeError, OverflowError):
-                raise ValueError(f"{key} must be a finite number") from None
-            if isinstance(value, bool) or not math.isfinite(number) or number < 0 or (key == "exchange_rate" and number == 0):
-                raise ValueError(f"{key} must be {'positive' if key == 'exchange_rate' else 'non-negative'} and finite")
-            fields[key] = number
+        fields = normalize_transaction_fields(fields)
         if "currency" in fields:
-            currency = fields["currency"]
-            if not isinstance(currency, str) or not re.fullmatch(r"[A-Za-z]{3}", currency):
-                raise ValueError("Currency must be a three-letter code")
-            fields["currency"] = currency.upper()
             if fields["currency"] != tx["currency"]:
                 if fields["currency"] == "SGD":
                     fields["exchange_rate"] = 1.0
                 elif "exchange_rate" not in fields:
                     fields["exchange_rate"] = None
-        if "type" in fields and fields["type"] not in ("expense", "income", "refund", "transfer"):
-            raise ValueError("Type must be expense, income, refund, or transfer")
-        if "transaction_date" in fields:
-            value = fields["transaction_date"]
-            if not isinstance(value, str) or not re.fullmatch(
-                r"\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,6})?)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d)?)?", value
-            ):
-                raise ValueError("Transaction date must be an ISO date or timestamp")
-            try:
-                fields["transaction_date"] = datetime.fromisoformat(value).isoformat()
-            except ValueError:
-                raise ValueError("Transaction date must be a valid calendar date and time") from None
         merchant = fields.get("merchant", tx.get("merchant"))
         if remember_category and (
             not isinstance(merchant, str) or not merchant.strip()

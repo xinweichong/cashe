@@ -11,6 +11,65 @@ def bot_service(in_memory_db):
     return TelegramBotService(storage=storage, bot_token="test-token")
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize('command', ['_add', '_cash', '_income'])
+@pytest.mark.parametrize('amount', ['nan', 'inf'])
+async def test_manual_commands_reject_nonfinite_values_without_followups(bot_service, command, amount):
+    update = SimpleNamespace(message=SimpleNamespace(reply_text=AsyncMock()))
+    context = SimpleNamespace(args=[amount, 'Cafe'])
+    with patch.object(bot_service.storage, 'auto_assign_to_active_trip') as assign:
+        await getattr(bot_service, command)(update, context)
+        assign.assert_not_called()
+    assert bot_service.storage.query_transactions(limit=50) == []
+    assert 'Couldn’t save' in update.message.reply_text.call_args.args[0]
+
+
+@pytest.mark.asyncio
+async def test_add_without_exchange_service_records_unresolved_foreign_currency(bot_service):
+    update = SimpleNamespace(message=SimpleNamespace(reply_text=AsyncMock()))
+    await bot_service._add(update, SimpleNamespace(args=['12', 'USD', 'Cafe']))
+    tx = bot_service.storage.query_transactions(limit=50)[0]
+    assert tx['currency'] == 'USD'
+    assert tx['exchange_rate'] is None
+    assert tx['merchant'] == 'Cafe'
+    assert tx['source_id'].startswith('manual-')
+    assert 'SGD conversion unresolved' in update.message.reply_text.call_args.args[0]
+
+
+@pytest.mark.asyncio
+async def test_duplicate_manual_command_is_reported_without_repeating_trip_assignment(bot_service):
+    from datetime import datetime
+    update = SimpleNamespace(message=SimpleNamespace(reply_text=AsyncMock()))
+    context = SimpleNamespace(args=['12', 'Cafe'])
+    with patch.object(bot_service, '_local_now', return_value=datetime(2026, 9, 7, 12)), patch.object(bot_service.storage, 'auto_assign_to_active_trip') as assign:
+        await bot_service._add(update, context)
+        await bot_service._add(update, context)
+        assert assign.call_count == 1
+    assert len(bot_service.storage.query_transactions(limit=50)) == 1
+    assert update.message.reply_text.call_args.args[0] == 'Already logged.'
+
+
+@pytest.mark.asyncio
+async def test_nl_confirmation_uses_shared_validation_and_retains_failed_draft(bot_service):
+    query = SimpleNamespace(data='nl_confirm', answer=AsyncMock(), edit_message_text=AsyncMock())
+    update = SimpleNamespace(callback_query=query)
+    context = SimpleNamespace(user_data={'nl_pending': {'amount': 12, 'currency': 'USD', 'merchant': 'Cafe', 'category': 'Food', 'date': '2026-02-30'}})
+    with patch.object(bot_service.storage, 'auto_assign_to_active_trip') as assign:
+        await bot_service._handle_nl_callback(update, context)
+        assign.assert_not_called()
+    assert bot_service.storage.query_transactions(limit=50) == []
+    assert 'nl_pending' in context.user_data
+    markup = query.edit_message_text.call_args.kwargs['reply_markup']
+    assert [button.callback_data for button in markup.inline_keyboard[0]] == ['nl_edit', 'nl_cancel']
+    context.user_data['nl_pending']['date'] = '2026-09-01'
+    context.user_data['nl_pending']['amount'] = '12'
+    await bot_service._handle_nl_callback(update, context)
+    tx = bot_service.storage.query_transactions(limit=50)[0]
+    assert tx['transaction_date'] == '2026-09-01T00:00:00'
+    assert tx['exchange_rate'] is None
+    assert 'nl_pending' not in context.user_data
+
+
 class TestParseAddCommand:
     def test_parse_add_full(self, bot_service):
         result = bot_service.parse_add_command("12.50 Toast Box food 2026-04-16")

@@ -231,3 +231,16 @@ Date/classification corrections were committed as `32cdd79`; this continuation s
 - Browser discovery returned no connected browser (`[]`), so rendered/device checks remain pending. No production data or services were modified.
 
 Verification: **814 backend tests passed** (four existing datetime deprecation warnings), **64 frontend tests passed**, production build and `git diff --check` passed. Coverage includes invalid/boolean/non-finite monetary corrections, atomic rollback, zero amounts, currency normalization, stale-rate clearing, explicit replacement/NULL rates, review/facts reconciliation and rounding, unchanged-field preservation, editor reset, and unresolved display. Focused lint matches the committed baseline: 11 findings in `api/client.ts`, one each in `TransactionDetail.tsx` and `SubscriptionDetail.tsx`; the correction test file passes lint. The verified monetary correction slice is committed separately.
+
+
+## 2026-09-07 continuation — shared manual-entry validation
+
+Monetary corrections were committed as `4ba0996`; this continuation started with a clean working tree.
+
+- Extracted the existing correction rules to `src/transaction_validation.py` and added `Storage.create_manual_transaction`. Web manual creation and Telegram `/add`, `/cash`, `/income`, and confirmed NL drafts use this shared validation boundary. Automated ingestion and legacy/synthetic low-level inserts remain unchanged.
+- Manual entries accept only manual/cash sources and expense/income classification, validate textual metadata, normalize currency/date input, and reject invalid/non-finite monetary values before writing. Missing foreign rates stay NULL; native SGD uses 1. Web validation errors return 400; duplicate generated IDs return 409.
+- Existing source IDs remain unchanged, including actual `/cash` IDs with their `cash-` prefix. Telegram duplicate/validation failures send sanitized replies and skip success/trip follow-ups. Currency parsing in `/add` works even without an exchange service; unknown conversions are explicit in acknowledgements.
+- Confirmed NL drafts preserve their supplied date/timestamp instead of attaching the current time to a date-only record. Invalid confirmation drafts retain Edit/Cancel actions and pending fields. No AI service calls were made during validation.
+- Removed the now-unused API date helper. Manual source-event capture, durable follow-ups, request idempotency, and the full shared command interface remain open. No schema changes, frontend changes, or production data/service modifications occurred.
+
+Verification: **838 backend tests passed** (four existing datetime deprecation warnings). The final NL error-action/confirmation formatting refinement was verified with **74 Telegram tests passed**. New tests cover invalid manual bodies/fields, non-finite command amounts, absent exchange services, unresolved FX, source-ID duplicate handling, date-only confirmation, and retained failed-draft actions. `git diff --check` passed. Frontend files are unchanged; the preceding baseline remains 64 passing tests and a successful production build. This verified manual-validation slice is committed separately.
