@@ -109,3 +109,15 @@ Verification: **15 focused audit/backup tests passed**, including committed WAL 
 - Public evidence excludes raw payloads and source IDs. `docs/operations/spending-facts.md` documents response semantics and limits, including source freshness, settlement precedence, splits/refund links, weekly reporting, FX provenance, and migration work that remain open.
 
 Verification: **745 backend tests passed**, with the same four existing datetime deprecation warnings. Added coverage for rounding, legacy NULL types, refunds/transfers, missing income, negative net flow, unresolved/indicative FX, leap/month/year boundaries, Singapore date projection, evidence pagination/reconciliation, input validation, privacy, and cross-user isolation. `git diff --check` passed. This additive API slice is committed before the planned 100,000-transaction benchmark; no production data or frontend files were changed.
+
+
+## 2026-09-06 continuation — 100,000-transaction reporting benchmark
+
+The shared monthly facts/evidence API was committed as `53b8704`.
+
+- Added `python -m scripts.benchmark_spending_facts`: a reproducible temporary disk SQLite/WAL fixture with no real database input. It reports repeated query timings and bounded JSON payload sizes.
+- At 100,000 synthetic rows over 240 days, median monthly facts were **61.8 ms**, with evidence pages **9.7 ms** (five runs). Concentrating the same rows into six days produced **466.2 ms** for facts and approximately **393–395 ms** for evidence pages (three runs).
+- Facts payloads were about 1.6 KB and 50-row evidence payloads under 9.7 KB. These local macOS arm64/Python 3.12.1/SQLite 3.43.1 results exclude HTTP/auth/network costs and do not establish OCI/mobile performance.
+- No caching or additional indexes were added. Period-wide evidence materialization remains a measured dense-period cost to revisit when deployment workload measurements warrant it. Commands, methodology, and both profiles are recorded in `docs/operations/spending-facts.md`.
+
+Verification: both full-size benchmark profiles completed; CLI help and `git diff --check` passed. The benchmark has no application-runtime effect and is committed as a separate performance baseline.

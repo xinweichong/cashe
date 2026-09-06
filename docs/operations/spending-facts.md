@@ -24,3 +24,23 @@ Amounts are SGD integer minor units computed with Decimal and half-up rounding *
 A period's `complete` status means its selected monetary values are resolved by these rules. It does **not** establish source completeness or mailbox freshness. Source-health information must accompany the eventual Home briefing. Category changes are suppressed when either comparable period is partial.
 
 Storage is unchanged by these endpoints. Audited integer-money conversion, settlement precedence, explicit FX provenance, weekly reporting, forecast inputs, and the new Home UI remain open in the plan.
+
+## Synthetic performance baseline
+
+Run the reproducible benchmark without providing any real database path:
+
+```sh
+python -m scripts.benchmark_spending_facts
+python -m scripts.benchmark_spending_facts --history-days 6 --runs 3
+```
+
+It creates and removes a temporary disk SQLite/WAL database using the production schema. Fixture creation is excluded from timings. Each response is serialized separately to measure payload size; timings measure the Storage query/calculation only, excluding HTTP, authentication, and network latency.
+
+Measured on 2026-09-06, macOS arm64, Python 3.12.1, SQLite 3.43.1:
+
+| 100,000-row profile | Monthly facts median | First evidence page median | Later evidence page median |
+|---|---:|---:|---:|
+| Spread over 240 days; 5 runs | 61.8 ms | 9.7 ms | 9.7 ms |
+| Concentrated in 6 days; 3 runs | 466.2 ms | 393.2 ms | 395.5 ms |
+
+Monthly JSON was about 1.6 KB; each 50-row evidence response was under 9.7 KB. These are local warm-cache measurements, not OCI capacity or mobile LCP measurements. No caching or additional indexes were introduced. Evidence payloads are bounded, but calculation still scans/materializes the selected period to share exact timezone/conversion semantics; concentrated periods are the next performance concern if they occur in real usage. Re-run on the deployment hardware before setting service latency targets.
