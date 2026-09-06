@@ -21,7 +21,7 @@ from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 
 from src.config import local_now
 from src.web.auth import verify_password, create_session, verify_session, destroy_session
-from src.web.contracts import CaptureFollowup, CaptureIssue, HomeBriefing, QueuedResponse, SpendingEvidence, SpendingFacts, TransactionProvenance
+from src.web.contracts import CaptureFollowup, CaptureIssue, HomeBriefing, QueuedResponse, SpendingEvidence, SpendingFacts, SpendingReview, TransactionProvenance
 from src.analytics import (
     load_summary,
     get_yoy_comparison,
@@ -244,6 +244,13 @@ def create_dashboard_app(
             return await _db(storage.get_week_spending_facts, as_of, timezone)
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from None
+
+    @app.get("/api/v2/spending/review", response_model=SpendingReview)
+    async def spending_review(
+        limit: int = Query(50, ge=1, le=100), offset: int = Query(0, ge=0),
+        storage=Depends(_get_storage),
+    ):
+        return await _db(storage.get_spending_review, timezone=timezone, limit=limit, offset=offset)
 
     @app.get("/api/v2/spending/evidence", response_model=SpendingEvidence)
     async def spending_evidence(

@@ -192,3 +192,16 @@ Explicit category correction scope was committed as `b18fb2e`; this continuation
 - Browser setup and troubleshooting found no connected browser (`[]`), so rendered/device acceptance remains unverified. No production data or services were touched.
 
 Verification: **774 backend tests passed** (four existing datetime deprecation warnings), **54 frontend tests passed**, production build and `git diff --check` passed. New tests cover cross-source capture, raw/parsed grouping, date-only separation, legacy/manual evidence absence, deleted transactions, authenticated response privacy, overlapping IDs across user databases, and UI loading/retry/selection states. Focused lint reports 12 pre-existing errors (11 `no-explicit-any` in `api/client.ts`, one `set-state-in-effect` in `TransactionDetail.tsx`); the same findings were reproduced against committed HEAD. The verified provenance slice is committed separately.
+
+
+## 2026-09-06 continuation — unresolved spending review
+
+Transaction provenance was committed as `8519f11`; this continuation started with a clean working tree.
+
+- Added typed authenticated `GET /api/v2/spending/review`, exposing paginated unresolved records across all history through the existing per-user, locked spending-facts interface. Responses exclude raw payloads, source IDs, and payment metadata.
+- Review and unresolved evidence share selection rules. Independent reasons distinguish missing/unreadable dates, unresolved monetary values/conversions, and unknown classification. Transfers and usable indicative conversions stay out of this list; legacy NULL types remain expenses. Date uncertainty alone is not labeled as missing conversion.
+- Review now includes spending records alongside capture/follow-up processing issues. The groups load independently, with explicit loading/error/retry/empty states. Spending pagination is retained in the URL and the transaction close path; transaction mutations invalidate the review query.
+- Existing rate corrections automatically remove resolved conversion records; no dismissal state or database migration is added. New date/classification correction controls still require the shared transaction-command slice. Ambiguous duplicates, unknown merchants, refund matches, and recurring confirmation remain open.
+- All-history review scans the legacy ledger with bounded response pages; it is not an indexed queue or proof of capture completeness. Browser discovery again returned no connected browser (`[]`), so rendered and device acceptance remain pending. No production data or services were modified.
+
+Verification: **780 backend tests passed** (four existing datetime deprecation warnings), **57 frontend tests passed**, production build and `git diff --check` passed. Added all-history/evidence reconciliation, independent reason, timezone, pagination, correction/deletion, privacy/authentication, cross-user isolation, retry, and return-link coverage. Focused frontend lint passes except the existing `set-state-in-effect` finding in `TransactionsPage.tsx`, reproduced against committed HEAD. This verified review slice is committed separately.

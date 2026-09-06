@@ -28,6 +28,18 @@ A period's `complete` status means its selected monetary values are resolved by 
 
 Storage is unchanged by these endpoints. Audited integer-money conversion, settlement precedence, explicit FX provenance, migration of legacy report consumers, forecast inputs, and the new Home UI remain open in the plan.
 
+## Spending review
+
+Authenticated `GET /api/v2/spending/review?limit=50&offset=0` lists unresolved records across all dates, including older and undated observations. It shares selection and conversion rules with unresolved spending evidence. Transfers and usable indicative conversions are excluded; legacy NULL types remain expenses. Each item exposes only its transaction ID, merchant, category, projected date, and reason codes:
+
+- `missing_date`: missing or unreadable transaction date.
+- `unresolved_money`: the original amount or retained conversion cannot produce a reporting amount.
+- `unknown_type`: classification is not expense, income, or refund.
+
+Reasons can coexist. Missing dates alone do not imply missing FX. The response includes `total`, `limit` (1–100), and `offset`; listing is read-only and does not mark records resolved. Corrections/deletions change membership automatically. The Review screen preserves its spending-page URL through transaction details and refreshes after transaction mutations. Existing exchange-rate editing can resolve a missing conversion; new date/classification correction controls remain part of the shared transaction-command work.
+
+This is an all-history scan using the legacy facts calculation, with bounded response pages. It is not an indexed queue or a completion audit, and does not include uncertain duplicates, unknown merchants, refund matches, or recurring suggestions yet.
+
 ## Synthetic performance baseline
 
 Run the reproducible benchmark without providing any real database path:

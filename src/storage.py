@@ -93,6 +93,11 @@ class Storage:
             "followup_issue_count": self._conn.execute("SELECT COUNT(*) FROM ingestion_outbox WHERE status != 'done'").fetchone()[0],
         }
 
+    @_locked
+    def get_spending_review(self, *, timezone="Asia/Singapore", limit=50, offset=0) -> dict:
+        from src.spending_facts import spending_review
+        return spending_review(self._conn, timezone=timezone, limit=limit, offset=offset)
+
     @contextmanager
     def reconciliation_lock(self):
         """Serialize check-and-insert across the user's Wallet and Gmail inputs."""

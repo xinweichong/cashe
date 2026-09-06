@@ -148,6 +148,32 @@ def _facts(conn, as_of: date, timezone: str, periods: tuple[date, date, date, da
     }
 
 
+def _needs_review(row: dict) -> bool:
+    return row["type"] != "transfer" and (
+        row["minor"] is None or row["type"] not in ("expense", "refund", "income")
+    )
+
+
+def spending_review(conn, *, timezone: str = DEFAULT_TIMEZONE,
+                    limit: int = 50, offset: int = 0) -> dict:
+    if not 1 <= limit <= 100 or offset < 0:
+        raise ValueError("Invalid review query")
+    rows = [row for row in _rows(conn, date.min, date.max, timezone) if _needs_review(row)]
+    items = []
+    for row in rows[offset:offset + limit]:
+        reasons = []
+        if row["day"] is None:
+            reasons.append("missing_date")
+        # Date uncertainty alone must not be described as a conversion problem.
+        if convert_legacy_sgd(row)[0] is None:
+            reasons.append("unresolved_money")
+        if row["type"] not in ("expense", "refund", "income"):
+            reasons.append("unknown_type")
+        items.append({"id": row["id"], "merchant": row["merchant"], "category": row["category"],
+                      "date": row["day"].isoformat() if row["day"] else None, "reasons": reasons})
+    return {"items": items, "total": len(rows), "limit": limit, "offset": offset}
+
+
 def spending_evidence(conn, start: date, end: date, *, timezone: str = DEFAULT_TIMEZONE,
                       category: str | None = None, measure: str = "spending",
                       limit: int = 50, offset: int = 0) -> dict:
@@ -156,8 +182,7 @@ def spending_evidence(conn, start: date, end: date, *, timezone: str = DEFAULT_T
     kinds = ("expense", "refund") if measure == "spending" else ("income",)
     rows = [row for row in _rows(conn, start, end, timezone)
             if (category is None or row["category"] == category)
-            and ((measure == "unresolved" and row["type"] != "transfer"
-                  and (row["minor"] is None or row["type"] not in ("expense", "refund", "income")))
+            and ((measure == "unresolved" and _needs_review(row))
                  or (measure != "unresolved" and row["day"] is not None and row["type"] in kinds))]
     items = []
     for row in rows[offset:offset + limit]:

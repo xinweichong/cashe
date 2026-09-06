@@ -35,7 +35,7 @@ export function TransactionsPage() {
 
   const [searchParams, setSearchParams] = useSearchParams();
   const returnTo = searchParams.get('returnTo');
-  const closeDetail = () => navigate(returnTo?.startsWith('/evidence?') ? returnTo : `${activityPath}${location.search}`);
+  const closeDetail = () => navigate(returnTo?.startsWith('/evidence?') || returnTo === '/review' || returnTo?.startsWith('/review?') ? returnTo : `${activityPath}${location.search}`);
   useEffect(() => {
     if (searchParams.get('add') === '1') {
       setShowForm(true);

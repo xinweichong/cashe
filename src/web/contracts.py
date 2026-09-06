@@ -92,6 +92,21 @@ class SpendingEvidence(BaseModel):
     offset: int
 
 
+class SpendingReviewItem(BaseModel):
+    id: int
+    merchant: str | None
+    category: str
+    date: str | None
+    reasons: list[Literal["missing_date", "unresolved_money", "unknown_type"]]
+
+
+class SpendingReview(BaseModel):
+    items: list[SpendingReviewItem]
+    total: int
+    limit: int
+    offset: int
+
+
 class UpcomingCharge(BaseModel):
     id: int
     subscription_id: int

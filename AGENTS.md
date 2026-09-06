@@ -213,6 +213,7 @@ The `IngestionPipeline` is instantiated per-user inside `UserManager._build_cont
 
 ### Shared spending facts
 
+- `/api/v2/spending/review` lists all-history unresolved spending records using the same selection/conversion rules as evidence. Reason codes distinguish missing dates, unresolved money, and unknown classification; transfers and usable indicative FX are excluded. The read-only list resolves membership from current data, not dismissals. Invalidate `spending-review` after transaction mutations and preserve `/review?spending_offset=...` when closing details.
 - Opt-in Home: `home_briefing_enabled` defaults off in Settings. `/api/v2/home` composes shared facts and sanitized capture freshness; `/home`, `/evidence`, and `/review` are lazy-loaded authenticated screens. Keep failed/stale/partial states explicit and invalidate Home/evidence queries after transaction mutations. Capture list APIs support `limit` and `offset`.
 
 - New reporting uses `src/spending_facts.py` through locked Storage wrappers. The additive authenticated `/api/v2/spending/month`, `/api/v2/spending/week`, and `/api/v2/spending/evidence` endpoints share classification, Decimal rounding, timezone projection, and evidence selection. See `docs/operations/spending-facts.md` for compatibility limits.

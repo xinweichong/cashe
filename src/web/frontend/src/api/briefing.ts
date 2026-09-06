@@ -26,11 +26,17 @@ export interface HomeBriefing {
 export interface CaptureIssue {
   id: number; source: string; status: string; attempts: number; error_code: string | null;
 }
+export interface SpendingReview {
+  items: { id: number; merchant: string | null; category: string; date: string | null;
+    reasons: ('missing_date' | 'unresolved_money' | 'unknown_type')[] }[];
+  total: number; limit: number; offset: number;
+}
 export interface FollowupIssue {
   id: number; transaction_id: number; kind: string; status: string; attempts: number;
 }
 export const briefingApi = {
   home: () => request<HomeBriefing>('/api/v2/home'),
+  spendingReview: (offset = 0) => request<SpendingReview>(`/api/v2/spending/review?limit=50&offset=${offset}`),
   evidence: (query: URLSearchParams) => request<{ items: EvidenceItem[]; total: number; limit: number; offset: number }>(`/api/v2/spending/evidence?${query}`),
   captureIssues: (offset = 0) => request<CaptureIssue[]>(`/api/v2/capture/issues?limit=50&offset=${offset}`),
   followups: (offset = 0) => request<FollowupIssue[]>(`/api/v2/capture/followups?limit=50&offset=${offset}`),

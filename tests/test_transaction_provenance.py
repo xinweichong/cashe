@@ -106,3 +106,44 @@ async def test_api_auth_privacy_and_user_isolation(in_memory_db, monkeypatch):
     finally:
         other_conn.close()
         admin_conn.close()
+
+
+@pytest.mark.asyncio
+async def test_spending_review_api_privacy_validation_and_isolation(in_memory_db, monkeypatch):
+    admin_conn = make_admin_db_with_user()
+    admin_conn.execute("INSERT INTO users(username, password_hash) SELECT 'other', password_hash FROM users")
+    admin_conn.commit()
+    admin = AdminStorage(admin_conn)
+    monkeypatch.setattr(auth, "_admin_storage", admin)
+    storage = Storage(in_memory_db)
+    other_conn = init_db(":memory:")
+    other = Storage(other_conn)
+    try:
+        tx_id = storage.insert_transaction(source="manual", source_id="private-id", raw_data="private payload",
+                                           amount=10, currency="USD", exchange_rate=1,
+                                           transaction_date="2020-01-01", merchant="Old purchase")
+        other.insert_transaction(source="manual", source_id="other", amount=10, transaction_date="2020-01-01")
+        app = create_dashboard_app(FakeMultiUserManager({TEST_USERNAME: storage, "other": other}), admin)
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            path = '/api/v2/spending/review'
+            assert (await client.get(path)).status_code == 401
+            client.cookies.set("session", admin.create_session(TEST_USERNAME))
+            response = await client.get(path)
+            assert response.status_code == 200
+            assert response.json() == {
+                "items": [{"id": tx_id, "merchant": "Old purchase", "category": "Other",
+                           "date": "2020-01-01", "reasons": ["unresolved_money"]}],
+                "total": 1, "limit": 50, "offset": 0,
+            }
+            assert "private" not in response.text
+            for query in ('limit=0', 'limit=101', 'offset=-1', 'offset=bad'):
+                assert (await client.get(f'{path}?{query}')).status_code == 422
+            update = await client.put(f'/api/transactions/{tx_id}', json={"exchange_rate": 1.3})
+            assert update.status_code == 200
+            assert (await client.get(path)).json()['total'] == 0
+            storage.update_transaction(tx_id, exchange_rate=1)
+            client.cookies.set("session", admin.create_session("other"))
+            assert (await client.get(path)).json()['total'] == 0
+    finally:
+        other_conn.close()
+        admin_conn.close()

@@ -38,6 +38,7 @@ export function useCreateTransaction() {
       qc.invalidateQueries({ queryKey: ['summary'] });
       qc.invalidateQueries({ queryKey: ['home-briefing'] });
       qc.invalidateQueries({ queryKey: ['spending-evidence'] });
+      qc.invalidateQueries({ queryKey: ['spending-review'] });
       qc.invalidateQueries({ queryKey: ['balance'] });
     },
   });
@@ -70,6 +71,7 @@ export function useUpdateTransaction() {
       qc.invalidateQueries({ queryKey: ['summary'] });
       qc.invalidateQueries({ queryKey: ['home-briefing'] });
       qc.invalidateQueries({ queryKey: ['spending-evidence'] });
+      qc.invalidateQueries({ queryKey: ['spending-review'] });
     },
   });
 }
@@ -97,6 +99,7 @@ export function useDeleteTransaction() {
       qc.invalidateQueries({ queryKey: ['summary'] });
       qc.invalidateQueries({ queryKey: ['home-briefing'] });
       qc.invalidateQueries({ queryKey: ['spending-evidence'] });
+      qc.invalidateQueries({ queryKey: ['spending-review'] });
       qc.invalidateQueries({ queryKey: ['balance'] });
     },
   });

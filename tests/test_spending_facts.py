@@ -23,6 +23,47 @@ def facts(storage, day='2026-09-06'):
     return storage.get_month_spending_facts(date.fromisoformat(day))
 
 
+def test_review_covers_all_history_and_shares_evidence_selection(ledger):
+    storage, add = ledger
+    older = add(10, '2020-01-01', currency='USD', exchange_rate=1)
+    undated = add(10, None)
+    invalid = add(10, tx_type='unknown')
+    multiple = add(-1, 'not-a-date', tx_type='unknown')
+    add(10, currency='USD', exchange_rate=1.3)  # Indicative, not unresolved.
+    add(10, tx_type=None)  # Legacy expense.
+    add(10, None, tx_type='transfer')
+    review = storage.get_spending_review()
+    records = {item['id']: item for item in review['items']}
+    assert set(records) == {older, undated, invalid, multiple}
+    assert records[older]['reasons'] == ['unresolved_money']
+    assert records[undated]['reasons'] == ['missing_date']
+    assert records[invalid]['reasons'] == ['unknown_type']
+    assert records[multiple]['reasons'] == ['missing_date', 'unresolved_money', 'unknown_type']
+    evidence = storage.get_spending_evidence(date.min, date.max, measure='unresolved')
+    assert [item['id'] for item in review['items']] == [item['id'] for item in evidence['items']]
+
+
+def test_review_pagination_timezone_and_corrections(ledger):
+    storage, add = ledger
+    ids = [add(10, '2026-08-31T18:00:00+00:00', currency='USD', exchange_rate=1) for _ in range(3)]
+    first = storage.get_spending_review(limit=2)
+    second = storage.get_spending_review(limit=2, offset=2)
+    assert [item['id'] for item in first['items'] + second['items']] == ids[::-1]
+    assert first['total'] == second['total'] == 3
+    assert first['items'][0]['date'] == '2026-09-01'
+    assert storage.get_spending_review(timezone='UTC')['items'][0]['date'] == '2026-08-31'
+    storage.update_transaction(ids[0], exchange_rate=1.3)
+    storage.delete_transaction(ids[1])
+    assert storage.get_spending_review()['total'] == 1
+    assert storage.get_spending_review(offset=50)['items'] == []
+
+
+@pytest.mark.parametrize('options', [{'limit': 0}, {'limit': 101}, {'offset': -1}])
+def test_review_rejects_invalid_pagination(ledger, options):
+    with pytest.raises(ValueError):
+        ledger[0].get_spending_review(**options)
+
+
 @pytest.mark.parametrize(('as_of', 'ends'), [
     ('2026-03-31', ('2026-03-28', '2026-02-28')),
     ('2024-03-31', ('2024-03-29', '2024-02-29')),
