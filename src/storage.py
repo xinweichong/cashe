@@ -47,6 +47,11 @@ class Storage:
         return month_facts(self._conn, as_of, timezone)
 
     @_locked
+    def get_week_spending_facts(self, as_of=None, timezone="Asia/Singapore") -> dict:
+        from src.spending_facts import week_facts
+        return week_facts(self._conn, as_of, timezone)
+
+    @_locked
     def get_spending_evidence(self, start, end, **filters) -> dict:
         from src.spending_facts import spending_evidence
         return spending_evidence(self._conn, start, end, **filters)

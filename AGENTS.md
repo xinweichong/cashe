@@ -212,9 +212,10 @@ The `IngestionPipeline` is instantiated per-user inside `UserManager._build_cont
 
 ### Shared spending facts
 
-- New reporting uses `src/spending_facts.py` through locked Storage wrappers. The additive authenticated `/api/v2/spending/month` and `/api/v2/spending/evidence` endpoints share classification, Decimal rounding, timezone projection, and evidence selection. See `docs/operations/spending-facts.md` for compatibility limits.
+- New reporting uses `src/spending_facts.py` through locked Storage wrappers. The additive authenticated `/api/v2/spending/month`, `/api/v2/spending/week`, and `/api/v2/spending/evidence` endpoints share classification, Decimal rounding, timezone projection, and evidence selection. See `docs/operations/spending-facts.md` for compatibility limits.
 - Report SGD integer minor units rounded per transaction; storage remains legacy floats until the audited migration. Never describe this compatibility calculation as a completed money migration.
 - Always expose partial/indicative status with known subtotals. Legacy foreign `1.0` rates are unresolved, not proof of conversion. Undated observations make comparisons unavailable. Missing income is absent, and negative recorded net flow is retained.
+- Weekly facts compare Monday through the requested weekday with the same weekdays seven days earlier. Both monthly and weekly facts share monetary and evidence calculations.
 - Use the response's separate comparison periods for evidence drill-downs: short previous months truncate the comparable current window, not the main month-to-date total.
 
 ### Parser System

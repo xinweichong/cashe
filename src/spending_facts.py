@@ -25,6 +25,13 @@ def month_periods(as_of: date) -> tuple[date, date, date, date]:
     return current_start, current_start + timedelta(days=days - 1), previous_start, previous_start + timedelta(days=days - 1)
 
 
+def week_periods(as_of: date) -> tuple[date, date, date, date]:
+    current_start = as_of - timedelta(days=as_of.weekday())
+    if current_start < date(1, 1, 8):
+        raise ValueError("No previous week is representable")
+    return current_start, as_of, current_start - timedelta(days=7), as_of - timedelta(days=7)
+
+
 def _converted(row: dict) -> tuple[int | None, str]:
     try:
         amount = Decimal(str(row["amount"]))
@@ -104,7 +111,16 @@ def _period(rows: list[dict], start: date, end: date) -> dict:
 
 def month_facts(conn, as_of: date | None = None, timezone: str = DEFAULT_TIMEZONE) -> dict:
     as_of = as_of or local_now(timezone).date()
-    current_start, comparison_end, previous_start, previous_end = month_periods(as_of)
+    return _facts(conn, as_of, timezone, month_periods(as_of))
+
+
+def week_facts(conn, as_of: date | None = None, timezone: str = DEFAULT_TIMEZONE) -> dict:
+    as_of = as_of or local_now(timezone).date()
+    return _facts(conn, as_of, timezone, week_periods(as_of))
+
+
+def _facts(conn, as_of: date, timezone: str, periods: tuple[date, date, date, date]) -> dict:
+    current_start, comparison_end, previous_start, previous_end = periods
     rows = _rows(conn, previous_start, as_of, timezone)
     current = _period(rows, current_start, as_of)
     comparable = _period(rows, current_start, comparison_end)

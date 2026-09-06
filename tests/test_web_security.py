@@ -446,3 +446,14 @@ async def test_spending_facts_evidence_omits_internal_columns(authed_client, in_
     assert response.json()['items'][0]['id'] == tx_id
     assert 'private-source-id' not in response.text and 'secret-email' not in response.text
     assert 'raw_data' not in response.text and 'source_id' not in response.text
+
+
+@pytest.mark.asyncio
+async def test_weekly_spending_api_auth_validation_and_periods(client, authed_client):
+    assert (await client.get('/api/v2/spending/week')).status_code == 401
+    assert (await authed_client.get('/api/v2/spending/week?as_of=invalid')).status_code == 422
+    assert (await authed_client.get('/api/v2/spending/week?as_of=0001-01-01')).status_code == 422
+    response = await authed_client.get('/api/v2/spending/week?as_of=2026-01-01')
+    assert response.status_code == 200
+    assert response.json()['current']['start'] == '2025-12-29'
+    assert response.json()['previous']['end'] == '2025-12-25'

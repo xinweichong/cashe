@@ -53,7 +53,7 @@ class CategoryChange(BaseModel):
     change: Money
 
 
-class MonthSpendingFacts(BaseModel):
+class SpendingFacts(BaseModel):
     undated_count: int
     as_of: str
     timezone: str

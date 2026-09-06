@@ -121,3 +121,15 @@ The shared monthly facts/evidence API was committed as `53b8704`.
 - No caching or additional indexes were added. Period-wide evidence materialization remains a measured dense-period cost to revisit when deployment workload measurements warrant it. Commands, methodology, and both profiles are recorded in `docs/operations/spending-facts.md`.
 
 Verification: both full-size benchmark profiles completed; CLI help and `git diff --check` passed. The benchmark has no application-runtime effect and is committed as a separate performance baseline.
+
+
+## 2026-09-06 continuation — weekday-aligned weekly facts
+
+The reproducible performance baseline was committed as `4691690`.
+
+- Added `Storage.get_week_spending_facts()` and authenticated typed `GET /api/v2/spending/week`, using the same response contract, monetary calculations, category contributions, and paginated evidence as monthly facts.
+- Week-to-date runs from Monday through `as_of`; comparison dates cover the same weekdays seven days earlier. This works across month/year boundaries and uses the configured local timezone.
+- Extracted the common period calculation so currency uncertainty, undated observations, legacy NULL expenses, refunds/transfers, and missing-income behavior cannot drift between month/week implementations.
+- Updated the spending-facts contract notes and agent instructions. Existing web/Telegram report consumers still need migration to the shared interface; the Home briefing, money-storage migration, and remaining production trust checks remain open.
+
+Verification: **56 focused spending-facts/API-security tests passed**, including existing monthly/evidence behavior and eight new weekly boundary, timezone, partial-FX, and authenticated-route cases. The preceding full backend suite passed 745 tests. `git diff --check` passed. No production services were touched. This verified weekly slice is committed separately.

@@ -158,3 +158,52 @@ def test_category_drivers_and_paginated_evidence_reconcile(ledger):
         items.extend(page['items'])
     assert len({item['id'] for item in items}) == 125
     assert sum(item['amount']['minor_units'] for item in items) == 1250
+
+
+@pytest.mark.parametrize(('as_of', 'expected'), [
+    ('2026-09-07', ('2026-09-07', '2026-09-07', '2026-08-31', '2026-08-31')),
+    ('2026-09-09', ('2026-09-07', '2026-09-09', '2026-08-31', '2026-09-02')),
+    ('2026-09-13', ('2026-09-07', '2026-09-13', '2026-08-31', '2026-09-06')),
+    ('2026-01-01', ('2025-12-29', '2026-01-01', '2025-12-22', '2025-12-25')),
+])
+def test_week_periods_align_weekdays(as_of, expected):
+    from src.spending_facts import week_periods
+    periods = week_periods(date.fromisoformat(as_of))
+    assert tuple(day.isoformat() for day in periods) == expected
+    assert periods[0].weekday() == periods[2].weekday() == 0
+    assert periods[1].weekday() == periods[3].weekday()
+
+
+def test_week_evidence_includes_equal_weekdays_only(ledger):
+    storage, add = ledger
+    add(20, '2026-09-07T12:00:00')
+    add(5, '2026-09-09T12:00:00')
+    add(999, '2026-09-10T12:00:00')
+    add(10, '2026-08-31T12:00:00')
+    add(999, '2026-09-03T12:00:00')
+    report = storage.get_week_spending_facts(date(2026, 9, 9))
+    assert report['current']['spending']['minor_units'] == 2500
+    assert report['previous']['spending']['minor_units'] == 1000
+    assert report['change']['minor_units'] == 1500
+    assert report['comparison_current'] == report['current']
+    for period in (report['current'], report['previous']):
+        evidence = storage.get_spending_evidence(date.fromisoformat(period['start']), date.fromisoformat(period['end']))
+        assert sum(item['amount']['minor_units'] for item in evidence['items']) == period['spending']['minor_units']
+
+
+def test_week_uses_same_partial_currency_semantics(ledger):
+    storage, add = ledger
+    add(10, '2026-09-07T12:00:00', currency='USD', exchange_rate=1)
+    report = storage.get_week_spending_facts(date(2026, 9, 9))
+    assert report['current']['status'] == 'partial'
+    assert report['change'] is None
+    assert report['category_changes'] == []
+
+
+def test_week_timezone_projects_sunday_utc_into_monday(ledger):
+    storage, add = ledger
+    add(10, '2026-09-06T16:00:00+00:00')
+    report = storage.get_week_spending_facts(date(2026, 9, 7), 'Asia/Singapore')
+    assert report['current']['spending']['minor_units'] == 1000
+    report = storage.get_week_spending_facts(date(2026, 9, 7), 'UTC')
+    assert report['current']['spending']['minor_units'] == 0

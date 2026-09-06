@@ -1,13 +1,16 @@
 # Spending facts compatibility slice
 
-`src/spending_facts.py` is the shared read-only reporting interface for the new client. `Storage.get_month_spending_facts()` and `Storage.get_spending_evidence()` run it under the per-user database lock. The existing dashboard and Telegram reports still use their legacy interfaces; moving those consumers happens in later slices.
+`src/spending_facts.py` is the shared read-only reporting interface for the new client. `Storage.get_month_spending_facts()`, `Storage.get_week_spending_facts()`, and `Storage.get_spending_evidence()` run it under the per-user database lock. The existing dashboard and Telegram reports still use their legacy interfaces; moving those consumers happens in later slices.
 
 Authenticated endpoints:
 
 - `GET /api/v2/spending/month?as_of=2026-09-06`
+- `GET /api/v2/spending/week?as_of=2026-09-09`
 - `GET /api/v2/spending/evidence?start=2026-09-01&end=2026-09-06&measure=spending&category=Food&limit=50&offset=0`
 
 The month response includes the full month-to-date period, a separate comparable current period, the previous comparable period, and category contributions to the spending change. Both comparison windows have the same number of calendar days. For March 31 against a 28-day February, the comparison uses March 1–28 and February 1–28; the main current total still includes March 29–31.
+
+The week response uses the same contract and calculations. Its current period starts Monday and ends on `as_of`; the previous period covers the same weekdays seven days earlier. A Wednesday query compares Monday–Wednesday with the preceding Monday–Wednesday, including across month/year boundaries.
 
 For a total, query evidence using that period's `start` and `end`. For a category contribution, query both comparable periods with its `category`. `measure` accepts `spending`, `income`, and `unresolved`. Evidence is paginated, includes transaction IDs for details, and uses the same conversion/classification functions as the totals. It excludes raw payloads and internal source identifiers.
 
@@ -23,7 +26,7 @@ Amounts are SGD integer minor units computed with Decimal and half-up rounding *
 
 A period's `complete` status means its selected monetary values are resolved by these rules. It does **not** establish source completeness or mailbox freshness. Source-health information must accompany the eventual Home briefing. Category changes are suppressed when either comparable period is partial.
 
-Storage is unchanged by these endpoints. Audited integer-money conversion, settlement precedence, explicit FX provenance, weekly reporting, forecast inputs, and the new Home UI remain open in the plan.
+Storage is unchanged by these endpoints. Audited integer-money conversion, settlement precedence, explicit FX provenance, migration of legacy report consumers, forecast inputs, and the new Home UI remain open in the plan.
 
 ## Synthetic performance baseline
 

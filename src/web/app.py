@@ -21,7 +21,7 @@ from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 
 from src.config import local_now
 from src.web.auth import verify_password, create_session, verify_session, destroy_session
-from src.web.contracts import CaptureFollowup, CaptureIssue, MonthSpendingFacts, QueuedResponse, SpendingEvidence
+from src.web.contracts import CaptureFollowup, CaptureIssue, QueuedResponse, SpendingEvidence, SpendingFacts
 from src.analytics import (
     load_summary,
     get_yoy_comparison,
@@ -219,10 +219,17 @@ def create_dashboard_app(
             raise HTTPException(status_code=404 if str(exc).endswith("not found") else 409, detail=str(exc))
         return QueuedResponse()
 
-    @app.get("/api/v2/spending/month", response_model=MonthSpendingFacts)
+    @app.get("/api/v2/spending/month", response_model=SpendingFacts)
     async def month_spending(as_of: date | None = None, storage=Depends(_get_storage)):
         try:
             return await _db(storage.get_month_spending_facts, as_of, timezone)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from None
+
+    @app.get("/api/v2/spending/week", response_model=SpendingFacts)
+    async def week_spending(as_of: date | None = None, storage=Depends(_get_storage)):
+        try:
+            return await _db(storage.get_week_spending_facts, as_of, timezone)
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from None
 
