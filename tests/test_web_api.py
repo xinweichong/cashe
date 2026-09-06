@@ -443,3 +443,36 @@ class TestSettingsFeatureFlags:
         get_resp = await client.get("/api/settings")
         assert get_resp.status_code == 200
         assert get_resp.json()["recurring_enabled"] is True
+
+
+@pytest.mark.asyncio
+async def test_category_edit_only_remembers_when_requested(client, in_memory_db):
+    storage = Storage(in_memory_db)
+    tx_id = storage.insert_transaction(source='manual', source_id='scope-1', amount=12, merchant='Cafe', category='Other')
+    storage.set_merchant_override('Cafe', 'Original rule')
+    response = await client.put(f'/api/transactions/{tx_id}', json={'category': 'Food'})
+    assert response.status_code == 200
+    assert response.json()['category'] == 'Food'
+    assert storage.get_merchant_overrides() == {'Cafe': 'Original rule'}
+    response = await client.put(f'/api/transactions/{tx_id}', json={
+        'category': 'Food', 'merchant': 'New Cafe', 'remember_category': True,
+    })
+    assert response.status_code == 200
+    assert storage.get_merchant_overrides() == {'Cafe': 'Original rule', 'New Cafe': 'Food'}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('fields', [
+    {'category': 'Food', 'remember_category': 'true'},
+    {'category': 'Food', 'merchant': '', 'remember_category': True},
+    {'description': 'changed', 'remember_category': True},
+    {'category': None, 'remember_category': True},
+])
+async def test_invalid_remember_choice_does_not_partially_edit(client, in_memory_db, fields):
+    storage = Storage(in_memory_db)
+    tx_id = storage.insert_transaction(source='manual', source_id='scope-invalid', amount=12, merchant='Cafe', category='Other')
+    original = storage.get_transaction(tx_id)
+    response = await client.put(f'/api/transactions/{tx_id}', json=fields)
+    assert response.status_code == 422
+    assert storage.get_transaction(tx_id) == original
+    assert storage.get_merchant_overrides() == {}

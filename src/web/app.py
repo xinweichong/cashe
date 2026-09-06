@@ -569,12 +569,13 @@ def create_dashboard_app(
             fields["transaction_date"] = _normalise_transaction_date(fields["transaction_date"])
         if not fields:
             raise HTTPException(status_code=400, detail="No valid fields to update")
-        await _db(storage.update_transaction, tx_id, **fields)
-        # Auto-learn merchant override when category changes
-        if "category" in fields and fields["category"] != tx.get("category"):
-            merchant = fields.get("merchant") or tx.get("merchant")
-            if merchant:
-                await _db(storage.set_merchant_override, merchant, fields["category"])
+        remember = body.get("remember_category", False)
+        if not isinstance(remember, bool):
+            raise HTTPException(status_code=422, detail="remember_category must be a boolean")
+        try:
+            await _db(storage.update_transaction, tx_id, remember_category=remember, **fields)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
         return await _db(storage.get_transaction, tx_id)
 
     @app.delete("/api/transactions/{tx_id}")

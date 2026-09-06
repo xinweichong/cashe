@@ -115,7 +115,7 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 - `source_id` UNIQUE constraint prevents duplicate transactions
 - Cross-source dedup: a unique candidate with matching merchant, amount, currency, type, and transaction time within 10 minutes links both source events to one record. Date-only/missing times and ambiguous candidates remain separate. Never compare ingestion time.
 - `raw_data` column stores original payloads for re-parsing
-- Categories auto-assigned via keyword matching, overridable via `/recategorize` (learns merchant overrides)
+- Categories auto-assigned via keyword matching, overridable via `/recategorize` (transaction-only by default; `--remember` explicitly learns future merchant overrides)
 - `type` column distinguishes `expense` (default) from `income` transactions
 - `exchange_rate` column normalizes foreign currency to SGD; all summaries use `amount * exchange_rate`
 - Categorizer returns `(category, match_source)` tuple — match_source is `"learned"`, `"keyword:<kw>"`, or `"default"`
@@ -170,7 +170,7 @@ The system supports multiple users. Each user has:
 
 - `require_auth` is `Depends(require_auth)` added to each route individually — there is no global auth middleware. Forgetting it on a new route silently makes it public.
 - All responses are raw `dict`/`list` — no Pydantic response models. All DB columns including `raw_data` and `ingested_at` are returned to the client.
-- `PUT /api/transactions/{id}` auto-calls `storage.set_merchant_override()` when the category changes, but does not call `categorizer.reload_overrides()` — the web API holds no categorizer reference.
+- `PUT /api/transactions/{id}` changes only that transaction unless `remember_category: true` is explicit. Storage commits the correction and remembered merchant rule atomically. Existing rules stay unchanged for transaction-only edits. Ingestion reloads overrides before future matching. Telegram category callbacks/editing use the same transaction-only default; `/recategorize <id> [category] --remember` explicitly saves a rule.
 - `PUT /api/settings` is all-or-nothing: validates all fields, collects errors into a dict, raises HTTP 422 with the errors dict, or writes all values atomically. Never writes a partial update.
 - Manual transactions via the web API use `source_id = f"manual_{uuid4().hex[:12]}"`. Telegram `/add` uses `f"manual-{timestamp}-{amount}"`. Both use `source="manual"` and coexist in the DB.
 - The SPA catch-all `/{full_path:path}` is only registered at startup if `src/web/dist/` exists. If the frontend is not built, all non-API paths return 404.

@@ -490,10 +490,10 @@ class TelegramBotService:
             return ConversationHandler.END
 
         edit_ctx.storage.update_transaction(tx_id, category=category)
-        if tx.get("merchant") and edit_ctx.categorizer:
-            edit_ctx.categorizer.learn_merchant(tx["merchant"], category, edit_ctx.storage)
-
-        await query.edit_message_text(f"Category updated to *{category}*.", parse_mode="Markdown")
+        await query.edit_message_text(
+            f"Category updated to {category} for this transaction only.\n"
+            f"To remember its current category for future purchases: /recategorize {tx_id} --remember"
+        )
         context.user_data.clear()
         return ConversationHandler.END
 
@@ -912,7 +912,7 @@ class TelegramBotService:
         if ctx is None:
             return
         if not context.args:
-            await update.message.reply_text("Usage: /recategorize <transaction_id>")
+            await update.message.reply_text("Usage: /recategorize <transaction_id> [category] [--remember]")
             return
         try:
             tx_id = int(context.args[0])
@@ -927,7 +927,9 @@ class TelegramBotService:
 
         # If a category was provided, apply it directly
         if len(context.args) >= 2:
-            new_category = context.args[1]
+            remember = context.args[-1] == "--remember"
+            category_args = context.args[1:-1] if remember else context.args[1:]
+            new_category = " ".join(category_args) if category_args else tx["category"]
             valid_categories = [c["name"] for c in ctx.storage.get_categories()]
             if new_category not in valid_categories:
                 await update.message.reply_text(
@@ -936,18 +938,17 @@ class TelegramBotService:
                 return
 
             old_category = tx["category"]
-            ctx.storage.update_transaction(tx_id, category=new_category)
-
-            merchant = tx["merchant"]
-            if merchant and ctx.categorizer:
-                ctx.categorizer.learn_merchant(merchant, new_category, ctx.storage)
-            elif merchant:
-                ctx.storage.set_merchant_override(merchant, new_category)
-
-            await update.message.reply_text(
-                f"Updated #{tx_id}: {old_category} -> {new_category}"
-                + (f" (learned: {merchant} = {new_category})" if merchant else "")
+            try:
+                ctx.storage.update_transaction(tx_id, category=new_category, remember_category=remember)
+            except ValueError as exc:
+                await update.message.reply_text(str(exc))
+                return
+            if remember and ctx.categorizer:
+                ctx.categorizer.reload_overrides(ctx.storage.get_merchant_overrides())
+            scope = "Remembered for future matching transactions." if remember else (
+                f"This transaction only. To remember its current category for future purchases: /recategorize {tx_id} --remember"
             )
+            await update.message.reply_text(f"Updated #{tx_id}: {old_category} -> {new_category}\n{scope}")
             return
 
         # No category provided — show a grid of category buttons
@@ -1739,25 +1740,20 @@ class TelegramBotService:
                     chat_id=_chat_id, text=msg, parse_mode="Markdown"
                 )
 
-    async def _apply_category_update(self, tx_id: int, category: str, query, storage=None, categorizer=None) -> None:
-        """Shared body for cat: and recat: callbacks — update category, learn override, refresh message."""
+    async def _apply_category_update(self, tx_id: int, category: str, query, storage=None) -> None:
+        """Update this transaction only; future matching requires explicit --remember."""
         _storage = storage if storage is not None else self.storage
-        _categorizer = categorizer if categorizer is not None else self.categorizer
         loop = asyncio.get_running_loop()
         tx = await loop.run_in_executor(None, _storage.get_transaction, tx_id)
         if not tx:
             await query.edit_message_text("Transaction not found.")
             return
         await loop.run_in_executor(None, functools.partial(_storage.update_transaction, tx_id, category=category))
-        merchant = tx["merchant"]
-        if merchant and _categorizer:
-            await loop.run_in_executor(None, _categorizer.learn_merchant, merchant, category, _storage)
-        elif merchant:
-            await loop.run_in_executor(None, _storage.set_merchant_override, merchant, category)
         icon_map = await loop.run_in_executor(None, _storage.get_category_icon_map)
         updated_tx = await loop.run_in_executor(None, _storage.get_transaction, tx_id)
         await query.edit_message_text(
-            self._format_tx_block(updated_tx, icon_map),
+            self._format_tx_block(updated_tx, icon_map)
+            + f"\n\nThis transaction only. To remember its current category for future purchases:\n/recategorize {tx_id} --remember",
             parse_mode="Markdown",
         )
 
@@ -1769,8 +1765,7 @@ class TelegramBotService:
         _, tx_id_str, category = query.data.split(":", 2)
         cb_ctx = await self._require_ctx(update)
         storage = cb_ctx.storage if cb_ctx else None
-        categorizer = cb_ctx.categorizer if cb_ctx else None
-        await self._apply_category_update(int(tx_id_str), category, query, storage=storage, categorizer=categorizer)
+        await self._apply_category_update(int(tx_id_str), category, query, storage=storage)
 
     async def _recat_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         query = update.callback_query
@@ -1780,8 +1775,7 @@ class TelegramBotService:
         _, tx_id_str, category = query.data.split(":", 2)
         cb_ctx = await self._require_ctx(update)
         storage = cb_ctx.storage if cb_ctx else None
-        categorizer = cb_ctx.categorizer if cb_ctx else None
-        await self._apply_category_update(int(tx_id_str), category, query, storage=storage, categorizer=categorizer)
+        await self._apply_category_update(int(tx_id_str), category, query, storage=storage)
 
     async def _cmd_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         query = update.callback_query

@@ -864,7 +864,7 @@ def test_apply_category_update_sets_category(bot_with_storage):
     assert updated["category"] == "Food"
 
 
-def test_apply_category_update_learns_merchant_override(bot_with_storage):
+def test_apply_category_update_preserves_existing_merchant_override(bot_with_storage):
     bot, storage = bot_with_storage
     tx_id = storage._conn.execute("SELECT id FROM transactions WHERE source_id='apply-cat-1'").fetchone()["id"]
     query = make_query_mock(f"cat:{tx_id}:Food")
@@ -874,7 +874,8 @@ def test_apply_category_update_learns_merchant_override(bot_with_storage):
     )
 
     overrides = storage.get_merchant_overrides()
-    assert overrides.get("Kopi Shop") == "Food"
+    assert overrides == {}
+    assert "--remember" in query.edit_message_text.call_args.args[0]
 
 
 def test_apply_category_update_notifies_transaction_not_found(bot_with_storage):
@@ -1133,3 +1134,23 @@ def test_notification_bridge_returns_send_future(in_memory_db, monkeypatch, noti
     future.set_exception(RuntimeError('send failed'))
     with pytest.raises(RuntimeError, match='send failed'):
         result.result()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('remember', [False, True])
+async def test_recategorize_explicit_rule_scope(bot_with_storage, remember):
+    bot, storage = bot_with_storage
+    storage._conn.execute("INSERT INTO categories (name, keywords) VALUES ('Food and Drink', '')")
+    storage._conn.commit()
+    tx_id = storage._conn.execute("SELECT id FROM transactions WHERE source_id='apply-cat-1'").fetchone()['id']
+    update = MagicMock()
+    update.message.reply_text = AsyncMock()
+    context = MagicMock()
+    context.args = [str(tx_id), 'Food', 'and', 'Drink'] + (['--remember'] if remember else [])
+    await bot._recategorize(update, context)
+    assert storage.get_transaction(tx_id)['category'] == 'Food and Drink'
+    assert storage.get_merchant_overrides() == ({'Kopi Shop': 'Food and Drink'} if remember else {})
+    if remember:
+        context.args = [str(tx_id), '--remember']
+        await bot._recategorize(update, context)
+        assert storage.get_merchant_overrides() == {'Kopi Shop': 'Food and Drink'}

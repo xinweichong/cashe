@@ -320,7 +320,7 @@ export const api = {
       body: JSON.stringify(data),
     }),
 
-  updateTransaction: (id: number, data: Partial<Transaction>) =>
+  updateTransaction: (id: number, data: Partial<Transaction> & { remember_category?: boolean }) =>
     request<Transaction>(`/api/transactions/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),

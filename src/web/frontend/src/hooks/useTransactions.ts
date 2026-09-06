@@ -46,7 +46,7 @@ export function useCreateTransaction() {
 export function useUpdateTransaction() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, data }: { id: number; data: Partial<Transaction> }) =>
+    mutationFn: ({ id, data }: { id: number; data: Partial<Transaction> & { remember_category?: boolean } }) =>
       api.updateTransaction(id, data),
     onMutate: async ({ id, data }) => {
       await qc.cancelQueries({ queryKey: ['transactions'] });

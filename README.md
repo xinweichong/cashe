@@ -334,7 +334,7 @@ All config values can be set via environment variables (for Railway or Docker). 
 
 | Command | Description |
 |---------|-------------|
-| `/recategorize <id> <category>` | Change a transaction's category and learn the merchant mapping |
+| `/recategorize <id> [category] [--remember]` | Change this transaction only; add `--remember` to save its category for future matching purchases |
 
 ### Utilities
 

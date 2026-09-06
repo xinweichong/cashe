@@ -280,17 +280,29 @@ class Storage:
         return dict(row) if row else None
 
     @_locked
-    def update_transaction(self, tx_id: int, **fields) -> None:
+    def update_transaction(self, tx_id: int, *, remember_category: bool = False, **fields) -> None:
         if not fields:
             return
-        if self.get_transaction(tx_id) is None:
+        tx = self.get_transaction(tx_id)
+        if tx is None:
             raise ValueError(f"transaction {tx_id} not found")
+        merchant = fields.get("merchant", tx.get("merchant"))
+        if remember_category and (
+            not isinstance(merchant, str) or not merchant.strip()
+            or not isinstance(fields.get("category"), str) or not fields["category"].strip()
+        ):
+            raise ValueError("Remembering a category requires a merchant and category")
         set_clauses = ", ".join(f"{k} = ?" for k in fields)
         values = list(fields.values()) + [tx_id]
-        self._conn.execute(
-            f"UPDATE transactions SET {set_clauses} WHERE id = ?", values
-        )
-        self._conn.commit()
+        with self._conn:
+            self._conn.execute(
+                f"UPDATE transactions SET {set_clauses} WHERE id = ?", values
+            )
+            if remember_category:
+                self._conn.execute(
+                    "INSERT OR REPLACE INTO merchant_overrides (merchant, category, updated_at) "
+                    "VALUES (?, ?, CURRENT_TIMESTAMP)", (merchant, fields["category"]),
+                )
 
     @_locked
     def delete_transaction(self, tx_id: int) -> None:

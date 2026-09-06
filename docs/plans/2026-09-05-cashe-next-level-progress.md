@@ -167,3 +167,15 @@ The four-destination navigation slice was committed as `a55788c`.
 - Added global reduced-motion configuration and CSS handling, visible focus outlines, and matching browser theme-color metadata. Design and agent instructions document the new conventions.
 
 Verification: **49 frontend tests passed**, including system changes, preference restoration/override, unavailable storage, draft preservation, chart color updates, and normal-text AA contrast for primary/muted text on neutral surfaces. Production build and focused lint are checked before commit. Visual, category-color/opacity contrast, screen-reader, enlarged-text, and real-device acceptance remain pending; these unit checks do not certify the full design. Previous backend baseline remains 757 passing tests; this slice changes no backend behavior.
+
+
+## 2026-09-06 continuation — explicit category correction scope
+
+Appearance was committed as `399a62d`.
+
+- Web transaction editing now defaults to “This transaction only” and offers an explicit “Remember for future matching transactions” radio choice. The choice resets between edit sessions. Existing rules survive transaction-only corrections.
+- `PUT /api/transactions/{id}` accepts a strictly boolean `remember_category`; it no longer silently learns overrides. Storage commits the correction and optional rule atomically, using the corrected merchant. Invalid remembering requests and failed rule writes leave the transaction unchanged.
+- Telegram category pickers, `/edit`, and `/recategorize` also default to transaction-only corrections. `/recategorize <id> [category] --remember` explicitly records a future rule and reloads the categorizer. Multi-word category names work; omitting the category with `--remember` uses the current category. Messages explain the scope and command.
+- Transaction detail edit/delete/close controls now have accessible names and 44px touch targets. Updated user and agent documentation for the intentionally changed learning behavior. Bulk corrections, rule-management redesign, and undo remain pending.
+
+Verification: **765 backend tests passed** (four existing deprecation warnings), **50 frontend tests passed**, and production build passed. Added atomic rollback, invalid scope, existing rule preservation, corrected-merchant scope, explicit Telegram remembering, and UI choice/reset coverage. A final focused Telegram run verifies removal of the unused helper argument. No production deployment or real data migration occurred.

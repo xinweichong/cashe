@@ -909,3 +909,13 @@ class TestAnalyticsWrappers:
         result = storage.generate_digest()
         assert isinstance(result, dict)
 
+
+
+def test_category_and_rule_commit_atomically(storage, in_memory_db):
+    import sqlite3
+    tx_id = storage.insert_transaction(source='manual', source_id='atomic-rule', amount=12, merchant='Cafe', category='Other')
+    in_memory_db.execute("CREATE TRIGGER reject_rule BEFORE INSERT ON merchant_overrides BEGIN SELECT RAISE(ABORT, 'unavailable'); END")
+    with pytest.raises(sqlite3.IntegrityError):
+        storage.update_transaction(tx_id, category='Food', remember_category=True)
+    assert storage.get_transaction(tx_id)['category'] == 'Other'
+    assert storage.get_merchant_overrides() == {}

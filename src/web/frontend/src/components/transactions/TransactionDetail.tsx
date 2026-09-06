@@ -29,6 +29,7 @@ export function TransactionDetail({
   const navigate = useNavigate();
   const [editing, setEditing] = useState(false);
   const [merchant, setMerchant] = useState(tx.merchant ?? '');
+  const [rememberCategory, setRememberCategory] = useState(false);
   const [category, setCategory] = useState(tx.category ?? '');
   const [description, setDescription] = useState(tx.description ?? '');
   const [exchangeRate, setExchangeRate] = useState(tx.exchange_rate ?? 1.0);
@@ -41,6 +42,7 @@ export function TransactionDetail({
   const resetFields = useCallback(() => {
     setMerchant(tx.merchant ?? '');
     setCategory(tx.category ?? '');
+    setRememberCategory(false);
     setDescription(tx.description ?? '');
     setExchangeRate(tx.exchange_rate ?? 1.0);
   }, [tx.merchant, tx.category, tx.description, tx.exchange_rate]);
@@ -75,7 +77,7 @@ export function TransactionDetail({
 
   const handleSave = () => {
     setSaveError(null);
-    const data: Partial<Transaction> = { merchant, category };
+    const data: Partial<Transaction> & { remember_category?: boolean } = { merchant, category, remember_category: rememberCategory };
     if (isAppleWallet) data.description = description;
     if (tx.currency !== 'SGD') data.exchange_rate = exchangeRate;
     updateTx.mutate(
@@ -124,7 +126,7 @@ export function TransactionDetail({
             )}
           </div>
         </div>
-        <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={onClose}>
+        <Button variant="ghost" size="icon" aria-label="Close transaction" className="h-11 w-11 shrink-0" onClick={onClose}>
           <X className="h-4 w-4" />
         </Button>
       </div>
@@ -184,13 +186,14 @@ export function TransactionDetail({
           </div>
         ) : (
           <div className="flex gap-2 px-4 py-2">
-            <Button variant="ghost" size="icon" className="h-9 w-9" onClick={handleEdit}>
+            <Button variant="ghost" size="icon" aria-label="Edit" className="h-11 w-11" onClick={handleEdit}>
               <Pencil className="w-4 h-4" />
             </Button>
             <Button
               variant="ghost"
               size="icon"
-              className="h-9 w-9 text-destructive"
+              aria-label="Delete transaction"
+              className="h-11 w-11 text-destructive"
               onClick={handleDelete}
               disabled={deleteTx.isPending}
             >
@@ -280,6 +283,18 @@ export function TransactionDetail({
                 </SelectContent>
               </Select>
             </div>
+            <fieldset className="space-y-1 text-sm">
+              <legend className="text-xs text-muted">Apply category</legend>
+              <label className="min-h-11 flex items-center gap-2">
+                <input type="radio" name={`category-scope-${tx.id}`} checked={!rememberCategory} onChange={() => setRememberCategory(false)} />
+                This transaction only
+              </label>
+              <label className="min-h-11 flex items-center gap-2">
+                <input type="radio" name={`category-scope-${tx.id}`} checked={rememberCategory} onChange={() => setRememberCategory(true)} />
+                Remember for future matching transactions
+              </label>
+              {rememberCategory && <p className="text-muted">Future purchases matching this merchant will use this category. Earlier transactions stay unchanged.</p>}
+            </fieldset>
             {isAppleWallet && appleWalletCards && appleWalletCards.length > 0 && (
               <div>
                 <label className="text-xs text-muted mb-1 block">Card</label>
