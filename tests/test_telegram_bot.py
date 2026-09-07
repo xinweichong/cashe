@@ -91,16 +91,16 @@ async def test_busy_outbox_worker_does_not_block_manual_confirmation(bot_service
 
 @pytest.mark.asyncio
 async def test_nl_confirmation_uses_shared_validation_and_retains_failed_draft(bot_service):
-    query = SimpleNamespace(data='nl_confirm', answer=AsyncMock(), edit_message_text=AsyncMock())
+    query = SimpleNamespace(data='nl_confirm:' + 'a' * 32, answer=AsyncMock(), edit_message_text=AsyncMock())
     update = SimpleNamespace(callback_query=query)
-    context = SimpleNamespace(user_data={'nl_pending': {'amount': 12, 'currency': 'USD', 'merchant': 'Cafe', 'category': 'Food', 'date': '2026-02-30'}})
+    context = SimpleNamespace(user_data={'nl_pending': {'_id': 'a' * 32, 'amount': 12, 'currency': 'USD', 'merchant': 'Cafe', 'category': 'Food', 'date': '2026-02-30'}})
     with patch.object(bot_service.storage, 'enlist_transaction') as assign:
         await bot_service._handle_nl_callback(update, context)
         assign.assert_not_called()
     assert bot_service.storage.query_transactions(limit=50) == []
     assert 'nl_pending' in context.user_data
     markup = query.edit_message_text.call_args.kwargs['reply_markup']
-    assert [button.callback_data for button in markup.inline_keyboard[0]] == ['nl_edit', 'nl_cancel']
+    assert [button.callback_data for button in markup.inline_keyboard[0]] == ['nl_edit:' + 'a' * 32, 'nl_cancel:' + 'a' * 32]
     context.user_data['nl_pending']['date'] = '2026-09-01'
     context.user_data['nl_pending']['amount'] = '12'
     await bot_service._handle_nl_callback(update, context)

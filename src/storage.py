@@ -395,6 +395,23 @@ class Storage:
         return tx_id, False
 
     @_locked
+    def confirm_telegram_draft(self, draft_id: str, draft: dict, exchange_rate=None) -> tuple[int, bool]:
+        """Accept one confirmed NL draft, excluding fetched FX from replay identity."""
+        if not isinstance(draft_id, str) or not re.fullmatch(r"[a-f0-9]{32}", draft_id):
+            raise ValueError("Invalid Telegram draft identity")
+        submitted = {key: draft[key] for key in ("amount", "currency", "merchant", "category", "date")}
+        receipt, previous = self._transaction_request(f"telegram-nl:{draft_id}", submitted)
+        if previous is not None:
+            return previous["id"], True
+        tx_id = self.create_manual_transaction(
+            source_id=f"telegram-nl-{draft_id}", amount=submitted["amount"],
+            currency=submitted["currency"], merchant=submitted["merchant"],
+            category=submitted["category"], transaction_date=submitted["date"],
+            exchange_rate=exchange_rate, assign_to_active_trip=True, _request_receipt=receipt,
+        )
+        return tx_id, False
+
+    @_locked
     def create_manual_transaction(self, *, source_id: str, amount, transaction_date,
                                   source="manual", currency="SGD", exchange_rate=None,
                                   merchant=None, description=None, category=None,

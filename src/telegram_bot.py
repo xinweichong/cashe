@@ -4,6 +4,7 @@ import functools
 import json
 import logging
 import re
+import secrets
 from datetime import datetime, timedelta
 from types import SimpleNamespace
 from typing import Optional
@@ -793,12 +794,17 @@ class TelegramBotService:
             pass
         await self._send_long_message(update, text)
 
-    async def _save_manual_entry(self, ctx, reply, *, message=None, command=None, args=None, **fields):
+    async def _save_manual_entry(self, ctx, reply, *, message=None, command=None, args=None,
+                                 draft=None, on_accepted=None, **fields):
         replayed = False
         try:
             chat_id = getattr(message, "chat_id", None)
             message_id = getattr(message, "message_id", None)
-            if type(chat_id) is int and type(message_id) is int:
+            if draft is not None:
+                tx_id, replayed = ctx.storage.confirm_telegram_draft(
+                    draft["_id"], draft, exchange_rate=fields.get("exchange_rate"),
+                )
+            elif type(chat_id) is int and type(message_id) is int:
                 tx_id, replayed = ctx.storage.create_telegram_transaction(
                     chat_id=chat_id, message_id=message_id, command=command, args=list(args), **fields,
                 )
@@ -812,6 +818,8 @@ class TelegramBotService:
             message = "Already logged." if str(exc).startswith("duplicate source_id:") else "Couldn’t save. Check the amount, currency, exchange rate, and date."
             await reply(message)
             return None
+        if on_accepted is not None:
+            on_accepted()
         if fields.get("assign_to_active_trip"):
             from src.ingestion import IngestionPipeline
             pipeline = getattr(getattr(ctx, "poller", None), "pipeline", None)
@@ -1385,7 +1393,10 @@ class TelegramBotService:
         date = parsed.get("date", self._local_now().strftime("%Y-%m-%d"))
         category = parsed.get("category_hint", "Other")
 
+        draft_id = secrets.token_hex(16)
         context.user_data["nl_pending"] = {
+            "_id": draft_id, "_username": getattr(ctx, "username", None),
+            "_chat_id": self._get_chat_id(update),
             "amount": amount, "currency": currency,
             "merchant": merchant, "date": date, "category": category,
         }
@@ -1395,9 +1406,9 @@ class TelegramBotService:
             f"{self._escape_md(category)}  |  {self._escape_md(date)}"
         )
         keyboard = InlineKeyboardMarkup([[
-            InlineKeyboardButton("Add", callback_data="nl_confirm"),
-            InlineKeyboardButton("Edit", callback_data="nl_edit"),
-            InlineKeyboardButton("Cancel", callback_data="nl_cancel"),
+            InlineKeyboardButton("Add", callback_data=f"nl_confirm:{draft_id}"),
+            InlineKeyboardButton("Edit", callback_data=f"nl_edit:{draft_id}"),
+            InlineKeyboardButton("Cancel", callback_data=f"nl_cancel:{draft_id}"),
         ]])
         await update.message.reply_text(summary, parse_mode="Markdown", reply_markup=keyboard)
 
@@ -1405,49 +1416,49 @@ class TelegramBotService:
         """Handle inline button responses from the NL confirmation card."""
         query = update.callback_query
         await query.answer()
-        action = query.data  # nl_confirm / nl_edit / nl_cancel
+        action, _, draft_id = query.data.partition(":")
         pending = context.user_data.get("nl_pending")
+        ctx = await self._require_ctx(update)
+        if ctx is None:
+            return
+        if (not pending or not draft_id or pending.get("_id") != draft_id
+                or pending.get("_username") != getattr(ctx, "username", None)
+                or pending.get("_chat_id") != self._get_chat_id(update)):
+            await query.edit_message_text("This draft is no longer available. Check Activity or send a new entry.")
+            return
 
-        if action == "nl_cancel" or not pending:
+        def clear_pending():
+            # A new message may replace the draft while a Telegram reply is awaited.
+            if context.user_data.get("nl_pending") is pending:
+                context.user_data.pop("nl_pending", None)
+
+        if action == "nl_cancel":
+            clear_pending()
             await query.edit_message_text("Cancelled.")
-            context.user_data.pop("nl_pending", None)
             return
 
         if action == "nl_edit":
+            clear_pending()
             await query.edit_message_text(
                 "Use /add to enter manually:\n"
                 f"`/add {pending['amount']} {pending['currency']} {pending['merchant']} "
                 f"{pending['category']} {pending['date']}`",
                 parse_mode="Markdown",
             )
-            context.user_data.pop("nl_pending", None)
             return
 
         if action == "nl_confirm":
-            ctx = await self._require_ctx(update)
-            if ctx is None:
-                context.user_data.pop("nl_pending", None)
-                return
-
-            now = self._local_now()
             exchange_rate = 1.0 if pending["currency"] == "SGD" else None
             if self.exchange_service and pending["currency"] != "SGD":
                 exchange_rate = self.exchange_service.get_rate(pending["currency"])
 
             retry_markup = InlineKeyboardMarkup([[
-                InlineKeyboardButton("Edit", callback_data="nl_edit"),
-                InlineKeyboardButton("Cancel", callback_data="nl_cancel"),
+                InlineKeyboardButton("Edit", callback_data=f"nl_edit:{draft_id}"),
+                InlineKeyboardButton("Cancel", callback_data=f"nl_cancel:{draft_id}"),
             ]])
             tx_id = await self._save_manual_entry(ctx, functools.partial(query.edit_message_text, reply_markup=retry_markup),
-                assign_to_active_trip=True,
-                source="manual",
-                source_id=f"manual-{now.strftime('%Y%m%d%H%M%S%f')}-{pending['amount']}",
-                amount=pending["amount"],
-                currency=pending["currency"],
+                draft=pending, on_accepted=clear_pending, assign_to_active_trip=True,
                 exchange_rate=exchange_rate,
-                merchant=pending["merchant"],
-                category=pending["category"],
-                transaction_date=pending["date"],
             )
             if tx_id is None:
                 return
@@ -1460,7 +1471,6 @@ class TelegramBotService:
                     sgd = float(pending["amount"]) * exchange_rate
                     msg += f"\n~ SGD `${sgd:.2f}` (indicative)"
             await query.edit_message_text(msg, parse_mode="Markdown")
-            context.user_data.pop("nl_pending", None)
 
     def notify_text(self, text: str, username: Optional[str] = None) -> None:
         """Send a plain text message. Called from background threads (e.g., APScheduler)."""
