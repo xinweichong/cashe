@@ -375,6 +375,26 @@ class Storage:
         return (request_key, fingerprint), tx
 
     @_locked
+    def create_telegram_transaction(self, *, chat_id: int, message_id: int,
+                                    command: str, args: list[str], **fields) -> tuple[int, bool]:
+        """Return (transaction ID, replayed) for a direct Telegram entry command."""
+        if type(chat_id) is not int or type(message_id) is not int or message_id <= 0:
+            raise ValueError("Invalid Telegram message identity")
+        if command not in ("add", "cash", "income"):
+            raise ValueError("Invalid Telegram entry command")
+        # ':' cannot appear in a web request key. The command is in the hash,
+        # not the key: editing /add into /income must not create another row.
+        request_key = f"telegram:{chat_id}:{message_id}"
+        receipt, previous = self._transaction_request(request_key, {"command": command, "args": args})
+        if previous is not None:
+            return previous["id"], True
+        # Distinct messages can arrive in the same second with the same amount.
+        # Existing source IDs remain untouched; only new identified commands use this format.
+        fields["source_id"] = "telegram-" + hashlib.sha256(request_key.encode()).hexdigest()
+        tx_id = self.create_manual_transaction(_request_receipt=receipt, **fields)
+        return tx_id, False
+
+    @_locked
     def create_manual_transaction(self, *, source_id: str, amount, transaction_date,
                                   source="manual", currency="SGD", exchange_rate=None,
                                   merchant=None, description=None, category=None,

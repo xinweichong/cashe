@@ -14,7 +14,7 @@ from telegram.ext import Application, CallbackQueryHandler, CommandHandler, Conv
 from src.categorizer import Categorizer
 from src.config import local_now
 from src.exchange import ExchangeRateService
-from src.storage import Storage
+from src.storage import Storage, TransactionRequestConflict
 
 logger = logging.getLogger(__name__)
 
@@ -793,9 +793,21 @@ class TelegramBotService:
             pass
         await self._send_long_message(update, text)
 
-    async def _save_manual_entry(self, ctx, reply, **fields):
+    async def _save_manual_entry(self, ctx, reply, *, message=None, command=None, args=None, **fields):
+        replayed = False
         try:
-            tx_id = ctx.storage.create_manual_transaction(**fields)
+            chat_id = getattr(message, "chat_id", None)
+            message_id = getattr(message, "message_id", None)
+            if type(chat_id) is int and type(message_id) is int:
+                tx_id, replayed = ctx.storage.create_telegram_transaction(
+                    chat_id=chat_id, message_id=message_id, command=command, args=list(args), **fields,
+                )
+            else:
+                # Legacy/in-process direct callers have no Telegram message identity.
+                tx_id = ctx.storage.create_manual_transaction(**fields)
+        except TransactionRequestConflict:
+            await reply("This message was already saved or its transaction was deleted. Check Activity to make corrections.")
+            return None
         except ValueError as exc:
             message = "Already logged." if str(exc).startswith("duplicate source_id:") else "Couldn’t save. Check the amount, currency, exchange rate, and date."
             await reply(message)
@@ -806,6 +818,9 @@ class TelegramBotService:
             if pipeline is None:
                 pipeline = IngestionPipeline(ctx.storage)
             pipeline.process_outbox(transaction_id=tx_id)
+        if replayed:
+            await reply(f"Already logged. Transaction {tx_id}.")
+            return None
         return tx_id
 
     async def _add(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -851,6 +866,7 @@ class TelegramBotService:
             category, _ = ctx.categorizer.categorize(parsed["merchant"])
 
         tx_id = await self._save_manual_entry(ctx, update.message.reply_text,
+            message=update.message, command="add", args=context.args,
             assign_to_active_trip=True,
             source="manual",
             source_id=f"manual-{now.strftime('%Y%m%d%H%M%S')}-{parsed['amount']}",
@@ -909,6 +925,7 @@ class TelegramBotService:
             category, _ = ctx.categorizer.categorize(parsed["merchant"])
 
         tx_id = await self._save_manual_entry(ctx, update.message.reply_text,
+            message=update.message, command="cash", args=context.args,
             assign_to_active_trip=True,
             source="cash",
             source_id=f"cash-{now.strftime('%Y%m%d%H%M%S')}-{parsed['amount']}",
@@ -1025,6 +1042,7 @@ class TelegramBotService:
         date_str = tx_date or now.strftime("%Y-%m-%dT%H:%M:%S")
 
         tx_id = await self._save_manual_entry(ctx, update.message.reply_text,
+            message=update.message, command="income", args=context.args,
             source="manual",
             source_id=f"manual-{now.strftime('%Y%m%d%H%M%S')}-{amount}",
             amount=amount,
