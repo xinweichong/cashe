@@ -71,6 +71,12 @@ MIGRATIONS = (
             draft_id TEXT NOT NULL
         )""",
     )),
+    (7, (
+        """CREATE TABLE capture_issue_resolutions (
+            event_id INTEGER PRIMARY KEY REFERENCES source_events(id) ON DELETE CASCADE,
+            handled_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )""",
+    )),
 )
 
 

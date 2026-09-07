@@ -24,7 +24,7 @@ export interface HomeBriefing {
   freshness: { gmail_connected: boolean; gmail_last_checked: string | null; gmail_needs_reconnection: boolean };
 }
 export interface CaptureIssue {
-  id: number; source: string; status: string; attempts: number; error_code: string | null;
+  id: number; source: string; handled?: boolean; status: string; attempts: number; error_code: string | null;
 }
 export interface SpendingReview {
   items: { id: number; merchant: string | null; category: string; date: string | null;
@@ -38,8 +38,9 @@ export const briefingApi = {
   home: () => request<HomeBriefing>('/api/v2/home'),
   spendingReview: (offset = 0) => request<SpendingReview>(`/api/v2/spending/review?limit=50&offset=${offset}`),
   evidence: (query: URLSearchParams) => request<{ items: EvidenceItem[]; total: number; limit: number; offset: number }>(`/api/v2/spending/evidence?${query}`),
-  captureIssues: (offset = 0) => request<CaptureIssue[]>(`/api/v2/capture/issues?limit=50&offset=${offset}`),
+  captureIssues: (offset = 0, includeHandled = false) => request<CaptureIssue[]>(`/api/v2/capture/issues?limit=50&offset=${offset}&include_handled=${includeHandled}`),
   followups: (offset = 0) => request<FollowupIssue[]>(`/api/v2/capture/followups?limit=50&offset=${offset}`),
+  resolveCapture: (id: number, handled: boolean) => request(`/api/v2/capture/issues/${id}/${handled ? 'resolve' : 'reopen'}`, { method: 'POST' }),
   retryCapture: (id: number) => request(`/api/v2/capture/issues/${id}/retry`, { method: 'POST' }),
   retryFollowup: (id: number) => request(`/api/v2/capture/followups/${id}/retry`, { method: 'POST' }),
 };

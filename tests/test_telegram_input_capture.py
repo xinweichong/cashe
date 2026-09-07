@@ -190,3 +190,26 @@ async def test_confirmation_raw_link_is_atomic_with_purchase_and_draft(in_memory
     in_memory_db.execute('DROP TRIGGER reject_link')
     tx_id, _ = storage.confirm_telegram_draft(draft['_id'], {}, chat_id=100)
     assert event(storage)['transaction_id'] == tx_id
+
+
+@pytest.mark.asyncio
+async def test_handled_input_blocks_redelivery_and_inflight_model_result(in_memory_db):
+    storage = Storage(in_memory_db)
+    original = storage.begin_telegram_nl_input(100, 10, TEXT)
+    storage.set_capture_issue_handled(original['id'], True)
+    service = setup(storage)
+    await service._handle_nl_message(update(), SimpleNamespace())
+    service.llm_service.parse_telegram_message.assert_not_called()
+    assert event(storage) == original
+    storage.set_capture_issue_handled(original['id'], False)
+
+    def parse(*args):
+        storage.set_capture_issue_handled(original['id'], True)
+        return PARSED
+
+    service.llm_service.parse_telegram_message.side_effect = parse
+    await service._handle_nl_message(update(), SimpleNamespace())
+    assert storage.get_telegram_draft_for_message(100, 10, TEXT.strip()) is None
+    assert event(storage)['status'] == 'pending'
+    assert storage.list_capture_issues() == []
+    assert storage.query_transactions(limit=50) == []

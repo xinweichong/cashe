@@ -96,7 +96,8 @@ class Storage:
             "facts": facts, "recent": recent, "upcoming": upcoming,
             "upcoming_total": money(sum(item["amount"]["minor_units"] for item in upcoming if item["amount"])),
             "upcoming_unknown_count": sum(item["amount"] is None for item in upcoming),
-            "capture_issue_count": self._conn.execute("SELECT COUNT(*) FROM source_events WHERE status != 'processed'").fetchone()[0],
+            "capture_issue_count": self._conn.execute("""SELECT COUNT(*) FROM source_events e WHERE status != 'processed'
+                AND NOT EXISTS (SELECT 1 FROM capture_issue_resolutions r WHERE r.event_id = e.id)""").fetchone()[0],
             "followup_issue_count": self._conn.execute("SELECT COUNT(*) FROM ingestion_outbox WHERE status != 'done'").fetchone()[0],
         }
 
@@ -210,13 +211,28 @@ class Storage:
                 )
 
     @_locked
-    def list_capture_issues(self, limit: int = 50, offset: int = 0) -> list[dict]:
+    def list_capture_issues(self, limit: int = 50, offset: int = 0, include_handled: bool = False) -> list[dict]:
         return [dict(row) for row in self._conn.execute(
-            """SELECT id, source, parser_version, status, transaction_id, attempts,
-                      error_code, created_at, updated_at
-               FROM source_events WHERE status != 'processed'
-               ORDER BY id DESC LIMIT ? OFFSET ?""", (limit, offset),
+            """SELECT e.id, source, parser_version, status, transaction_id, attempts,
+                      error_code, created_at, updated_at, r.event_id IS NOT NULL AS handled
+               FROM source_events e LEFT JOIN capture_issue_resolutions r ON r.event_id = e.id
+               WHERE status != 'processed' AND (? OR r.event_id IS NULL)
+               ORDER BY e.id DESC LIMIT ? OFFSET ?""", (include_handled, limit, offset),
         ).fetchall()]
+
+    @_locked
+    def set_capture_issue_handled(self, event_id: int, handled: bool) -> dict:
+        row = self._conn.execute("SELECT source, status FROM source_events WHERE id = ?", (event_id,)).fetchone()
+        if row is None:
+            raise ValueError("Source event not found")
+        if row["source"] != "telegram_nl" or row["status"] == "processed":
+            raise ValueError("Only unfinished Telegram input can be marked handled or returned to Review")
+        with self._conn:
+            if handled:
+                self._conn.execute("INSERT OR IGNORE INTO capture_issue_resolutions(event_id) VALUES (?)", (event_id,))
+            else:
+                self._conn.execute("DELETE FROM capture_issue_resolutions WHERE event_id = ?", (event_id,))
+        return {"id": event_id, "handled": handled}
 
     @_locked
     def retry_source_event(self, event_id: int) -> None:
@@ -422,7 +438,8 @@ class Storage:
             event = self.record_source_event("telegram_nl", key, json.dumps({"text": raw_text}), "telegram-nl:1")
         elif json.loads(event["payload"])["text"].strip() != raw_text.strip():
             raise TransactionRequestConflict("This Telegram message was already received with different text")
-        if event["status"] == "processed" or event["attempts"] >= 5:
+        if (event["status"] == "processed" or event["attempts"] >= 5
+                or self._conn.execute("SELECT 1 FROM capture_issue_resolutions WHERE event_id = ?", (event["id"],)).fetchone()):
             return None
         with self._conn:
             self._conn.execute(
@@ -470,6 +487,11 @@ class Storage:
             if previous is not None:
                 return previous
             message_receipt = self._telegram_draft_message_identity(chat_id, message_id, message_text)
+            if self._conn.execute(
+                """SELECT 1 FROM capture_issue_resolutions r JOIN source_events e ON e.id = r.event_id
+                   WHERE e.source = 'telegram_nl' AND e.source_id = ?""", (message_receipt[0],),
+            ).fetchone():
+                raise TransactionRequestConflict("This Telegram message was already handled")
         payload = json.dumps({key: draft[key] for key in ("amount", "currency", "merchant", "category", "date")})
         now = int(local_now().timestamp())
         with self._conn:

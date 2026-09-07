@@ -5,7 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { briefingApi } from '@/api/briefing';
 import { ReviewPage } from '../ReviewPage';
 
-vi.mock('@/api/briefing', () => ({ briefingApi: { spendingReview: vi.fn(), captureIssues: vi.fn(), followups: vi.fn() } }));
+vi.mock('@/api/briefing', () => ({ briefingApi: { spendingReview: vi.fn(), captureIssues: vi.fn(), followups: vi.fn(), resolveCapture: vi.fn() } }));
 beforeEach(() => {
   vi.resetAllMocks();
   vi.mocked(briefingApi.captureIssues).mockResolvedValue([]);
@@ -53,4 +53,32 @@ test('Telegram input failures explain manual recovery without offering automatic
   expect(await screen.findByText('Telegram entry · failed')).toBeTruthy();
   expect(screen.getByText(/Use \/add or send a new entry in Telegram/)).toBeTruthy();
   expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
+});
+
+
+test('handled entries can be hidden, inspected, and returned to Review', async () => {
+  vi.mocked(briefingApi.spendingReview).mockResolvedValue({ items: [], total: 0, limit: 50, offset: 0 });
+  let handled = false;
+  vi.mocked(briefingApi.captureIssues).mockImplementation(async (_offset, includeHandled) =>
+    handled && !includeHandled ? [] : [{ id: 20, source: 'telegram_nl', status: 'failed', attempts: 1, error_code: null, handled }]);
+  vi.mocked(briefingApi.resolveCapture).mockImplementation(async (_id, value) => { handled = value; });
+  show();
+  fireEvent.click(await screen.findByRole('button', { name: 'Mark handled' }));
+  await screen.findByText('No capture issues on this page.');
+  expect(briefingApi.resolveCapture).toHaveBeenCalledWith(20, true);
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Show handled Telegram entries' }));
+  expect(await screen.findByText('Telegram entry · failed · Handled')).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: 'Return to Review' }));
+  expect(await screen.findByRole('button', { name: 'Mark handled' })).toBeTruthy();
+  expect(briefingApi.resolveCapture).toHaveBeenCalledWith(20, false);
+});
+
+test('resolution failures retain the entry and show an error', async () => {
+  vi.mocked(briefingApi.spendingReview).mockResolvedValue({ items: [], total: 0, limit: 50, offset: 0 });
+  vi.mocked(briefingApi.captureIssues).mockResolvedValue([{ id: 20, source: 'telegram_nl', status: 'failed', attempts: 1, error_code: null }]);
+  vi.mocked(briefingApi.resolveCapture).mockRejectedValue(new Error('offline'));
+  show();
+  fireEvent.click(await screen.findByRole('button', { name: 'Mark handled' }));
+  expect((await screen.findByRole('alert')).textContent).toContain('Couldn’t update this entry.');
+  expect(screen.getByRole('button', { name: 'Mark handled' })).toBeTruthy();
 });

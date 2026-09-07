@@ -702,3 +702,27 @@ async def test_telegram_input_review_excludes_raw_payload_and_rejects_bank_retry
     retry = await client.post(f"/api/v2/capture/issues/{event['id']}/retry")
     assert retry.status_code == 409
     assert storage.get_source_event('telegram_nl', event['source_id'])['status'] == 'failed'
+
+
+@pytest.mark.asyncio
+async def test_capture_resolution_api_auth_privacy_and_reopen(client, in_memory_db):
+    storage = Storage(in_memory_db)
+    event = storage.begin_telegram_nl_input(100, 10, 'private raw financial text')
+    route = f"/api/v2/capture/issues/{event['id']}"
+    response = await client.post(route + '/resolve')
+    assert response.status_code == 200
+    assert response.json() == {'id': event['id'], 'handled': True}
+    assert (await client.get('/api/v2/capture/issues')).json() == []
+    response = await client.get('/api/v2/capture/issues?include_handled=true')
+    assert response.json()[0]['handled'] is True
+    assert 'private raw' not in response.text
+    assert 'source_id' not in response.json()[0]
+    assert (await client.post(route + '/reopen')).json()['handled'] is False
+    assert (await client.get('/api/v2/capture/issues')).json()[0]['handled'] is False
+    bank = storage.record_source_event('gmail', 'bank', '{}', '1')
+    assert (await client.post(f"/api/v2/capture/issues/{bank['id']}/resolve")).status_code == 409
+    assert (await client.post('/api/v2/capture/issues/99999/resolve')).status_code == 404
+    await client.post('/api/logout')
+    for action in ('resolve', 'reopen'):
+        assert (await client.post(route + '/' + action)).status_code == 401
+    assert (await client.get('/api/v2/capture/issues?include_handled=true')).status_code == 401

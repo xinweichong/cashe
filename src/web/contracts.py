@@ -4,7 +4,13 @@ from typing import Literal
 from pydantic import BaseModel
 
 
+class CaptureResolution(BaseModel):
+    id: int
+    handled: bool
+
+
 class CaptureIssue(BaseModel):
+    handled: bool
     id: int
     source: str
     parser_version: str

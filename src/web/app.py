@@ -21,7 +21,7 @@ from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 from src.storage import TransactionRequestConflict
 from src.config import local_now
 from src.web.auth import verify_password, create_session, verify_session, destroy_session
-from src.web.contracts import CaptureFollowup, CaptureIssue, HomeBriefing, QueuedResponse, SpendingEvidence, SpendingFacts, SpendingReview, TransactionProvenance
+from src.web.contracts import CaptureFollowup, CaptureIssue, CaptureResolution, HomeBriefing, QueuedResponse, SpendingEvidence, SpendingFacts, SpendingReview, TransactionProvenance
 from src.analytics import (
     load_summary,
     get_yoy_comparison,
@@ -188,8 +188,22 @@ def create_dashboard_app(
         }
 
     @app.get("/api/v2/capture/issues", response_model=list[CaptureIssue])
-    async def capture_issues(limit: int = Query(50, ge=1, le=100), offset: int = Query(0, ge=0), storage=Depends(_get_storage)):
-        return await _db(storage.list_capture_issues, limit, offset)
+    async def capture_issues(limit: int = Query(50, ge=1, le=100), offset: int = Query(0, ge=0), include_handled: bool = False, storage=Depends(_get_storage)):
+        return await _db(storage.list_capture_issues, limit, offset, include_handled)
+
+    @app.post("/api/v2/capture/issues/{event_id}/resolve", response_model=CaptureResolution)
+    async def resolve_capture_issue(event_id: int, storage=Depends(_get_storage)):
+        return await change_capture_resolution(storage, event_id, True)
+
+    @app.post("/api/v2/capture/issues/{event_id}/reopen", response_model=CaptureResolution)
+    async def reopen_capture_issue(event_id: int, storage=Depends(_get_storage)):
+        return await change_capture_resolution(storage, event_id, False)
+
+    async def change_capture_resolution(storage, event_id, handled):
+        try:
+            return await _db(storage.set_capture_issue_handled, event_id, handled)
+        except ValueError as exc:
+            raise HTTPException(status_code=404 if str(exc).endswith("not found") else 409, detail=str(exc))
 
     @app.post("/api/v2/capture/issues/{event_id}/retry", response_model=QueuedResponse)
     async def retry_capture_issue(event_id: int, storage=Depends(_get_storage)):
