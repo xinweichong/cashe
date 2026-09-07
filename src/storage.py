@@ -1,5 +1,7 @@
 import calendar
 import functools
+import hashlib
+import re
 import json
 import sqlite3
 import threading
@@ -32,6 +34,10 @@ def _get_budget_period(period: str) -> tuple[str, str]:
         monday = today - timedelta(days=today.weekday())
         return monday.isoformat(), today.isoformat()
     raise ValueError(f"Unknown period '{period}'. Must be 'monthly' or 'weekly'.")
+
+
+class TransactionRequestConflict(ValueError):
+    """A creation key was already accepted for a different or deleted purchase."""
 
 
 class Storage:
@@ -239,6 +245,7 @@ class Storage:
         tx_type: str = "expense",
         followups: Optional[list[tuple[str, dict]]] = None,
         manual_evidence: Optional[str] = None,
+        request_receipt: Optional[tuple[str, str]] = None,
     ) -> int:
         try:
             with self._conn:
@@ -264,6 +271,11 @@ class Storage:
                            (source, source_id, payload, parser_version, status, transaction_id, attempts)
                            VALUES (?, ?, ?, 'manual:1', 'processed', ?, 1)""",
                         (source, source_id, manual_evidence, tx_id),
+                    )
+                if request_receipt is not None:
+                    self._conn.execute(
+                        "INSERT INTO transaction_requests(request_key, fingerprint, transaction_id) VALUES (?, ?, ?)",
+                        (*request_receipt, tx_id),
                     )
             return tx_id
         except sqlite3.IntegrityError:
@@ -324,10 +336,50 @@ class Storage:
         return dict(row) if row else None
 
     @_locked
+    def create_web_transaction(self, body: dict, *, source_id: str, request_key=None,
+                               timezone="Asia/Singapore") -> dict:
+        # Fingerprint submitted fields before generating defaults (especially time).
+        # Keys are scoped by the per-user database and retained after deletion.
+        receipt = None
+        if request_key is not None:
+            if not isinstance(request_key, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", request_key):
+                raise ValueError("Invalid Idempotency-Key")
+            receipt, previous = self._transaction_request(request_key, body)
+            if previous is not None:
+                return previous
+        tx_id = self.create_manual_transaction(
+            source_id=source_id, source=body.get("source", "manual"), amount=body.get("amount"),
+            merchant=body.get("merchant"), description=body.get("description"), category=body.get("category"),
+            currency=body.get("currency", "SGD"), exchange_rate=body.get("exchange_rate"),
+            transaction_date=body.get("transaction_date", local_now(timezone).strftime("%Y-%m-%dT%H:%M:%S")),
+            tx_type=body.get("type", "expense"), _request_receipt=receipt,
+        )
+        return self.get_transaction(tx_id)
+
+    def _transaction_request(self, request_key: str, submitted):
+        """Look up a receipt while the calling command holds the Storage lock."""
+        fingerprint = hashlib.sha256(json.dumps(
+            submitted, sort_keys=True, separators=(",", ":"), ensure_ascii=True,
+        ).encode()).hexdigest()
+        previous = self._conn.execute(
+            "SELECT fingerprint, transaction_id FROM transaction_requests WHERE request_key = ?",
+            (request_key,),
+        ).fetchone()
+        tx = None
+        if previous:
+            if previous["fingerprint"] != fingerprint:
+                raise TransactionRequestConflict("This request key was already used with different fields")
+            tx = self.get_transaction(previous["transaction_id"])
+            if tx is None:
+                raise TransactionRequestConflict("The transaction created by this request was deleted")
+        return (request_key, fingerprint), tx
+
+    @_locked
     def create_manual_transaction(self, *, source_id: str, amount, transaction_date,
                                   source="manual", currency="SGD", exchange_rate=None,
                                   merchant=None, description=None, category=None,
-                                  tx_type="expense", assign_to_active_trip=False) -> int:
+                                  tx_type="expense", assign_to_active_trip=False,
+                                  _request_receipt=None) -> int:
         if source not in ("manual", "cash"):
             raise ValueError("Manual source must be manual or cash")
         if tx_type not in ("expense", "income"):
@@ -357,7 +409,7 @@ class Storage:
                 followups.append(("trip", {"trip_id": active["id"]}))
         return self.insert_transaction(source=source, source_id=source_id, merchant=merchant,
                                        description=description, category=category, followups=followups,
-                                       manual_evidence=evidence, **fields)
+                                       manual_evidence=evidence, request_receipt=_request_receipt, **fields)
 
     @_locked
     def update_transaction(self, tx_id: int, *, remember_category: bool = False, **fields) -> None:

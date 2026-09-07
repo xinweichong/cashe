@@ -62,12 +62,15 @@ def test_intentionally_retained_evidence_is_informational(tmp_path):
     conn = init_db(str(path))
     conn.execute("INSERT INTO source_events(source, source_id, payload, parser_version, transaction_id) VALUES ('apple_wallet', 'secret-source', 'private-payload', '2', 999)")
     conn.execute("INSERT INTO ingestion_outbox(transaction_id, kind, payload) VALUES (999, 'notification', '{}')")
+    conn.execute("INSERT INTO transaction_requests(request_key, fingerprint, transaction_id) VALUES ('private-key', 'private-fingerprint', 999)")
     conn.commit()
     report = audit_database(path)
     assert report['status'] == 'ok'
-    assert report['retained_links_to_deleted_transactions'] == {'source_events': 1, 'ingestion_outbox': 1}
+    assert report['retained_links_to_deleted_transactions'] == {'source_events': 1, 'ingestion_outbox': 1, 'transaction_requests': 1}
     assert report['foreign_key_violations'] == []
     assert 'private-payload' not in json.dumps(report)
+    assert 'private-key' not in json.dumps(report)
+    assert 'private-fingerprint' not in json.dumps(report)
     conn.close()
 
 
@@ -117,7 +120,7 @@ def test_partial_legacy_schema_is_not_a_clean_bill_of_health(tmp_path):
     report = audit_database(path)
     assert report['status'] == 'issues'
     assert report['absent_feature_tables'] == ['goal_contributions', 'trip_transactions', 'upcoming_transactions']
-    assert report['pending_migrations'] == [1, 2, 3]
+    assert report['pending_migrations'] == [1, 2, 3, 4]
 
 
 def test_missing_file_is_not_created_and_corrupt_input_is_safe(tmp_path, capsys):

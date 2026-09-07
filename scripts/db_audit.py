@@ -81,7 +81,7 @@ def audit_database(path: Path) -> dict:
         # These links deliberately survive transaction deletion. They are not FKs.
         retained = {}
         if kind == "user":
-            for table in ("source_events", "ingestion_outbox"):
+            for table in ("source_events", "ingestion_outbox", "transaction_requests"):
                 if table in tables:
                     retained[table] = _orphan_count(conn, table, "transaction_id", "transactions", "id")
         applied = []

@@ -18,6 +18,7 @@ import csv
 import io
 from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 
+from src.storage import TransactionRequestConflict
 from src.config import local_now
 from src.web.auth import verify_password, create_session, verify_session, destroy_session
 from src.web.contracts import CaptureFollowup, CaptureIssue, HomeBriefing, QueuedResponse, SpendingEvidence, SpendingFacts, SpendingReview, TransactionProvenance
@@ -531,32 +532,16 @@ def create_dashboard_app(
         if tx_type not in ("expense", "income"):
             raise HTTPException(status_code=400, detail="type must be 'expense' or 'income'")
 
-        source = body.get("source", "manual")
-        source_id = f"manual_{uuid.uuid4().hex[:12]}"
-        merchant = body.get("merchant")
-        description = body.get("description")
-        category = body.get("category")
-        currency = body.get("currency", "SGD")
-        exchange_rate = body.get("exchange_rate")
-        transaction_date = body.get("transaction_date", local_now(timezone).strftime("%Y-%m-%dT%H:%M:%S"))
-
         try:
-            tx_id = await _db(storage.create_manual_transaction,
-                source=source,
-                source_id=source_id,
-                amount=amount,
-                merchant=merchant,
-                description=description,
-                category=category,
-                currency=currency,
-                exchange_rate=exchange_rate,
-                transaction_date=transaction_date,
-                tx_type=tx_type,
+            return await _db(
+                storage.create_web_transaction, body,
+                source_id=f"manual_{uuid.uuid4().hex[:12]}",
+                request_key=request.headers.get("Idempotency-Key"), timezone=timezone,
             )
+        except TransactionRequestConflict as e:
+            raise HTTPException(status_code=409, detail=str(e))
         except ValueError as e:
             raise HTTPException(status_code=409 if str(e).startswith("duplicate source_id:") else 400, detail=str(e))
-
-        return await _db(storage.get_transaction, tx_id)
 
     @app.put("/api/transactions/{tx_id}")
     async def update_transaction(tx_id: int, request: Request, username: str = Depends(require_auth)):

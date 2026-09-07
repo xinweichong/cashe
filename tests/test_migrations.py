@@ -10,7 +10,7 @@ def test_migrations_preserve_old_transactions_and_are_idempotent():
     migrate(conn)
     migrate(conn)
     assert conn.execute("SELECT * FROM transactions").fetchall() == [(42, "original-id", 1.25, None)]
-    assert conn.execute("SELECT version FROM schema_migrations").fetchall() == [(1,), (2,), (3,)]
+    assert conn.execute("SELECT version FROM schema_migrations").fetchall() == [(1,), (2,), (3,), (4,)]
     assert conn.execute("SELECT COUNT(*) FROM source_events").fetchone()[0] == 0
     conn.close()
 

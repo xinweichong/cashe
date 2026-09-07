@@ -42,23 +42,27 @@ export function TransactionForm({ categories, onClose }: TransactionFormProps) {
     return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
   });
 
+  const [requestKey] = useState(() => crypto.randomUUID());
   const createTx = useCreateTransaction();
   const toast = useToast();
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const parsed = parseFloat(amount);
-    if (isNaN(parsed) || parsed <= 0) return;
+    if (isNaN(parsed) || parsed <= 0 || createTx.isPending) return;
     createTx.mutate(
       {
-        type: type === 'cash' ? 'expense' : type,
-        amount: parsed,
-        merchant: merchant || undefined,
-        category: category || undefined,
-        description: description || undefined,
-        currency,
-        source: type === 'cash' ? 'cash' : 'manual',
-        transaction_date: datetime ? datetime + ':00' : undefined,
+        requestKey,
+        data: {
+          type: type === 'cash' ? 'expense' : type,
+          amount: parsed,
+          merchant: merchant || undefined,
+          category: category || undefined,
+          description: description || undefined,
+          currency,
+          source: type === 'cash' ? 'cash' : 'manual',
+          transaction_date: datetime ? datetime + ':00' : undefined,
+        },
       },
       {
         onSuccess: () => {
@@ -164,6 +168,14 @@ export function TransactionForm({ categories, onClose }: TransactionFormProps) {
             className="bg-background border-border"
           />
         </div>
+
+        {createTx.isError && (
+          <p role="alert" className="text-sm text-destructive">
+            {createTx.error.message.includes('409')
+              ? 'This entry was already submitted. Check Activity before starting another entry.'
+              : 'Save was not confirmed. Retry with the same fields, or check Activity before starting another entry.'}
+          </p>
+        )}
 
         <Separator />
 

@@ -651,3 +651,37 @@ async def test_manual_creation_exposes_provenance_without_snapshot_payload(clien
     assert tx['source_id'] not in provenance.text
     assert 'manual_entry' not in response.text
     assert Storage(in_memory_db).get_source_event('manual', tx['source_id']) is not None
+
+
+@pytest.mark.asyncio
+async def test_web_creation_idempotency_replay_conflict_and_deletion(client, in_memory_db):
+    body = {'amount': 12.5, 'merchant': 'Cafe'}
+    headers = {'Idempotency-Key': 'web-request-1'}
+    first = await client.post('/api/transactions', json=body, headers=headers)
+    assert first.status_code == 200
+    # JSON property ordering does not alter request identity.
+    replay = await client.post('/api/transactions', json=dict(reversed(list(body.items()))), headers=headers)
+    assert replay.json() == first.json()
+    assert 'request_key' not in replay.json()
+    assert 'fingerprint' not in replay.json()
+    conflict = await client.post('/api/transactions', json={**body, 'amount': 20}, headers=headers)
+    assert conflict.status_code == 409
+    assert len(Storage(in_memory_db).query_transactions(limit=50)) == 1
+    await client.delete(f"/api/transactions/{first.json()['id']}")
+    deleted = await client.post('/api/transactions', json=body, headers=headers)
+    assert deleted.status_code == 409
+    assert Storage(in_memory_db).query_transactions(limit=50) == []
+
+
+@pytest.mark.asyncio
+async def test_web_creation_invalid_key_and_legacy_requests(client, in_memory_db):
+    body = {'amount': 12}
+    invalid = await client.post('/api/transactions', json=body, headers={'Idempotency-Key': 'bad key'})
+    assert invalid.status_code == 400
+    assert Storage(in_memory_db).query_transactions(limit=50) == []
+    first = await client.post('/api/transactions', json=body)
+    second = await client.post('/api/transactions', json=body)
+    assert first.json()['id'] != second.json()['id']
+    await client.post('/api/logout')
+    denied = await client.post('/api/transactions', json=body, headers={'Idempotency-Key': 'key'})
+    assert denied.status_code == 401

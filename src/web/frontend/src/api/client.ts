@@ -325,9 +325,10 @@ export const api = {
   getTransactionProvenance: (id: number) =>
     request<TransactionProvenance>(`/api/v2/transactions/${id}/provenance`),
 
-  createTransaction: (data: Partial<Transaction> & { source?: string }) =>
+  createTransaction: (data: Partial<Transaction> & { source?: string }, requestKey?: string) =>
     request<Transaction>('/api/transactions', {
       method: 'POST',
+      headers: requestKey ? { 'Idempotency-Key': requestKey } : undefined,
       body: JSON.stringify(data),
     }),
 

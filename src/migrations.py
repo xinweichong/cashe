@@ -48,6 +48,14 @@ MIGRATIONS = (
         "ALTER TABLE source_events ADD COLUMN payment_identity_kind TEXT",
         "ALTER TABLE source_events ADD COLUMN payment_identity TEXT",
     )),
+    (4, (
+        """CREATE TABLE transaction_requests (
+            request_key TEXT PRIMARY KEY,
+            fingerprint TEXT NOT NULL,
+            transaction_id INTEGER NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )""",
+    )),
 )
 
 

@@ -32,7 +32,8 @@ export function useTransactions(params?: Record<string, string | number>) {
 export function useCreateTransaction() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: Partial<Transaction> & { source?: string }) => api.createTransaction(data),
+    mutationFn: ({ data, requestKey }: { data: Partial<Transaction>; requestKey: string }) =>
+      api.createTransaction(data, requestKey),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['transactions'] });
       qc.invalidateQueries({ queryKey: ['summary'] });
