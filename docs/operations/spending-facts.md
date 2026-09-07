@@ -1,6 +1,6 @@
 # Spending facts compatibility slice
 
-`src/spending_facts.py` is the shared read-only reporting interface for the new client. `Storage.get_month_spending_facts()`, `Storage.get_week_spending_facts()`, and `Storage.get_spending_evidence()` run it under the per-user database lock. The existing dashboard and Telegram reports still use their legacy interfaces; moving those consumers happens in later slices.
+`src/spending_facts.py` is the shared read-only reporting interface for the new client. `Storage.get_month_spending_facts()`, `Storage.get_week_spending_facts()`, and `Storage.get_spending_evidence()` run it under the per-user database lock. Home and Telegram /week and /month consume these shared facts. Other dashboard reports, daily Telegram reports, and scheduled weekly/monthly summaries retain their legacy interfaces; moving those consumers happens in later slices.
 
 Authenticated endpoints:
 
@@ -67,3 +67,12 @@ Measured on 2026-09-06, macOS arm64, Python 3.12.1, SQLite 3.43.1:
 | Concentrated in 6 days; 3 runs | 466.2 ms | 393.2 ms | 395.5 ms |
 
 Monthly JSON was about 1.6 KB; each 50-row evidence response was under 9.7 KB. These are local warm-cache measurements, not OCI capacity or mobile LCP measurements. No caching or additional indexes were introduced. Evidence payloads are bounded, but calculation still scans/materializes the selected period to share exact timezone/conversion semantics; concentrated periods are the next performance concern if they occur in real usage. Re-run on the deployment hardware before setting service latency targets.
+
+
+## Telegram period commands
+
+`/week` uses Monday through today; `/month` uses the first of the month through today, in the bot's configured timezone. Both resolve the linked user's Storage, read shared facts and evidence under one lock, and release that lock before sending. They display known SGD spending/income subtotals, absent income, negative recorded net flow, unresolved/indicative status, and the exact comparable date windows. Monetary formatting uses the shared integer minor units without recomputing float totals.
+
+Reports include the three largest category changes and up to 50 spending plus 50 income evidence records, with explicit shown/total counts and an Activity pointer when truncated. Evidence includes projected dates, signed refund amounts, unresolved conversions, and transaction IDs; no raw payload or source identifier is included. Totals are not truncated with the evidence list. Recorded-data status does not establish capture completeness.
+
+These commands no longer append legacy budget-pace advice. Scheduled weekly/monthly summaries, their optional AI text, and daily/balance commands are outside this migration; their compatibility limits remain. This change does not migrate money storage.

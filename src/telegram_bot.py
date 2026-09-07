@@ -735,64 +735,86 @@ class TelegramBotService:
         text = self.format_daily_summary(yesterday, storage=ctx.storage)
         await self._send_long_message(update, text)
 
+    def _format_spending_period(self, storage, period: str) -> str:
+        from datetime import date
+        from decimal import Decimal
+
+        def amount(value):
+            return f"S${Decimal(value['minor_units']) / 100:,.2f}"
+
+        as_of = self._local_now().date()
+        with storage.reconciliation_lock():
+            facts = (storage.get_week_spending_facts(as_of, self.timezone) if period == "week"
+                     else storage.get_month_spending_facts(as_of, self.timezone))
+            current = facts["current"]
+            evidence = {
+                measure: storage.get_spending_evidence(
+                    date.fromisoformat(current["start"]), date.fromisoformat(current["end"]),
+                    timezone=self.timezone, measure=measure, limit=50, offset=0,
+                ) for measure in ("spending", "income")
+            }
+        lines = [
+            f"*{'Weekly' if period == 'week' else 'Monthly'} Summary ({current['start']} to {current['end']})*",
+            f"Spending{' known subtotal' if current['status'] == 'partial' else ''}: `{amount(current['spending'])}`",
+            f"Status: {current['status']}",
+        ]
+        if current["income"] is not None:
+            label = "Income known subtotal" if current["status"] == "partial" else "Recorded income"
+            lines.append(f"{label}: `{amount(current['income'])}`")
+        else:
+            lines.append("No income recorded.")
+        if current["recorded_net_flow"] is not None:
+            lines.append(f"Recorded net flow: `{amount(current['recorded_net_flow'])}`")
+        if current["unresolved_count"]:
+            lines.append(f"{current['unresolved_count']} records in this period have unresolved money or classification.")
+        if facts["undated_count"]:
+            lines.append(f"{facts['undated_count']} undated records cannot be assigned to a period.")
+        if current["indicative_count"]:
+            lines.append("Currency conversions are indicative estimates.")
+        if current["status"] == "partial":
+            lines.append("Known subtotals are incomplete. Open Review to resolve missing information.")
+        if facts["change"] is None:
+            lines.append("Comparison unavailable because records remain unresolved.")
+        else:
+            comparable, previous = facts["comparison_current"], facts["previous"]
+            lines.extend([
+                "",
+                "*Spending comparison*",
+                f"{comparable['start']} to {comparable['end']}: `{amount(comparable['spending'])}`",
+                f"{previous['start']} to {previous['end']}: `{amount(previous['spending'])}`",
+                f"Change: `{amount(facts['change'])}`",
+            ])
+            if comparable["indicative_count"] or previous["indicative_count"]:
+                lines.append("Comparison uses indicative currency conversions.")
+            if facts["category_changes"]:
+                lines.append("Largest category changes:")
+                for driver in facts["category_changes"][:3]:
+                    lines.append(f"• {self._escape_md(driver['category'])}: `{amount(driver['change'])}`")
+        for measure, report in evidence.items():
+            if not report["total"]:
+                continue
+            lines.extend(["", f"*{'Spending' if measure == 'spending' else 'Income'} evidence ({len(report['items'])} of {report['total']})*"])
+            for item in report["items"]:
+                value = amount(item["amount"]) if item["amount"] is not None else "SGD unresolved"
+                suffix = " · indicative" if item["conversion_status"] == "indicative" else ""
+                merchant = self._escape_md(item["merchant"] or "Unnamed transaction")
+                lines.append(f"{item['date']} · {merchant} · `{value}`{suffix} · ID {item['id']}")
+            if report["total"] > len(report["items"]):
+                lines.append("Open Activity for the remaining records.")
+        lines.append("\nTotals reflect recorded data; they do not establish capture completeness.")
+        return "\n".join(lines)
+
     async def _week(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         ctx = await self._require_ctx(update)
         if ctx is None:
             return
-        today = self._local_now()
-        start = (today - timedelta(days=today.weekday())).strftime("%Y-%m-%d")
-        end = today.strftime("%Y-%m-%d")
-        text = self.format_weekly_summary(start, end, storage=ctx.storage)
-        # Append weekly pace note if budget data is available
-        try:
-            summary = ctx.storage.get_spending_summary(start_date=start, end_date=end)
-            total_spent = summary["total"]
-            weekly_budget = 0.0
-            progress = ctx.storage.get_budget_progress()
-            for b in progress:
-                if b["category"] is None and b["period"] == "monthly" and b["budget_amount"] > 0:
-                    weekly_budget = b["budget_amount"] / 4.33
-                    break
-            days_elapsed = today.weekday() + 1  # Monday=0, so +1 for days elapsed
-            note = self._build_pace_note_weekly(total_spent, weekly_budget, days_elapsed)
-            if note:
-                text = text + "\n\n" + note
-        except Exception:
-            pass
-        await self._send_long_message(update, text)
+        await self._send_long_message(update, self._format_spending_period(ctx.storage, "week"))
 
     async def _month(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         ctx = await self._require_ctx(update)
         if ctx is None:
             return
-        today = self._local_now()
-        start = f"{today.year}-{today.month:02d}-01"
-        end = today.strftime("%Y-%m-%d")
-        summary = ctx.storage.get_spending_summary(start_date=start, end_date=end)
-        if summary["total"] == 0:
-            await update.message.reply_text("Nothing logged yet.")
-            return
-        text = self._build_summary_with_transactions(
-            f"*Monthly Summary ({start} to {end})*", summary, start, end, storage=ctx.storage
-        )
-        # Append monthly pace note if budget data is available
-        try:
-            import calendar as _cal
-            total_spent = summary["total"]
-            progress = ctx.storage.get_budget_progress()
-            for b in progress:
-                if b["category"] is None and b["period"] == "monthly" and b["budget_amount"] > 0:
-                    monthly_budget = b["budget_amount"]
-                    days_elapsed = today.day
-                    dim = _cal.monthrange(today.year, today.month)[1]
-                    daily_budget = monthly_budget / dim
-                    note = self._build_pace_note_daily(total_spent / days_elapsed, daily_budget)
-                    if note:
-                        text = text + "\n\n" + note
-                    break
-        except Exception:
-            pass
-        await self._send_long_message(update, text)
+        await self._send_long_message(update, self._format_spending_period(ctx.storage, "month"))
 
     async def _save_manual_entry(self, ctx, reply, *, message=None, command=None, args=None,
                                  draft=None, **fields):
@@ -1742,18 +1764,6 @@ class TelegramBotService:
         else:
             overage = spent - daily_budget
             return f"Over daily by ${overage:.2f}."
-
-    def _build_pace_note_weekly(self, spent: float, weekly_budget: float, days_elapsed: int) -> str:
-        if weekly_budget <= 0 or days_elapsed <= 0:
-            return ""
-        expected = (weekly_budget / 7) * days_elapsed
-        pct = spent / expected * 100 if expected > 0 else 0
-        if pct <= 90:
-            return "On track for the week."
-        elif pct <= 110:
-            return "Tracking roughly on budget."
-        else:
-            return f"Running {pct:.0f}% of expected weekly pace."
 
     async def _check_and_alert_budgets(
         self, category: Optional[str], amount_sgd: float, storage=None, chat_id: Optional[int] = None

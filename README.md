@@ -303,8 +303,8 @@ All config values can be set via environment variables (for Railway or Docker). 
 |---------|-------------|
 | `/today` | Today's spending summary |
 | `/yesterday` | Yesterday's spending summary |
-| `/week` | This week's summary |
-| `/month` | This month's breakdown |
+| `/week` | Monday-to-date spending, comparable prior weekdays, and evidence |
+| `/month` | Month-to-date spending, comparable prior-month dates, and evidence |
 | `/balance` | Income vs expenses, net position |
 | `/insights` | Top merchants, average daily spend |
 | `/subscriptions` | Detected recurring transactions |
