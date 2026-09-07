@@ -257,3 +257,16 @@ Shared manual-entry validation was committed as `5e61ae1`; this continuation sta
 - Manual source-event capture, request idempotency, and full ingestion/command unification remain open. No schema changes, frontend changes, or production data/services were touched.
 
 Verification: **849 backend tests passed** (four existing datetime deprecation warnings). Coverage includes manual transaction/outbox rollback, disk reopen, capture-time trip retention, duplicate IDs, disabled/inactive/not-requested behavior, deletion, bounded/manual retries, successful command confirmation after assignment failure, and a busy dispatcher. `git diff --check` passed. No frontend changes; the preceding frontend baseline remains 64 passing tests and a successful production build. This verified manual trip-outbox slice is committed separately.
+
+
+## 2026-09-07 continuation — retained manual-entry provenance
+
+Durable manual trip assignment was committed as `f7d3768`; this continuation started with a clean working tree.
+
+- Accepted manual/cash creation now writes a `source_events` snapshot in the same transaction as the ledger row and any trip job. Failure to write the snapshot rolls all three back. No schema change is required.
+- Versioned `manual:1` snapshots preserve accepted command fields after caller parsing/categorization: original amount/rate representations, currency, date/timestamp, merchant, description, category, and classification. Numeric values are represented as strings. Raw Telegram text, HTTP headers, and rejected requests are not captured by this slice.
+- Snapshots are processed-only and keep unknown timestamp precision because manual entry can supply generated capture times. They never enter generic ParseResult replay, and adding provenance does not silently make manual purchases eligible for automatic Wallet/email matching.
+- The existing authenticated provenance API now reports retained manual/cash evidence for new entries without exposing snapshots. Corrections and deletion retain original evidence. Reusing a retained source identity after deletion is rejected without rewriting evidence or creating a replacement transaction. Legacy manual records are not backfilled.
+- Request idempotency, manual/automated command unification, and the wider product plan remain open. No frontend changes or production data/services were touched.
+
+Verification: **857 backend tests passed** (four existing datetime deprecation warnings). Coverage includes snapshot/transaction/outbox rollback, submitted-field retention, correction/deletion preservation, disk reopen, identity reuse rejection, processed-snapshot exclusion from retries, both cross-source arrival orders, and payload-free API provenance. `git diff --check` passed. No frontend files changed; the preceding baseline remains 64 passing tests and a successful production build. This verified manual-provenance slice is committed separately.

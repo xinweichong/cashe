@@ -28,6 +28,7 @@ def test_manual_trip_outbox_is_atomic(in_memory_db):
         create(storage)
     assert storage.query_transactions(limit=50) == []
     assert storage.pending_ingestion_effects() == []
+    assert storage.get_source_event('manual', 'manual-20260907120000-12') is None
 
 
 def test_restart_retains_original_trip_and_worker_replays_once(tmp_path):

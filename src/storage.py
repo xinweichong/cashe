@@ -238,6 +238,7 @@ class Storage:
         raw_data: Optional[str] = None,
         tx_type: str = "expense",
         followups: Optional[list[tuple[str, dict]]] = None,
+        manual_evidence: Optional[str] = None,
     ) -> int:
         try:
             with self._conn:
@@ -255,9 +256,19 @@ class Storage:
                         "INSERT INTO ingestion_outbox(transaction_id, kind, payload) VALUES (?, ?, ?)",
                         (tx_id, kind, json.dumps(payload)),
                     )
+                if manual_evidence is not None:
+                    # These processed snapshots are not replayable ParseResults.
+                    # Keep default unknown precision: entry time may be generated.
+                    self._conn.execute(
+                        """INSERT INTO source_events
+                           (source, source_id, payload, parser_version, status, transaction_id, attempts)
+                           VALUES (?, ?, ?, 'manual:1', 'processed', ?, 1)""",
+                        (source, source_id, manual_evidence, tx_id),
+                    )
             return tx_id
         except sqlite3.IntegrityError:
-            if self.get_transaction_by_source_id(source_id) is not None:
+            if (self.get_transaction_by_source_id(source_id) is not None
+                    or (manual_evidence is not None and self.get_source_event(source, source_id) is not None)):
                 raise ValueError(f"duplicate source_id: {source_id}") from None
             raise
 
@@ -330,6 +341,14 @@ class Storage:
         })
         if fields["currency"] == "SGD":
             fields["exchange_rate"] = 1.0
+        # Retain accepted command fields, not raw Telegram text or request headers.
+        # Numeric strings preserve submitted representation before normalization.
+        evidence = json.dumps({
+            "kind": "manual_entry", "amount": str(amount), "currency": currency,
+            "exchange_rate": str(exchange_rate) if exchange_rate is not None else None,
+            "transaction_date": transaction_date, "merchant": merchant,
+            "description": description, "category": category, "type": tx_type,
+        })
         fields["tx_type"] = fields.pop("type")
         followups = []
         if assign_to_active_trip and self.get_setting("trips_enabled", "false") == "true":
@@ -337,7 +356,8 @@ class Storage:
             if active:
                 followups.append(("trip", {"trip_id": active["id"]}))
         return self.insert_transaction(source=source, source_id=source_id, merchant=merchant,
-                                       description=description, category=category, followups=followups, **fields)
+                                       description=description, category=category, followups=followups,
+                                       manual_evidence=evidence, **fields)
 
     @_locked
     def update_transaction(self, tx_id: int, *, remember_category: bool = False, **fields) -> None:

@@ -633,3 +633,21 @@ async def test_manual_creation_unknown_fx_date_normalization_and_native_rate(cli
     assert response.json()['exchange_rate'] == 1
     assert response.json()['source'] == 'cash'
     assert (await client.post('/api/transactions', json=[])).status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_manual_creation_exposes_provenance_without_snapshot_payload(client, in_memory_db):
+    response = await client.post('/api/transactions', json={
+        'amount': '12.50', 'merchant': 'Original Cafe', 'description': 'Private note',
+        'transaction_date': '2026-09-07',
+    })
+    tx = response.json()
+    assert response.status_code == 200
+    provenance = await client.get(f'/api/v2/transactions/{tx["id"]}/provenance')
+    assert provenance.json() == {
+        'transaction_id': tx['id'], 'sources': [{'channel': 'manual', 'evidence_recorded': True}],
+    }
+    assert 'Private note' not in provenance.text
+    assert tx['source_id'] not in provenance.text
+    assert 'manual_entry' not in response.text
+    assert Storage(in_memory_db).get_source_event('manual', tx['source_id']) is not None
