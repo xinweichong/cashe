@@ -1353,11 +1353,24 @@ class TelegramBotService:
         )
 
     async def _handle_nl_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        """Handle free-text messages as natural language transaction entry.
-
-        When LLMService is absent: show /add hint (identical to old _unknown_text).
-        When LLMService is present: parse with LLM, show confirmation card.
-        """
+        """Reuse recorded drafts before optionally parsing new natural-language input."""
+        ctx = await self._require_ctx(update)
+        if ctx is None:
+            return
+        text = update.message.text.strip()
+        chat_id = self._get_chat_id(update)
+        message_id = getattr(update.message, "message_id", None)
+        if type(message_id) is not int:
+            message_id = None
+        if message_id is not None:
+            try:
+                previous = ctx.storage.get_telegram_draft_for_message(chat_id, message_id, text)
+            except TransactionRequestConflict:
+                await update.message.reply_text("This message was already handled. Check Activity or send a new entry.")
+                return
+            if previous is not None:
+                await self._send_nl_draft_card(update, previous)
+                return
         if not self.llm_service:
             await update.message.reply_text(
                 "Commands start with /.\n"
@@ -1366,11 +1379,6 @@ class TelegramBotService:
             )
             return
 
-        ctx = await self._require_ctx(update)
-        if ctx is None:
-            return
-
-        text = update.message.text.strip()
         categories = [c["name"] for c in ctx.storage.get_categories()]
 
         parsed = self.llm_service.parse_telegram_message(text, categories, self.timezone)
@@ -1391,15 +1399,23 @@ class TelegramBotService:
         date = parsed.get("date", self._local_now().strftime("%Y-%m-%d"))
         category = parsed.get("category_hint", "Other")
 
-        draft_id = secrets.token_hex(16)
-        ctx.storage.save_telegram_draft(draft_id, self._get_chat_id(update), {
-            "amount": amount, "currency": currency,
-            "merchant": merchant, "date": date, "category": category,
-        })
+        try:
+            draft = ctx.storage.save_telegram_draft(secrets.token_hex(16), chat_id, {
+                "amount": amount, "currency": currency,
+                "merchant": merchant, "date": date, "category": category,
+            }, message_id=message_id, message_text=text)
+        except TransactionRequestConflict:
+            await update.message.reply_text("This message was already handled. Check Activity or send a new entry.")
+            return
+        await self._send_nl_draft_card(update, draft)
 
+    async def _send_nl_draft_card(self, update, draft):
+        draft_id = draft["_id"]
+        amount, currency, merchant = draft["amount"], draft["currency"], draft["merchant"]
+        category, date = draft["category"], draft["date"]
         summary = (
             f"*{self._escape_md(merchant)}* — {self._escape_md(currency)} {amount:.2f}\n"
-            f"{self._escape_md(category)}  |  {self._escape_md(date)}\nConfirm within 24 hours."
+            f"{self._escape_md(category)}  |  {self._escape_md(date)}\nThis draft expires 24 hours after it was created."
         )
         keyboard = InlineKeyboardMarkup([[
             InlineKeyboardButton("Add", callback_data=f"nl_confirm:{draft_id}"),

@@ -64,6 +64,13 @@ MIGRATIONS = (
             expires_at INTEGER NOT NULL
         )""",
     )),
+    (6, (
+        """CREATE TABLE telegram_draft_messages (
+            message_key TEXT PRIMARY KEY,
+            fingerprint TEXT NOT NULL,
+            draft_id TEXT NOT NULL
+        )""",
+    )),
 )
 
 

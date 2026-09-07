@@ -397,12 +397,43 @@ class Storage:
         tx_id = self.create_manual_transaction(_request_receipt=receipt, **fields)
         return tx_id, False
 
+    @staticmethod
+    def _telegram_draft_message_identity(chat_id: int, message_id: int, text: str) -> tuple[str, str]:
+        if type(chat_id) is not int or type(message_id) is not int or message_id <= 0 or not isinstance(text, str):
+            raise ValueError("Invalid Telegram message identity")
+        return (hashlib.sha256(f"{chat_id}:{message_id}".encode()).hexdigest(),
+                hashlib.sha256(text.encode()).hexdigest())
+
     @_locked
-    def save_telegram_draft(self, draft_id: str, chat_id: int, draft: dict) -> None:
+    def get_telegram_draft_for_message(self, chat_id: int, message_id: int, text: str) -> Optional[dict]:
+        message_key, fingerprint = self._telegram_draft_message_identity(chat_id, message_id, text)
+        receipt = self._conn.execute(
+            "SELECT fingerprint, draft_id FROM telegram_draft_messages WHERE message_key = ?", (message_key,),
+        ).fetchone()
+        if receipt is None:
+            return None
+        if receipt["fingerprint"] != fingerprint:
+            raise TransactionRequestConflict("This Telegram message was already handled")
+        draft = self.get_telegram_draft(receipt["draft_id"], chat_id)
+        if draft is None:
+            # Retained links prevent canceled, replaced, expired, or accepted drafts
+            # from being revived by redelivery. They deliberately are not foreign keys.
+            raise TransactionRequestConflict("This Telegram message was already handled")
+        return draft
+
+    @_locked
+    def save_telegram_draft(self, draft_id: str, chat_id: int, draft: dict, *,
+                            message_id=None, message_text=None) -> dict:
         if not isinstance(draft_id, str) or not re.fullmatch(r"[a-f0-9]{32}", draft_id):
             raise ValueError("Invalid Telegram draft identity")
         if type(chat_id) is not int:
             raise ValueError("Invalid Telegram chat identity")
+        message_receipt = None
+        if message_id is not None:
+            previous = self.get_telegram_draft_for_message(chat_id, message_id, message_text)
+            if previous is not None:
+                return previous
+            message_receipt = self._telegram_draft_message_identity(chat_id, message_id, message_text)
         payload = json.dumps({key: draft[key] for key in ("amount", "currency", "merchant", "category", "date")})
         now = int(local_now().timestamp())
         with self._conn:
@@ -411,6 +442,12 @@ class Storage:
                 "INSERT INTO telegram_drafts(draft_id, chat_id, payload, expires_at) VALUES (?, ?, ?, ?)",
                 (draft_id, chat_id, payload, now + 24 * 60 * 60),
             )
+            if message_receipt is not None:
+                self._conn.execute(
+                    "INSERT INTO telegram_draft_messages(message_key, fingerprint, draft_id) VALUES (?, ?, ?)",
+                    (*message_receipt, draft_id),
+                )
+        return {**json.loads(payload), "_id": draft_id, "_chat_id": chat_id}
 
     @_locked
     def get_telegram_draft(self, draft_id: str, chat_id: int) -> Optional[dict]:
