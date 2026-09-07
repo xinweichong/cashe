@@ -20,13 +20,11 @@ def callback(action='confirm', token=TOKEN, chat_id=100):
     ))
 
 
-def pending(token=TOKEN):
-    return {**DRAFT, '_id': token, '_chat_id': 100, '_username': None}
-
-
 @pytest.fixture
 def bot(in_memory_db):
-    return TelegramBotService(storage=Storage(in_memory_db), bot_token='test-token')
+    bot = TelegramBotService(storage=Storage(in_memory_db), bot_token='test-token')
+    bot.storage.save_telegram_draft(TOKEN, 100, DRAFT)
+    return bot
 
 
 @pytest.mark.asyncio
@@ -35,23 +33,24 @@ async def test_generated_cards_have_distinct_bound_tokens(bot):
     context = SimpleNamespace(user_data={})
     update = SimpleNamespace(message=SimpleNamespace(chat_id=100, text='12 Cafe', reply_text=AsyncMock()))
     await bot._handle_nl_message(update, context)
-    first = context.user_data['nl_pending']
     first_buttons = update.message.reply_text.call_args.kwargs['reply_markup'].inline_keyboard[0]
-    assert [b.callback_data for b in first_buttons] == [f'nl_{action}:{first["_id"]}' for action in ('confirm', 'edit', 'cancel')]
+    first_id = first_buttons[0].callback_data.split(':')[1]
+    assert [b.callback_data for b in first_buttons] == [f'nl_{action}:{first_id}' for action in ('confirm', 'edit', 'cancel')]
     assert all(len(b.callback_data.encode()) <= 64 for b in first_buttons)
-    assert first['_chat_id'] == 100
+    assert bot.storage.get_telegram_draft(first_id, 100)['_chat_id'] == 100
     await bot._handle_nl_message(update, context)
-    assert context.user_data['nl_pending']['_id'] != first['_id']
+    second_id = update.message.reply_text.call_args.kwargs['reply_markup'].inline_keyboard[0][0].callback_data.split(':')[1]
+    assert first_id != second_id
+    assert bot.storage.get_telegram_draft(first_id, 100) is None
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('action', ['confirm', 'edit', 'cancel'])
 async def test_old_card_cannot_save_or_clear_new_draft(bot, action):
-    current = pending('b' * 32)
-    context = SimpleNamespace(user_data={'nl_pending': current})
+    bot.storage.save_telegram_draft('b' * 32, 100, DRAFT)
     update = callback(action)
-    await bot._handle_nl_callback(update, context)
-    assert context.user_data['nl_pending'] is current
+    await bot._handle_nl_callback(update, SimpleNamespace(user_data={}))
+    assert bot.storage.get_telegram_draft('b' * 32, 100) is not None
     assert bot.storage.query_transactions(limit=50) == []
     assert 'no longer available' in update.callback_query.edit_message_text.call_args.args[0]
 
@@ -59,29 +58,35 @@ async def test_old_card_cannot_save_or_clear_new_draft(bot, action):
 @pytest.mark.asyncio
 @pytest.mark.parametrize('mismatch', ['chat', 'user', 'legacy', 'expired'])
 async def test_wrong_owner_and_unbound_or_expired_cards_cannot_create(bot, mismatch):
-    draft = pending()
-    if mismatch == 'user':
-        draft['_username'] = 'another-user'
-    context = SimpleNamespace(user_data={} if mismatch == 'expired' else {'nl_pending': draft})
     update = callback(chat_id=200 if mismatch == 'chat' else 100)
-    if mismatch == 'legacy':
+    other = None
+    if mismatch == 'user':
+        other = init_db(':memory:')
+        bot._require_ctx = AsyncMock(return_value=SimpleNamespace(storage=Storage(other)))
+    elif mismatch == 'legacy':
         update.callback_query.data = 'nl_confirm'
-    await bot._handle_nl_callback(update, context)
-    assert bot.storage.query_transactions(limit=50) == []
-    if mismatch != 'expired':
-        assert context.user_data['nl_pending'] is draft
+    elif mismatch == 'expired':
+        bot.storage.discard_telegram_draft(TOKEN, 100)
+    try:
+        await bot._handle_nl_callback(update, SimpleNamespace(user_data={}))
+        assert bot.storage.query_transactions(limit=50) == []
+        if mismatch != 'expired':
+            assert bot.storage.get_telegram_draft(TOKEN, 100) is not None
+    finally:
+        if other is not None:
+            other.close()
 
 
 @pytest.mark.asyncio
 async def test_lost_success_reply_and_repeated_taps_do_not_recreate(bot):
-    context = SimpleNamespace(user_data={'nl_pending': pending()})
+    context = SimpleNamespace(user_data={})
     update = callback()
     update.callback_query.edit_message_text.side_effect = RuntimeError('lost reply')
     with pytest.raises(RuntimeError, match='lost reply'):
         await bot._handle_nl_callback(update, context)
     original = bot.storage.query_transactions(limit=50)
     assert len(original) == 1
-    assert context.user_data == {}
+    assert bot.storage.get_telegram_draft(TOKEN, 100) is None
     replay = callback()
     await bot._handle_nl_callback(replay, context)
     assert 'Check Activity' in replay.callback_query.edit_message_text.call_args.args[0]
@@ -91,14 +96,12 @@ async def test_lost_success_reply_and_repeated_taps_do_not_recreate(bot):
 @pytest.mark.asyncio
 @pytest.mark.parametrize('action', ['confirm', 'edit', 'cancel'])
 async def test_reply_completion_does_not_clear_newer_draft(bot, action):
-    context = SimpleNamespace(user_data={'nl_pending': pending()})
-    next_draft = pending('b' * 32)
     update = callback(action)
     async def replace_draft(*args, **kwargs):
-        context.user_data['nl_pending'] = next_draft
+        bot.storage.save_telegram_draft('b' * 32, 100, DRAFT)
     update.callback_query.edit_message_text.side_effect = replace_draft
-    await bot._handle_nl_callback(update, context)
-    assert context.user_data['nl_pending'] is next_draft
+    await bot._handle_nl_callback(update, SimpleNamespace(user_data={}))
+    assert bot.storage.get_telegram_draft('b' * 32, 100) is not None
     assert len(bot.storage.query_transactions(limit=50)) == (action == 'confirm')
 
 
@@ -153,10 +156,10 @@ def test_draft_acceptance_is_atomic(in_memory_db, table):
 
 @pytest.mark.asyncio
 async def test_validation_failure_retains_only_matching_edit_cancel_actions(bot):
-    context = SimpleNamespace(user_data={'nl_pending': {**pending(), 'amount': -1}})
+    bot.storage.save_telegram_draft(TOKEN, 100, {**DRAFT, 'amount': -1})
     update = callback()
-    await bot._handle_nl_callback(update, context)
-    assert context.user_data['nl_pending']['_id'] == TOKEN
+    await bot._handle_nl_callback(update, SimpleNamespace(user_data={}))
+    assert bot.storage.get_telegram_draft(TOKEN, 100)['_id'] == TOKEN
     markup = update.callback_query.edit_message_text.call_args.kwargs['reply_markup']
     assert [b.callback_data for b in markup.inline_keyboard[0]] == [f'nl_edit:{TOKEN}', f'nl_cancel:{TOKEN}']
     assert bot.storage.query_transactions(limit=50) == []

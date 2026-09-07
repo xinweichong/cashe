@@ -56,6 +56,14 @@ MIGRATIONS = (
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )""",
     )),
+    (5, (
+        """CREATE TABLE telegram_drafts (
+            draft_id TEXT PRIMARY KEY,
+            chat_id INTEGER NOT NULL UNIQUE,
+            payload TEXT NOT NULL,
+            expires_at INTEGER NOT NULL
+        )""",
+    )),
 )
 
 

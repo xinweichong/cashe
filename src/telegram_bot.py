@@ -795,14 +795,14 @@ class TelegramBotService:
         await self._send_long_message(update, text)
 
     async def _save_manual_entry(self, ctx, reply, *, message=None, command=None, args=None,
-                                 draft=None, on_accepted=None, **fields):
+                                 draft=None, **fields):
         replayed = False
         try:
             chat_id = getattr(message, "chat_id", None)
             message_id = getattr(message, "message_id", None)
             if draft is not None:
                 tx_id, replayed = ctx.storage.confirm_telegram_draft(
-                    draft["_id"], draft, exchange_rate=fields.get("exchange_rate"),
+                    draft["_id"], draft, exchange_rate=fields.get("exchange_rate"), chat_id=draft["_chat_id"],
                 )
             elif type(chat_id) is int and type(message_id) is int:
                 tx_id, replayed = ctx.storage.create_telegram_transaction(
@@ -818,8 +818,6 @@ class TelegramBotService:
             message = "Already logged." if str(exc).startswith("duplicate source_id:") else "Couldn’t save. Check the amount, currency, exchange rate, and date."
             await reply(message)
             return None
-        if on_accepted is not None:
-            on_accepted()
         if fields.get("assign_to_active_trip"):
             from src.ingestion import IngestionPipeline
             pipeline = getattr(getattr(ctx, "poller", None), "pipeline", None)
@@ -1394,16 +1392,14 @@ class TelegramBotService:
         category = parsed.get("category_hint", "Other")
 
         draft_id = secrets.token_hex(16)
-        context.user_data["nl_pending"] = {
-            "_id": draft_id, "_username": getattr(ctx, "username", None),
-            "_chat_id": self._get_chat_id(update),
+        ctx.storage.save_telegram_draft(draft_id, self._get_chat_id(update), {
             "amount": amount, "currency": currency,
             "merchant": merchant, "date": date, "category": category,
-        }
+        })
 
         summary = (
             f"*{self._escape_md(merchant)}* — {self._escape_md(currency)} {amount:.2f}\n"
-            f"{self._escape_md(category)}  |  {self._escape_md(date)}"
+            f"{self._escape_md(category)}  |  {self._escape_md(date)}\nConfirm within 24 hours."
         )
         keyboard = InlineKeyboardMarkup([[
             InlineKeyboardButton("Add", callback_data=f"nl_confirm:{draft_id}"),
@@ -1417,28 +1413,22 @@ class TelegramBotService:
         query = update.callback_query
         await query.answer()
         action, _, draft_id = query.data.partition(":")
-        pending = context.user_data.get("nl_pending")
         ctx = await self._require_ctx(update)
         if ctx is None:
             return
-        if (not pending or not draft_id or pending.get("_id") != draft_id
-                or pending.get("_username") != getattr(ctx, "username", None)
-                or pending.get("_chat_id") != self._get_chat_id(update)):
+        chat_id = self._get_chat_id(update)
+        pending = ctx.storage.get_telegram_draft(draft_id, chat_id) if draft_id else None
+        if pending is None:
             await query.edit_message_text("This draft is no longer available. Check Activity or send a new entry.")
             return
 
-        def clear_pending():
-            # A new message may replace the draft while a Telegram reply is awaited.
-            if context.user_data.get("nl_pending") is pending:
-                context.user_data.pop("nl_pending", None)
-
         if action == "nl_cancel":
-            clear_pending()
+            ctx.storage.discard_telegram_draft(draft_id, chat_id)
             await query.edit_message_text("Cancelled.")
             return
 
         if action == "nl_edit":
-            clear_pending()
+            ctx.storage.discard_telegram_draft(draft_id, chat_id)
             await query.edit_message_text(
                 "Use /add to enter manually:\n"
                 f"`/add {pending['amount']} {pending['currency']} {pending['merchant']} "
@@ -1457,7 +1447,7 @@ class TelegramBotService:
                 InlineKeyboardButton("Cancel", callback_data=f"nl_cancel:{draft_id}"),
             ]])
             tx_id = await self._save_manual_entry(ctx, functools.partial(query.edit_message_text, reply_markup=retry_markup),
-                draft=pending, on_accepted=clear_pending, assign_to_active_trip=True,
+                draft=pending, assign_to_active_trip=True,
                 exchange_rate=exchange_rate,
             )
             if tx_id is None:

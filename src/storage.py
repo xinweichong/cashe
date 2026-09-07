@@ -246,6 +246,7 @@ class Storage:
         followups: Optional[list[tuple[str, dict]]] = None,
         manual_evidence: Optional[str] = None,
         request_receipt: Optional[tuple[str, str]] = None,
+        consumed_draft_id: Optional[str] = None,
     ) -> int:
         try:
             with self._conn:
@@ -277,6 +278,8 @@ class Storage:
                         "INSERT INTO transaction_requests(request_key, fingerprint, transaction_id) VALUES (?, ?, ?)",
                         (*request_receipt, tx_id),
                     )
+                if consumed_draft_id is not None:
+                    self._conn.execute("DELETE FROM telegram_drafts WHERE draft_id = ?", (consumed_draft_id,))
             return tx_id
         except sqlite3.IntegrityError:
             if (self.get_transaction_by_source_id(source_id) is not None
@@ -395,19 +398,57 @@ class Storage:
         return tx_id, False
 
     @_locked
-    def confirm_telegram_draft(self, draft_id: str, draft: dict, exchange_rate=None) -> tuple[int, bool]:
+    def save_telegram_draft(self, draft_id: str, chat_id: int, draft: dict) -> None:
+        if not isinstance(draft_id, str) or not re.fullmatch(r"[a-f0-9]{32}", draft_id):
+            raise ValueError("Invalid Telegram draft identity")
+        if type(chat_id) is not int:
+            raise ValueError("Invalid Telegram chat identity")
+        payload = json.dumps({key: draft[key] for key in ("amount", "currency", "merchant", "category", "date")})
+        now = int(local_now().timestamp())
+        with self._conn:
+            self._conn.execute("DELETE FROM telegram_drafts WHERE chat_id = ? OR expires_at <= ?", (chat_id, now))
+            self._conn.execute(
+                "INSERT INTO telegram_drafts(draft_id, chat_id, payload, expires_at) VALUES (?, ?, ?, ?)",
+                (draft_id, chat_id, payload, now + 24 * 60 * 60),
+            )
+
+    @_locked
+    def get_telegram_draft(self, draft_id: str, chat_id: int) -> Optional[dict]:
+        with self._conn:
+            self._conn.execute("DELETE FROM telegram_drafts WHERE expires_at <= ?", (int(local_now().timestamp()),))
+        row = self._conn.execute(
+            "SELECT * FROM telegram_drafts WHERE draft_id = ? AND chat_id = ?", (draft_id, chat_id),
+        ).fetchone()
+        if row is None:
+            return None
+        return {**json.loads(row["payload"]), "_id": row["draft_id"], "_chat_id": row["chat_id"]}
+
+    @_locked
+    def discard_telegram_draft(self, draft_id: str, chat_id: int) -> None:
+        with self._conn:
+            self._conn.execute("DELETE FROM telegram_drafts WHERE draft_id = ? AND chat_id = ?", (draft_id, chat_id))
+
+    @_locked
+    def confirm_telegram_draft(self, draft_id: str, draft: dict, exchange_rate=None, *, chat_id=None) -> tuple[int, bool]:
         """Accept one confirmed NL draft, excluding fetched FX from replay identity."""
         if not isinstance(draft_id, str) or not re.fullmatch(r"[a-f0-9]{32}", draft_id):
             raise ValueError("Invalid Telegram draft identity")
+        if chat_id is not None:
+            draft = self.get_telegram_draft(draft_id, chat_id)
+            if draft is None:
+                raise ValueError("Telegram draft expired or unavailable")
         submitted = {key: draft[key] for key in ("amount", "currency", "merchant", "category", "date")}
         receipt, previous = self._transaction_request(f"telegram-nl:{draft_id}", submitted)
         if previous is not None:
+            if chat_id is not None:
+                self.discard_telegram_draft(draft_id, chat_id)
             return previous["id"], True
         tx_id = self.create_manual_transaction(
             source_id=f"telegram-nl-{draft_id}", amount=submitted["amount"],
             currency=submitted["currency"], merchant=submitted["merchant"],
             category=submitted["category"], transaction_date=submitted["date"],
             exchange_rate=exchange_rate, assign_to_active_trip=True, _request_receipt=receipt,
+            _consumed_draft_id=draft_id if chat_id is not None else None,
         )
         return tx_id, False
 
@@ -416,7 +457,7 @@ class Storage:
                                   source="manual", currency="SGD", exchange_rate=None,
                                   merchant=None, description=None, category=None,
                                   tx_type="expense", assign_to_active_trip=False,
-                                  _request_receipt=None) -> int:
+                                  _request_receipt=None, _consumed_draft_id=None) -> int:
         if source not in ("manual", "cash"):
             raise ValueError("Manual source must be manual or cash")
         if tx_type not in ("expense", "income"):
@@ -446,7 +487,8 @@ class Storage:
                 followups.append(("trip", {"trip_id": active["id"]}))
         return self.insert_transaction(source=source, source_id=source_id, merchant=merchant,
                                        description=description, category=category, followups=followups,
-                                       manual_evidence=evidence, request_receipt=_request_receipt, **fields)
+                                       manual_evidence=evidence, request_receipt=_request_receipt,
+                                       consumed_draft_id=_consumed_draft_id, **fields)
 
     @_locked
     def update_transaction(self, tx_id: int, *, remember_category: bool = False, **fields) -> None:
