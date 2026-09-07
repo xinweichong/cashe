@@ -685,3 +685,20 @@ async def test_web_creation_invalid_key_and_legacy_requests(client, in_memory_db
     await client.post('/api/logout')
     denied = await client.post('/api/transactions', json=body, headers={'Idempotency-Key': 'key'})
     assert denied.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_telegram_input_review_excludes_raw_payload_and_rejects_bank_retry(client, in_memory_db):
+    storage = Storage(in_memory_db)
+    event = storage.begin_telegram_nl_input(100, 10, 'private raw financial text')
+    storage.fail_telegram_nl_input(event['id'])
+    response = await client.get('/api/v2/capture/issues')
+    assert response.status_code == 200
+    item = next(item for item in response.json() if item['id'] == event['id'])
+    assert item['source'] == 'telegram_nl'
+    assert 'payload' not in item
+    assert 'source_id' not in item
+    assert 'private raw financial text' not in response.text
+    retry = await client.post(f"/api/v2/capture/issues/{event['id']}/retry")
+    assert retry.status_code == 409
+    assert storage.get_source_event('telegram_nl', event['source_id'])['status'] == 'failed'

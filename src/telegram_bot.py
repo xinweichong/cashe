@@ -1379,10 +1379,29 @@ class TelegramBotService:
             )
             return
 
-        categories = [c["name"] for c in ctx.storage.get_categories()]
+        event = None
+        if message_id is not None:
+            try:
+                event = ctx.storage.begin_telegram_nl_input(chat_id, message_id, update.message.text)
+            except TransactionRequestConflict:
+                await update.message.reply_text("This message was already received. Use /add or send a new entry.")
+                return
+            if event is None:
+                await update.message.reply_text("This message cannot be parsed again. Check Activity or use /add.")
+                return
 
-        parsed = self.llm_service.parse_telegram_message(text, categories, self.timezone)
-        if not parsed or parsed.get("confidence", 0) < 0.7:
+        try:
+            categories = [c["name"] for c in ctx.storage.get_categories()]
+            parsed = self.llm_service.parse_telegram_message(text, categories, self.timezone)
+            recognized = parsed and parsed.get("confidence", 0) >= 0.7 and parsed.get("amount") is not None
+        except Exception:
+            if event is not None:
+                ctx.storage.fail_telegram_nl_input(event["id"])
+            await update.message.reply_text("Couldn't parse this entry. Use /add or send it again.")
+            return
+        if not recognized:
+            if event is not None:
+                ctx.storage.fail_telegram_nl_input(event["id"], unrecognized=True)
             await update.message.reply_text(
                 "Couldn't parse that as a transaction.\n"
                 "Try: *15.90 SGD Starbucks Food* or use /add for full control.",
@@ -1391,9 +1410,6 @@ class TelegramBotService:
             return
 
         amount = parsed.get("amount")
-        if amount is None:
-            await update.message.reply_text("Couldn't determine the amount. Try /add.")
-            return
         currency = parsed.get("currency", "SGD")
         merchant = parsed.get("merchant", "Unknown")
         date = parsed.get("date", self._local_now().strftime("%Y-%m-%d"))
@@ -1406,6 +1422,11 @@ class TelegramBotService:
             }, message_id=message_id, message_text=text)
         except TransactionRequestConflict:
             await update.message.reply_text("This message was already handled. Check Activity or send a new entry.")
+            return
+        except Exception:
+            if event is not None:
+                ctx.storage.fail_telegram_nl_input(event["id"])
+            await update.message.reply_text("Couldn't save this draft. Use /add or send it again.")
             return
         await self._send_nl_draft_card(update, draft)
 

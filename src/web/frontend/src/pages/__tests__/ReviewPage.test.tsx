@@ -45,3 +45,12 @@ test('empty later pages retain a way back after corrections', async () => {
   expect((screen.getByRole('button', { name: 'Previous spending records' }) as HTMLButtonElement).disabled).toBe(false);
   expect((screen.getByRole('button', { name: 'Next spending records' }) as HTMLButtonElement).disabled).toBe(true);
 });
+
+test('Telegram input failures explain manual recovery without offering automatic replay', async () => {
+  vi.mocked(briefingApi.spendingReview).mockResolvedValue({ items: [], total: 0, limit: 50, offset: 0 });
+  vi.mocked(briefingApi.captureIssues).mockResolvedValue([{ id: 20, source: 'telegram_nl', status: 'failed', attempts: 1, error_code: 'nl_processing_failed' }]);
+  show();
+  expect(await screen.findByText('Telegram entry · failed')).toBeTruthy();
+  expect(screen.getByText(/Use \/add or send a new entry in Telegram/)).toBeTruthy();
+  expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
+});

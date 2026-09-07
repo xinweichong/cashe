@@ -121,6 +121,8 @@ class Storage:
         def channel(source):
             if source in {"apple_wallet", "wallet_request"}:
                 return "apple_wallet"
+            if source == "telegram_nl":
+                return "manual"
             if source in {"gmail", "dbs_paylah", "uob_card", "uob_paynow", "uob_paynow_sent",
                           "uob_transfer", "uob_nets"}:
                 return "gmail"
@@ -175,7 +177,7 @@ class Storage:
     @_locked
     def pending_source_events(self, source: Optional[str], limit: int = 100) -> list[dict]:
         return [dict(row) for row in self._conn.execute(
-            """SELECT * FROM source_events WHERE (source = ? OR (? IS NULL AND source != 'gmail'))
+            """SELECT * FROM source_events WHERE (source = ? OR (? IS NULL AND source NOT IN ('gmail', 'telegram_nl')))
                AND status IN ('pending', 'failed') AND attempts < 5
                ORDER BY attempts, id LIMIT ?""", (source, source, limit),
         ).fetchall()]
@@ -218,9 +220,11 @@ class Storage:
 
     @_locked
     def retry_source_event(self, event_id: int) -> None:
-        row = self._conn.execute("SELECT status FROM source_events WHERE id = ?", (event_id,)).fetchone()
+        row = self._conn.execute("SELECT status, source FROM source_events WHERE id = ?", (event_id,)).fetchone()
         if row is None:
             raise ValueError("Source event not found")
+        if row["source"] == "telegram_nl":
+            raise ValueError("Use Telegram /add or send a new entry to recover this input")
         if row["status"] == "processed":
             raise ValueError("Source event already processed")
         self._conn.execute(
@@ -279,6 +283,12 @@ class Storage:
                         (*request_receipt, tx_id),
                     )
                 if consumed_draft_id is not None:
+                    self._conn.execute(
+                        """UPDATE source_events SET transaction_id = ?, updated_at = CURRENT_TIMESTAMP
+                           WHERE source = 'telegram_nl' AND status = 'processed' AND source_id IN
+                           (SELECT message_key FROM telegram_draft_messages WHERE draft_id = ?)""",
+                        (tx_id, consumed_draft_id),
+                    )
                     self._conn.execute("DELETE FROM telegram_drafts WHERE draft_id = ?", (consumed_draft_id,))
             return tx_id
         except sqlite3.IntegrityError:
@@ -405,6 +415,32 @@ class Storage:
                 hashlib.sha256(text.encode()).hexdigest())
 
     @_locked
+    def begin_telegram_nl_input(self, chat_id: int, message_id: int, raw_text: str) -> Optional[dict]:
+        key, _ = self._telegram_draft_message_identity(chat_id, message_id, raw_text)
+        event = self.get_source_event("telegram_nl", key)
+        if event is None:
+            event = self.record_source_event("telegram_nl", key, json.dumps({"text": raw_text}), "telegram-nl:1")
+        elif json.loads(event["payload"])["text"].strip() != raw_text.strip():
+            raise TransactionRequestConflict("This Telegram message was already received with different text")
+        if event["status"] == "processed" or event["attempts"] >= 5:
+            return None
+        with self._conn:
+            self._conn.execute(
+                """UPDATE source_events SET status = 'pending', attempts = attempts + 1,
+                   error_code = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?""", (event["id"],),
+            )
+        return self.get_source_event("telegram_nl", key)
+
+    @_locked
+    def fail_telegram_nl_input(self, event_id: int, *, unrecognized=False) -> None:
+        with self._conn:
+            self._conn.execute(
+                """UPDATE source_events SET status = ?, error_code = ?, updated_at = CURRENT_TIMESTAMP
+                   WHERE id = ? AND source = 'telegram_nl' AND status != 'processed'""",
+                ("unrecognized" if unrecognized else "failed", "nl_unrecognized" if unrecognized else "nl_processing_failed", event_id),
+            )
+
+    @_locked
     def get_telegram_draft_for_message(self, chat_id: int, message_id: int, text: str) -> Optional[dict]:
         message_key, fingerprint = self._telegram_draft_message_identity(chat_id, message_id, text)
         receipt = self._conn.execute(
@@ -446,6 +482,11 @@ class Storage:
                 self._conn.execute(
                     "INSERT INTO telegram_draft_messages(message_key, fingerprint, draft_id) VALUES (?, ?, ?)",
                     (*message_receipt, draft_id),
+                )
+                self._conn.execute(
+                    """UPDATE source_events SET status = 'processed', error_code = NULL,
+                       updated_at = CURRENT_TIMESTAMP WHERE source = 'telegram_nl' AND source_id = ?""",
+                    (message_receipt[0],),
                 )
         return {**json.loads(payload), "_id": draft_id, "_chat_id": chat_id}
 

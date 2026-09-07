@@ -6,7 +6,7 @@ import { PageCard } from '@/components/ui/cards';
 import { Button } from '@/components/ui/button';
 import { LoadFailed } from '@/components/ui/LoadFailed';
 
-const sourceLabels: Record<string, string> = { gmail: 'Gmail', wallet_request: 'Wallet request', apple_wallet: 'Apple Wallet' };
+const sourceLabels: Record<string, string> = { telegram_nl: 'Telegram entry', gmail: 'Gmail', wallet_request: 'Wallet request', apple_wallet: 'Apple Wallet' };
 const effectLabels: Record<string, string> = { trip: 'Trip assignment', recurring: 'Recurring analysis', notification: 'Transaction notification', suggestion: 'Recurring suggestion' };
 
 export function ReviewPage() {
@@ -24,7 +24,7 @@ export function ReviewPage() {
     {retry.isSuccess && <p role="status">Retry queued. Processing normally runs within two minutes.</p>}
     {query.isError ? <div role="alert"><LoadFailed onRetry={() => void query.refetch()} /></div> : !query.data ? <p role="status">Loading capture review…</p> : <>
       <PageCard title="Source observations">
-        {query.data.capture.map(item => <div key={item.id} className="py-4 border-b border-border last:border-0 flex items-center gap-4 justify-between"><div><p>{sourceLabels[item.source] || 'Bank alert'} · {item.status}</p><p className="text-sm text-muted">{item.status === 'unrecognized' ? 'The request could not be parsed. Check the source or Shortcut fields before retrying.' : item.attempts >= 5 ? 'Automatic retries have stopped. Retry after resolving the cause.' : 'Pending or temporarily failed processing.'}</p></div><Button variant="outline" disabled={retry.isPending} onClick={() => retry.mutate({ id: item.id, type: 'capture' })}>Retry</Button></div>)}
+        {query.data.capture.map(item => <div key={item.id} className="py-4 border-b border-border last:border-0 flex items-center gap-4 justify-between"><div><p>{sourceLabels[item.source] || 'Bank alert'} · {item.status}</p><p className="text-sm text-muted">{item.source === 'telegram_nl' ? 'No draft was completed. Use /add or send a new entry in Telegram. Parsing is not retried automatically.' : item.status === 'unrecognized' ? 'The request could not be parsed. Check the source or Shortcut fields before retrying.' : item.attempts >= 5 ? 'Automatic retries have stopped. Retry after resolving the cause.' : 'Pending or temporarily failed processing.'}</p></div>{item.source !== 'telegram_nl' && <Button variant="outline" disabled={retry.isPending} onClick={() => retry.mutate({ id: item.id, type: 'capture' })}>Retry</Button>}</div>)}
         {!query.data.capture.length && <p className="text-muted">No capture issues on this page.</p>}
       </PageCard>
       <PageCard title="Transaction follow-ups">
