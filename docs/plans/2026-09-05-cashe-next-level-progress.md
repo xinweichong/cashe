@@ -244,3 +244,16 @@ Monetary corrections were committed as `4ba0996`; this continuation started with
 - Removed the now-unused API date helper. Manual source-event capture, durable follow-ups, request idempotency, and the full shared command interface remain open. No schema changes, frontend changes, or production data/service modifications occurred.
 
 Verification: **838 backend tests passed** (four existing datetime deprecation warnings). The final NL error-action/confirmation formatting refinement was verified with **74 Telegram tests passed**. New tests cover invalid manual bodies/fields, non-finite command amounts, absent exchange services, unresolved FX, source-ID duplicate handling, date-only confirmation, and retained failed-draft actions. `git diff --check` passed. Frontend files are unchanged; the preceding baseline remains 64 passing tests and a successful production build. This verified manual-validation slice is committed separately.
+
+
+## 2026-09-07 continuation — durable manual trip assignment
+
+Shared manual-entry validation was committed as `5e61ae1`; this continuation started with a clean working tree.
+
+- Added internal `assign_to_active_trip` support to validated manual creation. When requested and trips are enabled/active, the transaction and a trip job containing the capture-time trip ID commit atomically. An outbox insertion failure rolls back the transaction.
+- Telegram `/add`, `/cash`, and confirmed NL entry request this job instead of calling trip assignment directly after insertion. Dispatch reuses the user's pipeline when available, runs after releasing the Storage lock, and leaves failed/busy work to the existing two-minute worker. Successful capture still receives its command confirmation after a failed or deferred assignment.
+- Existing behavior is preserved for web entry and `/income` (no automatic trip assignment), command source IDs, and backdated manual entries. No recurring/notification jobs are added to manual creation; direct Telegram confirmation replies remain best-effort.
+- Restart replay retains the original trip even when another becomes active. Duplicate command IDs create no extra jobs, deleted transactions/trips are skipped, and existing bounded retries/manual requeue apply through capture review.
+- Manual source-event capture, request idempotency, and full ingestion/command unification remain open. No schema changes, frontend changes, or production data/services were touched.
+
+Verification: **849 backend tests passed** (four existing datetime deprecation warnings). Coverage includes manual transaction/outbox rollback, disk reopen, capture-time trip retention, duplicate IDs, disabled/inactive/not-requested behavior, deletion, bounded/manual retries, successful command confirmation after assignment failure, and a busy dispatcher. `git diff --check` passed. No frontend changes; the preceding frontend baseline remains 64 passing tests and a successful production build. This verified manual trip-outbox slice is committed separately.

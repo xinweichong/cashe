@@ -793,13 +793,20 @@ class TelegramBotService:
             pass
         await self._send_long_message(update, text)
 
-    async def _save_manual_entry(self, storage, reply, **fields):
+    async def _save_manual_entry(self, ctx, reply, **fields):
         try:
-            return storage.create_manual_transaction(**fields)
+            tx_id = ctx.storage.create_manual_transaction(**fields)
         except ValueError as exc:
             message = "Already logged." if str(exc).startswith("duplicate source_id:") else "Couldn’t save. Check the amount, currency, exchange rate, and date."
             await reply(message)
             return None
+        if fields.get("assign_to_active_trip"):
+            from src.ingestion import IngestionPipeline
+            pipeline = getattr(getattr(ctx, "poller", None), "pipeline", None)
+            if pipeline is None:
+                pipeline = IngestionPipeline(ctx.storage)
+            pipeline.process_outbox(transaction_id=tx_id)
+        return tx_id
 
     async def _add(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         ctx = await self._require_ctx(update)
@@ -843,7 +850,8 @@ class TelegramBotService:
         if not category and ctx.categorizer:
             category, _ = ctx.categorizer.categorize(parsed["merchant"])
 
-        tx_id = await self._save_manual_entry(ctx.storage, update.message.reply_text,
+        tx_id = await self._save_manual_entry(ctx, update.message.reply_text,
+            assign_to_active_trip=True,
             source="manual",
             source_id=f"manual-{now.strftime('%Y%m%d%H%M%S')}-{parsed['amount']}",
             amount=parsed["amount"],
@@ -855,7 +863,6 @@ class TelegramBotService:
         )
         if tx_id is None:
             return
-        ctx.storage.auto_assign_to_active_trip(tx_id)
 
         context_line = self._build_context_line(category, parsed["merchant"], parsed["amount"])
         msg = f"cash, caught. [${parsed['amount']:.2f} · {parsed['merchant']}]"
@@ -901,7 +908,8 @@ class TelegramBotService:
         if not category and ctx.categorizer:
             category, _ = ctx.categorizer.categorize(parsed["merchant"])
 
-        tx_id = await self._save_manual_entry(ctx.storage, update.message.reply_text,
+        tx_id = await self._save_manual_entry(ctx, update.message.reply_text,
+            assign_to_active_trip=True,
             source="cash",
             source_id=f"cash-{now.strftime('%Y%m%d%H%M%S')}-{parsed['amount']}",
             amount=parsed["amount"],
@@ -911,7 +919,6 @@ class TelegramBotService:
         )
         if tx_id is None:
             return
-        ctx.storage.auto_assign_to_active_trip(tx_id)
         context_line = self._build_context_line(category, parsed["merchant"], parsed["amount"])
         msg = f"cash, caught. [${parsed['amount']:.2f} · {parsed['merchant']}]"
         if context_line:
@@ -1017,7 +1024,7 @@ class TelegramBotService:
         now = self._local_now()
         date_str = tx_date or now.strftime("%Y-%m-%dT%H:%M:%S")
 
-        tx_id = await self._save_manual_entry(ctx.storage, update.message.reply_text,
+        tx_id = await self._save_manual_entry(ctx, update.message.reply_text,
             source="manual",
             source_id=f"manual-{now.strftime('%Y%m%d%H%M%S')}-{amount}",
             amount=amount,
@@ -1413,7 +1420,8 @@ class TelegramBotService:
                 InlineKeyboardButton("Edit", callback_data="nl_edit"),
                 InlineKeyboardButton("Cancel", callback_data="nl_cancel"),
             ]])
-            tx_id = await self._save_manual_entry(ctx.storage, functools.partial(query.edit_message_text, reply_markup=retry_markup),
+            tx_id = await self._save_manual_entry(ctx, functools.partial(query.edit_message_text, reply_markup=retry_markup),
+                assign_to_active_trip=True,
                 source="manual",
                 source_id=f"manual-{now.strftime('%Y%m%d%H%M%S%f')}-{pending['amount']}",
                 amount=pending["amount"],
@@ -1425,7 +1433,6 @@ class TelegramBotService:
             )
             if tx_id is None:
                 return
-            ctx.storage.auto_assign_to_active_trip(tx_id)
 
             msg = f"Added: *{self._escape_md(pending['merchant'])}* {self._escape_md(pending['currency'])} {float(pending['amount']):.2f}"
             if pending["currency"] != "SGD":

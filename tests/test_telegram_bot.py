@@ -17,7 +17,7 @@ def bot_service(in_memory_db):
 async def test_manual_commands_reject_nonfinite_values_without_followups(bot_service, command, amount):
     update = SimpleNamespace(message=SimpleNamespace(reply_text=AsyncMock()))
     context = SimpleNamespace(args=[amount, 'Cafe'])
-    with patch.object(bot_service.storage, 'auto_assign_to_active_trip') as assign:
+    with patch.object(bot_service.storage, 'enlist_transaction') as assign:
         await getattr(bot_service, command)(update, context)
         assign.assert_not_called()
     assert bot_service.storage.query_transactions(limit=50) == []
@@ -41,7 +41,10 @@ async def test_duplicate_manual_command_is_reported_without_repeating_trip_assig
     from datetime import datetime
     update = SimpleNamespace(message=SimpleNamespace(reply_text=AsyncMock()))
     context = SimpleNamespace(args=['12', 'Cafe'])
-    with patch.object(bot_service, '_local_now', return_value=datetime(2026, 9, 7, 12)), patch.object(bot_service.storage, 'auto_assign_to_active_trip') as assign:
+    bot_service.storage.set_setting('trips_enabled', 'true')
+    trip_id = bot_service.storage.create_trip('Current', '2026-09-01')
+    bot_service.storage.activate_trip(trip_id)
+    with patch.object(bot_service, '_local_now', return_value=datetime(2026, 9, 7, 12)), patch.object(bot_service.storage, 'enlist_transaction', wraps=bot_service.storage.enlist_transaction) as assign:
         await bot_service._add(update, context)
         await bot_service._add(update, context)
         assert assign.call_count == 1
@@ -50,11 +53,48 @@ async def test_duplicate_manual_command_is_reported_without_repeating_trip_assig
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('command', ['_add', '_cash'])
+async def test_manual_trip_failure_preserves_capture_and_success_reply(bot_service, command):
+    from src.ingestion import IngestionPipeline
+    storage = bot_service.storage
+    storage.set_setting('trips_enabled', 'true')
+    trip_id = storage.create_trip('Current', '2026-09-01')
+    storage.activate_trip(trip_id)
+    update = SimpleNamespace(message=SimpleNamespace(reply_text=AsyncMock()))
+    with patch.object(storage, 'enlist_transaction', side_effect=RuntimeError('private failure')):
+        await getattr(bot_service, command)(update, SimpleNamespace(args=['12', 'Cafe']))
+    tx = storage.query_transactions(limit=50)[0]
+    assert 'cash, caught.' in update.message.reply_text.call_args.args[0]
+    assert storage.list_ingestion_effects()[0]['status'] == 'failed'
+    IngestionPipeline(storage).retry_pending()
+    assert storage.is_in_trip(trip_id, tx['id'])
+    assert storage.list_ingestion_effects() == []
+
+
+@pytest.mark.asyncio
+async def test_busy_outbox_worker_does_not_block_manual_confirmation(bot_service):
+    from src.ingestion import IngestionPipeline
+    storage = bot_service.storage
+    storage.set_setting('trips_enabled', 'true')
+    trip_id = storage.create_trip('Current', '2026-09-01')
+    storage.activate_trip(trip_id)
+    update = SimpleNamespace(message=SimpleNamespace(reply_text=AsyncMock()))
+    with storage.outbox_dispatch_lock:
+        await bot_service._add(update, SimpleNamespace(args=['12', 'Cafe']))
+        tx = storage.query_transactions(limit=50)[0]
+        assert storage.list_ingestion_effects()[0]['status'] == 'pending'
+        assert not storage.is_in_trip(trip_id, tx['id'])
+        assert 'cash, caught.' in update.message.reply_text.call_args.args[0]
+    IngestionPipeline(storage).retry_pending()
+    assert storage.is_in_trip(trip_id, tx['id'])
+
+
+@pytest.mark.asyncio
 async def test_nl_confirmation_uses_shared_validation_and_retains_failed_draft(bot_service):
     query = SimpleNamespace(data='nl_confirm', answer=AsyncMock(), edit_message_text=AsyncMock())
     update = SimpleNamespace(callback_query=query)
     context = SimpleNamespace(user_data={'nl_pending': {'amount': 12, 'currency': 'USD', 'merchant': 'Cafe', 'category': 'Food', 'date': '2026-02-30'}})
-    with patch.object(bot_service.storage, 'auto_assign_to_active_trip') as assign:
+    with patch.object(bot_service.storage, 'enlist_transaction') as assign:
         await bot_service._handle_nl_callback(update, context)
         assign.assert_not_called()
     assert bot_service.storage.query_transactions(limit=50) == []
@@ -1068,7 +1108,6 @@ class TestAddCommandConfirmation:
     async def test_add_uses_brand_hook_format(self, bot_service, in_memory_db):
         """_add confirmation should use 'cash, caught. [$amount · merchant]' format."""
         bot_service.storage.get_category_icon_map = MagicMock(return_value={})
-        bot_service.storage.auto_assign_to_active_trip = MagicMock()
         bot_service._build_context_line = MagicMock(return_value="")
 
         update = MagicMock()
@@ -1091,7 +1130,6 @@ class TestAddCommandConfirmation:
     async def test_add_appends_context_line_when_present(self, bot_service, in_memory_db):
         """If _build_context_line returns a note it should appear after a newline."""
         bot_service.storage.get_category_icon_map = MagicMock(return_value={})
-        bot_service.storage.auto_assign_to_active_trip = MagicMock()
         bot_service._build_context_line = MagicMock(return_value="Budget 82% used — $45 left this month.")
 
         update = MagicMock()
@@ -1110,7 +1148,6 @@ class TestAddCommandConfirmation:
     async def test_add_no_context_line_no_trailing_newline(self, bot_service, in_memory_db):
         """When _build_context_line returns '' there should be no trailing newline."""
         bot_service.storage.get_category_icon_map = MagicMock(return_value={})
-        bot_service.storage.auto_assign_to_active_trip = MagicMock()
         bot_service._build_context_line = MagicMock(return_value="")
 
         update = MagicMock()
@@ -1130,7 +1167,6 @@ class TestCashCommandConfirmation:
     async def test_cash_uses_brand_hook_format(self, bot_service, in_memory_db):
         """_cash confirmation should use 'cash, caught. [$amount · merchant]' format."""
         bot_service.storage.get_category_icon_map = MagicMock(return_value={})
-        bot_service.storage.auto_assign_to_active_trip = MagicMock()
         bot_service._build_context_line = MagicMock(return_value="")
 
         update = MagicMock()
@@ -1152,7 +1188,6 @@ class TestCashCommandConfirmation:
     async def test_cash_appends_context_line_when_present(self, bot_service, in_memory_db):
         """If _build_context_line returns a note it should be appended."""
         bot_service.storage.get_category_icon_map = MagicMock(return_value={})
-        bot_service.storage.auto_assign_to_active_trip = MagicMock()
         bot_service._build_context_line = MagicMock(return_value="Hawker — 3× this week.")
 
         update = MagicMock()

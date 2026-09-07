@@ -316,7 +316,7 @@ class Storage:
     def create_manual_transaction(self, *, source_id: str, amount, transaction_date,
                                   source="manual", currency="SGD", exchange_rate=None,
                                   merchant=None, description=None, category=None,
-                                  tx_type="expense") -> int:
+                                  tx_type="expense", assign_to_active_trip=False) -> int:
         if source not in ("manual", "cash"):
             raise ValueError("Manual source must be manual or cash")
         if tx_type not in ("expense", "income"):
@@ -331,8 +331,13 @@ class Storage:
         if fields["currency"] == "SGD":
             fields["exchange_rate"] = 1.0
         fields["tx_type"] = fields.pop("type")
+        followups = []
+        if assign_to_active_trip and self.get_setting("trips_enabled", "false") == "true":
+            active = self.get_active_trip()
+            if active:
+                followups.append(("trip", {"trip_id": active["id"]}))
         return self.insert_transaction(source=source, source_id=source_id, merchant=merchant,
-                                       description=description, category=category, **fields)
+                                       description=description, category=category, followups=followups, **fields)
 
     @_locked
     def update_transaction(self, tx_id: int, *, remember_category: bool = False, **fields) -> None:
