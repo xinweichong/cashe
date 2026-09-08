@@ -85,6 +85,15 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
     },
   });
 
+  const pauseMutation = useMutation({
+    mutationFn: (status: 'paused' | 'active') => api.updateSubscription(subId, { status }),
+    onSuccess: () => {
+      for (const key of ['subscriptions', 'subscription-upcoming', 'plan-upcoming', 'home-briefing']) {
+        qc.invalidateQueries({ queryKey: [key] });
+      }
+    },
+  });
+
   const deleteMutation = useMutation({
     mutationFn: () => api.deleteSubscription(subId),
     onSuccess: () => {
@@ -184,6 +193,7 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
                   <span className="text-warning">⚠ Possibly cancelled</span>
                 )}
                 {sub.status === 'cancelled' && <span>Cancelled</span>}
+                {sub.status === 'paused' && <span>Paused in Cashe</span>}
               </div>
             )}
           </div>
@@ -215,7 +225,13 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
                 </div>
               </div>
             ) : (
-              <div className="flex gap-2 px-4 py-2">
+              <div className="flex flex-wrap gap-2 px-4 py-2">
+                {sub.status !== 'cancelled' && (
+                  <Button variant="outline" className="min-h-11" disabled={pauseMutation.isPending}
+                    onClick={() => pauseMutation.mutate(sub.status === 'paused' ? 'active' : 'paused')}>
+                    {pauseMutation.isPending ? 'Saving…' : sub.status === 'paused' ? 'Resume in Cashe' : 'Pause in Cashe'}
+                  </Button>
+                )}
                 <Button
                   variant="ghost"
                   size="icon"
@@ -252,6 +268,14 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
 
         {/* Scrollable body */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {sub && sub.status !== 'cancelled' && (
+            <p className="text-xs text-muted">
+              {sub.status === 'paused'
+                ? 'Predictions are hidden and automatic matching is paused. Resuming restores retained dates, including overdue predictions.'
+                : 'Pausing hides predictions and stops automatic matching in Cashe.'}
+              {' '}This does not pause billing with your provider.
+            </p>
+          )}
           {!sub && <p className="text-sm text-muted">Catching up…</p>}
 
           {sub && (
@@ -303,13 +327,13 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
                 </ChartCard>
               )}
 
-              {[matchMutation.error, dismissMutation.error, linkMutation.error].filter(Boolean).map((error, index) => (
+              {[pauseMutation.error, matchMutation.error, dismissMutation.error, linkMutation.error].filter(Boolean).map((error, index) => (
                 <p key={index} role="alert" className="text-sm text-destructive">
                   {error instanceof Error ? error.message : 'Could not update the charge. Try again.'}
                 </p>
               ))}
 
-              {pendingUpcomings.length > 0 && (
+              {sub.status !== 'paused' && pendingUpcomings.length > 0 && (
                 <section>
                   <p className="text-[10px] font-mono font-semibold uppercase tracking-[0.22em] text-muted mb-2">
                     Upcoming

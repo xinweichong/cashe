@@ -80,10 +80,11 @@ export function SubscriptionsSection({ selectedSubId, onSelectSub }: Subscriptio
                   {sub.status === 'possibly_cancelled' && (
                     <span className="text-xs text-warning">⚠ Check</span>
                   )}
+                  {sub.status === 'paused' && <span className="text-xs text-muted">Paused in Cashe</span>}
                   {sub.status === 'cancelled' && (
                     <span className="text-xs text-muted">Cancelled</span>
                   )}
-                  {sub.next_expected_date && sub.status !== 'cancelled' && (
+                  {sub.next_expected_date && (sub.status === 'active' || sub.status === 'possibly_cancelled') && (
                     <span className="text-xs text-muted">
                       Next {sub.next_expected_date.slice(0, 10)}
                     </span>

@@ -814,3 +814,25 @@ async def test_subscription_matching_conflicts_validation_and_auth(client, in_me
     assert (await client.post(path + '/match', json={'transaction_id': tx})).status_code == 401
     assert (await client.post(link, json={'transaction_id': tx})).status_code == 401
     assert (await client.post(path + '/dismiss')).status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_subscription_pause_resume_api(client, in_memory_db):
+    storage = Storage(in_memory_db)
+    sub = storage.create_subscription('Cafe', 'monthly')
+    charge = storage.create_upcoming_transaction(sub, '2026-09-09', 12)
+    path = f'/api/subscriptions/{sub}'
+    assert (await client.put(path, json={'status': 'paused'})).json()['status'] == 'paused'
+    listing = (await client.get('/api/subscriptions')).json()['subscriptions'][0]
+    assert listing['next_expected_date'] is None
+    assert listing['next_upcoming_id'] is None
+    assert (await client.get(path + '/upcoming')).json()[0]['id'] == charge
+    response = await client.put(path, json={'status': 'invalid', 'merchant': 'Changed'})
+    assert response.status_code == 422
+    assert storage.get_subscription(sub)['merchant'] == 'Cafe'
+    assert (await client.put(path, json={'status': 'active'})).json()['status'] == 'active'
+    listing = (await client.get('/api/subscriptions')).json()['subscriptions'][0]
+    assert listing['next_upcoming_id'] == charge
+    assert (await client.put('/api/subscriptions/999999', json={'status': 'paused'})).status_code == 404
+    await client.post('/api/logout')
+    assert (await client.put(path, json={'status': 'paused'})).status_code == 401

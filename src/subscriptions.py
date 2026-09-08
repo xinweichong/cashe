@@ -90,11 +90,16 @@ class SubscriptionMatcher:
 
     def run(self) -> None:
         subscriptions = self.storage.list_subscriptions()
-        # Only active and possibly_cancelled — never cancelled
+        # Paused and cancelled schedules retain history without automatic processing.
         active = [s for s in subscriptions if s["status"] in ("active", "possibly_cancelled")]
         for sub in active:
             try:
-                self._process(sub)
+                # Re-read under the same lock as pause/cancel writes so a stale
+                # worker snapshot cannot generate charges or reactivate a schedule.
+                with self.storage.reconciliation_lock():
+                    current = self.storage.get_subscription(sub["id"])
+                    if current and current["status"] in ("active", "possibly_cancelled"):
+                        self._process(current)
             except Exception:
                 logger.exception("SubscriptionMatcher error for sub %s", sub["id"])
 

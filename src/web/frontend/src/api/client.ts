@@ -167,7 +167,7 @@ export interface Subscription {
   label: string | null;
   frequency: 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'annual';
   billing_day: number | null;
-  status: 'active' | 'possibly_cancelled' | 'cancelled';
+  status: 'active' | 'possibly_cancelled' | 'paused' | 'cancelled';
   notes: string | null;
   last_amount: number | null;
   next_expected_date: string | null;

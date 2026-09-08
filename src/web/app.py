@@ -1326,7 +1326,7 @@ def create_dashboard_app(
         for sub in subs:
             last_amount = await _db(storage.get_subscription_last_amount, sub["id"])
             upcoming = await _db(storage.list_upcoming_transactions, sub["id"])
-            pending = [u for u in upcoming if u["status"] == "pending"]
+            pending = [u for u in upcoming if u["status"] == "pending" and sub["status"] in ("active", "possibly_cancelled")]
             next_upcoming = pending[0] if pending else None
             enriched.append({
                 **sub,
@@ -1375,7 +1375,7 @@ def create_dashboard_app(
         try:
             await _db(storage.update_subscription, sub_id, **body)
         except ValueError as e:
-            raise HTTPException(status_code=404, detail=str(e))
+            raise HTTPException(status_code=404 if "not found" in str(e) else 422, detail=str(e))
         return await _db(storage.get_subscription, sub_id)
 
     @app.delete("/api/subscriptions/{sub_id}")

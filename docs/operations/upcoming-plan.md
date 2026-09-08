@@ -10,7 +10,7 @@ The new Plan destination opens this timeline, with 14/30/90-day selection, bound
 
 The API's `enabled` metadata reflects the UI subscription setting; the flag does not delete or hide records from authenticated API callers. The page explains how to enable subscriptions when disabled.
 
-The timeline does not expand all future billing cycles, include unrecorded commitments, provide a full forecast, or certify completeness. It reuses the scheduler's retained predictions; manual controls continue through the existing subscription UI. Confirmed/inferred provenance, pause controls, richer overdue review, and new reconciliation rules remain separate work.
+The timeline does not expand all future billing cycles, include unrecorded commitments, provide a full forecast, or certify completeness. It reuses the scheduler's retained predictions; manual controls continue through the existing subscription UI. Confirmed/inferred provenance, richer overdue review, and new reconciliation rules remain separate work.
 
 
 ## Correcting or dismissing a prediction
@@ -28,3 +28,10 @@ Expected-date corrections may influence subsequent predictions because the exist
 Existing authenticated subscription match/link controls now serialize eligibility and uniqueness checks under the per-user Storage lock. One actual expense (including legacy NULL expense types) can create only one new link across all predictions and subscriptions. Repeating an accepted match or the same subscription link is harmless; changing an existing match, reusing its transaction elsewhere, or matching a dismissed/cancelled prediction returns 409. The legacy dismissal endpoint uses the same pending-state guard as Plan. Missing records return 404; invalid transaction IDs or non-expense actuals return 422. Errors are displayed in subscription details.
 
 Direct historical links require a valid transaction date and use shared per-row SGD rounding; unresolved foreign conversions retain an unknown estimate. The original transaction date's calendar date is retained. Existing duplicate links are preserved for audit: this is command-level protection for the single-process service, not a new database uniqueness constraint or a repair migration. Automatic candidate selection, ambiguous-match review, and scheduler forecast expansion remain separate work.
+
+
+## Pausing a schedule in Cashe
+
+Subscription details offer **Pause in Cashe** and **Resume in Cashe** through the authenticated subscription update API (`status: paused` / `status: active`). Pausing hides pending predictions from Plan/Home and next-charge summaries, excludes the schedule from active monthly totals, and stops automatic generation/matching. Transaction history and all prediction rows remain intact. Explicit historical linking remains available. This setting does not pause or cancel provider billing.
+
+Resuming retains original expected dates, including overdue dates, and allows the next scheduler cycle to process the schedule. It does not shift billing dates or synthesize missed cycles. Paused predictions reject manual matching/correction/dismissal until resumed. The scheduler re-reads status under the same Storage lock as updates, preventing a stale worker snapshot from reactivating or generating predictions after a pause. Invalid statuses reject the whole update with 422. No schema migration is required for the existing text status column.

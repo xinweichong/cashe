@@ -469,3 +469,16 @@ Timeline prediction actions were committed as `581e40f`; this continuation start
 - Automatic candidate heuristics, ambiguous-match review, recurring confirmation/provenance, pause controls, and forecast expansion remain pending. No production data/service changes, live Telegram/model calls, push, or deployment. Visual/device acceptance remains unverified.
 
 Verification: **1023 backend tests passed** in the full run (four existing datetime deprecation warnings); two additional legacy-duplicate/overwrite regressions then passed with all **22 focused matching tests**, bringing the verified inventory to **1025 backend tests**. The 96-test API suite, **77 frontend tests**, production build, and whitespace checks passed. Coverage includes concurrent match/link requests, idempotent replay, cross-subscription reuse, stale states, invalid IDs/types/dates, unknown FX, retained transactions/legacy links, route ownership, and authentication. Focused subscription-detail lint reports its pre-existing `Date.now()` render-purity error at line 70 (confirmed present in `581e40f`); no new lint finding was reported. This increment is committed separately.
+
+
+## 2026-09-08 continuation — pause and resume schedules
+
+Actual-charge matching integrity was committed as `377e24e`; this continuation started with a clean working tree.
+
+- Added `paused` to validated subscription states with Pause/Resume in Cashe controls, paused badges, provider-billing clarification, pending feedback, and retryable errors. Successful changes refresh subscription details, Plan, and Home.
+- Paused schedules retain transactions and all prediction rows, but disappear from Plan/Home and next-charge metadata and stop automatic generation/matching. Resume restores retained dates, including overdue predictions; it does not shift billing dates or create catch-up cycles. Explicit historical linking remains available.
+- Scheduler processing rechecks current status under the same per-user Storage lock as pause/cancel updates. A stale snapshot cannot generate charges or reactivate a schedule after it has been paused. Invalid statuses reject all fields in the update before writing.
+- Updated operator and agent documentation. No schema migration, production data/service changes, live Telegram/model calls, push, or deployment. Browser/device visual acceptance remains unverified.
+- Confirmed/inferred recurring provenance, ambiguous matching review, price-change/annual-renewal surfacing, and forecast expansion remain pending.
+
+Verification: **1035 backend tests passed** (four existing datetime deprecation warnings), **79 frontend tests passed**, and the production build passed. Ten new backend cases cover pause/resume selection and retention, no generation/matching while paused, stale worker snapshots, atomic invalid-state rejection, next-charge API metadata, missing records, and authentication. Two UI cases cover provider clarification, query refresh, retained dates on resume, and failed-save retry. Focused list/test lint and whitespace checks pass; detail-panel lint still reports only the pre-existing `Date.now()` render-purity error at line 70. This verified increment is committed separately.

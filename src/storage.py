@@ -1988,6 +1988,8 @@ class Storage:
         updates = {k: v for k, v in fields.items() if k in allowed}
         if not updates:
             return
+        if "status" in updates and updates["status"] not in ("active", "possibly_cancelled", "paused", "cancelled"):
+            raise ValueError("Invalid subscription status")
         set_clause = ", ".join(f"{k} = ?" for k in updates)
         self._conn.execute(
             f"UPDATE subscriptions SET {set_clause}, updated_at = CURRENT_TIMESTAMP WHERE id = ?",

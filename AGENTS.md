@@ -639,3 +639,8 @@ System/light/dark preferences are supplied by `ThemeProvider` and selected in Pr
 
 - `match_upcoming_transaction` and `link_transaction_to_subscription` validate expense/legacy-NULL actuals and reject reuse across predictions under the Storage lock. Exact accepted matches/links are replayable; `SubscriptionMatchConflict` maps to HTTP 409. Missing records map to 404, invalid transaction IDs/classification/date to 422. Legacy dismissal now shares Plan's pending-state guard.
 - Direct historical links use shared SGD conversion/rounding and retain unknown foreign estimates. Existing duplicate links are not migrated or repaired; uniqueness is enforced by commands within the single-process service.
+
+### Paused subscription schedules
+
+- Subscription status accepts `active`, `possibly_cancelled`, `paused`, or `cancelled`; invalid status updates fail before any field is written. Pause/resume are Cashe tracking controls, never provider billing actions.
+- Paused schedules retain history and pending dates but are excluded from Plan/Home predictions, next-charge metadata, active totals, and automatic scheduler processing. Resume retains overdue dates. The scheduler re-reads current status and processes each schedule under the Storage reconciliation lock so stale snapshots cannot overwrite pauses/cancellations.
