@@ -482,3 +482,16 @@ Actual-charge matching integrity was committed as `377e24e`; this continuation s
 - Confirmed/inferred recurring provenance, ambiguous matching review, price-change/annual-renewal surfacing, and forecast expansion remain pending.
 
 Verification: **1035 backend tests passed** (four existing datetime deprecation warnings), **79 frontend tests passed**, and the production build passed. Ten new backend cases cover pause/resume selection and retention, no generation/matching while paused, stale worker snapshots, atomic invalid-state rejection, next-charge API metadata, missing records, and authentication. Two UI cases cover provider clarification, query refresh, retained dates on resume, and failed-save retry. Focused list/test lint and whitespace checks pass; detail-panel lint still reports only the pre-existing `Date.now()` render-purity error at line 70. This verified increment is committed separately.
+
+
+## 2026-09-08 continuation — schedule confirmation provenance
+
+Pause/resume schedules were committed as `7211a95`; this continuation started with a clean working tree.
+
+- Migration 8 adds explicit confirmation records without backfilling legacy schedules. New web schedules record user confirmation; accepted Telegram recurring suggestions record recurring-pattern confirmation, atomically with schedule creation. Detection alone does not create/confirm a schedule.
+- Subscription reads and typed Plan items expose sanitized `confirmation_source`. Timeline/detail labels distinguish user confirmation, accepted recurring patterns, and unrecorded legacy confirmation. Future charge dates/amounts remain estimates in every case; unknown legacy records are not labeled inferred by assumption.
+- Added authenticated, replayable `/api/subscriptions/{id}/confirm` and an explicit detail-panel action for unknown schedules. Confirmation preserves original source/timestamp on replay, retains paused/cancelled status and prediction rows, and displays retryable errors. Successful confirmation refreshes subscription and Plan queries.
+- Confirmation records historical acceptance rather than a snapshot of every editable field or provider evidence. Duplicate Telegram acceptance, durable/full-identity suggestions, confirmed charge amount provenance, price/renewal changes, and forecasts remain pending.
+- Updated operator/agent documentation and migration/audit expectations. No production DB migration, live Telegram/model call, production service change, push, or deployment. Browser/device visual acceptance remains unverified.
+
+Verification: **1044 backend tests passed** (four existing datetime deprecation warnings), **84 frontend tests passed**, production build and final TypeScript checks passed. Nine new backend cases cover legacy migration preservation/idempotency, confirmation sources, replay preservation, paused/cancelled retention, invalid/missing records, deletion cleanup, authenticated API behavior, server-selected creation provenance, and accepted Telegram suggestions. Five UI cases cover explicit confirmation, failed saves, and the three timeline labels without certifying future charges. Focused new/Plan lint and whitespace checks passed. The previously documented detail-panel `Date.now()` render-purity issue remains unchanged. This verified increment is committed separately.

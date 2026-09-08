@@ -1,3 +1,4 @@
+import type { SubscriptionConfirmation } from '@/lib/subscriptionConfirmation';
 import { request } from './client';
 
 export interface Money { minor_units: number; currency: 'SGD' }
@@ -29,7 +30,7 @@ export interface CaptureIssue {
 export interface UpcomingPlan {
   start: string; end: string; timezone: string; enabled: boolean;
   items: { id: number; subscription_id: number; label: string; date: string;
-    frequency: string; schedule_status: 'active' | 'possibly_cancelled'; amount: Money | null }[];
+    confirmation_source: SubscriptionConfirmation; frequency: string; schedule_status: 'active' | 'possibly_cancelled'; amount: Money | null }[];
   total: number; limit: number; offset: number; known_total: Money;
   unknown_count: number; status: 'partial' | 'estimated';
 }

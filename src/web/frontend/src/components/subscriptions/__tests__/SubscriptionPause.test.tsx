@@ -6,11 +6,11 @@ import { SubscriptionDetail } from '../SubscriptionDetail';
 
 vi.mock('@/api/client', () => ({ api: {
   getSubscriptions: vi.fn(), getSubscriptionHistory: vi.fn(), getSubscriptionUpcoming: vi.fn(),
-  getTransactions: vi.fn(), updateSubscription: vi.fn(),
+  getTransactions: vi.fn(), updateSubscription: vi.fn(), confirmSubscription: vi.fn(),
 } }));
 const base: Subscription = {
   id: 1, merchant: 'Cafe', label: null, frequency: 'monthly', billing_day: 9,
-  status: 'active', notes: null, last_amount: null, next_expected_date: '2026-09-09',
+  status: 'active', confirmation_source: 'unknown', notes: null, last_amount: null, next_expected_date: '2026-09-09',
   next_upcoming_id: 2, created_at: '', updated_at: '',
 };
 let sub: Subscription;
@@ -59,4 +59,30 @@ test('failed pause retains schedule and allows retry', async () => {
   expect((await screen.findByRole('alert')).textContent).toBe('Could not save');
   fireEvent.click(screen.getByRole('button', { name: 'Pause in Cashe' }));
   expect(await screen.findByRole('button', { name: 'Resume in Cashe' })).toBeTruthy();
+});
+
+
+test('explicit confirmation preserves paused status and labels estimates', async () => {
+  sub.status = 'paused';
+  vi.mocked(api.confirmSubscription).mockImplementation(async () => {
+    sub = { ...sub, confirmation_source: 'user' }; return { status: 'ok' };
+  });
+  const invalidate = show();
+  fireEvent.click(await screen.findByRole('button', { name: 'Confirm this schedule' }));
+  expect(await screen.findByText(/Schedule confirmed by you/)).toBeTruthy();
+  expect(screen.getByText(/Future dates and amounts remain estimates/)).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Resume in Cashe' })).toBeTruthy();
+  expect(api.confirmSubscription).toHaveBeenCalledWith(1);
+  expect(invalidate).toHaveBeenCalledWith({ queryKey: ['plan-upcoming'] });
+  expect(screen.queryByRole('button', { name: 'Confirm this schedule' })).toBeNull();
+});
+
+
+test('failed confirmation stays unknown and can be retried', async () => {
+  vi.mocked(api.confirmSubscription).mockRejectedValueOnce(new Error('Could not confirm'));
+  show();
+  fireEvent.click(await screen.findByRole('button', { name: 'Confirm this schedule' }));
+  expect((await screen.findByRole('alert')).textContent).toBe('Could not confirm');
+  expect(screen.getByText(/Schedule confirmation not recorded/)).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Confirm this schedule' }).hasAttribute('disabled')).toBe(false);
 });

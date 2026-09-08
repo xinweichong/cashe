@@ -1360,8 +1360,17 @@ def create_dashboard_app(
             billing_day=body.get("billing_day"),
             label=body.get("label"),
             notes=body.get("notes"),
+            confirmation_source="user",
         )
         return await _db(storage.get_subscription, sub_id)
+
+    @app.post("/api/subscriptions/{sub_id}/confirm", response_model=PlanMutationResponse)
+    async def confirm_subscription(sub_id: int, storage=Depends(_get_storage)):
+        try:
+            await _db(storage.confirm_subscription, sub_id)
+        except ValueError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+        return {"status": "ok"}
 
     @app.put("/api/subscriptions/{sub_id}")
     async def update_subscription(sub_id: int, body: dict, storage=Depends(_get_storage)):

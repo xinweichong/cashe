@@ -836,3 +836,25 @@ async def test_subscription_pause_resume_api(client, in_memory_db):
     assert (await client.put('/api/subscriptions/999999', json={'status': 'paused'})).status_code == 404
     await client.post('/api/logout')
     assert (await client.put(path, json={'status': 'paused'})).status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_subscription_confirmation_api(client, in_memory_db):
+    response = await client.post('/api/subscriptions', json={
+        'merchant': 'Cafe', 'frequency': 'monthly', 'confirmation_source': 'recurring_suggestion',
+    })
+    assert response.status_code == 201
+    assert response.json()['confirmation_source'] == 'user'
+    storage = Storage(in_memory_db)
+    legacy = storage.create_subscription('Old', 'monthly')
+    storage.update_subscription(legacy, status='paused')
+    path = f'/api/subscriptions/{legacy}/confirm'
+    for _ in range(2):
+        response = await client.post(path)
+        assert response.status_code == 200
+        assert response.json() == {'status': 'ok'}
+    assert storage.get_subscription(legacy)['status'] == 'paused'
+    assert storage.get_subscription(legacy)['confirmation_source'] == 'user'
+    assert (await client.post('/api/subscriptions/999999/confirm')).status_code == 404
+    await client.post('/api/logout')
+    assert (await client.post(path)).status_code == 401

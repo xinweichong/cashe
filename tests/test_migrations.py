@@ -10,7 +10,7 @@ def test_migrations_preserve_old_transactions_and_are_idempotent():
     migrate(conn)
     migrate(conn)
     assert conn.execute("SELECT * FROM transactions").fetchall() == [(42, "original-id", 1.25, None)]
-    assert conn.execute("SELECT version FROM schema_migrations").fetchall() == [(1,), (2,), (3,), (4,), (5,), (6,), (7,)]
+    assert conn.execute("SELECT version FROM schema_migrations").fetchall() == [(1,), (2,), (3,), (4,), (5,), (6,), (7,), (8,)]
     assert conn.execute("SELECT COUNT(*) FROM source_events").fetchone()[0] == 0
     conn.close()
 
@@ -38,4 +38,20 @@ def test_metadata_migration_preserves_legacy_evidence_as_unknown(monkeypatch):
     monkeypatch.setattr(migrations, 'MIGRATIONS', released)
     migrate(conn)
     assert conn.execute('SELECT payload, timestamp_precision, payment_identity_kind, payment_identity FROM source_events').fetchone() == ('original evidence', 'unknown', None, None)
+    conn.close()
+
+
+def test_subscription_confirmation_migration_does_not_backfill_legacy(monkeypatch):
+    import src.migrations as migrations
+    conn = sqlite3.connect(':memory:')
+    conn.execute('CREATE TABLE subscriptions(id INTEGER PRIMARY KEY, merchant TEXT)')
+    conn.execute("INSERT INTO subscriptions VALUES (1, 'Original')")
+    released = migrations.MIGRATIONS
+    monkeypatch.setattr(migrations, 'MIGRATIONS', released[:7])
+    migrate(conn)
+    monkeypatch.setattr(migrations, 'MIGRATIONS', released)
+    migrate(conn)
+    migrate(conn)
+    assert conn.execute('SELECT * FROM subscriptions').fetchall() == [(1, 'Original')]
+    assert conn.execute('SELECT * FROM subscription_confirmations').fetchall() == []
     conn.close()

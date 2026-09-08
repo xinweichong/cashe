@@ -8,7 +8,7 @@ import { PlanPage } from '../PlanPage';
 vi.mock('@/api/briefing', async importOriginal => ({ ...await importOriginal<typeof import('@/api/briefing')>(), briefingApi: { upcoming: vi.fn(), updatePlannedCharge: vi.fn(), dismissPlannedCharge: vi.fn() } }));
 const report: UpcomingPlan = {
   start: '2026-09-08', end: '2026-10-07', timezone: 'Asia/Singapore', enabled: true,
-  items: [{ id: 1, subscription_id: 3, label: 'Internet', date: '2026-09-09', frequency: 'monthly', schedule_status: 'possibly_cancelled', amount: null }],
+  items: [{ id: 1, subscription_id: 3, label: 'Internet', date: '2026-09-09', frequency: 'monthly', schedule_status: 'possibly_cancelled', confirmation_source: 'unknown', amount: null }],
   total: 1, limit: 50, offset: 0, known_total: { minor_units: 0, currency: 'SGD' }, unknown_count: 1, status: 'partial',
 };
 beforeEach(() => { vi.resetAllMocks(); vi.mocked(briefingApi.upcoming).mockResolvedValue(report); });
@@ -95,4 +95,18 @@ test('dismissal requires an explicit second action and does not cancel the provi
   fireEvent.click(screen.getByRole('button', { name: 'Dismiss charge' }));
   await waitFor(() => expect(briefingApi.dismissPlannedCharge).toHaveBeenCalledWith(1));
   await waitFor(() => expect(briefingApi.upcoming).toHaveBeenCalledTimes(2));
+});
+
+
+test.each([
+  ['unknown', 'Schedule confirmation not recorded'],
+  ['user', 'Schedule confirmed by you'],
+  ['recurring_suggestion', 'Recurring pattern confirmed by you'],
+] as const)('shows %s provenance separately from estimated charges', async (source, label) => {
+  vi.mocked(briefingApi.upcoming).mockResolvedValue({ ...report,
+    items: [{ ...report.items[0], confirmation_source: source }],
+  });
+  show();
+  expect(await screen.findByText(label)).toBeTruthy();
+  expect(screen.getByText(/Dates and amounts are estimates, not confirmed charges/)).toBeTruthy();
 });

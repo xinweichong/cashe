@@ -644,3 +644,8 @@ System/light/dark preferences are supplied by `ThemeProvider` and selected in Pr
 
 - Subscription status accepts `active`, `possibly_cancelled`, `paused`, or `cancelled`; invalid status updates fail before any field is written. Pause/resume are Cashe tracking controls, never provider billing actions.
 - Paused schedules retain history and pending dates but are excluded from Plan/Home predictions, next-charge metadata, active totals, and automatic scheduler processing. Resume retains overdue dates. The scheduler re-reads current status and processes each schedule under the Storage reconciliation lock so stale snapshots cannot overwrite pauses/cancellations.
+
+### Schedule confirmation provenance
+
+- Migration 8 stores explicit schedule confirmation in `subscription_confirmations`; legacy schedules remain `unknown`. Web creation supplies `confirmation_source="user"`; accepted Telegram recurring suggestions supply `"recurring_suggestion"`. Creation and confirmation commit atomically. Detection alone does not confirm anything.
+- Authenticated subscription `/confirm` records a user decision without reactivating paused/cancelled schedules or changing charges. Repeats preserve original source/timestamp. Subscription reads and Plan expose sanitized `confirmation_source`; future dates/amounts remain estimates regardless of schedule confirmation. Confirmation is historical acceptance, not a revision snapshot or provider evidence.

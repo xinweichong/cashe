@@ -1,3 +1,4 @@
+import type { SubscriptionConfirmation } from '@/lib/subscriptionConfirmation';
 const BASE = '';
 
 export async function request<T>(path: string, opts?: RequestInit): Promise<T> {
@@ -162,6 +163,7 @@ export interface Trip {
 }
 
 export interface Subscription {
+  confirmation_source: SubscriptionConfirmation;
   id: number;
   merchant: string;
   label: string | null;
@@ -633,6 +635,9 @@ export const api = {
     data: Partial<Pick<Subscription, 'merchant' | 'label' | 'frequency' | 'billing_day' | 'status' | 'notes'>>,
   ) =>
     request<Subscription>(`/api/subscriptions/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+
+  confirmSubscription: (id: number) =>
+    request<{ status: string }>(`/api/subscriptions/${id}/confirm`, { method: 'POST' }),
 
   deleteSubscription: (id: number) =>
     request<{ status: string }>(`/api/subscriptions/${id}`, { method: 'DELETE' }),

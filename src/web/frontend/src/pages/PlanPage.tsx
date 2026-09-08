@@ -1,3 +1,4 @@
+import { subscriptionConfirmationLabels } from '@/lib/subscriptionConfirmation';
 import { useState } from 'react';
 import { Link, Navigate, useLocation } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -47,6 +48,7 @@ export function PlanPage() {
           {report.items.map(item => <li key={item.id} className="py-4 border-b border-border last:border-0 space-y-1">
             <div className="flex justify-between gap-4"><p className="font-medium">{item.label}</p><p className="tabular-nums">{item.amount ? formatMoney(item.amount) : 'Amount unknown'}</p></div>
             <p className="text-muted"><time dateTime={item.date}>{item.date}</time> · {frequencies[item.frequency] || item.frequency} · Estimated</p>
+            <p className="text-sm text-muted">{subscriptionConfirmationLabels[item.confirmation_source]}</p>
             {item.schedule_status === 'possibly_cancelled' && <p className="text-warning">Schedule needs review: a previous charge may be overdue.</p>}
             <ChargeActions item={item} />
             <Link to={`/plan/manage?subscription=${item.subscription_id}`} className="text-teal min-h-11 inline-flex items-center">Review or match schedule for {item.label}</Link>

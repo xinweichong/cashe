@@ -1,3 +1,4 @@
+import { subscriptionConfirmationLabels } from '@/lib/subscriptionConfirmation';
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
@@ -82,6 +83,14 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
       qc.invalidateQueries({ queryKey: ['plan-upcoming'] });
       qc.invalidateQueries({ queryKey: ['home-briefing'] });
       setConfirmCancel(false);
+    },
+  });
+
+  const confirmationMutation = useMutation({
+    mutationFn: () => api.confirmSubscription(subId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['subscriptions'] });
+      qc.invalidateQueries({ queryKey: ['plan-upcoming'] });
     },
   });
 
@@ -327,7 +336,15 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
                 </ChartCard>
               )}
 
-              {[pauseMutation.error, matchMutation.error, dismissMutation.error, linkMutation.error].filter(Boolean).map((error, index) => (
+              <p className="text-sm text-muted">{subscriptionConfirmationLabels[sub.confirmation_source]}. Future dates and amounts remain estimates.</p>
+              {sub.confirmation_source === 'unknown' && (
+                <Button variant="outline" className="min-h-11" disabled={confirmationMutation.isPending}
+                  onClick={() => confirmationMutation.mutate()}>
+                  {confirmationMutation.isPending ? 'Saving…' : 'Confirm this schedule'}
+                </Button>
+              )}
+
+              {[confirmationMutation.error, pauseMutation.error, matchMutation.error, dismissMutation.error, linkMutation.error].filter(Boolean).map((error, index) => (
                 <p key={index} role="alert" className="text-sm text-destructive">
                   {error instanceof Error ? error.message : 'Could not update the charge. Try again.'}
                 </p>

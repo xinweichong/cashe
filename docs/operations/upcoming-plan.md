@@ -10,7 +10,7 @@ The new Plan destination opens this timeline, with 14/30/90-day selection, bound
 
 The API's `enabled` metadata reflects the UI subscription setting; the flag does not delete or hide records from authenticated API callers. The page explains how to enable subscriptions when disabled.
 
-The timeline does not expand all future billing cycles, include unrecorded commitments, provide a full forecast, or certify completeness. It reuses the scheduler's retained predictions; manual controls continue through the existing subscription UI. Confirmed/inferred provenance, richer overdue review, and new reconciliation rules remain separate work.
+The timeline does not expand all future billing cycles, include unrecorded commitments, provide a full forecast, or certify completeness. It reuses the scheduler's retained predictions; manual controls continue through the existing subscription UI. Confirmed/inferred charge amounts, richer overdue review, and new reconciliation rules remain separate work.
 
 
 ## Correcting or dismissing a prediction
@@ -35,3 +35,12 @@ Direct historical links require a valid transaction date and use shared per-row 
 Subscription details offer **Pause in Cashe** and **Resume in Cashe** through the authenticated subscription update API (`status: paused` / `status: active`). Pausing hides pending predictions from Plan/Home and next-charge summaries, excludes the schedule from active monthly totals, and stops automatic generation/matching. Transaction history and all prediction rows remain intact. Explicit historical linking remains available. This setting does not pause or cancel provider billing.
 
 Resuming retains original expected dates, including overdue dates, and allows the next scheduler cycle to process the schedule. It does not shift billing dates or synthesize missed cycles. Paused predictions reject manual matching/correction/dismissal until resumed. The scheduler re-reads status under the same Storage lock as updates, preventing a stale worker snapshot from reactivating or generating predictions after a pause. Invalid statuses reject the whole update with 422. No schema migration is required for the existing text status column.
+
+
+## Schedule confirmation provenance
+
+Migration 8 adds `subscription_confirmations`, leaving legacy schedules without a confirmation record. Subscription reads and the Plan API expose only `confirmation_source`: `unknown`, `user`, or `recurring_suggestion`. New web creation records `user`; accepting a Telegram recurring suggestion records `recurring_suggestion`. Detection alone does not confirm or create a schedule. Confirmation is committed atomically with creation.
+
+Subscription details offer **Confirm this schedule** for unknown records through authenticated `POST /api/subscriptions/{id}/confirm`. Repeating confirmation preserves its original source and timestamp. It does not change status, pending dates/amounts, or recorded spending. Paused/cancelled schedules remain paused/cancelled. Removing the schedule removes its confirmation record.
+
+The label records a user's decision to track a schedule, not proof of a future charge or a frozen version of all schedule fields. Dates and amounts remain estimates after confirmation or subsequent edits. Legacy records are labeled “Schedule confirmation not recorded”, never automatically classified as inferred or confirmed. Telegram suggestion payload durability, full merchant identity, and repeated-acceptance idempotency remain separate work.

@@ -1573,7 +1573,7 @@ class TelegramBotService:
             if ctx is None:
                 return
             try:
-                ctx.storage.create_subscription(merchant=merchant, frequency=frequency)
+                ctx.storage.create_subscription(merchant=merchant, frequency=frequency, confirmation_source="recurring_suggestion")
                 await query.edit_message_text(
                     f"✅ Added *{self._escape_md(merchant)}* \\({frequency}\\) as a subscription\\. "
                     f"Open the app to set billing day and other details\\.",

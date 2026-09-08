@@ -77,6 +77,13 @@ MIGRATIONS = (
             handled_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )""",
     )),
+    (8, (
+        """CREATE TABLE subscription_confirmations (
+            subscription_id INTEGER PRIMARY KEY REFERENCES subscriptions(id) ON DELETE CASCADE,
+            source TEXT NOT NULL CHECK(source IN ('user', 'recurring_suggestion')),
+            confirmed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )""",
+    )),
 )
 
 

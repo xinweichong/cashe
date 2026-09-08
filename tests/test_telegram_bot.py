@@ -1158,3 +1158,15 @@ async def test_recategorize_explicit_rule_scope(bot_with_storage, remember):
         context.args = [str(tx_id), '--remember']
         await bot._recategorize(update, context)
         assert storage.get_merchant_overrides() == {'Kopi Shop': 'Food and Drink'}
+
+
+@pytest.mark.asyncio
+async def test_accepted_recurring_suggestion_records_confirmation(bot_service):
+    query = SimpleNamespace(data='sub_suggest_add|monthly|Cafe', answer=AsyncMock(), edit_message_text=AsyncMock())
+    update = SimpleNamespace(callback_query=query)
+    ctx = SimpleNamespace(storage=bot_service.storage)
+    with patch.object(bot_service, '_require_ctx', new=AsyncMock(return_value=ctx)):
+        await bot_service._handle_sub_suggest_callback(update, SimpleNamespace())
+    schedules = bot_service.storage.list_subscriptions()
+    assert len(schedules) == 1
+    assert schedules[0]['confirmation_source'] == 'recurring_suggestion'

@@ -82,8 +82,9 @@ class Storage:
         items = []
         for row in self._conn.execute(
             """SELECT u.id, u.expected_date, u.expected_amount, s.id AS subscription_id,
-                      COALESCE(s.label, s.merchant) AS label, s.frequency, s.status
+                      COALESCE(s.label, s.merchant) AS label, s.frequency, s.status, COALESCE(c.source, 'unknown') AS confirmation_source
                FROM upcoming_transactions u JOIN subscriptions s ON s.id = u.subscription_id
+               LEFT JOIN subscription_confirmations c ON c.subscription_id = s.id
                WHERE u.status = 'pending' AND u.matched_transaction_id IS NULL
                AND s.status IN ('active', 'possibly_cancelled')
                AND DATE(u.expected_date) >= ? AND DATE(u.expected_date) <= ?
@@ -93,6 +94,7 @@ class Storage:
             items.append({"id": row["id"], "subscription_id": row["subscription_id"],
                           "label": row["label"], "date": row["expected_date"],
                           "frequency": row["frequency"], "schedule_status": row["status"],
+                          "confirmation_source": row["confirmation_source"],
                           "amount": money(minor) if minor is not None else None})
         unknown = sum(item["amount"] is None for item in items)
         return {"start": start.isoformat(), "end": end.isoformat(), "timezone": timezone,
@@ -1956,27 +1958,50 @@ class Storage:
     @_locked
     def create_subscription(
         self, merchant: str, frequency: str,
-        billing_day: int | None = None, label: str | None = None, notes: str | None = None
+        billing_day: int | None = None, label: str | None = None, notes: str | None = None,
+        *, confirmation_source: str = "unknown",
     ) -> int:
-        cur = self._conn.execute(
-            """INSERT INTO subscriptions (merchant, frequency, billing_day, label, notes)
-               VALUES (?, ?, ?, ?, ?)""",
-            (merchant, frequency, billing_day, label, notes),
-        )
-        self._conn.commit()
-        return cur.lastrowid
+        if confirmation_source not in ("unknown", "user", "recurring_suggestion"):
+            raise ValueError("Invalid confirmation source")
+        with self._conn:
+            cur = self._conn.execute(
+                """INSERT INTO subscriptions (merchant, frequency, billing_day, label, notes)
+                   VALUES (?, ?, ?, ?, ?)""",
+                (merchant, frequency, billing_day, label, notes),
+            )
+            sub_id = cur.lastrowid
+            if confirmation_source != "unknown":
+                self._conn.execute(
+                    "INSERT INTO subscription_confirmations(subscription_id, source) VALUES (?, ?)",
+                    (sub_id, confirmation_source),
+                )
+        return sub_id
+
+    @_locked
+    def confirm_subscription(self, sub_id: int) -> None:
+        if not self.get_subscription(sub_id):
+            raise ValueError("Subscription not found")
+        with self._conn:
+            self._conn.execute(
+                "INSERT OR IGNORE INTO subscription_confirmations(subscription_id, source) VALUES (?, 'user')",
+                (sub_id,),
+            )
 
     @_locked
     def get_subscription(self, sub_id: int) -> dict | None:
         row = self._conn.execute(
-            "SELECT * FROM subscriptions WHERE id = ?", (sub_id,)
+            """SELECT s.*, COALESCE(c.source, 'unknown') AS confirmation_source
+               FROM subscriptions s LEFT JOIN subscription_confirmations c ON c.subscription_id = s.id
+               WHERE s.id = ?""", (sub_id,),
         ).fetchone()
         return dict(row) if row else None
 
     @_locked
     def list_subscriptions(self) -> list[dict]:
         rows = self._conn.execute(
-            "SELECT * FROM subscriptions ORDER BY status, merchant"
+            """SELECT s.*, COALESCE(c.source, 'unknown') AS confirmation_source
+               FROM subscriptions s LEFT JOIN subscription_confirmations c ON c.subscription_id = s.id
+               ORDER BY s.status, s.merchant"""
         ).fetchall()
         return [dict(r) for r in rows]
 
@@ -2002,6 +2027,7 @@ class Storage:
         if not self.get_subscription(sub_id):
             raise ValueError("subscription not found")
         self._conn.execute("DELETE FROM upcoming_transactions WHERE subscription_id = ?", (sub_id,))
+        self._conn.execute("DELETE FROM subscription_confirmations WHERE subscription_id = ?", (sub_id,))
         self._conn.execute("DELETE FROM subscriptions WHERE id = ?", (sub_id,))
         self._conn.commit()
 

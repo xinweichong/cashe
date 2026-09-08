@@ -126,6 +126,7 @@ class PlanMutationResponse(BaseModel):
 
 
 class PlannedCharge(UpcomingCharge):
+    confirmation_source: Literal["unknown", "user", "recurring_suggestion"]
     frequency: str
     schedule_status: Literal["active", "possibly_cancelled"]
 
