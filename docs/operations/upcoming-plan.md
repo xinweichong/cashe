@@ -43,4 +43,13 @@ Migration 8 adds `subscription_confirmations`, leaving legacy schedules without 
 
 Subscription details offer **Confirm this schedule** for unknown records through authenticated `POST /api/subscriptions/{id}/confirm`. Repeating confirmation preserves its original source and timestamp. It does not change status, pending dates/amounts, or recorded spending. Paused/cancelled schedules remain paused/cancelled. Removing the schedule removes its confirmation record.
 
-The label records a user's decision to track a schedule, not proof of a future charge or a frozen version of all schedule fields. Dates and amounts remain estimates after confirmation or subsequent edits. Legacy records are labeled “Schedule confirmation not recorded”, never automatically classified as inferred or confirmed. Telegram suggestion payload durability, full merchant identity, and repeated-acceptance idempotency remain separate work.
+The label records a user's decision to track a schedule, not proof of a future charge or a frozen version of all schedule fields. Dates and amounts remain estimates after confirmation or subsequent edits. Legacy records are labeled “Schedule confirmation not recorded”, never automatically classified as inferred or confirmed. Telegram suggestion payload durability and full merchant identity remain separate work.
+
+
+## Repeated Telegram suggestion acceptance
+
+Migration 9 stores acceptance receipts keyed by Telegram chat/message identity in each user's database. Accepting a suggestion atomically records its merchant/frequency, the schedule ID, and confirmation. Repeated/concurrent clicks reuse that schedule, including after service restart or subsequent schedule edits. Receipts deliberately survive schedule deletion: replaying the same button reports that the schedule was deleted rather than recreating it.
+
+For a previously unaccepted message, one exact merchant/frequency schedule is reused without changing billing fields, pause/cancel status, or existing confirmation provenance. Several exact matches require review in the app; none creates a new confirmed schedule. Different notification messages have separate receipts. A new message can create a new schedule after deletion; no global merchant suppression is introduced.
+
+Legacy callback payloads still contain truncated merchant text, so these guarantees use the accepted callback fields, not recovered full merchant identity. Pending/dismissed suggestions are not yet durable records and notification delivery remains at least once. Errors direct users to retry or review existing subscriptions. No legacy receipts are inferred or backfilled.

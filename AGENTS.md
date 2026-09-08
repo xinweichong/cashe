@@ -649,3 +649,8 @@ System/light/dark preferences are supplied by `ThemeProvider` and selected in Pr
 
 - Migration 8 stores explicit schedule confirmation in `subscription_confirmations`; legacy schedules remain `unknown`. Web creation supplies `confirmation_source="user"`; accepted Telegram recurring suggestions supply `"recurring_suggestion"`. Creation and confirmation commit atomically. Detection alone does not confirm anything.
 - Authenticated subscription `/confirm` records a user decision without reactivating paused/cancelled schedules or changing charges. Repeats preserve original source/timestamp. Subscription reads and Plan expose sanitized `confirmation_source`; future dates/amounts remain estimates regardless of schedule confirmation. Confirmation is historical acceptance, not a revision snapshot or provider evidence.
+
+### Telegram recurring suggestion acceptance
+
+- Migration 9 stores `subscription_suggestion_acceptances` keyed by per-user Telegram chat/message identity. `accept_subscription_suggestion` commits schedule, confirmation, and receipt atomically under the Storage lock. Receipts intentionally have no subscription foreign key and survive deletion; never clean them up as orphans.
+- Replay preserves original schedule identity even after edits and rejects deleted targets/changed fields. A first acceptance reuses one exact merchant/frequency schedule (including paused/cancelled) without reactivation; ambiguous matches require review. Existing confirmation provenance survives reuse. Legacy callback merchant truncation and non-durable pending/dismissed suggestions remain limitations.

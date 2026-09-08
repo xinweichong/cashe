@@ -10,7 +10,7 @@ def test_migrations_preserve_old_transactions_and_are_idempotent():
     migrate(conn)
     migrate(conn)
     assert conn.execute("SELECT * FROM transactions").fetchall() == [(42, "original-id", 1.25, None)]
-    assert conn.execute("SELECT version FROM schema_migrations").fetchall() == [(1,), (2,), (3,), (4,), (5,), (6,), (7,), (8,)]
+    assert conn.execute("SELECT version FROM schema_migrations").fetchall() == [(1,), (2,), (3,), (4,), (5,), (6,), (7,), (8,), (9,)]
     assert conn.execute("SELECT COUNT(*) FROM source_events").fetchone()[0] == 0
     conn.close()
 
@@ -54,4 +54,5 @@ def test_subscription_confirmation_migration_does_not_backfill_legacy(monkeypatc
     migrate(conn)
     assert conn.execute('SELECT * FROM subscriptions').fetchall() == [(1, 'Original')]
     assert conn.execute('SELECT * FROM subscription_confirmations').fetchall() == []
+    assert conn.execute('SELECT * FROM subscription_suggestion_acceptances').fetchall() == []
     conn.close()

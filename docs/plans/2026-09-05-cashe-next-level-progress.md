@@ -495,3 +495,16 @@ Pause/resume schedules were committed as `7211a95`; this continuation started wi
 - Updated operator/agent documentation and migration/audit expectations. No production DB migration, live Telegram/model call, production service change, push, or deployment. Browser/device visual acceptance remains unverified.
 
 Verification: **1044 backend tests passed** (four existing datetime deprecation warnings), **84 frontend tests passed**, production build and final TypeScript checks passed. Nine new backend cases cover legacy migration preservation/idempotency, confirmation sources, replay preservation, paused/cancelled retention, invalid/missing records, deletion cleanup, authenticated API behavior, server-selected creation provenance, and accepted Telegram suggestions. Five UI cases cover explicit confirmation, failed saves, and the three timeline labels without certifying future charges. Focused new/Plan lint and whitespace checks passed. The previously documented detail-panel `Date.now()` render-purity issue remains unchanged. This verified increment is committed separately.
+
+
+## 2026-09-08 continuation — replayable Telegram suggestion acceptance
+
+Schedule confirmation provenance was committed as `c9b28cc`; this continuation started with a clean working tree.
+
+- Migration 9 adds per-user acceptance receipts keyed by Telegram chat/message identity. Schedule creation, recurring confirmation, and receipt insertion commit atomically under the Storage lock. Same-message retries/concurrent clicks return the original schedule, including after restart and schedule edits.
+- Receipts deliberately survive schedule deletion so the same button cannot recreate a deleted schedule. Changed callback fields reject replay. A previously unaccepted message reuses one exact merchant/frequency schedule, retaining billing details, pause/cancel state, and existing confirmation; ambiguous existing matches require review instead of guessing.
+- Telegram acknowledges current schedule state without implying provider changes. Response failures advise retry/review rather than manual recreation. Unlinked users cannot accept suggestions.
+- These guarantees apply to accepted legacy callback fields: full merchant identity and durable pending/dismissed suggestions remain pending. Different messages have separate receipts; a new message after deletion may create a new schedule. No global merchant suppression or legacy acceptance backfill was added.
+- Updated operator/agent docs and migration/audit expectations. No frontend change, production DB migration, live Telegram/model call, service change, push, or deployment.
+
+Verification: **1061 backend tests passed** (four existing datetime deprecation warnings). Seventeen new cases cover concurrent/repeated acceptance, unique existing schedule reuse across states, preserved edits/provenance, restart/deletion retention, changed/ambiguous callbacks, invalid inputs, atomic rollback on receipt failure, user isolation, response failure/retry, and unlinked-user rejection. Focused migration/acceptance checks and the final 76-test Telegram run passed; whitespace checks passed. No frontend files changed; the prior **84 frontend tests**, production build, and documented lint limitation remain the baseline. This verified increment is committed separately.

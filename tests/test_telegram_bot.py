@@ -1162,7 +1162,8 @@ async def test_recategorize_explicit_rule_scope(bot_with_storage, remember):
 
 @pytest.mark.asyncio
 async def test_accepted_recurring_suggestion_records_confirmation(bot_service):
-    query = SimpleNamespace(data='sub_suggest_add|monthly|Cafe', answer=AsyncMock(), edit_message_text=AsyncMock())
+    query = SimpleNamespace(data='sub_suggest_add|monthly|Cafe', answer=AsyncMock(), edit_message_text=AsyncMock(),
+                            message=SimpleNamespace(chat_id=123, message_id=456))
     update = SimpleNamespace(callback_query=query)
     ctx = SimpleNamespace(storage=bot_service.storage)
     with patch.object(bot_service, '_require_ctx', new=AsyncMock(return_value=ctx)):
@@ -1170,3 +1171,28 @@ async def test_accepted_recurring_suggestion_records_confirmation(bot_service):
     schedules = bot_service.storage.list_subscriptions()
     assert len(schedules) == 1
     assert schedules[0]['confirmation_source'] == 'recurring_suggestion'
+
+
+@pytest.mark.asyncio
+async def test_recurring_acceptance_replay_after_send_failure_preserves_paused_schedule(bot_service):
+    storage = bot_service.storage
+    sub = storage.create_subscription('Cafe', 'monthly')
+    storage.update_subscription(sub, status='paused')
+    query = SimpleNamespace(data='sub_suggest_add|monthly|Cafe', answer=AsyncMock(),
+                            edit_message_text=AsyncMock(side_effect=[RuntimeError('send failed'), None, None]),
+                            message=SimpleNamespace(chat_id=123, message_id=456))
+    with patch.object(bot_service, '_require_ctx', new=AsyncMock(return_value=SimpleNamespace(storage=storage))):
+        for _ in range(2):
+            await bot_service._handle_sub_suggest_callback(SimpleNamespace(callback_query=query), SimpleNamespace())
+    assert len(storage.list_subscriptions()) == 1
+    assert storage.get_subscription(sub)['status'] == 'paused'
+    assert 'paused' in query.edit_message_text.call_args.args[0]
+
+
+@pytest.mark.asyncio
+async def test_unlinked_telegram_user_cannot_accept_suggestion(bot_service):
+    query = SimpleNamespace(data='sub_suggest_add|monthly|Cafe', answer=AsyncMock(), edit_message_text=AsyncMock(),
+                            message=SimpleNamespace(chat_id=123, message_id=456))
+    with patch.object(bot_service, '_require_ctx', new=AsyncMock(return_value=None)):
+        await bot_service._handle_sub_suggest_callback(SimpleNamespace(callback_query=query), SimpleNamespace())
+    assert bot_service.storage.list_subscriptions() == []

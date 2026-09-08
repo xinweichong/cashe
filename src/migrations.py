@@ -84,6 +84,15 @@ MIGRATIONS = (
             confirmed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )""",
     )),
+    (9, (
+        """CREATE TABLE subscription_suggestion_acceptances (
+            message_key TEXT PRIMARY KEY,
+            merchant TEXT NOT NULL,
+            frequency TEXT NOT NULL,
+            subscription_id INTEGER NOT NULL,
+            accepted_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )""",
+    )),
 )
 
 

@@ -120,7 +120,7 @@ def test_partial_legacy_schema_is_not_a_clean_bill_of_health(tmp_path):
     report = audit_database(path)
     assert report['status'] == 'issues'
     assert report['absent_feature_tables'] == ['goal_contributions', 'trip_transactions', 'upcoming_transactions']
-    assert report['pending_migrations'] == [1, 2, 3, 4, 5, 6, 7, 8]
+    assert report['pending_migrations'] == [1, 2, 3, 4, 5, 6, 7, 8, 9]
 
 
 def test_missing_file_is_not_created_and_corrupt_input_is_safe(tmp_path, capsys):

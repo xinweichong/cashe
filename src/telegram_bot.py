@@ -1573,15 +1573,20 @@ class TelegramBotService:
             if ctx is None:
                 return
             try:
-                ctx.storage.create_subscription(merchant=merchant, frequency=frequency, confirmation_source="recurring_suggestion")
-                await query.edit_message_text(
-                    f"✅ Added *{self._escape_md(merchant)}* \\({frequency}\\) as a subscription\\. "
-                    f"Open the app to set billing day and other details\\.",
-                    parse_mode="MarkdownV2",
+                message = query.message
+                sub_id = ctx.storage.accept_subscription_suggestion(
+                    message.chat_id, message.message_id, merchant, frequency,
                 )
+                sub = ctx.storage.get_subscription(sub_id)
+                await query.edit_message_text(
+                    f"Schedule saved for {sub['merchant']}. Current status: {sub['status'].replace('_', ' ')}. "
+                    "Open the app to review billing details. Provider billing is unchanged.",
+                )
+            except ValueError as e:
+                await query.edit_message_text(str(e))
             except Exception as e:
-                logger.error("Failed to create subscription from suggestion: %s", e)
-                await query.edit_message_text("Failed to add subscription — try adding it manually in the app.")
+                logger.error("Subscription suggestion handling failed: %s", e)
+                await query.edit_message_text("Could not finish this request. Tap again or review subscriptions in the app.")
 
     async def _async_notify(self, tx_id: int, amount: float, merchant: str, category: Optional[str], match_source: str, source: str, chat_id: Optional[int] = None, storage=None) -> None:
         _chat_id = chat_id if chat_id is not None else self.chat_id

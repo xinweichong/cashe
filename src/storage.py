@@ -1978,6 +1978,46 @@ class Storage:
         return sub_id
 
     @_locked
+    def accept_subscription_suggestion(self, chat_id: int, message_id: int, merchant: str, frequency: str) -> int:
+        """Accept once per Telegram message, retaining the receipt after deletion."""
+        if type(chat_id) is not int or chat_id == 0 or type(message_id) is not int or message_id <= 0:
+            raise ValueError("Suggestion needs a Telegram message identity")
+        if not isinstance(merchant, str) or not merchant.strip() or frequency not in ("weekly", "biweekly", "monthly"):
+            raise ValueError("Invalid recurring suggestion")
+        message_key = f"telegram:{chat_id}:{message_id}"
+        accepted = self._conn.execute(
+            "SELECT * FROM subscription_suggestion_acceptances WHERE message_key = ?", (message_key,),
+        ).fetchone()
+        if accepted:
+            if (accepted["merchant"], accepted["frequency"]) != (merchant, frequency):
+                raise SubscriptionMatchConflict("This suggestion was already accepted with different fields")
+            if not self.get_subscription(accepted["subscription_id"]):
+                raise SubscriptionMatchConflict("The schedule from this suggestion was deleted; add it manually if needed")
+            return accepted["subscription_id"]
+        matches = self._conn.execute(
+            "SELECT id FROM subscriptions WHERE merchant = ? AND frequency = ? ORDER BY id LIMIT 2",
+            (merchant, frequency),
+        ).fetchall()
+        if len(matches) > 1:
+            raise SubscriptionMatchConflict("Several schedules match this suggestion; review them in the app")
+        with self._conn:
+            if matches:
+                sub_id = matches[0]["id"]
+            else:
+                sub_id = self._conn.execute(
+                    "INSERT INTO subscriptions(merchant, frequency) VALUES (?, ?)", (merchant, frequency),
+                ).lastrowid
+            self._conn.execute(
+                """INSERT OR IGNORE INTO subscription_confirmations(subscription_id, source)
+                   VALUES (?, 'recurring_suggestion')""", (sub_id,),
+            )
+            self._conn.execute(
+                """INSERT INTO subscription_suggestion_acceptances(message_key, merchant, frequency, subscription_id)
+                   VALUES (?, ?, ?, ?)""", (message_key, merchant, frequency, sub_id),
+            )
+        return sub_id
+
+    @_locked
     def confirm_subscription(self, sub_id: int) -> None:
         if not self.get_subscription(sub_id):
             raise ValueError("Subscription not found")
