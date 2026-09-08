@@ -1074,32 +1074,48 @@ class TelegramBotService:
         if ctx is None:
             return
         today = self._local_now()
-        start = f"{today.year}-{today.month:02d}-01"
-        end = today.strftime("%Y-%m-%d")
-        balance = ctx.storage.get_balance(start, end)
+        from decimal import Decimal
 
-        if balance["income"] == 0 and balance["expenses"] == 0:
-            await update.message.reply_text("Nothing logged yet.")
-            return
+        facts = ctx.storage.get_month_spending_facts(today.date(), self.timezone)
+        current = facts["current"]
 
-        month_str = today.strftime("%B %Y")
-        days_in_month = calendar.monthrange(today.year, today.month)[1]
-        days_remaining = days_in_month - today.day
+        def amount(value):
+            return f"S${Decimal(value['minor_units']) / 100:,.2f}"
 
+        partial = current["status"] == "partial"
+        lines = [
+            f"*Recorded flow for {today.strftime('%B %Y')}*",
+            f"{current['start']} to {current['end']}",
+            f"Status: {current['status']}",
+            f"Spending{' known subtotal' if partial else ''}: `{amount(current['spending'])}`",
+        ]
+        if current["income"] is None:
+            lines.append("No income recorded. Recorded net flow is unavailable.")
+        else:
+            label = "Income known subtotal" if partial else "Recorded income"
+            lines.append(f"{label}: `{amount(current['income'])}`")
+            if current["recorded_net_flow"] is not None:
+                lines.append(f"Recorded net flow: `{amount(current['recorded_net_flow'])}`")
+            else:
+                lines.append("Recorded net flow is unavailable while records remain unresolved.")
+        if current["unresolved_count"]:
+            lines.append(f"{current['unresolved_count']} records in this period have unresolved money or classification.")
+        if facts["undated_count"]:
+            lines.append(f"{facts['undated_count']} undated records cannot be assigned to a period.")
+        if partial:
+            lines.append("Known subtotals are incomplete. Open Review to resolve missing information.")
+        if current["indicative_count"]:
+            lines.append("Currency conversions are indicative estimates.")
+        days_remaining = calendar.monthrange(today.year, today.month)[1] - today.day
+        lines.extend([
+            f"_{days_remaining} days remaining this month_",
+            "Recorded flow is not an account balance and does not establish capture completeness.",
+        ])
         keyboard = InlineKeyboardMarkup([[
             InlineKeyboardButton("📊 Insights", callback_data="cmd_insights"),
             InlineKeyboardButton("🏠 Menu", callback_data="cmd_menu"),
         ]])
-
-        await update.message.reply_text(
-            f"*Balance for {month_str}*\n\n"
-            f"💸 Income: *${balance['income']:.2f}*\n"
-            f"💵 Expenses: *${balance['expenses']:.2f}*\n"
-            f"💳 Net: *${balance['net']:.2f}*\n\n"
-            f"_{days_remaining} days remaining this month_",
-            parse_mode="Markdown",
-            reply_markup=keyboard,
-        )
+        await self._send_long_message(update, "\n".join(lines), reply_markup=keyboard)
 
     async def _insights(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         ctx = await self._require_ctx(update)

@@ -391,3 +391,16 @@ Interactive period commands were committed as `17982e8`; this continuation start
 - Per-user job routing and notification transport remain in place. Durable scheduled delivery, daily/balance and remaining dashboard report migrations, free-only AI controls, integer-money storage, and device verification remain pending. No live Telegram/model calls or production data/service changes were used.
 
 Verification: **963 backend tests passed** (four existing datetime deprecation warnings), **69 frontend tests passed**, and the production build passed. Eight new scheduled-report cases cover weekday selection, completed-month/leap-year/year boundaries, interactive versus scheduled month semantics, timezone projection, compact partial/indicative output and category bounds, skipped evidence queries, per-user registered-job dispatch, and exclusion of model calls and cached narratives. The 33-test focused report/registry suite and whitespace checks passed. This verified increment is committed separately; no push or deployment was performed.
+
+
+## 2026-09-08 continuation — shared recorded flow in Telegram balance
+
+Scheduled shared-facts reports were committed as `e5bc50f`; this continuation started with a clean working tree.
+
+- `/balance` now resolves the linked user's shared month-to-date facts using the bot's local calendar and timezone. It uses the same per-transaction rounding, NULL-expense/refund/transfer interpretation, and conversion rules as Home and the other migrated Telegram reports.
+- The command labels income minus spending **recorded net flow**, retains negative values, distinguishes absent income from recorded zero income, and avoids claiming an account balance or complete capture.
+- Partial records show known subtotals and explicit unresolved/undated counts; net flow remains unavailable. Indicative conversion estimates stay labeled. An empty month retains menu navigation without inventing income or net flow.
+- Replaced two legacy mocked-balance tests with eight production-backed report cases and updated user/operator/agent documentation. Daily reports, daily optional AI, remaining dashboard consumers, and the audited money-storage migration remain pending.
+- No frontend or schema changes, live Telegram/model calls, production data/service changes, push, or deployment.
+
+Verification: **969 backend tests passed** (four existing datetime deprecation warnings), including the eight new balance cases. Coverage verifies shared rounding/classification, negative flow, absent versus recorded zero income, unresolved foreign expense/income, undated observations, indicative conversions, empty-state navigation, linked-user isolation, and timezone boundaries. The 83-test focused Telegram run and whitespace checks passed. No frontend files changed; the previous baseline remains **69 frontend tests** and a successful production build. This verified increment is committed separately.

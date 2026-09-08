@@ -91,7 +91,7 @@ Most people don't track their spending — not because they don't care, but beca
 | **Financial Goals** | Savings goals with target amounts and dates, manual contributions, progress rings, and Telegram completion notifications |
 | **Subscriptions** | Tracked recurring charges with upcoming-transaction predictions; daily matcher auto-links incoming transactions; match/dismiss flow; possibly-cancelled detection |
 | **Trips** | Group any set of transactions into a trip; all new transactions auto-assigned to the active trip across every ingestion path |
-| **Income Tracking** | Record income alongside expenses; see earned / spent / net via `/balance` |
+| **Income Tracking** | Record income alongside expenses; see recorded income, spending, and recorded net flow via `/balance` |
 
 ### Interface
 
@@ -305,7 +305,7 @@ All config values can be set via environment variables (for Railway or Docker). 
 | `/yesterday` | Yesterday's spending summary |
 | `/week` | Monday-to-date spending, comparable prior weekdays, and evidence |
 | `/month` | Month-to-date spending, comparable prior-month dates, and evidence |
-| `/balance` | Income vs expenses, net position |
+| `/balance` | Month-to-date recorded income, spending, and recorded net flow |
 | `/insights` | Top merchants, average daily spend |
 | `/subscriptions` | Detected recurring transactions |
 | `/trip` | Active trip summary with spend breakdown |

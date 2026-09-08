@@ -271,47 +271,6 @@ class TestSubscriptionsCommand:
         assert "No subscriptions" in text
 
 
-class TestBalanceCommand:
-    @pytest.mark.asyncio
-    async def test_balance_includes_month_and_amounts(self, bot_service):
-        bot_service.storage.get_balance = MagicMock(return_value={
-            "income": 5000.0,
-            "expenses": 1200.0,
-            "net": 3800.0,
-        })
-
-        update = MagicMock()
-        update.message.reply_text = AsyncMock()
-        context = MagicMock()
-
-        await bot_service._balance(update, context)
-
-        update.message.reply_text.assert_called_once()
-        text = update.message.reply_text.call_args[0][0]
-        assert "5000.00" in text
-        assert "1200.00" in text
-        assert "3800.00" in text
-        assert "days remaining" in text
-        # Month name should appear (e.g. "April 2026")
-        from datetime import datetime
-        month_str = datetime.now().strftime("%B %Y")
-        assert month_str in text
-
-    @pytest.mark.asyncio
-    async def test_balance_empty_no_keyboard(self, bot_service):
-        bot_service.storage.get_balance = MagicMock(return_value={
-            "income": 0.0, "expenses": 0.0, "net": 0.0,
-        })
-
-        update = MagicMock()
-        update.message.reply_text = AsyncMock()
-        context = MagicMock()
-
-        await bot_service._balance(update, context)
-
-        update.message.reply_text.assert_called_once_with("Nothing logged yet.")
-
-
 class TestYesterdayCommand:
     @pytest.mark.asyncio
     async def test_yesterday_sends_message_for_yesterday(self, bot_service):
