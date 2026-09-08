@@ -102,7 +102,7 @@ Most people don't track their spending — not because they don't care, but beca
 | **Auto-Categorisation** | Keyword matching with learned merchant overrides that persist and hot-reload without a restart |
 | **Category Management** | Full CRUD with keyword editor, icon and colour picker, needs/wants/neutral type classification |
 | **CSV Export** | Download filtered transactions from the Transactions page |
-| **Scheduled Reports** | Daily morning digest, weekly and monthly summary reports via Telegram |
+| **Scheduled Reports** | Morning digest and weekly/monthly Telegram reports share spending facts, comparison periods, and unresolved-currency status |
 | **Oracle Cloud Deployment** | Runs free on Oracle Always Free ARM VM + Cloudflare Tunnel — no open ports, automatic TLS, custom domain |
 | **Privacy-First** | All data stays in your own SQLite database. No third-party data sharing. No telemetry |
 

@@ -1892,62 +1892,19 @@ class TelegramBotService:
         )
 
     async def _send_daily_digest(self, chat_id: Optional[int] = None, storage=None) -> None:
-        """Send morning digest: yesterday's total, month-to-date, any alerts."""
+        """Send shared daily/monthly facts without legacy alerts or cached prose."""
         _chat_id = chat_id if chat_id is not None else self.chat_id
         _storage = storage if storage is not None else self.storage
         if not _chat_id:
             logger.debug("Cannot send daily digest: no chat_id")
             return
 
-        _now = self._local_now()
-        yesterday = (_now - timedelta(days=1)).strftime("%Y-%m-%d")
-        today = _now.strftime("%Y-%m-%d")
-
-        # Yesterday's total — use get_spending_summary to handle NULL-type rows correctly
-        yesterday_summary = _storage.get_spending_summary(yesterday, yesterday)
-        yesterday_total = yesterday_summary["total"]
-        yesterday_count = len(_storage.query_transactions(start_date=yesterday, end_date=yesterday, limit=10_000))
-
-        # Month to date
-        month_start = _now.replace(day=1).strftime("%Y-%m-%d")
-        month_total = _storage.get_spending_summary(month_start, today)["total"]
-
-        # Velocity, new merchants, anomalies
-        velocity = _storage.spending_velocity()
-        new_merchants_list = _storage.new_merchants()
-        anomaly_multiplier = float(_storage.get_setting("anomaly_multiplier", "2.0"))
-        anomalies = _storage.spending_anomalies(multiplier=anomaly_multiplier)
-
-        lines = [
-            "*Morning Digest*\n",
-            f"Yesterday: *${yesterday_total:.2f}* ({yesterday_count} transactions)",
-            f"Month to date: *${month_total:.2f}*\n",
-        ]
-
-        velocity_threshold = float(_storage.get_setting("velocity_alert_threshold", "110"))
-        if velocity["pace_percent"] > velocity_threshold:
-            lines.append(f"⚠ Spending {velocity['pace_percent']:.0f}% of last month's pace")
-
-        if new_merchants_list:
-            lines.append(f"🛍 {len(new_merchants_list)} new merchant(s)")
-
-        if anomalies:
-            lines.append(f"⚠ {len(anomalies)} unusual transaction(s)")
-
-        # LLM insight — append if cached and fresh
-        insight_str = _storage.get_setting("llm_insight_content", "")
-        if insight_str:
-            try:
-                insight = json.loads(insight_str)
-                narrative = insight.get("narrative", "")
-                nudges = insight.get("nudges", [])
-                if narrative:
-                    lines.append("\n*AI Insight*")
-                    lines.append(narrative)
-                    if nudges:
-                        lines.append("\n" + "\n".join(f"• {n}" for n in nudges))
-            except Exception:
-                pass
+        today = self._local_now().date()
+        yesterday = today - timedelta(days=1)
+        with _storage.reconciliation_lock():
+            daily = self._format_spending_period(_storage, "day", as_of=yesterday, include_evidence=False)
+            monthly = self._format_spending_period(_storage, "month", as_of=today, include_evidence=False)
+        lines = ["*Morning Digest*", "", "*Yesterday*", daily, "", "*Month to date*", monthly]
 
         keyboard = InlineKeyboardMarkup([
             [

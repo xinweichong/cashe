@@ -473,57 +473,6 @@ class TestRecatCallback:
 
 
 class TestDailyDigest:
-    @pytest.mark.asyncio
-    async def test_send_daily_digest_with_data(self, bot_service):
-        bot_service.chat_id = 12345
-        bot_service.app = MagicMock()
-        bot_service.app.bot.send_message = AsyncMock()
-
-        def mock_spending_summary(start, end):
-            from datetime import datetime, timedelta
-            yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
-            if start == yesterday and end == yesterday:
-                return {"total": 15.0, "by_category": {}}
-            return {"total": 35.0, "by_category": {}}
-
-        bot_service.storage.get_spending_summary = MagicMock(side_effect=mock_spending_summary)
-        bot_service.storage.query_transactions = MagicMock(return_value=[{}, {}])  # count = 2
-        bot_service.storage.spending_velocity = MagicMock(return_value={"status": "ok", "pace_percent": 80})
-        bot_service.storage.new_merchants = MagicMock(return_value=[])
-        bot_service.storage.spending_anomalies = MagicMock(return_value=[])
-
-        await bot_service._send_daily_digest()
-
-        bot_service.app.bot.send_message.assert_called_once()
-        call_kwargs = bot_service.app.bot.send_message.call_args[1]
-        assert call_kwargs["chat_id"] == 12345
-        assert call_kwargs["parse_mode"] == "Markdown"
-        assert "Morning Digest" in call_kwargs["text"]
-        assert "15.00" in call_kwargs["text"]  # yesterday total
-        assert "35.00" in call_kwargs["text"]  # month total
-
-    @pytest.mark.asyncio
-    async def test_send_daily_digest_alerts(self, bot_service):
-        bot_service.chat_id = 12345
-        bot_service.app = MagicMock()
-        bot_service.app.bot.send_message = AsyncMock()
-
-        bot_service.storage.get_spending_summary = MagicMock(
-            return_value={"total": 10.0, "by_category": {}}
-        )
-        bot_service.storage.query_transactions = MagicMock(return_value=[{}])
-        bot_service.storage.spending_velocity = MagicMock(
-            return_value={"status": "ahead", "pace_percent": 130}
-        )
-        bot_service.storage.new_merchants = MagicMock(return_value=[{"merchant": "NewShop"}])
-        bot_service.storage.spending_anomalies = MagicMock(return_value=[{"id": 1}])
-
-        await bot_service._send_daily_digest()
-
-        text = bot_service.app.bot.send_message.call_args[1]["text"]
-        assert "⚠" in text
-        assert "🛍" in text
-
     def test_notify_daily_digest_no_chat_id(self, bot_service):
         bot_service.chat_id = None
         bot_service._loop = MagicMock()

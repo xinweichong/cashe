@@ -417,3 +417,17 @@ Shared Telegram balance was committed as `1526e56`; this continuation started wi
 - No frontend or schema changes, live Telegram/model calls, production data/service changes, push, or deployment.
 
 Verification: **970 backend tests passed** (four existing datetime deprecation warnings): nine new daily-facts/command/API cases replace eight obsolete pace-helper tests. Coverage includes same-weekday and year boundaries, evidence reconciliation, NULL expenses, refunds/transfers, negative flow, indicative/unknown money, undated observations, configured timezone/default date, invalid/minimum API dates, private-payload exclusion, authentication, and daily command navigation without legacy queries. The 95-test focused run and whitespace checks passed. No frontend files changed; the previous baseline remains **69 frontend tests** and a successful production build. This verified increment is committed separately.
+
+
+## 2026-09-08 continuation — shared morning digest
+
+Shared daily commands/API were committed as `66c009f`; this continuation started with a clean working tree. The reference remains `docs/plans/2026-09-05-cashe-next-level-plan.md`.
+
+- The morning digest now composes compact shared yesterday and month-to-date reports. Yesterday compares with the same weekday one week earlier; the month uses its separate comparable windows. First-of-month and year/leap boundaries keep the two report periods distinct.
+- Both reports retain known subtotals, partial/indicative state, absent income, negative recorded net flow, undated warnings, and category contributions. Evidence lists are skipped and category labels remain bounded. Both sections are read under one per-user Storage lock, released before Telegram delivery.
+- Removed the digest's legacy velocity/new-merchant/anomaly calculations and cached AI narrative append. Independent budget alerts and optional daily dashboard AI generation remain unchanged; this is not completion of the free-only/private-AI controls.
+- Replaced two legacy mock-based digest tests with seven production-backed cases; retained the existing more-than-100-transactions regression. Updated user/operator/agent documentation.
+- Remaining plan work still includes legacy dashboard/analytics consumers, audited integer-money storage, ambiguous-duplicate review, CSV import/undo, receipt drafts, forecasts, offline/PWA behavior, free-only AI controls, and operational/device acceptance. Durable scheduled delivery is also still absent.
+- No schema or frontend changes, live Telegram/model calls, production data/service changes, push, or deployment.
+
+Verification: **975 backend tests passed** (four existing datetime deprecation warnings), including seven new morning-digest cases replacing two legacy tests. Coverage verifies shared rounding/classification and negative flow, separate daily/monthly totals, year/leap boundaries, partial/indicative output, timezone projection, user isolation, database access during pending delivery, compact category bounds, empty/undated states, and exclusion of legacy queries/cached narrative. The 80-test focused run, existing 150-transaction regression, and whitespace checks passed. No frontend files changed; the previous baseline remains **69 frontend tests** and a successful production build. This verified increment is committed separately.
