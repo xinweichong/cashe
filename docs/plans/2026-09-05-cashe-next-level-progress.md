@@ -444,3 +444,16 @@ Shared morning digest was committed as `9bcabf2`; this continuation started with
 - Updated design, operator, user, and agent documentation. No schema change, production data/service change, live Telegram/model call, push, or deployment. Browser/device visual acceptance remains unverified.
 
 Verification: **983 backend tests passed** (four existing datetime deprecation warnings), **74 frontend tests passed**, production build and focused timeline lint passed. Eight new backend cases cover selection/exclusion, partial totals, full-window pagination totals, timezone/window bounds, Home parity, disabled metadata, invalid queries, API privacy, and authentication. Five timeline UI cases cover uncertainty labels, direct schedule links, failure/retry, horizon pagination reset, disabled display, and retained older Plan management links; legacy Finance redirect expectations were updated. Whitespace checks passed. This verified increment is committed separately.
+
+
+## 2026-09-08 continuation — timeline prediction actions
+
+The upcoming timeline was committed as `1a3f2cb`; this continuation started with a clean working tree.
+
+- Added authenticated, typed-response Plan correction and dismissal commands. Corrections accept strict calendar dates and finite/nonnegative estimated SGD amounts (or null for unknown), validate every field before writing, and preserve omitted values. Both actions recheck pending/unmatched and schedule status under the per-user Storage lock.
+- Matched, dismissed, linked, or cancelled-schedule charges reject stale actions with 409; missing charges return 404 and invalid corrections 422. Changes affect prediction rows, not recorded transactions or subscription/provider cancellation state.
+- Timeline rows offer labeled date/amount editing, explicit dismissal confirmation, errors that retain the form, and a refresh action. Date-only edits omit the displayed rounded amount. Successful changes invalidate Plan, Home, subscription summaries, and expected-charge details. Matching stays in the linked existing subscription controls.
+- Expected-date edits may influence later predictions through the existing scheduler anchor; this is explained in the editor and operator documentation. No independent schedule-exception or simultaneous-edit revision model is introduced. Existing matching rules and later-period generation remain unchanged.
+- Updated design/operator/agent documentation. No schema change, production data/service change, live Telegram/model call, push, or deployment. Visual/device acceptance remains unverified.
+
+Verification: **1002 backend tests passed** (four existing datetime deprecation warnings), **77 frontend tests passed**, production build and focused Plan lint passed. Nineteen new backend cases cover all-or-nothing validation, omitted-value precision, unknown estimates, corrected Plan/Home totals, retained subscriptions/transactions, matched/dismissed/cancelled/linked conflicts, isolation, response privacy, and authentication. Three new UI cases verify omitted rounded amounts, explicit unknown values, retained error forms, refresh/invalidation, and dismissal confirmation/cancel. The focused backend command checks and whitespace checks passed. This verified increment is committed separately.

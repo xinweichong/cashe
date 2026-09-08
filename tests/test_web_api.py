@@ -765,3 +765,25 @@ async def test_upcoming_plan_api_is_sanitized_bounded_and_authenticated(client, 
     assert (await client.get('/api/v2/plan/upcoming?offset=-1')).status_code == 422
     await client.post('/api/logout')
     assert (await client.get('/api/v2/plan/upcoming')).status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_planned_charge_commands_validation_conflicts_and_auth(client, in_memory_db):
+    storage = Storage(in_memory_db)
+    sub = storage.create_subscription('Cafe', 'monthly')
+    charge = storage.create_upcoming_transaction(sub, '2026-09-09', 12.005)
+    path = f'/api/v2/plan/upcoming/{charge}'
+    invalid = await client.put(path, json={'expected_date': '2026-02-30', 'expected_amount': 99})
+    assert invalid.status_code == 422
+    assert storage.get_upcoming_transaction(charge)['expected_amount'] == 12.005
+    response = await client.put(path, json={'expected_date': '2026-09-10', 'expected_amount': None})
+    assert response.status_code == 200
+    assert response.json() == {'status': 'ok'}
+    assert storage.get_upcoming_transaction(charge)['expected_amount'] is None
+    assert (await client.post(path + '/dismiss')).status_code == 200
+    assert (await client.put(path, json={'expected_amount': 5})).status_code == 409
+    assert (await client.post(path + '/dismiss')).status_code == 409
+    assert (await client.post('/api/v2/plan/upcoming/999999/dismiss')).status_code == 404
+    await client.post('/api/logout')
+    assert (await client.put(path, json={'expected_amount': 5})).status_code == 401
+    assert (await client.post(path + '/dismiss')).status_code == 401

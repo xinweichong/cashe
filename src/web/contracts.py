@@ -121,6 +121,10 @@ class UpcomingCharge(BaseModel):
     amount: Money | None
 
 
+class PlanMutationResponse(BaseModel):
+    status: Literal["ok"] = "ok"
+
+
 class PlannedCharge(UpcomingCharge):
     frequency: str
     schedule_status: Literal["active", "possibly_cancelled"]

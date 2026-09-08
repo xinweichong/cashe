@@ -21,7 +21,7 @@ from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 from src.storage import TransactionRequestConflict
 from src.config import local_now
 from src.web.auth import verify_password, create_session, verify_session, destroy_session
-from src.web.contracts import CaptureFollowup, CaptureIssue, CaptureResolution, HomeBriefing, QueuedResponse, SpendingEvidence, SpendingFacts, SpendingReview, TransactionProvenance, UpcomingPlan
+from src.web.contracts import CaptureFollowup, CaptureIssue, CaptureResolution, HomeBriefing, QueuedResponse, SpendingEvidence, SpendingFacts, SpendingReview, TransactionProvenance, UpcomingPlan, PlanMutationResponse
 from src.analytics import (
     load_summary,
     get_yoy_comparison,
@@ -231,6 +231,23 @@ def create_dashboard_app(
             return await _db(storage.get_month_spending_facts, as_of, timezone)
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from None
+
+    @app.put("/api/v2/plan/upcoming/{upcoming_id}", response_model=PlanMutationResponse)
+    async def update_planned_charge(upcoming_id: int, body: dict, storage=Depends(_get_storage)):
+        try:
+            await _db(storage.update_planned_charge, upcoming_id, body)
+        except ValueError as exc:
+            code = 404 if str(exc).endswith("not found") else 409 if str(exc) == "Charge is no longer pending" else 422
+            raise HTTPException(status_code=code, detail=str(exc)) from None
+        return {"status": "ok"}
+
+    @app.post("/api/v2/plan/upcoming/{upcoming_id}/dismiss", response_model=PlanMutationResponse)
+    async def dismiss_planned_charge(upcoming_id: int, storage=Depends(_get_storage)):
+        try:
+            await _db(storage.dismiss_planned_charge, upcoming_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=404 if str(exc).endswith("not found") else 409, detail=str(exc)) from None
+        return {"status": "ok"}
 
     @app.get("/api/v2/plan/upcoming", response_model=UpcomingPlan)
     async def upcoming_plan(days: int = Query(30, ge=1, le=90), limit: int = Query(50, ge=1, le=100),

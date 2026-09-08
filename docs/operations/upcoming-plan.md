@@ -11,3 +11,14 @@ The new Plan destination opens this timeline, with 14/30/90-day selection, bound
 The API's `enabled` metadata reflects the UI subscription setting; the flag does not delete or hide records from authenticated API callers. The page explains how to enable subscriptions when disabled.
 
 The timeline does not expand all future billing cycles, include unrecorded commitments, provide a full forecast, or certify completeness. It reuses the scheduler's retained predictions; manual controls continue through the existing subscription UI. Confirmed/inferred provenance, pause controls, richer overdue review, and new reconciliation rules remain separate work.
+
+
+## Correcting or dismissing a prediction
+
+Authenticated `PUT /api/v2/plan/upcoming/{id}` accepts only `expected_date` (strict YYYY-MM-DD calendar date) and/or `expected_amount` (finite nonnegative SGD value, or null for unknown). All submitted fields validate before one atomic update. Omitted fields retain their exact stored values; the UI omits unchanged amounts so a date-only edit does not write back a rounded display value.
+
+Authenticated `POST /api/v2/plan/upcoming/{id}/dismiss` marks one pending prediction dismissed. Both commands check current status under the Storage lock and reject matched, dismissed, linked, or cancelled-schedule charges with 409; missing charges return 404, invalid corrections 422. Dismissal retains the prediction and does not delete transactions, alter recorded spending, or cancel the subscription/provider. The existing scheduler can generate later periods.
+
+Timeline edits require an explicit save; dismissal requires an explicit confirmation. Successful changes invalidate Plan, Home, subscription summaries, and expected-charge details. Errors retain the form and offer a timeline refresh. Actual-transaction matching remains in the linked subscription controls.
+
+Expected-date corrections may influence subsequent predictions because the existing scheduler anchors future dates on retained expected dates. No independent schedule-exception system, revision conflict handling between simultaneous pending edits, or new matching rules are introduced in this slice.

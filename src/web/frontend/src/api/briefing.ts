@@ -42,6 +42,9 @@ export interface FollowupIssue {
   id: number; transaction_id: number; kind: string; status: string; attempts: number;
 }
 export const briefingApi = {
+  updatePlannedCharge: (id: number, data: { expected_date?: string; expected_amount?: string | null }) =>
+    request(`/api/v2/plan/upcoming/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  dismissPlannedCharge: (id: number) => request(`/api/v2/plan/upcoming/${id}/dismiss`, { method: 'POST' }),
   upcoming: (days = 30, offset = 0) => request<UpcomingPlan>(`/api/v2/plan/upcoming?days=${days}&limit=50&offset=${offset}`),
   home: () => request<HomeBriefing>('/api/v2/home'),
   spendingReview: (offset = 0) => request<SpendingReview>(`/api/v2/spending/review?limit=50&offset=${offset}`),

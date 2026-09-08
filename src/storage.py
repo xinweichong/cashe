@@ -2183,6 +2183,47 @@ class Storage:
         )
         self._conn.commit()
 
+    def _pending_planned_charge(self, upcoming_id: int):
+        """Called only by locked plan commands."""
+        row = self._conn.execute(
+            """SELECT u.*, s.status AS schedule_status FROM upcoming_transactions u
+               JOIN subscriptions s ON s.id = u.subscription_id WHERE u.id = ?""", (upcoming_id,),
+        ).fetchone()
+        if row is None:
+            raise ValueError("Charge not found")
+        if (row["status"] != "pending" or row["matched_transaction_id"] is not None
+                or row["schedule_status"] not in ("active", "possibly_cancelled")):
+            raise ValueError("Charge is no longer pending")
+        return row
+
+    @_locked
+    def update_planned_charge(self, upcoming_id: int, fields: dict) -> None:
+        self._pending_planned_charge(upcoming_id)
+        if not fields or set(fields) - {"expected_date", "expected_amount"}:
+            raise ValueError("Provide an expected date or amount only")
+        accepted = dict(fields)
+        if "expected_date" in accepted:
+            value = accepted["expected_date"]
+            if not isinstance(value, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+                raise ValueError("Expected date must be YYYY-MM-DD")
+            try:
+                accepted["expected_date"] = date.fromisoformat(value).isoformat()
+            except ValueError:
+                raise ValueError("Expected date must be a valid calendar date") from None
+        if "expected_amount" in accepted and accepted["expected_amount"] is not None:
+            accepted["expected_amount"] = normalize_transaction_fields({"amount": accepted["expected_amount"]})["amount"]
+        with self._conn:
+            self._conn.execute(
+                f"UPDATE upcoming_transactions SET {', '.join(key + ' = ?' for key in accepted)} WHERE id = ?",
+                (*accepted.values(), upcoming_id),
+            )
+
+    @_locked
+    def dismiss_planned_charge(self, upcoming_id: int) -> None:
+        self._pending_planned_charge(upcoming_id)
+        with self._conn:
+            self._conn.execute("UPDATE upcoming_transactions SET status = 'dismissed' WHERE id = ?", (upcoming_id,))
+
     @_locked
     def dismiss_upcoming_transaction(self, upcoming_id: int) -> None:
         self._conn.execute(
