@@ -235,11 +235,11 @@ class UserManager:
 
         def weekly():
             if bot and ctx:
-                bot.notify_text(_weekly_summary(ctx.storage, bot, self._llm_service), username)
+                bot.notify_text(_weekly_summary(ctx.storage, bot), username)
 
         def monthly():
             if bot and ctx:
-                bot.notify_text(_monthly_summary(ctx.storage, bot, self._llm_service), username)
+                bot.notify_text(_monthly_summary(ctx.storage, bot), username)
 
         def daily():
             ctx = self.get(username)
@@ -294,54 +294,16 @@ def _init_user_db(db_path: str) -> sqlite3.Connection:
 # Summary helpers (used by scheduler jobs)
 # ---------------------------------------------------------------------------
 
-def _weekly_summary(storage, bot, llm_service=None) -> str:
-    import json
-    from src.config import local_now
+def _weekly_summary(storage, bot) -> str:
+    """Scheduled Sunday report: current Monday through the local send date."""
+    return bot._format_spending_period(storage, "week", include_evidence=False)
+
+
+def _monthly_summary(storage, bot) -> str:
+    """Scheduled first-of-month report: the completed previous calendar month."""
     from datetime import timedelta
-    end = local_now()
-    start = end - timedelta(days=7)
-    text = bot.format_weekly_summary(
-        start.strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d"), storage=storage
-    )
-    if llm_service:
-        _generate_weekly_insight(storage, llm_service)
-        insight_str = storage.get_setting("llm_weekly_insight_content", "")
-        if insight_str:
-            try:
-                insight = json.loads(insight_str)
-                narrative = insight.get("narrative", "")
-                nudges = insight.get("nudges", [])
-                if narrative:
-                    text += "\n\n*AI Weekly Insight*\n" + narrative
-                    if nudges:
-                        text += "\n" + "\n".join(f"• {n}" for n in nudges)
-            except Exception:
-                pass
-    return text
-
-
-def _monthly_summary(storage, bot, llm_service=None) -> str:
-    import json
-    from src.config import local_now
-    now = local_now()
-    start = now.replace(day=1).strftime("%Y-%m-%d")
-    end = now.strftime("%Y-%m-%d")
-    text = bot.format_monthly_summary(start, end, storage=storage)
-    if llm_service:
-        _generate_monthly_insight(storage, llm_service)
-        insight_str = storage.get_setting("llm_monthly_insight_content", "")
-        if insight_str:
-            try:
-                insight = json.loads(insight_str)
-                narrative = insight.get("narrative", "")
-                nudges = insight.get("nudges", [])
-                if narrative:
-                    text += "\n\n*AI Monthly Insight*\n" + narrative
-                    if nudges:
-                        text += "\n" + "\n".join(f"• {n}" for n in nudges)
-            except Exception:
-                pass
-    return text
+    previous_end = bot._local_now().date().replace(day=1) - timedelta(days=1)
+    return bot._format_spending_period(storage, "month", as_of=previous_end, include_evidence=False)
 
 
 def _check_budget_alerts(storage, bot, username) -> None:
@@ -378,93 +340,6 @@ def _check_budget_alerts(storage, bot, username) -> None:
             storage.set_setting(dedup_key, "1")
         except Exception:
             pass
-
-
-def _generate_weekly_insight(storage, llm_service) -> None:
-    """Generate weekly LLM insight and cache in app_settings."""
-    import json
-    from src.analytics import get_category_comparison, get_spending_velocity
-    from src.config import local_now
-    from datetime import timedelta
-
-    try:
-        now = local_now()
-        end = now.strftime("%Y-%m-%d")
-        start = (now - timedelta(days=7)).strftime("%Y-%m-%d")
-
-        summary_raw = storage.get_spending_summary(start_date=start, end_date=end)
-        velocity = get_spending_velocity(storage._conn)
-        categories = get_category_comparison(storage._conn, period="week")
-
-        top_cats = [
-            {"name": c["category"], "amount": c["current"]}
-            for c in categories[:5]
-        ]
-
-        summary_dict = {
-            "period_label": f"{start} to {end}",
-            "total_expense": round(summary_raw["total"], 2),
-            "total_income": 0,  # weekly view focuses on expense
-            "top_categories": top_cats,
-            "velocity_status": velocity.get("status"),
-        }
-
-        result = llm_service.generate_weekly_insight(summary_dict)
-        storage.set_setting("llm_weekly_insight_content", json.dumps(result))
-        storage.set_setting("llm_weekly_insight_generated_at", now.isoformat())
-        logger.info("Weekly LLM insight cached successfully")
-    except Exception as e:
-        logger.warning("Weekly LLM insight generation failed: %s", e)
-
-
-def _generate_monthly_insight(storage, llm_service) -> None:
-    """Generate monthly LLM insight and cache in app_settings."""
-    import json
-    from src.analytics import get_period_comparison, get_category_comparison, get_spending_velocity
-    from src.config import local_now
-
-    try:
-        now = local_now()
-        start = now.replace(day=1).strftime("%Y-%m-%d")
-        end = now.strftime("%Y-%m-%d")
-
-        comparison = get_period_comparison(storage._conn, period="month")
-        categories = get_category_comparison(storage._conn, period="month")
-        velocity = get_spending_velocity(storage._conn)
-
-        balance_row = storage._conn.execute(
-            """SELECT
-                 COALESCE(SUM(CASE WHEN type='income' THEN amount*exchange_rate END), 0) AS income,
-                 COALESCE(SUM(CASE WHEN (type IS NULL OR type='expense') THEN amount*exchange_rate END), 0) AS expenses
-               FROM transactions
-               WHERE DATE(transaction_date) BETWEEN ? AND ?""",
-            (start, end),
-        ).fetchone()
-        income = balance_row["income"]
-        expenses = balance_row["expenses"]
-        savings_rate = ((income - expenses) / income * 100) if income > 0 else 0
-
-        top_cats = [
-            {"name": c["category"], "amount": c["current"], "change_pct": c["change_percent"]}
-            for c in categories[:5]
-        ]
-
-        summary_dict = {
-            "period_label": now.strftime("%B %Y"),
-            "total_expense": round(expenses, 2),
-            "total_income": round(income, 2),
-            "savings_rate": round(savings_rate, 1),
-            "change_vs_last_month_pct": comparison.get("change_percent"),
-            "top_categories": top_cats,
-            "velocity_status": velocity.get("status"),
-        }
-
-        result = llm_service.generate_monthly_insight(summary_dict)
-        storage.set_setting("llm_monthly_insight_content", json.dumps(result))
-        storage.set_setting("llm_monthly_insight_generated_at", now.isoformat())
-        logger.info("Monthly LLM insight cached successfully")
-    except Exception as e:
-        logger.warning("Monthly LLM insight generation failed: %s", e)
 
 
 def _generate_llm_insight(storage, llm_service) -> None:

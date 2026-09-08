@@ -1,6 +1,6 @@
 # Spending facts compatibility slice
 
-`src/spending_facts.py` is the shared read-only reporting interface for the new client. `Storage.get_month_spending_facts()`, `Storage.get_week_spending_facts()`, and `Storage.get_spending_evidence()` run it under the per-user database lock. Home and Telegram /week and /month consume these shared facts. Other dashboard reports, daily Telegram reports, and scheduled weekly/monthly summaries retain their legacy interfaces; moving those consumers happens in later slices.
+`src/spending_facts.py` is the shared read-only reporting interface for the new client. `Storage.get_month_spending_facts()`, `Storage.get_week_spending_facts()`, and `Storage.get_spending_evidence()` run it under the per-user database lock. Home and Telegram /week and /month consume these shared facts. Scheduled weekly/monthly Telegram summaries also use these facts. Other dashboard reports and daily Telegram reports retain their legacy interfaces; moving those consumers happens in later slices.
 
 Authenticated endpoints:
 
@@ -75,4 +75,13 @@ Monthly JSON was about 1.6 KB; each 50-row evidence response was under 9.7 KB. T
 
 Reports include the three largest category changes and up to 50 spending plus 50 income evidence records, with explicit shown/total counts and an Activity pointer when truncated. Evidence includes projected dates, signed refund amounts, unresolved conversions, and transaction IDs; no raw payload or source identifier is included. Totals are not truncated with the evidence list. Recorded-data status does not establish capture completeness.
 
-These commands no longer append legacy budget-pace advice. Scheduled weekly/monthly summaries, their optional AI text, and daily/balance commands are outside this migration; their compatibility limits remain. This change does not migrate money storage.
+These commands no longer append legacy budget-pace advice. Daily/balance commands are outside this migration; their compatibility limits remain. This change does not migrate money storage.
+
+
+## Scheduled Telegram period reports
+
+The existing Sunday 08:00 schedule now reports Monday through the local send date, including only data recorded so far that Sunday. The first-of-month 08:00 schedule reports the completed previous calendar month, including December/January and leap-year boundaries. It does not report the new month's first day. Interactive `/month` continues to report the current month to date.
+
+Both jobs use the bot's configured local calendar and the same facts formatter as the commands. Notifications retain monetary status, unresolved counts, negative recorded net flow, and exact comparison windows, but omit transaction lists and cap displayed category names at 80 characters. No evidence query is needed for this compact output. Existing per-user scheduling and notification transport remain in place; durable scheduled delivery is not added.
+
+Scheduled weekly/monthly reports no longer generate or append legacy AI narratives. Existing cached insight rows and their timestamps remain available through the legacy read endpoints; they are not refreshed by these jobs. Optional daily AI generation is unchanged. Free-only AI verification, usage controls, privacy minimization, and the remaining legacy report migrations are still pending.

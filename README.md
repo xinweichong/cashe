@@ -79,7 +79,7 @@ Most people don't track their spending — not because they don't care, but beca
 | **Spending Velocity** | Daily pace indicator and projected month-end total based on current trajectory |
 | **Merchant Intelligence** | Per-merchant profiles with spend trends, tags (subscription, online, foreign, essential, recurring), notes, and full transaction history |
 | **Anomaly Detection** | Unusual spending flagged in yellow with explanatory labels; new merchants highlighted separately |
-| **LLM Intelligence** | Optional Gemini Flash integration — AI anomaly explanations on Analytics, natural-language Telegram transaction entry, and AI-generated weekly/monthly spending insights; disabled when `gemini_api_key` is blank |
+| **LLM Intelligence** | Optional Gemini Flash integration — AI anomaly explanations on Analytics, natural-language Telegram transaction entry, and AI-generated daily spending insights; disabled when `gemini_api_key` is blank |
 | **Recurring Detection** | Automatically identifies subscriptions and regular payments — monthly, weekly, biweekly |
 | **Period Comparison** | Current vs previous period charts, category-level breakdown, and change percentages |
 

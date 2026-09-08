@@ -15,7 +15,7 @@ Single Python monolith, one process, eight subsystems:
 6. **Categorization** — keyword matching + learned merchant overrides, with match source tracking
 7. **Intelligence** — recurring transaction detection, spending insights, multi-currency exchange rates, analytics
 8. **Finance System** — budgets (monthly/weekly), savings goals with contributions, trip expense tracking, subscriptions with upcoming-transaction tracking
-9. **LLM Intelligence** — optional Gemini Flash layer for anomaly explanations, natural-language Telegram parsing, and weekly/monthly AI insights; `None` when `gemini_api_key` is absent
+9. **LLM Intelligence** — optional Gemini Flash layer for anomaly explanations, natural-language Telegram parsing, and daily AI insights; `None` when `gemini_api_key` is absent
 
 All data in SQLite with WAL mode. Multi-user system with per-user expense DBs and a shared admin DB. Supports income and expense tracking.
 
@@ -222,7 +222,7 @@ The `IngestionPipeline` is instantiated per-user inside `UserManager._build_cont
 
 ### Shared spending facts
 
-- Telegram `/week` and `/month` resolve per-user shared weekly/monthly facts in the bot timezone. Read facts and bounded spending/income evidence under the Storage lock, then send outside it. Preserve partial/indicative labels, absent income, negative recorded net flow, and separate comparable windows. Evidence lists show up to 50 per measure with explicit counts. These commands do not append legacy budget-pace notes; daily/balance commands and scheduled weekly/monthly reports remain legacy consumers.
+- Telegram `/week` and `/month` resolve per-user shared weekly/monthly facts in the bot timezone. Read facts and bounded spending/income evidence under the Storage lock, then send outside it. Preserve partial/indicative labels, absent income, negative recorded net flow, and separate comparable windows. Evidence lists show up to 50 per measure with explicit counts. These commands do not append legacy budget-pace notes; daily/balance commands remain legacy consumers. Scheduled Sunday reports use the same week-to-date facts; first-of-month reports use the completed previous month. Scheduled reports omit evidence lists and bound category labels for compact delivery. They do not call the model or append cached weekly/monthly narratives; daily optional AI generation remains separate.
 
 - `/api/v2/spending/review` lists all-history unresolved spending records using the same selection/conversion rules as evidence. Reason codes distinguish missing dates, unresolved money, and unknown classification; transfers and usable indicative FX are excluded. The read-only list resolves membership from current data, not dismissals. Invalidate `spending-review` after transaction mutations and preserve `/review?spending_offset=...` when closing details.
 - Opt-in Home: `home_briefing_enabled` defaults off in Settings. `/api/v2/home` composes shared facts and sanitized capture freshness; `/home`, `/evidence`, and `/review` are lazy-loaded authenticated screens. Keep failed/stale/partial states explicit and invalidate Home/evidence queries after transaction mutations. Capture list APIs support `limit` and `offset`.

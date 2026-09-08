@@ -317,26 +317,6 @@ class TelegramBotService:
             f"*Spending for {date}*", summary, date, date, storage=_storage
         )
 
-    def format_weekly_summary(self, start_date: str, end_date: str, storage=None) -> str:
-        _storage = storage if storage is not None else self.storage
-        summary = _storage.get_spending_summary(start_date=start_date, end_date=end_date)
-        if summary["total"] == 0:
-            return "Nothing logged yet."
-
-        return self._build_summary_with_transactions(
-            f"*Weekly Summary ({start_date} to {end_date})*", summary, start_date, end_date, storage=_storage
-        )
-
-    def format_monthly_summary(self, start_date: str, end_date: str, storage=None) -> str:
-        _storage = storage if storage is not None else self.storage
-        summary = _storage.get_spending_summary(start_date=start_date, end_date=end_date)
-        if summary["total"] == 0:
-            return "Nothing logged yet."
-        label = datetime.strptime(start_date, "%Y-%m-%d").strftime("%B %Y")
-        return self._build_summary_with_transactions(
-            f"*Monthly Summary — {label}*", summary, start_date, end_date, storage=_storage
-        )
-
     async def _delete_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         ctx = await self._require_ctx(update)
         if ctx is None:
@@ -735,14 +715,14 @@ class TelegramBotService:
         text = self.format_daily_summary(yesterday, storage=ctx.storage)
         await self._send_long_message(update, text)
 
-    def _format_spending_period(self, storage, period: str) -> str:
+    def _format_spending_period(self, storage, period: str, *, as_of=None, include_evidence=True) -> str:
         from datetime import date
         from decimal import Decimal
 
         def amount(value):
             return f"S${Decimal(value['minor_units']) / 100:,.2f}"
 
-        as_of = self._local_now().date()
+        as_of = as_of or self._local_now().date()
         with storage.reconciliation_lock():
             facts = (storage.get_week_spending_facts(as_of, self.timezone) if period == "week"
                      else storage.get_month_spending_facts(as_of, self.timezone))
@@ -751,7 +731,7 @@ class TelegramBotService:
                 measure: storage.get_spending_evidence(
                     date.fromisoformat(current["start"]), date.fromisoformat(current["end"]),
                     timezone=self.timezone, measure=measure, limit=50, offset=0,
-                ) for measure in ("spending", "income")
+                ) for measure in (("spending", "income") if include_evidence else ())
             }
         lines = [
             f"*{'Weekly' if period == 'week' else 'Monthly'} Summary ({current['start']} to {current['end']})*",
@@ -789,7 +769,10 @@ class TelegramBotService:
             if facts["category_changes"]:
                 lines.append("Largest category changes:")
                 for driver in facts["category_changes"][:3]:
-                    lines.append(f"• {self._escape_md(driver['category'])}: `{amount(driver['change'])}`")
+                    category = driver["category"]
+                    if not include_evidence and len(category) > 80:
+                        category = category[:80] + "…"
+                    lines.append(f"• {self._escape_md(category)}: `{amount(driver['change'])}`")
         for measure, report in evidence.items():
             if not report["total"]:
                 continue

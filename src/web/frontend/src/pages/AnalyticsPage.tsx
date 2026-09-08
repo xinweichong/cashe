@@ -88,8 +88,8 @@ function AIInsightsCard() {
 
   const tabs = [
     { key: 'daily' as const, label: 'Daily', queryFn: () => api.getAnalyticsInsight(), emptyLabel: 'No insight yet — generated daily at 8am.' },
-    { key: 'weekly' as const, label: 'Weekly', queryFn: () => api.getWeeklyInsight(), emptyLabel: 'No weekly insight yet — generated on Mondays.' },
-    { key: 'monthly' as const, label: 'Monthly', queryFn: () => api.getMonthlyInsight(), emptyLabel: 'No monthly insight yet — generated on the 1st.' },
+    { key: 'weekly' as const, label: 'Weekly', queryFn: () => api.getWeeklyInsight(), emptyLabel: 'No archived weekly insight.' },
+    { key: 'monthly' as const, label: 'Monthly', queryFn: () => api.getMonthlyInsight(), emptyLabel: 'No archived monthly insight.' },
   ];
 
   const activeTab = tabs.find(t => t.key === tab)!;
@@ -116,6 +116,7 @@ function AIInsightsCard() {
 
   return (
     <PageCard title="AI Insights" action={tabSelector}>
+      {tab !== 'daily' && <p className="text-sm text-muted mb-3">Archived AI text; no longer refreshed. Current spending facts are available in Home and Telegram summaries.</p>}
       <InsightCard period={tab} queryFn={activeTab.queryFn} emptyLabel={activeTab.emptyLabel} />
     </PageCard>
   );
