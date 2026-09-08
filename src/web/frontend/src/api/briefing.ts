@@ -42,7 +42,14 @@ export interface SpendingReview {
 export interface FollowupIssue {
   id: number; transaction_id: number; kind: string; status: string; attempts: number;
 }
+export interface RecurringReview {
+  items: { id: string; merchant: string; frequency: string }[];
+  total: number; limit: number; offset: number;
+}
 export const briefingApi = {
+  recurringReview: (offset = 0) => request<RecurringReview>(`/api/v2/recurring/review?limit=50&offset=${offset}`),
+  resolveRecurring: (id: string, action: 'accept' | 'dismiss') =>
+    request<{ status: 'ok'; subscription_id: number | null }>(`/api/v2/recurring/suggestions/${encodeURIComponent(id)}/${action}`, { method: 'POST' }),
   updatePlannedCharge: (id: number, data: { expected_date?: string; expected_amount?: string | null }) =>
     request(`/api/v2/plan/upcoming/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   dismissPlannedCharge: (id: number) => request(`/api/v2/plan/upcoming/${id}/dismiss`, { method: 'POST' }),

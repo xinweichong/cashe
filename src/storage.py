@@ -2045,6 +2045,25 @@ class Storage:
         return dict(self._conn.execute("SELECT * FROM recurring_suggestions WHERE id = ?", (suggestion_id,)).fetchone())
 
     @_locked
+    def get_recurring_review(self, limit=50, offset=0) -> dict:
+        if not 1 <= limit <= 100 or offset < 0:
+            raise ValueError("Invalid recurring review query")
+        rows = self._conn.execute(
+            """SELECT id, merchant, frequency FROM recurring_suggestions WHERE status = 'pending'
+               ORDER BY created_at, id LIMIT ? OFFSET ?""", (limit, offset),
+        ).fetchall()
+        total = self._conn.execute("SELECT COUNT(*) FROM recurring_suggestions WHERE status = 'pending'").fetchone()[0]
+        return {"items": [dict(row) for row in rows], "total": total, "limit": limit, "offset": offset}
+
+    @_locked
+    def resolve_recurring_review(self, suggestion_id: str, action: str) -> int | None:
+        """Authenticated web callers already resolve the owning user's Storage."""
+        row = self._conn.execute("SELECT chat_id FROM recurring_suggestions WHERE id = ?", (suggestion_id,)).fetchone()
+        if row is None:
+            raise ValueError("Suggestion not found")
+        return self.resolve_recurring_suggestion(suggestion_id, row["chat_id"], action)
+
+    @_locked
     def resolve_recurring_suggestion(self, suggestion_id: str, chat_id: int, action: str) -> int | None:
         if action not in ("accept", "dismiss"):
             raise ValueError("Invalid suggestion action")

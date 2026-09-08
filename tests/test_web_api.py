@@ -858,3 +858,30 @@ async def test_subscription_confirmation_api(client, in_memory_db):
     assert (await client.post('/api/subscriptions/999999/confirm')).status_code == 404
     await client.post('/api/logout')
     assert (await client.post(path)).status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_recurring_review_api_privacy_resolution_validation_and_auth(client, in_memory_db):
+    storage = Storage(in_memory_db)
+    suggestion = storage.prepare_recurring_suggestion(123456789, 'Full merchant', 'monthly', 98765)
+    report = (await client.get('/api/v2/recurring/review?limit=1')).json()
+    assert report == {'items': [{'id': suggestion['id'], 'merchant': 'Full merchant', 'frequency': 'monthly'}],
+                      'total': 1, 'limit': 1, 'offset': 0}
+    for query in ['limit=0', 'limit=101', 'offset=-1']:
+        assert (await client.get('/api/v2/recurring/review?' + query)).status_code == 422
+    path = f"/api/v2/recurring/suggestions/{suggestion['id']}"
+    assert (await client.post(path + '/invalid')).status_code == 422
+    first = await client.post(path + '/accept')
+    assert first.status_code == 200
+    assert set(first.json()) == {'status', 'subscription_id'}
+    assert (await client.post(path + '/accept')).json() == first.json()
+    assert (await client.get('/api/v2/recurring/review')).json()['total'] == 0
+    assert (await client.post(path + '/dismiss')).status_code == 409
+    assert (await client.post('/api/v2/recurring/suggestions/missing/accept')).status_code == 404
+    second = storage.prepare_recurring_suggestion(123456789, 'Second', 'monthly', 12)
+    response = await client.post(f"/api/v2/recurring/suggestions/{second['id']}/dismiss")
+    assert response.json() == {'status': 'ok', 'subscription_id': None}
+    await client.post('/api/logout')
+    assert (await client.get('/api/v2/recurring/review')).status_code == 401
+    assert (await client.post(path + '/accept')).status_code == 401
+    assert (await client.post(path + '/dismiss')).status_code == 401

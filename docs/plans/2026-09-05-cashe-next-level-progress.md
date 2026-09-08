@@ -521,3 +521,16 @@ Replayable legacy acceptance was committed as `38be6a9`; this continuation start
 - Updated operator/agent documentation and migration/audit expectations. Older callbacks retain their original limitations. No frontend changes, production DB migration, live Telegram/model call, service change, push, or deployment.
 
 Verification: **1075 backend tests passed** (four existing datetime deprecation warnings). Fourteen new cases cover full Unicode merchant preservation and callback byte limits, pending retry reuse and send failure, restart of pending/dismissed records, accepted replay/deletion, competing resolutions, per-chat/user isolation and notifier routing, paused/cancelled schedule reuse, rollback on resolution failure, invalid averages, durable dismiss callbacks, and missing IDs. Focused legacy/migration checks and the 90-test Telegram/durable run also passed; whitespace checks passed. No frontend files changed; the previous **84 frontend tests**, production build, and documented lint limitation remain the baseline. This verified increment is committed separately.
+
+
+## 2026-09-08 continuation — recurring suggestions in web Review
+
+Durable full-merchant suggestions were committed as `fca0a56`; this continuation started with a clean working tree.
+
+- Added authenticated, typed `/api/v2/recurring/review` with bounded pending-only pagination and full counts. Only opaque ID, merchant, and inferred frequency are exposed; destination chat and observed averages stay server-side because the average has no reliable currency context.
+- Added authenticated accept/dismiss actions that delegate under the Storage lock to the same command as Telegram. Web authentication establishes the owning user without a client-supplied chat identity. Replay, conflict, deletion protection, existing schedule reuse, and confirmation behavior stay shared.
+- Review now has an independent recurring group with loading/failure/empty states, pagination, inferred labels, accept/dismiss controls, retained errors with refresh, and an accepted schedule link to billing controls. Successful actions invalidate recurring/subscription/upcoming/Plan/Home queries.
+- This lists already-recorded durable suggestions prepared for Telegram. Generating suggestions for unlinked accounts, Home suggestion counts, richer evidence/amount provenance, and notification suppression remain pending.
+- Updated operator/agent documentation. No schema change, production data/service change, live Telegram/model call, push, or deployment. Browser/device visual acceptance remains unverified.
+
+Verification: **1078 backend tests passed** (four existing datetime deprecation warnings), **88 frontend tests passed**, production build and focused Review/test lint passed. Three new backend cases cover pending-only pagination/full counts, sanitized response fields, paging/action validation, shared web/Telegram resolution and replay/conflict behavior, isolation, missing IDs, and authentication. Four UI cases cover acceptance and billing links, dismissal/refresh, retained conflict errors, failed-load retry, inferred labels, and navigation after a later page empties. Whitespace checks passed. This verified increment is committed separately.

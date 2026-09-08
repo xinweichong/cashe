@@ -20,8 +20,9 @@ export function ReviewPage() {
   const retry = useMutation({ mutationFn: ({ id, type }: { id: number; type: 'capture' | 'followup' }) => type === 'capture' ? briefingApi.retryCapture(id) : briefingApi.retryFollowup(id), onSuccess: async () => { await Promise.all([client.invalidateQueries({ queryKey: ['capture-review'] }), client.invalidateQueries({ queryKey: ['home-briefing'] })]); } });
   const resolve = useMutation({ mutationFn: ({ id, handled }: { id: number; handled: boolean }) => briefingApi.resolveCapture(id, handled), onSuccess: async () => { await Promise.all([client.invalidateQueries({ queryKey: ['capture-review'] }), client.invalidateQueries({ queryKey: ['home-briefing'] })]); } });
   return <div className="max-w-4xl mx-auto p-4 md:p-8 space-y-6">
-    <header><Link to="/home" className="text-teal min-h-11 inline-flex items-center">Back to briefing</Link><h1 className="text-2xl font-semibold">Review</h1><p className="text-muted">Spending records, requests, and follow-ups that need attention.</p></header>
+    <header><Link to="/home" className="text-teal min-h-11 inline-flex items-center">Back to briefing</Link><h1 className="text-2xl font-semibold">Review</h1><p className="text-muted">Spending records, recurring suggestions, and capture follow-ups that need attention.</p></header>
     <SpendingReviewList />
+    <RecurringReviewList />
     {resolve.isError && <p role="alert" className="text-destructive">Couldn’t update this entry. Please try again.</p>}
     {retry.isError && <p role="alert" className="text-destructive">Couldn’t queue the retry. Please try again.</p>}
     {retry.isSuccess && <p role="status">Retry queued. Processing normally runs within two minutes.</p>}
@@ -68,6 +69,46 @@ function SpendingReviewList() {
     <nav aria-label="Spending review pages" className="flex justify-between items-center gap-3 pt-4">
       <Button variant="outline" className="min-h-11" disabled={!offset} onClick={() => move(Math.max(0, offset - 50))}>Previous spending records</Button>
       <Button variant="outline" className="min-h-11" disabled={!query.data || query.isError || offset + 50 >= query.data.total} onClick={() => move(offset + 50)}>Next spending records</Button>
+    </nav>
+  </PageCard>;
+}
+
+
+function RecurringReviewList() {
+  const client = useQueryClient();
+  const [offset, setOffset] = useState(0);
+  const query = useQuery({ queryKey: ['recurring-review', offset], queryFn: () => briefingApi.recurringReview(offset) });
+  const resolve = useMutation({
+    mutationFn: ({ id, action }: { id: string; action: 'accept' | 'dismiss' }) => briefingApi.resolveRecurring(id, action),
+    onSuccess: async () => {
+      await Promise.all(['recurring-review', 'subscriptions', 'subscription-upcoming', 'plan-upcoming', 'home-briefing'].map(key =>
+        client.invalidateQueries({ queryKey: [key] })));
+    },
+  });
+  const frequencies: Record<string, string> = { weekly: 'Weekly', biweekly: 'Every two weeks', monthly: 'Monthly' };
+  return <PageCard title="Recurring suggestions">
+    <p className="text-sm text-muted mb-3">These patterns may repeat. Accept to track a schedule, then review its billing date and amount. Provider billing is unchanged. Dismissal handles this suggestion; later patterns may still appear.</p>
+    {resolve.isError && <div role="alert" className="text-destructive">
+      <p>{resolve.error instanceof Error ? resolve.error.message : 'Could not update this suggestion. Try again.'}</p>
+      <Button variant="outline" className="min-h-11" onClick={() => void query.refetch()}>Refresh suggestions</Button>
+    </div>}
+    {resolve.isSuccess && <p role="status" className="py-2">
+      {resolve.data.subscription_id != null ? <>Schedule saved. <Link className="text-teal min-h-11 inline-flex items-center" to={`/plan/manage?subscription=${resolve.data.subscription_id}`}>Review billing details</Link></> : 'Suggestion dismissed.'}
+    </p>}
+    {query.isError ? <div role="alert"><LoadFailed onRetry={() => void query.refetch()} /></div> : !query.data ? <p role="status">Loading recurring suggestions…</p> : <>
+      <p className="text-sm text-muted">{query.data.total} pending suggestions</p>
+      {query.data.items.map(item => <div key={item.id} className="py-4 border-b border-border last:border-0 space-y-2">
+        <p>{item.merchant}</p><p className="text-sm text-muted">{frequencies[item.frequency] || item.frequency} · Inferred pattern</p>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" className="min-h-11" disabled={resolve.isPending} onClick={() => resolve.mutate({ id: item.id, action: 'accept' })}>Accept schedule</Button>
+          <Button variant="ghost" className="min-h-11" disabled={resolve.isPending} onClick={() => resolve.mutate({ id: item.id, action: 'dismiss' })}>Dismiss suggestion</Button>
+        </div>
+      </div>)}
+      {!query.data.items.length && <p className="py-4 text-muted">{query.data.total ? 'No suggestions on this page. Return to an earlier page.' : 'No pending recurring suggestions.'}</p>}
+    </>}
+    <nav aria-label="Recurring suggestion pages" className="flex justify-between gap-3 pt-4">
+      <Button variant="outline" className="min-h-11" disabled={!offset} onClick={() => setOffset(Math.max(0, offset - 50))}>Previous suggestions</Button>
+      <Button variant="outline" className="min-h-11" disabled={!query.data || query.isError || offset + 50 >= query.data.total} onClick={() => setOffset(offset + 50)}>Next suggestions</Button>
     </nav>
   </PageCard>;
 }

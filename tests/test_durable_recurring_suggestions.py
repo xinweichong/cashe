@@ -109,3 +109,34 @@ def test_invalid_average_does_not_create_pending_record(storage, in_memory_db, a
     with pytest.raises(ValueError):
         storage.prepare_recurring_suggestion(123, 'Cafe', 'monthly', amount)
     assert in_memory_db.execute('SELECT COUNT(*) FROM recurring_suggestions').fetchone()[0] == 0
+
+
+def test_web_review_is_pending_only_paginated_and_sanitized(storage):
+    suggestions = [storage.prepare_recurring_suggestion(123, name, 'monthly', 12) for name in ['First', 'Second', 'Third']]
+    storage.resolve_recurring_review(suggestions[0]['id'], 'dismiss')
+    report = storage.get_recurring_review(limit=1)
+    assert report['total'] == 2
+    assert len(report['items']) == 1
+    assert set(report['items'][0]) == {'id', 'merchant', 'frequency'}
+    second = storage.get_recurring_review(limit=1, offset=1)
+    assert second['items'][0]['id'] != report['items'][0]['id']
+    assert storage.get_recurring_review(offset=50)['items'] == []
+    for limits in [(0, 0), (101, 0), (50, -1)]:
+        with pytest.raises(ValueError):
+            storage.get_recurring_review(*limits)
+
+
+def test_web_resolution_and_telegram_share_state(storage, tmp_path):
+    suggestion = storage.prepare_recurring_suggestion(123, 'Cafe', 'monthly', 12)
+    sub = storage.resolve_recurring_review(suggestion['id'], 'accept')
+    assert storage.resolve_recurring_suggestion(suggestion['id'], 123, 'accept') == sub
+    assert storage.resolve_recurring_review(suggestion['id'], 'accept') == sub
+    assert storage.get_recurring_review()['total'] == 0
+    with pytest.raises(SubscriptionMatchConflict):
+        storage.resolve_recurring_suggestion(suggestion['id'], 123, 'dismiss')
+    conn = init_db(str(tmp_path / 'other.db'))
+    other = Storage(conn)
+    assert other.get_recurring_review()['total'] == 0
+    with pytest.raises(ValueError, match='not found'):
+        other.resolve_recurring_review(suggestion['id'], 'accept')
+    conn.close()

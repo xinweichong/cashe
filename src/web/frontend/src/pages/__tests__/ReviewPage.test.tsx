@@ -5,9 +5,10 @@ import { MemoryRouter } from 'react-router-dom';
 import { briefingApi } from '@/api/briefing';
 import { ReviewPage } from '../ReviewPage';
 
-vi.mock('@/api/briefing', () => ({ briefingApi: { spendingReview: vi.fn(), captureIssues: vi.fn(), followups: vi.fn(), resolveCapture: vi.fn() } }));
+vi.mock('@/api/briefing', () => ({ briefingApi: { recurringReview: vi.fn(), resolveRecurring: vi.fn(), spendingReview: vi.fn(), captureIssues: vi.fn(), followups: vi.fn(), resolveCapture: vi.fn() } }));
 beforeEach(() => {
-  vi.resetAllMocks();
+  vi.resetAllMocks(); vi.mocked(briefingApi.recurringReview).mockResolvedValue({ items: [], total: 0, limit: 50, offset: 0 });
+  vi.mocked(briefingApi.spendingReview).mockResolvedValue({ items: [], total: 0, limit: 50, offset: 0 });
   vi.mocked(briefingApi.captureIssues).mockResolvedValue([]);
   vi.mocked(briefingApi.followups).mockResolvedValue([]);
 });
@@ -81,4 +82,54 @@ test('resolution failures retain the entry and show an error', async () => {
   fireEvent.click(await screen.findByRole('button', { name: 'Mark handled' }));
   expect((await screen.findByRole('alert')).textContent).toContain('Couldn’t update this entry.');
   expect(screen.getByRole('button', { name: 'Mark handled' })).toBeTruthy();
+});
+
+
+const recurring = { items: [{ id: 'opaque', merchant: 'Full merchant', frequency: 'monthly' }], total: 1, limit: 50, offset: 0 };
+
+test('accepts an inferred recurring schedule and opens its billing controls', async () => {
+  vi.mocked(briefingApi.recurringReview).mockResolvedValueOnce(recurring).mockResolvedValue({ ...recurring, items: [], total: 0 });
+  vi.mocked(briefingApi.resolveRecurring).mockResolvedValue({ status: 'ok', subscription_id: 12 });
+  show();
+  fireEvent.click(await screen.findByRole('button', { name: 'Accept schedule' }));
+  expect(await screen.findByText('No pending recurring suggestions.')).toBeTruthy();
+  expect(screen.getByRole('link', { name: 'Review billing details' }).getAttribute('href')).toBe('/plan/manage?subscription=12');
+  expect(briefingApi.resolveRecurring).toHaveBeenCalledWith('opaque', 'accept');
+  expect(screen.getByText(/Provider billing is unchanged/)).toBeTruthy();
+});
+
+test('dismisses only the selected suggestion and refreshes the pending list', async () => {
+  vi.mocked(briefingApi.recurringReview).mockResolvedValueOnce(recurring).mockResolvedValue({ ...recurring, items: [], total: 0 });
+  vi.mocked(briefingApi.resolveRecurring).mockResolvedValue({ status: 'ok', subscription_id: null });
+  show();
+  fireEvent.click(await screen.findByRole('button', { name: 'Dismiss suggestion' }));
+  expect(await screen.findByText('Suggestion dismissed.')).toBeTruthy();
+  expect(briefingApi.resolveRecurring).toHaveBeenCalledWith('opaque', 'dismiss');
+  expect(await screen.findByText('No pending recurring suggestions.')).toBeTruthy();
+});
+
+test('a conflicting action retains the suggestion and offers a refresh', async () => {
+  vi.mocked(briefingApi.recurringReview).mockResolvedValue(recurring);
+  vi.mocked(briefingApi.resolveRecurring).mockRejectedValue(new Error('Already handled in Telegram'));
+  show();
+  fireEvent.click(await screen.findByRole('button', { name: 'Accept schedule' }));
+  expect(await screen.findByText('Already handled in Telegram')).toBeTruthy();
+  expect(screen.getByText('Full merchant')).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Accept schedule' }).hasAttribute('disabled')).toBe(false);
+  fireEvent.click(screen.getByRole('button', { name: 'Refresh suggestions' }));
+  await waitFor(() => expect(briefingApi.recurringReview).toHaveBeenCalledTimes(2));
+});
+
+test('recurring review can retry a failed load and navigate empty later pages', async () => {
+  vi.mocked(briefingApi.recurringReview).mockRejectedValueOnce(new Error('offline')).mockResolvedValue({ ...recurring, total: 51 });
+  show();
+  fireEvent.click(await screen.findByRole('button', { name: 'Retry' }));
+  expect(await screen.findByText('Full merchant')).toBeTruthy();
+  expect(screen.getByText('Monthly · Inferred pattern')).toBeTruthy();
+  vi.mocked(briefingApi.recurringReview).mockResolvedValue({ ...recurring, items: [], total: 1, offset: 50 });
+  fireEvent.click(screen.getByRole('button', { name: 'Next suggestions' }));
+  expect(await screen.findByText('No suggestions on this page. Return to an earlier page.')).toBeTruthy();
+  expect(briefingApi.recurringReview).toHaveBeenCalledWith(50);
+  fireEvent.click(screen.getByRole('button', { name: 'Previous suggestions' }));
+  await waitFor(() => expect(briefingApi.recurringReview).toHaveBeenLastCalledWith(0));
 });

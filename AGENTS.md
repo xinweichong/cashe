@@ -660,3 +660,9 @@ System/light/dark preferences are supplied by `ThemeProvider` and selected in Pr
 - Migration 10 persists full-field `recurring_suggestions` before Telegram delivery. New buttons contain opaque IDs, resolved only within the user's Storage and original chat. Pending records with identical chat/merchant/frequency/average are reused; later patterns after resolution may create new records.
 - Acceptance and dismissal are atomic/replayable and conflict with each other. Accepted schedule links survive deletion to prevent same-button resurrection. Both durable and legacy acceptance use `_subscription_from_suggestion` under their caller's lock/transaction. This helper must never commit independently.
 - The bot notification bridge selects the target user's Storage, persists off the event loop, then sends without the Storage lock. Its send Future still gates outbox acknowledgement. Older callbacks remain supported; new durable records do not repair old truncated merchant names or change average-amount conversion semantics.
+
+### Web recurring suggestion review
+
+- Authenticated `/api/v2/recurring/review` exposes bounded pending suggestions with only opaque ID, merchant, and frequency. Do not expose destination chat IDs or treat stored observed averages as SGD.
+- Web accept/dismiss resolves inside the authenticated user's Storage through `resolve_recurring_review`, which delegates under the same lock to Telegram's command. Browser requests never supply chat identity. Cross-channel replay/conflict/deletion rules remain shared.
+- Review lists already-prepared durable suggestions; generating suggestions independently of Telegram and adding Home suggestion counts remain pending. Invalidate `recurring-review`, subscription/upcoming, Plan, and Home queries after resolution.

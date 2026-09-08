@@ -160,3 +160,21 @@ class HomeBriefing(BaseModel):
     capture_issue_count: int
     followup_issue_count: int
     freshness: CaptureFreshness
+
+
+class RecurringReviewItem(BaseModel):
+    id: str
+    merchant: str
+    frequency: str
+
+
+class RecurringReview(BaseModel):
+    items: list[RecurringReviewItem]
+    total: int
+    limit: int
+    offset: int
+
+
+class RecurringResolution(BaseModel):
+    status: Literal["ok"] = "ok"
+    subscription_id: int | None
