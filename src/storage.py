@@ -1994,26 +1994,77 @@ class Storage:
             if not self.get_subscription(accepted["subscription_id"]):
                 raise SubscriptionMatchConflict("The schedule from this suggestion was deleted; add it manually if needed")
             return accepted["subscription_id"]
+        with self._conn:
+            sub_id = self._subscription_from_suggestion(merchant, frequency)
+            self._conn.execute(
+                """INSERT INTO subscription_suggestion_acceptances(message_key, merchant, frequency, subscription_id)
+                   VALUES (?, ?, ?, ?)""", (message_key, merchant, frequency, sub_id),
+            )
+        return sub_id
+
+    def _subscription_from_suggestion(self, merchant: str, frequency: str) -> int:
+        """Caller holds the Storage lock and owns the acceptance transaction."""
         matches = self._conn.execute(
             "SELECT id FROM subscriptions WHERE merchant = ? AND frequency = ? ORDER BY id LIMIT 2",
             (merchant, frequency),
         ).fetchall()
         if len(matches) > 1:
             raise SubscriptionMatchConflict("Several schedules match this suggestion; review them in the app")
+        if matches:
+            sub_id = matches[0]["id"]
+        else:
+            sub_id = self._conn.execute(
+                "INSERT INTO subscriptions(merchant, frequency) VALUES (?, ?)", (merchant, frequency),
+            ).lastrowid
+        self._conn.execute(
+            """INSERT OR IGNORE INTO subscription_confirmations(subscription_id, source)
+               VALUES (?, 'recurring_suggestion')""", (sub_id,),
+        )
+        return sub_id
+
+    @_locked
+    def prepare_recurring_suggestion(self, chat_id: int, merchant: str, frequency: str, avg_amount: float) -> dict:
+        if type(chat_id) is not int or chat_id == 0:
+            raise ValueError("Suggestion needs a Telegram chat identity")
+        if not isinstance(merchant, str) or not merchant.strip() or frequency not in ("weekly", "biweekly", "monthly"):
+            raise ValueError("Invalid recurring suggestion")
+        amount = normalize_transaction_fields({"amount": avg_amount})["amount"]
+        row = self._conn.execute(
+            """SELECT * FROM recurring_suggestions WHERE chat_id = ? AND merchant = ? AND frequency = ?
+               AND avg_amount = ? AND status = 'pending' ORDER BY created_at, id LIMIT 1""",
+            (chat_id, merchant, frequency, amount),
+        ).fetchone()
+        if row:
+            return dict(row)
+        suggestion_id = secrets.token_hex(16)
         with self._conn:
-            if matches:
-                sub_id = matches[0]["id"]
-            else:
-                sub_id = self._conn.execute(
-                    "INSERT INTO subscriptions(merchant, frequency) VALUES (?, ?)", (merchant, frequency),
-                ).lastrowid
             self._conn.execute(
-                """INSERT OR IGNORE INTO subscription_confirmations(subscription_id, source)
-                   VALUES (?, 'recurring_suggestion')""", (sub_id,),
+                "INSERT INTO recurring_suggestions(id, chat_id, merchant, frequency, avg_amount) VALUES (?, ?, ?, ?, ?)",
+                (suggestion_id, chat_id, merchant, frequency, amount),
             )
+        return dict(self._conn.execute("SELECT * FROM recurring_suggestions WHERE id = ?", (suggestion_id,)).fetchone())
+
+    @_locked
+    def resolve_recurring_suggestion(self, suggestion_id: str, chat_id: int, action: str) -> int | None:
+        if action not in ("accept", "dismiss"):
+            raise ValueError("Invalid suggestion action")
+        row = self._conn.execute(
+            "SELECT * FROM recurring_suggestions WHERE id = ? AND chat_id = ?", (suggestion_id, chat_id),
+        ).fetchone()
+        if row is None:
+            raise ValueError("Suggestion not found; review subscriptions in the app")
+        target = "accepted" if action == "accept" else "dismissed"
+        if row["status"] != "pending":
+            if row["status"] != target:
+                raise SubscriptionMatchConflict("This suggestion was already handled differently")
+            if target == "accepted" and not self.get_subscription(row["subscription_id"]):
+                raise SubscriptionMatchConflict("The schedule from this suggestion was deleted; add it manually if needed")
+            return row["subscription_id"]
+        with self._conn:
+            sub_id = self._subscription_from_suggestion(row["merchant"], row["frequency"]) if action == "accept" else None
             self._conn.execute(
-                """INSERT INTO subscription_suggestion_acceptances(message_key, merchant, frequency, subscription_id)
-                   VALUES (?, ?, ?, ?)""", (message_key, merchant, frequency, sub_id),
+                "UPDATE recurring_suggestions SET status = ?, subscription_id = ? WHERE id = ?",
+                (target, sub_id, suggestion_id),
             )
         return sub_id
 

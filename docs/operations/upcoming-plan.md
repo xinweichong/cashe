@@ -43,13 +43,24 @@ Migration 8 adds `subscription_confirmations`, leaving legacy schedules without 
 
 Subscription details offer **Confirm this schedule** for unknown records through authenticated `POST /api/subscriptions/{id}/confirm`. Repeating confirmation preserves its original source and timestamp. It does not change status, pending dates/amounts, or recorded spending. Paused/cancelled schedules remain paused/cancelled. Removing the schedule removes its confirmation record.
 
-The label records a user's decision to track a schedule, not proof of a future charge or a frozen version of all schedule fields. Dates and amounts remain estimates after confirmation or subsequent edits. Legacy records are labeled “Schedule confirmation not recorded”, never automatically classified as inferred or confirmed. Telegram suggestion payload durability and full merchant identity remain separate work.
+The label records a user's decision to track a schedule, not proof of a future charge or a frozen version of all schedule fields. Dates and amounts remain estimates after confirmation or subsequent edits. Legacy records are labeled “Schedule confirmation not recorded”, never automatically classified as inferred or confirmed. New Telegram suggestions retain full merchant identity as described below; old button payloads cannot recover truncated names.
 
 
-## Repeated Telegram suggestion acceptance
+## Repeated legacy Telegram suggestion acceptance
 
 Migration 9 stores acceptance receipts keyed by Telegram chat/message identity in each user's database. Accepting a suggestion atomically records its merchant/frequency, the schedule ID, and confirmation. Repeated/concurrent clicks reuse that schedule, including after service restart or subsequent schedule edits. Receipts deliberately survive schedule deletion: replaying the same button reports that the schedule was deleted rather than recreating it.
 
 For a previously unaccepted message, one exact merchant/frequency schedule is reused without changing billing fields, pause/cancel status, or existing confirmation provenance. Several exact matches require review in the app; none creates a new confirmed schedule. Different notification messages have separate receipts. A new message can create a new schedule after deletion; no global merchant suppression is introduced.
 
-Legacy callback payloads still contain truncated merchant text, so these guarantees use the accepted callback fields, not recovered full merchant identity. Pending/dismissed suggestions are not yet durable records and notification delivery remains at least once. Errors direct users to retry or review existing subscriptions. No legacy receipts are inferred or backfilled.
+Legacy callback payloads still contain truncated merchant text, so these guarantees use the accepted callback fields, not recovered full merchant identity. Legacy pending/dismissed buttons have no durable suggestion record; notification delivery remains at least once. Errors direct users to retry or review existing subscriptions. No legacy receipts are inferred or backfilled.
+
+
+## Durable recurring suggestions
+
+Migration 10 adds `recurring_suggestions` in each user's database. Before a new notification is sent, Cashe commits the complete merchant, frequency, observed average, destination chat, and pending state. A short opaque ID replaces merchant text in the accept/dismiss buttons, keeping Unicode and delimiter-containing names intact and callback payloads below 64 bytes. Persistence happens off the bot event loop, and sending holds no Storage lock. The existing notification Future still gates outbox acknowledgement.
+
+Pending suggestions with identical chat, merchant, frequency, and average reuse their record during retries. Both callbacks resolve the ID inside the authenticated user's Storage and check its destination chat. Acceptance atomically resolves the record and creates/reuses a uniquely matching schedule with confirmation. Replay retains the accepted schedule after edits; deletion leaves a retained link so the same button cannot resurrect it. Dismissal is also durable and replayable. Competing accept/dismiss actions cannot overwrite one another.
+
+Dismissal closes that suggestion, not every future pattern from the merchant. Later notifications after resolution, or with changed fields, may create another pending record. Delivery remains at least once; multiple messages can carry the same pending ID. This is not complete outbox-event identity, permanent notification suppression, or a browser review inbox. The observed average retains the existing detector's monetary semantics and is not certified SGD conversion evidence.
+
+Older `sub_suggest_add|...` buttons remain supported through migration 9 receipts; their truncated merchant text cannot be reconstructed. No old pending or dismissed buttons are backfilled. Resolved suggestion records intentionally retain schedule IDs after deletion and must not be cleaned up as orphaned foreign keys.

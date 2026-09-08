@@ -93,6 +93,19 @@ MIGRATIONS = (
             accepted_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )""",
     )),
+    (10, (
+        """CREATE TABLE recurring_suggestions (
+            id TEXT PRIMARY KEY,
+            chat_id INTEGER NOT NULL,
+            merchant TEXT NOT NULL,
+            frequency TEXT NOT NULL,
+            avg_amount REAL NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'accepted', 'dismissed')),
+            subscription_id INTEGER,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )""",
+        "CREATE INDEX idx_recurring_suggestions_pending ON recurring_suggestions(chat_id, merchant, frequency, status)",
+    )),
 )
 
 

@@ -1525,26 +1525,35 @@ class TelegramBotService:
             return
         if not self._loop or not self.app:
             raise RuntimeError("Telegram bot not started")
+        storage = self.storage
+        if self.user_manager:
+            ctx = self.user_manager.get(username)
+            if ctx is None:
+                raise ValueError("Suggestion user not found")
+            storage = ctx.storage
         fut = asyncio.run_coroutine_threadsafe(
-            self._async_notify_subscription_suggestion(chat_id, merchant, frequency, avg_amount),
+            self._async_notify_subscription_suggestion(chat_id, merchant, frequency, avg_amount, storage),
             self._loop,
         )
         return fut
 
     async def _async_notify_subscription_suggestion(
-        self, chat_id: int, merchant: str, frequency: str, avg_amount: float
+        self, chat_id: int, merchant: str, frequency: str, avg_amount: float, storage=None,
     ) -> None:
-        # Truncate merchant to stay within Telegram's 64-byte callback_data limit:
-        # "sub_suggest_add|{frequency}|" is at most 30 chars, leaving 34 for merchant.
-        merchant_trunc = merchant[:34]
+        storage = storage if storage is not None else self.storage
+        loop = asyncio.get_running_loop()
+        suggestion = await loop.run_in_executor(
+            None, storage.prepare_recurring_suggestion, chat_id, merchant, frequency, avg_amount,
+        )
+        suggestion_id = suggestion["id"]
         text = (
             f"🔄 Recurring pattern: *{self._escape_md(merchant)}* charged "
             f"~${avg_amount:.2f} ({frequency})\\. Add as subscription?"
         )
         keyboard = InlineKeyboardMarkup([
             [
-                InlineKeyboardButton("Add subscription", callback_data=f"sub_suggest_add|{frequency}|{merchant_trunc}"),
-                InlineKeyboardButton("Dismiss", callback_data="sub_suggest_dismiss"),
+                InlineKeyboardButton("Add subscription", callback_data=f"sub_suggest_accept:{suggestion_id}"),
+                InlineKeyboardButton("Dismiss", callback_data=f"sub_suggest_dismiss:{suggestion_id}"),
             ]
         ])
         await self.app.bot.send_message(
@@ -1558,6 +1567,30 @@ class TelegramBotService:
         query = update.callback_query
         await query.answer()
         data = query.data or ""
+
+        if data.startswith(("sub_suggest_accept:", "sub_suggest_dismiss:")):
+            ctx = await self._require_ctx(update)
+            if ctx is None:
+                return
+            action = "accept" if data.startswith("sub_suggest_accept:") else "dismiss"
+            try:
+                sub_id = ctx.storage.resolve_recurring_suggestion(
+                    data.split(":", 1)[1], query.message.chat_id, action,
+                )
+                if sub_id is None:
+                    await query.edit_message_text("Suggestion dismissed. Later detected patterns may still be suggested.")
+                else:
+                    sub = ctx.storage.get_subscription(sub_id)
+                    await query.edit_message_text(
+                        f"Schedule saved for {sub['merchant']}. Current status: {sub['status'].replace('_', ' ')}. "
+                        "Open the app to review billing details. Provider billing is unchanged.",
+                    )
+            except ValueError as e:
+                await query.edit_message_text(str(e))
+            except Exception as e:
+                logger.error("Recurring suggestion handling failed: %s", e)
+                await query.edit_message_text("Could not finish this request. Tap again or review subscriptions in the app.")
+            return
 
         if data == "sub_suggest_dismiss":
             await query.edit_message_text("Dismissed.")

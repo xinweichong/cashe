@@ -653,4 +653,10 @@ System/light/dark preferences are supplied by `ThemeProvider` and selected in Pr
 ### Telegram recurring suggestion acceptance
 
 - Migration 9 stores `subscription_suggestion_acceptances` keyed by per-user Telegram chat/message identity. `accept_subscription_suggestion` commits schedule, confirmation, and receipt atomically under the Storage lock. Receipts intentionally have no subscription foreign key and survive deletion; never clean them up as orphans.
-- Replay preserves original schedule identity even after edits and rejects deleted targets/changed fields. A first acceptance reuses one exact merchant/frequency schedule (including paused/cancelled) without reactivation; ambiguous matches require review. Existing confirmation provenance survives reuse. Legacy callback merchant truncation and non-durable pending/dismissed suggestions remain limitations.
+- Replay preserves original schedule identity even after edits and rejects deleted targets/changed fields. A first acceptance reuses one exact merchant/frequency schedule (including paused/cancelled) without reactivation; ambiguous matches require review. Existing confirmation provenance survives reuse. Legacy callbacks retain their merchant-truncation and non-durable pending/dismissed limitations; new callbacks use migration 10 records.
+
+### Durable recurring suggestion buttons
+
+- Migration 10 persists full-field `recurring_suggestions` before Telegram delivery. New buttons contain opaque IDs, resolved only within the user's Storage and original chat. Pending records with identical chat/merchant/frequency/average are reused; later patterns after resolution may create new records.
+- Acceptance and dismissal are atomic/replayable and conflict with each other. Accepted schedule links survive deletion to prevent same-button resurrection. Both durable and legacy acceptance use `_subscription_from_suggestion` under their caller's lock/transaction. This helper must never commit independently.
+- The bot notification bridge selects the target user's Storage, persists off the event loop, then sends without the Storage lock. Its send Future still gates outbox acknowledgement. Older callbacks remain supported; new durable records do not repair old truncated merchant names or change average-amount conversion semantics.

@@ -1196,3 +1196,54 @@ async def test_unlinked_telegram_user_cannot_accept_suggestion(bot_service):
     with patch.object(bot_service, '_require_ctx', new=AsyncMock(return_value=None)):
         await bot_service._handle_sub_suggest_callback(SimpleNamespace(callback_query=query), SimpleNamespace())
     assert bot_service.storage.list_subscriptions() == []
+
+
+@pytest.mark.asyncio
+async def test_durable_suggestion_buttons_retain_full_unicode_merchant_and_send_retry(bot_service):
+    merchant = '餐厅|Merchant: ' * 12
+    bot_service.app = SimpleNamespace(bot=SimpleNamespace(send_message=AsyncMock(side_effect=[RuntimeError('offline'), None])))
+    with pytest.raises(RuntimeError):
+        await bot_service._async_notify_subscription_suggestion(123, merchant, 'monthly', 12)
+    original_markup = bot_service.app.bot.send_message.call_args.kwargs['reply_markup']
+    await bot_service._async_notify_subscription_suggestion(123, merchant, 'monthly', 12)
+    markup = bot_service.app.bot.send_message.call_args.kwargs['reply_markup']
+    assert markup == original_markup
+    for button in markup.inline_keyboard[0]:
+        assert len(button.callback_data.encode('utf-8')) <= 64
+        assert merchant not in button.callback_data
+    query = SimpleNamespace(data=markup.inline_keyboard[0][0].callback_data, answer=AsyncMock(),
+                            edit_message_text=AsyncMock(), message=SimpleNamespace(chat_id=123))
+    with patch.object(bot_service, '_require_ctx', new=AsyncMock(return_value=SimpleNamespace(storage=bot_service.storage))):
+        for _ in range(2):
+            await bot_service._handle_sub_suggest_callback(SimpleNamespace(callback_query=query), SimpleNamespace())
+    assert [sub['merchant'] for sub in bot_service.storage.list_subscriptions()] == [merchant]
+
+
+@pytest.mark.asyncio
+async def test_durable_suggestion_callback_dismissal_and_unknown_token(bot_service):
+    suggestion = bot_service.storage.prepare_recurring_suggestion(123, 'Cafe', 'monthly', 12)
+    query = SimpleNamespace(data=f"sub_suggest_dismiss:{suggestion['id']}", answer=AsyncMock(),
+                            edit_message_text=AsyncMock(), message=SimpleNamespace(chat_id=123))
+    with patch.object(bot_service, '_require_ctx', new=AsyncMock(return_value=SimpleNamespace(storage=bot_service.storage))):
+        await bot_service._handle_sub_suggest_callback(SimpleNamespace(callback_query=query), SimpleNamespace())
+        assert 'dismissed' in query.edit_message_text.call_args.args[0]
+        query.data = 'sub_suggest_accept:missing'
+        await bot_service._handle_sub_suggest_callback(SimpleNamespace(callback_query=query), SimpleNamespace())
+        assert 'not found' in query.edit_message_text.call_args.args[0]
+    assert bot_service.storage.list_subscriptions() == []
+
+
+@pytest.mark.asyncio
+async def test_suggestion_bridge_persists_only_in_target_user_storage(bot_service, tmp_path):
+    import asyncio
+    from src.main import init_db
+    conn = init_db(str(tmp_path / 'target.db'))
+    target = Storage(conn)
+    bot_service.user_manager = SimpleNamespace(get=lambda username: SimpleNamespace(storage=target) if username == 'target' else None)
+    bot_service._resolve_chat_id = MagicMock(return_value=123)
+    bot_service._loop = asyncio.get_running_loop()
+    bot_service.app = SimpleNamespace(bot=SimpleNamespace(send_message=AsyncMock()))
+    await asyncio.wrap_future(bot_service.notify_subscription_suggestion('target', 'Cafe', 'monthly', 12))
+    assert conn.execute('SELECT merchant FROM recurring_suggestions').fetchone()[0] == 'Cafe'
+    assert bot_service.storage._conn.execute('SELECT COUNT(*) FROM recurring_suggestions').fetchone()[0] == 0
+    conn.close()
