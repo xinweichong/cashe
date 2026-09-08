@@ -22,3 +22,9 @@ Authenticated `POST /api/v2/plan/upcoming/{id}/dismiss` marks one pending predic
 Timeline edits require an explicit save; dismissal requires an explicit confirmation. Successful changes invalidate Plan, Home, subscription summaries, and expected-charge details. Errors retain the form and offer a timeline refresh. Actual-transaction matching remains in the linked subscription controls.
 
 Expected-date corrections may influence subsequent predictions because the existing scheduler anchors future dates on retained expected dates. No independent schedule-exception system, revision conflict handling between simultaneous pending edits, or new matching rules are introduced in this slice.
+
+## Matching actual charges
+
+Existing authenticated subscription match/link controls now serialize eligibility and uniqueness checks under the per-user Storage lock. One actual expense (including legacy NULL expense types) can create only one new link across all predictions and subscriptions. Repeating an accepted match or the same subscription link is harmless; changing an existing match, reusing its transaction elsewhere, or matching a dismissed/cancelled prediction returns 409. The legacy dismissal endpoint uses the same pending-state guard as Plan. Missing records return 404; invalid transaction IDs or non-expense actuals return 422. Errors are displayed in subscription details.
+
+Direct historical links require a valid transaction date and use shared per-row SGD rounding; unresolved foreign conversions retain an unknown estimate. The original transaction date's calendar date is retained. Existing duplicate links are preserved for audit: this is command-level protection for the single-process service, not a new database uniqueness constraint or a repair migration. Automatic candidate selection, ambiguous-match review, and scheduler forecast expansion remain separate work.

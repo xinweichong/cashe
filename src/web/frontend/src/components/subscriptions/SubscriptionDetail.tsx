@@ -303,6 +303,12 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
                 </ChartCard>
               )}
 
+              {[matchMutation.error, dismissMutation.error, linkMutation.error].filter(Boolean).map((error, index) => (
+                <p key={index} role="alert" className="text-sm text-destructive">
+                  {error instanceof Error ? error.message : 'Could not update the charge. Try again.'}
+                </p>
+              ))}
+
               {pendingUpcomings.length > 0 && (
                 <section>
                   <p className="text-[10px] font-mono font-semibold uppercase tracking-[0.22em] text-muted mb-2">

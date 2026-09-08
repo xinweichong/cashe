@@ -787,3 +787,30 @@ async def test_planned_charge_commands_validation_conflicts_and_auth(client, in_
     await client.post('/api/logout')
     assert (await client.put(path, json={'expected_amount': 5})).status_code == 401
     assert (await client.post(path + '/dismiss')).status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_subscription_matching_conflicts_validation_and_auth(client, in_memory_db):
+    storage = Storage(in_memory_db)
+    sub = storage.create_subscription('Cafe', 'monthly')
+    other = storage.create_subscription('Cafe', 'monthly')
+    first = storage.create_upcoming_transaction(sub, '2026-09-09', 12)
+    second = storage.create_upcoming_transaction(other, '2026-09-09', 12)
+    tx = (await client.post('/api/transactions', json={'amount': 12, 'merchant': 'Cafe'})).json()['id']
+    path = f'/api/subscriptions/{sub}/upcoming/{first}'
+    other_path = f'/api/subscriptions/{other}/upcoming/{second}'
+    link = f'/api/subscriptions/{other}/link-transaction'
+    for invalid in [True, None, '1', 0, -1]:
+        assert (await client.post(path + '/match', json={'transaction_id': invalid})).status_code == 422
+        assert (await client.post(link, json={'transaction_id': invalid})).status_code == 422
+    assert (await client.post(path + '/match', json={'transaction_id': 999999})).status_code == 404
+    assert (await client.post(f'/api/subscriptions/{other}/upcoming/{first}/match', json={'transaction_id': tx})).status_code == 404
+    for _ in range(2):
+        assert (await client.post(path + '/match', json={'transaction_id': tx})).status_code == 200
+    assert (await client.post(other_path + '/match', json={'transaction_id': tx})).status_code == 409
+    assert (await client.post(link, json={'transaction_id': tx})).status_code == 409
+    assert (await client.post(path + '/dismiss')).status_code == 409
+    await client.post('/api/logout')
+    assert (await client.post(path + '/match', json={'transaction_id': tx})).status_code == 401
+    assert (await client.post(link, json={'transaction_id': tx})).status_code == 401
+    assert (await client.post(path + '/dismiss')).status_code == 401

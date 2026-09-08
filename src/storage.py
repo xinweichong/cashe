@@ -40,6 +40,10 @@ class TransactionRequestConflict(ValueError):
     """A creation key was already accepted for a different or deleted purchase."""
 
 
+class SubscriptionMatchConflict(ValueError):
+    """A prediction or transaction already has an incompatible disposition."""
+
+
 class Storage:
     def __init__(self, connection: sqlite3.Connection):
         self._conn = connection
@@ -2142,46 +2146,67 @@ class Storage:
         ).fetchone()
         return dict(row) if row else None
 
+    def _subscription_expense(self, transaction_id: int) -> dict:
+        """Validate an actual charge while the caller holds the Storage lock."""
+        if type(transaction_id) is not int or transaction_id <= 0:
+            raise ValueError("transaction_id must be a positive integer")
+        tx = self.get_transaction(transaction_id)
+        if tx is None:
+            raise ValueError("Transaction not found")
+        if tx["type"] not in (None, "expense"):
+            raise ValueError("Only expense transactions can match a charge")
+        return tx
+
+    def _require_unlinked_charge(self, transaction_id: int) -> None:
+        if self._conn.execute(
+            "SELECT 1 FROM upcoming_transactions WHERE matched_transaction_id = ? LIMIT 1",
+            (transaction_id,),
+        ).fetchone():
+            raise SubscriptionMatchConflict("Transaction is already linked to a charge")
+
     @_locked
     def match_upcoming_transaction(self, upcoming_id: int, transaction_id: int) -> None:
-        self._conn.execute(
-            """UPDATE upcoming_transactions
-               SET status = 'matched', matched_transaction_id = ?
-               WHERE id = ?""",
-            (transaction_id, upcoming_id),
-        )
-        self._conn.commit()
+        self._subscription_expense(transaction_id)
+        upcoming = self.get_upcoming_transaction(upcoming_id)
+        if upcoming is None:
+            raise ValueError("Charge not found")
+        if upcoming["status"] == "matched" and upcoming["matched_transaction_id"] == transaction_id:
+            return
+        self._pending_planned_charge(upcoming_id)
+        self._require_unlinked_charge(transaction_id)
+        with self._conn:
+            self._conn.execute(
+                "UPDATE upcoming_transactions SET status = 'matched', matched_transaction_id = ? WHERE id = ?",
+                (transaction_id, upcoming_id),
+            )
 
     @_locked
     def link_transaction_to_subscription(self, sub_id: int, tx_id: int) -> None:
-        """Directly link a past transaction to a subscription.
-
-        Creates a matched upcoming_transactions row (idempotent — no-op if
-        the transaction is already linked to this subscription).
-        Raises ValueError if the subscription or transaction is not found.
-        """
+        """Link an actual expense once; replaying the same subscription link is harmless."""
         if not self.get_subscription(sub_id):
-            raise ValueError("subscription not found")
-        tx = self._conn.execute(
-            "SELECT transaction_date, amount, exchange_rate FROM transactions WHERE id = ?", (tx_id,)
-        ).fetchone()
-        if not tx:
-            raise ValueError("transaction not found")
+            raise ValueError("Subscription not found")
+        tx = self._subscription_expense(tx_id)
         existing = self._conn.execute(
-            "SELECT id FROM upcoming_transactions WHERE subscription_id = ? AND matched_transaction_id = ?",
+            "SELECT 1 FROM upcoming_transactions WHERE subscription_id = ? AND matched_transaction_id = ? AND status = 'matched'",
             (sub_id, tx_id),
         ).fetchone()
         if existing:
             return
-        expected_date = dict(tx)["transaction_date"][:10]
-        expected_amount = round(dict(tx)["amount"] * (dict(tx)["exchange_rate"] or 1.0), 2)
-        self._conn.execute(
-            """INSERT INTO upcoming_transactions
-                   (subscription_id, expected_date, expected_amount, matched_transaction_id, status)
-               VALUES (?, ?, ?, ?, 'matched')""",
-            (sub_id, expected_date, expected_amount, tx_id),
-        )
-        self._conn.commit()
+        self._require_unlinked_charge(tx_id)
+        try:
+            expected_date = datetime.fromisoformat(tx["transaction_date"]).date().isoformat()
+        except (ValueError, TypeError):
+            raise ValueError("Transaction needs a valid date before linking") from None
+        from src.spending_facts import convert_legacy_sgd
+        minor, _ = convert_legacy_sgd(tx)
+        expected_amount = minor / 100 if minor is not None else None
+        with self._conn:
+            self._conn.execute(
+                """INSERT INTO upcoming_transactions
+                       (subscription_id, expected_date, expected_amount, matched_transaction_id, status)
+                   VALUES (?, ?, ?, ?, 'matched')""",
+                (sub_id, expected_date, expected_amount, tx_id),
+            )
 
     def _pending_planned_charge(self, upcoming_id: int):
         """Called only by locked plan commands."""
@@ -2193,7 +2218,7 @@ class Storage:
             raise ValueError("Charge not found")
         if (row["status"] != "pending" or row["matched_transaction_id"] is not None
                 or row["schedule_status"] not in ("active", "possibly_cancelled")):
-            raise ValueError("Charge is no longer pending")
+            raise SubscriptionMatchConflict("Charge is no longer pending")
         return row
 
     @_locked
@@ -2226,11 +2251,7 @@ class Storage:
 
     @_locked
     def dismiss_upcoming_transaction(self, upcoming_id: int) -> None:
-        self._conn.execute(
-            "UPDATE upcoming_transactions SET status = 'dismissed' WHERE id = ?",
-            (upcoming_id,),
-        )
-        self._conn.commit()
+        self.dismiss_planned_charge(upcoming_id)
 
     @_locked
     def get_upcoming_transaction(self, upcoming_id: int) -> dict | None:

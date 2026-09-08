@@ -18,7 +18,7 @@ import csv
 import io
 from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 
-from src.storage import TransactionRequestConflict
+from src.storage import SubscriptionMatchConflict, TransactionRequestConflict
 from src.config import local_now
 from src.web.auth import verify_password, create_session, verify_session, destroy_session
 from src.web.contracts import CaptureFollowup, CaptureIssue, CaptureResolution, HomeBriefing, QueuedResponse, SpendingEvidence, SpendingFacts, SpendingReview, TransactionProvenance, UpcomingPlan, PlanMutationResponse
@@ -1406,11 +1406,12 @@ def create_dashboard_app(
         if not upcoming or upcoming["subscription_id"] != sub_id:
             raise HTTPException(status_code=404, detail="Upcoming transaction not found")
         transaction_id = body.get("transaction_id")
-        if not transaction_id:
-            raise HTTPException(status_code=422, detail="transaction_id required")
-        if not await _db(storage.get_transaction, transaction_id):
-            raise HTTPException(status_code=404, detail="Transaction not found")
-        await _db(storage.match_upcoming_transaction, upcoming_id, transaction_id)
+        try:
+            await _db(storage.match_upcoming_transaction, upcoming_id, transaction_id)
+        except SubscriptionMatchConflict as e:
+            raise HTTPException(status_code=409, detail=str(e))
+        except ValueError as e:
+            raise HTTPException(status_code=404 if "not found" in str(e).lower() else 422, detail=str(e))
         return {"status": "ok"}
 
     @app.post("/api/subscriptions/{sub_id}/upcoming/{upcoming_id}/dismiss")
@@ -1418,18 +1419,23 @@ def create_dashboard_app(
         upcoming = await _db(storage.get_upcoming_transaction, upcoming_id)
         if not upcoming or upcoming["subscription_id"] != sub_id:
             raise HTTPException(status_code=404, detail="Upcoming transaction not found")
-        await _db(storage.dismiss_upcoming_transaction, upcoming_id)
+        try:
+            await _db(storage.dismiss_upcoming_transaction, upcoming_id)
+        except SubscriptionMatchConflict as e:
+            raise HTTPException(status_code=409, detail=str(e))
+        except ValueError as e:
+            raise HTTPException(status_code=404, detail=str(e))
         return {"status": "ok"}
 
     @app.post("/api/subscriptions/{sub_id}/link-transaction", status_code=201)
     async def link_transaction(sub_id: int, body: dict, storage=Depends(_get_storage)):
         tx_id = body.get("transaction_id")
-        if not isinstance(tx_id, int):
-            raise HTTPException(status_code=422, detail="transaction_id must be an integer")
         try:
             await _db(storage.link_transaction_to_subscription, sub_id, tx_id)
+        except SubscriptionMatchConflict as e:
+            raise HTTPException(status_code=409, detail=str(e))
         except ValueError as e:
-            raise HTTPException(status_code=404, detail=str(e))
+            raise HTTPException(status_code=404 if "not found" in str(e).lower() else 422, detail=str(e))
         return {"status": "ok"}
 
     # Serve React SPA

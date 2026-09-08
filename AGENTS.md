@@ -634,3 +634,8 @@ When `home_briefing_enabled` is true, primary navigation is Home `/`, Activity `
 ### Appearance
 
 System/light/dark preferences are supplied by `ThemeProvider` and selected in Profile. Theme changes must preserve drafts and mounted page state. Use semantic CSS tokens for HTML/SVG surfaces, `text-on-brand` over spectrum gradient buttons, and `useChartTheme()` for Recharts colors (explicit per-theme hex values centralized in `lib/chartTheme.ts`). Dark muted token is now `#A8A1B5`; light token overrides are in `index.css`. Neutral text contrast is tested; rendered/device accessibility validation remains required.
+
+### Subscription match integrity
+
+- `match_upcoming_transaction` and `link_transaction_to_subscription` validate expense/legacy-NULL actuals and reject reuse across predictions under the Storage lock. Exact accepted matches/links are replayable; `SubscriptionMatchConflict` maps to HTTP 409. Missing records map to 404, invalid transaction IDs/classification/date to 422. Legacy dismissal now shares Plan's pending-state guard.
+- Direct historical links use shared SGD conversion/rounding and retain unknown foreign estimates. Existing duplicate links are not migrated or repaired; uniqueness is enforced by commands within the single-process service.

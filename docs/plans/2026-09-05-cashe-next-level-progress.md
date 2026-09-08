@@ -457,3 +457,15 @@ The upcoming timeline was committed as `1a3f2cb`; this continuation started with
 - Updated design/operator/agent documentation. No schema change, production data/service change, live Telegram/model call, push, or deployment. Visual/device acceptance remains unverified.
 
 Verification: **1002 backend tests passed** (four existing datetime deprecation warnings), **77 frontend tests passed**, production build and focused Plan lint passed. Nineteen new backend cases cover all-or-nothing validation, omitted-value precision, unknown estimates, corrected Plan/Home totals, retained subscriptions/transactions, matched/dismissed/cancelled/linked conflicts, isolation, response privacy, and authentication. Three new UI cases verify omitted rounded amounts, explicit unknown values, retained error forms, refresh/invalidation, and dismissal confirmation/cancel. The focused backend command checks and whitespace checks passed. This verified increment is committed separately.
+
+
+## 2026-09-08 continuation — actual-charge matching integrity
+
+Timeline prediction actions were committed as `581e40f`; this continuation started with a clean working tree.
+
+- Shared Storage match/link commands now validate actual expenses (including legacy NULL types) and reject transaction reuse across predictions and subscriptions under one per-user lock. Exact accepted matches and same-subscription links are safe to retry. Existing links cannot be overwritten or dismissed by stale actions.
+- The legacy dismissal route now uses Plan's pending-state guard. Match/link APIs return 409 for state/reuse conflicts, 404 for missing records, and 422 for invalid identifiers or non-expense actuals. Subscription details display mutation errors while retaining selections.
+- Historical direct links require a usable date and use shared SGD rounding; unknown foreign conversions stay unknown. Existing transactions and legacy duplicate links remain unchanged. No database uniqueness migration or duplicate repair was added; the command guarantee relies on the existing single-process Storage serialization.
+- Automatic candidate heuristics, ambiguous-match review, recurring confirmation/provenance, pause controls, and forecast expansion remain pending. No production data/service changes, live Telegram/model calls, push, or deployment. Visual/device acceptance remains unverified.
+
+Verification: **1023 backend tests passed** in the full run (four existing datetime deprecation warnings); two additional legacy-duplicate/overwrite regressions then passed with all **22 focused matching tests**, bringing the verified inventory to **1025 backend tests**. The 96-test API suite, **77 frontend tests**, production build, and whitespace checks passed. Coverage includes concurrent match/link requests, idempotent replay, cross-subscription reuse, stale states, invalid IDs/types/dates, unknown FX, retained transactions/legacy links, route ownership, and authentication. Focused subscription-detail lint reports its pre-existing `Date.now()` render-purity error at line 70 (confirmed present in `581e40f`); no new lint finding was reported. This increment is committed separately.
