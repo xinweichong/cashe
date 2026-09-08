@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api, type BudgetProgress, type Category, type GoalProgress, type Trip, type RecurringTransaction } from '@/api/client';
 import { PageCard, HeroCard, HighlightCard } from '@/components/ui/cards';
@@ -1073,7 +1073,14 @@ export function FinancePage() {
   const qc = useQueryClient();
   const navigate = useNavigate();
   const [showAddForm, setShowAddForm] = useState(false);
-  const [selectedSubId, setSelectedSubId] = useState<number | null>(null);
+  const [search, setSearch] = useSearchParams();
+  const requestedSubId = Number(search.get('subscription'));
+  const selectedSubId = Number.isSafeInteger(requestedSubId) && requestedSubId > 0 ? requestedSubId : null;
+  const setSelectedSubId = (id: number | null) => {
+    const next = new URLSearchParams(search);
+    if (id === null) next.delete('subscription'); else next.set('subscription', String(id));
+    setSearch(next);
+  };
 
   const { data: settings } = useQuery({
     queryKey: ['settings'],
@@ -1130,6 +1137,7 @@ export function FinancePage() {
 
       {/* ── Top area: title ── */}
       <div className="area-top">
+        <Link className="text-teal min-h-11 inline-flex items-center" to="/plan">Upcoming timeline</Link>
         <div className="flex flex-col gap-1 pb-5 border-b border-border">
           <div className="text-xs uppercase tracking-[0.22em] text-muted font-mono font-semibold">
             Finance

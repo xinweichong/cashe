@@ -33,7 +33,7 @@ export function HomePage() {
         {!facts.category_changes.length && <p className="text-muted">{facts.change ? 'No category spending changes in these periods.' : 'Resolve the records needing attention to compare categories.'}</p>}
       </PageCard>
       <div className="grid md:grid-cols-2 gap-6">
-        <PageCard title="Coming up" action={<Link className="text-teal min-h-11 inline-flex items-center" to="/finance">Open plan</Link>}>
+        <PageCard title="Coming up" action={<Link className="text-teal min-h-11 inline-flex items-center" to="/plan">Open plan</Link>}>
           <p>{formatMoney(upcoming_total)} in estimated charges over the next 14 days.</p>
           {!!upcoming_unknown_count && <p className="text-warning">{upcoming_unknown_count} expected charges have no amount yet.</p>}
           {upcoming.map(item => <div key={item.id} className="flex justify-between gap-4 py-3 border-b border-border last:border-0"><div>{item.label}<p className="text-sm text-muted">{item.date}</p></div><span>{item.amount ? formatMoney(item.amount) : 'Amount unknown'}</span></div>)}

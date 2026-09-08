@@ -431,3 +431,16 @@ Shared daily commands/API were committed as `66c009f`; this continuation started
 - No schema or frontend changes, live Telegram/model calls, production data/service changes, push, or deployment.
 
 Verification: **975 backend tests passed** (four existing datetime deprecation warnings), including seven new morning-digest cases replacing two legacy tests. Coverage verifies shared rounding/classification and negative flow, separate daily/monthly totals, year/leap boundaries, partial/indicative output, timezone projection, user isolation, database access during pending delivery, compact category bounds, empty/undated states, and exclusion of legacy queries/cached narrative. The 80-test focused run, existing 150-transaction regression, and whitespace checks passed. No frontend files changed; the previous baseline remains **69 frontend tests** and a successful production build. This verified increment is committed separately.
+
+
+## 2026-09-08 continuation — upcoming Plan timeline
+
+Shared morning digest was committed as `9bcabf2`; this continuation started with a clean working tree.
+
+- Added authenticated, typed `/api/v2/plan/upcoming` for 1–90 local calendar dates, with bounded pages, full-window estimated subtotals/unknown counts, and sanitized schedule fields. Only pending/unmatched charges from active or possibly-cancelled subscriptions appear; matched/dismissed/cancelled/past/out-of-window records are excluded.
+- `/plan` now opens a lazy-loaded, naturally scrolling timeline with 14/30/90-day windows, explicit estimates/unknown amounts, schedule-review labels, and loading/error/stale/disabled/empty states. Current subscription settings control display, without deleting or API-gating retained records.
+- Existing budgets/goals/trips/subscription tools remain at `/plan/manage`. Finance redirects and older Plan management parameters preserve queries/fragments. Direct subscription links open the existing detail controls. Home's Coming up link opens the timeline.
+- Subscription mutation paths invalidate timeline and Home queries. Counts/totals remain independent of pagination; the 14-day selection is checked against Home. This is recorded-prediction visibility, not all-cycle expansion, confirmed-amount provenance, a complete forecast, or new pause/reconciliation behavior.
+- Updated design, operator, user, and agent documentation. No schema change, production data/service change, live Telegram/model call, push, or deployment. Browser/device visual acceptance remains unverified.
+
+Verification: **983 backend tests passed** (four existing datetime deprecation warnings), **74 frontend tests passed**, production build and focused timeline lint passed. Eight new backend cases cover selection/exclusion, partial totals, full-window pagination totals, timezone/window bounds, Home parity, disabled metadata, invalid queries, API privacy, and authentication. Five timeline UI cases cover uncertainty labels, direct schedule links, failure/retry, horizon pagination reset, disabled display, and retained older Plan management links; legacy Finance redirect expectations were updated. Whitespace checks passed. This verified increment is committed separately.

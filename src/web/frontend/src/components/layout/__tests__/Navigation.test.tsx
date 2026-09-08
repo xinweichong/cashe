@@ -27,7 +27,7 @@ describe('opt-in navigation', () => {
   it.each([
     ['/transactions/42?returnTo=%2Fevidence%3Fcategory%3DFood#detail', '/transactions', '/activity', '/activity/42?returnTo=%2Fevidence%3Fcategory%3DFood#detail'],
     ['/merchants/Toast%20Box?start=2026-09-01', '/merchants', '/explore/merchants', '/explore/merchants/Toast%20Box?start=2026-09-01'],
-    ['/finance?tab=goals', '/finance', '/plan', '/plan?tab=goals'],
+    ['/finance?tab=goals', '/finance', '/plan/manage', '/plan/manage?tab=goals'],
   ])('preserves deep link %s', (url, from, to, expected) => {
     render(<MemoryRouter initialEntries={[url]}><Routes>
       <Route path={`${from}/*`} element={<LegacyRedirect from={from} to={to} />} />

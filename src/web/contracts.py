@@ -121,6 +121,25 @@ class UpcomingCharge(BaseModel):
     amount: Money | None
 
 
+class PlannedCharge(UpcomingCharge):
+    frequency: str
+    schedule_status: Literal["active", "possibly_cancelled"]
+
+
+class UpcomingPlan(BaseModel):
+    start: str
+    end: str
+    timezone: str
+    enabled: bool
+    items: list[PlannedCharge]
+    total: int
+    limit: int
+    offset: int
+    known_total: Money
+    unknown_count: int
+    status: Literal["partial", "estimated"]
+
+
 class CaptureFreshness(BaseModel):
     gmail_connected: bool
     gmail_last_checked: str | None

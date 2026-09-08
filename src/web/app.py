@@ -21,7 +21,7 @@ from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 from src.storage import TransactionRequestConflict
 from src.config import local_now
 from src.web.auth import verify_password, create_session, verify_session, destroy_session
-from src.web.contracts import CaptureFollowup, CaptureIssue, CaptureResolution, HomeBriefing, QueuedResponse, SpendingEvidence, SpendingFacts, SpendingReview, TransactionProvenance
+from src.web.contracts import CaptureFollowup, CaptureIssue, CaptureResolution, HomeBriefing, QueuedResponse, SpendingEvidence, SpendingFacts, SpendingReview, TransactionProvenance, UpcomingPlan
 from src.analytics import (
     load_summary,
     get_yoy_comparison,
@@ -231,6 +231,11 @@ def create_dashboard_app(
             return await _db(storage.get_month_spending_facts, as_of, timezone)
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from None
+
+    @app.get("/api/v2/plan/upcoming", response_model=UpcomingPlan)
+    async def upcoming_plan(days: int = Query(30, ge=1, le=90), limit: int = Query(50, ge=1, le=100),
+                            offset: int = Query(0, ge=0), storage=Depends(_get_storage)):
+        return await _db(storage.get_upcoming_plan, days, timezone, limit, offset)
 
     @app.get("/api/v2/home", response_model=HomeBriefing)
     async def home_briefing(username: str = Depends(require_auth)):

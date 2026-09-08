@@ -79,6 +79,8 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
     mutationFn: () => api.updateSubscription(subId, { status: 'cancelled' }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['subscriptions'] });
+      qc.invalidateQueries({ queryKey: ['plan-upcoming'] });
+      qc.invalidateQueries({ queryKey: ['home-briefing'] });
       setConfirmCancel(false);
     },
   });
@@ -87,13 +89,19 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
     mutationFn: () => api.deleteSubscription(subId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['subscriptions'] });
+      qc.invalidateQueries({ queryKey: ['plan-upcoming'] });
+      qc.invalidateQueries({ queryKey: ['home-briefing'] });
       onClose();
     },
   });
 
   const dismissMutation = useMutation({
     mutationFn: (upcomingId: number) => api.dismissUpcoming(subId, upcomingId),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['subscription-upcoming', subId] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['subscription-upcoming', subId] });
+      qc.invalidateQueries({ queryKey: ['plan-upcoming'] });
+      qc.invalidateQueries({ queryKey: ['home-briefing'] });
+    },
   });
 
   const matchMutation = useMutation({
@@ -103,6 +111,8 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
       qc.invalidateQueries({ queryKey: ['subscription-upcoming', subId] });
       qc.invalidateQueries({ queryKey: ['subscription-history', subId] });
       qc.invalidateQueries({ queryKey: ['subscriptions'] });
+      qc.invalidateQueries({ queryKey: ['plan-upcoming'] });
+      qc.invalidateQueries({ queryKey: ['home-briefing'] });
       const matchedTx = recentTxs.find((t) => t.id === txId);
       if (matchedTx && sub && matchedTx.merchant && matchedTx.merchant !== sub.merchant) {
         setAdoptPrompt({ txMerchant: matchedTx.merchant });
@@ -114,6 +124,8 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
     mutationFn: (merchant: string) => api.updateSubscription(subId, { merchant }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['subscriptions'] });
+      qc.invalidateQueries({ queryKey: ['plan-upcoming'] });
+      qc.invalidateQueries({ queryKey: ['home-briefing'] });
       setAdoptPrompt(null);
     },
   });
@@ -123,6 +135,8 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['subscription-history', subId] });
       qc.invalidateQueries({ queryKey: ['subscriptions'] });
+      qc.invalidateQueries({ queryKey: ['plan-upcoming'] });
+      qc.invalidateQueries({ queryKey: ['home-briefing'] });
       setLinkSelectedId('');
     },
   });
@@ -410,6 +424,8 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
           onSave={() => {
             setShowEdit(false);
             qc.invalidateQueries({ queryKey: ['subscriptions'] });
+            qc.invalidateQueries({ queryKey: ['plan-upcoming'] });
+            qc.invalidateQueries({ queryKey: ['home-briefing'] });
           }}
         />
       )}

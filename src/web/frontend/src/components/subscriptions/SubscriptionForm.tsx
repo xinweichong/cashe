@@ -81,6 +81,8 @@ export function SubscriptionForm({ onClose, onSave, initial }: SubscriptionFormP
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['subscriptions'] });
+      qc.invalidateQueries({ queryKey: ['plan-upcoming'] });
+      qc.invalidateQueries({ queryKey: ['home-briefing'] });
       onSave();
     },
     onError: (e: unknown) => {

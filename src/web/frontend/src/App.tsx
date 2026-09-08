@@ -15,6 +15,7 @@ import { setCategoryColors, nearestSpectrum } from '@/lib/utils';
 import { ToastProvider } from '@/components/ui/toast';
 import { SPECTRUM_PALETTE } from '@/lib/chartTheme';
 
+const PlanPage = lazy(() => import('@/pages/PlanPage').then(m => ({ default: m.PlanPage })));
 const HomePage = lazy(() => import('@/pages/HomePage').then(m => ({ default: m.HomePage })));
 const EvidencePage = lazy(() => import('@/pages/EvidencePage').then(m => ({ default: m.EvidencePage })));
 const ReviewPage = lazy(() => import('@/pages/ReviewPage').then(m => ({ default: m.ReviewPage })));
@@ -129,7 +130,8 @@ function AppContent() {
           <Route path="overview" element={<OverviewPage />} />
           <Route path="activity" element={<TransactionsPage />} />
           <Route path="activity/:transactionId" element={<TransactionsPage />} />
-          <Route path="plan" element={<FinancePage />} />
+          <Route path="plan" element={<PlanPage />} />
+          <Route path="plan/manage" element={<FinancePage />} />
           <Route path="explore" element={<ExplorePage />}>
             <Route index element={<AnalyticsPage />} />
             <Route path="merchants" element={settings?.home_briefing_enabled ? <LegacyRedirect from="/merchants" to="/explore/merchants" /> : <MerchantsPage />} />
@@ -144,7 +146,7 @@ function AppContent() {
           <Route path="settings" element={<SettingsPage />} />
           <Route path="merchants" element={settings?.home_briefing_enabled ? <LegacyRedirect from="/merchants" to="/explore/merchants" /> : <MerchantsPage />} />
           <Route path="merchants/:merchantName" element={settings?.home_briefing_enabled ? <LegacyRedirect from="/merchants" to="/explore/merchants" /> : <MerchantsPage />} />
-          <Route path="finance" element={settings?.home_briefing_enabled ? <LegacyRedirect from="/finance" to="/plan" /> : <FinancePage />} />
+          <Route path="finance" element={settings?.home_briefing_enabled ? <LegacyRedirect from="/finance" to="/plan/manage" /> : <FinancePage />} />
           <Route path="trips" element={<Navigate to="/finance" replace />} />
         </Route>
       </Routes>

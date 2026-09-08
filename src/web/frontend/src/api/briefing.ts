@@ -26,6 +26,13 @@ export interface HomeBriefing {
 export interface CaptureIssue {
   id: number; source: string; handled?: boolean; status: string; attempts: number; error_code: string | null;
 }
+export interface UpcomingPlan {
+  start: string; end: string; timezone: string; enabled: boolean;
+  items: { id: number; subscription_id: number; label: string; date: string;
+    frequency: string; schedule_status: 'active' | 'possibly_cancelled'; amount: Money | null }[];
+  total: number; limit: number; offset: number; known_total: Money;
+  unknown_count: number; status: 'partial' | 'estimated';
+}
 export interface SpendingReview {
   items: { id: number; merchant: string | null; category: string; date: string | null;
     reasons: ('missing_date' | 'unresolved_money' | 'unknown_type')[] }[];
@@ -35,6 +42,7 @@ export interface FollowupIssue {
   id: number; transaction_id: number; kind: string; status: string; attempts: number;
 }
 export const briefingApi = {
+  upcoming: (days = 30, offset = 0) => request<UpcomingPlan>(`/api/v2/plan/upcoming?days=${days}&limit=50&offset=${offset}`),
   home: () => request<HomeBriefing>('/api/v2/home'),
   spendingReview: (offset = 0) => request<SpendingReview>(`/api/v2/spending/review?limit=50&offset=${offset}`),
   evidence: (query: URLSearchParams) => request<{ items: EvidenceItem[]; total: number; limit: number; offset: number }>(`/api/v2/spending/evidence?${query}`),

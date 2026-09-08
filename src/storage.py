@@ -69,6 +69,35 @@ class Storage:
         return spending_evidence(self._conn, start, end, **filters)
 
     @_locked
+    def get_upcoming_plan(self, days=30, timezone="Asia/Singapore", limit=50, offset=0) -> dict:
+        from src.spending_facts import convert_legacy_sgd, money
+        if not 1 <= days <= 90 or not 1 <= limit <= 100 or offset < 0:
+            raise ValueError("Invalid upcoming query")
+        start = local_now(timezone).date()
+        end = start + timedelta(days=days - 1)
+        items = []
+        for row in self._conn.execute(
+            """SELECT u.id, u.expected_date, u.expected_amount, s.id AS subscription_id,
+                      COALESCE(s.label, s.merchant) AS label, s.frequency, s.status
+               FROM upcoming_transactions u JOIN subscriptions s ON s.id = u.subscription_id
+               WHERE u.status = 'pending' AND u.matched_transaction_id IS NULL
+               AND s.status IN ('active', 'possibly_cancelled')
+               AND DATE(u.expected_date) >= ? AND DATE(u.expected_date) <= ?
+               ORDER BY DATE(u.expected_date), u.id""", (start.isoformat(), end.isoformat()),
+        ):
+            minor, _ = convert_legacy_sgd({"amount": row["expected_amount"], "currency": "SGD"})
+            items.append({"id": row["id"], "subscription_id": row["subscription_id"],
+                          "label": row["label"], "date": row["expected_date"],
+                          "frequency": row["frequency"], "schedule_status": row["status"],
+                          "amount": money(minor) if minor is not None else None})
+        unknown = sum(item["amount"] is None for item in items)
+        return {"start": start.isoformat(), "end": end.isoformat(), "timezone": timezone,
+                "enabled": self.get_setting("subscriptions_enabled", "false") == "true",
+                "items": items[offset:offset + limit], "total": len(items), "limit": limit, "offset": offset,
+                "known_total": money(sum(item["amount"]["minor_units"] for item in items if item["amount"])),
+                "unknown_count": unknown, "status": "partial" if unknown else "estimated"}
+
+    @_locked
     def get_home_briefing(self, timezone="Asia/Singapore") -> dict:
         from src.spending_facts import convert_legacy_sgd, money
         today = local_now(timezone).date()

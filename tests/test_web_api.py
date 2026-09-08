@@ -744,3 +744,24 @@ async def test_daily_spending_api_contract_dates_and_auth(client, in_memory_db):
     assert (await client.get('/api/v2/spending/day?as_of=invalid')).status_code == 422
     await client.post('/api/logout')
     assert (await client.get('/api/v2/spending/day')).status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_upcoming_plan_api_is_sanitized_bounded_and_authenticated(client, in_memory_db):
+    from unittest.mock import patch
+    from datetime import datetime
+    storage = Storage(in_memory_db)
+    sub = storage.create_subscription('Cafe', 'annual', notes='PRIVATE NOTES')
+    storage.create_upcoming_transaction(sub, '2026-09-08', 12.005)
+    with patch('src.storage.local_now', return_value=datetime(2026, 9, 8)):
+        response = await client.get('/api/v2/plan/upcoming?days=14')
+    assert response.status_code == 200
+    report = response.json()
+    assert report['items'][0]['frequency'] == 'annual'
+    assert report['known_total']['minor_units'] == 1201
+    assert 'PRIVATE NOTES' not in response.text
+    assert 'notes' not in report['items'][0]
+    assert (await client.get('/api/v2/plan/upcoming?days=91')).status_code == 422
+    assert (await client.get('/api/v2/plan/upcoming?offset=-1')).status_code == 422
+    await client.post('/api/logout')
+    assert (await client.get('/api/v2/plan/upcoming')).status_code == 401
