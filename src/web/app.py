@@ -244,6 +244,13 @@ def create_dashboard_app(
         }
         return report
 
+    @app.get("/api/v2/spending/day", response_model=SpendingFacts)
+    async def day_spending(as_of: date | None = None, storage=Depends(_get_storage)):
+        try:
+            return await _db(storage.get_day_spending_facts, as_of, timezone)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from None
+
     @app.get("/api/v2/spending/week", response_model=SpendingFacts)
     async def week_spending(as_of: date | None = None, storage=Depends(_get_storage)):
         try:

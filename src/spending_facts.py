@@ -109,6 +109,14 @@ def _period(rows: list[dict], start: date, end: date) -> dict:
     }
 
 
+def day_facts(conn, as_of: date | None = None, timezone: str = DEFAULT_TIMEZONE) -> dict:
+    as_of = as_of or local_now(timezone).date()
+    if as_of < date(1, 1, 8):
+        raise ValueError("No previous weekday is representable")
+    previous = as_of - timedelta(days=7)
+    return _facts(conn, as_of, timezone, (as_of, as_of, previous, previous))
+
+
 def month_facts(conn, as_of: date | None = None, timezone: str = DEFAULT_TIMEZONE) -> dict:
     as_of = as_of or local_now(timezone).date()
     return _facts(conn, as_of, timezone, month_periods(as_of))

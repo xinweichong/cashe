@@ -288,34 +288,10 @@ class TelegramBotService:
             markup = reply_markup if i == len(parts) - 1 else None
             await _send(part, markup)
 
-    def _build_summary_with_transactions(self, header: str, summary: dict, start_date: str, end_date: str, storage=None) -> str:
-        _storage = storage if storage is not None else self.storage
-        icon_map = _storage.get_category_icon_map()
-        lines = [header, f"Total: `${summary['total']:.2f}`", ""]
-        for cat, total in sorted(summary["by_category"].items(), key=lambda x: -x[1]):
-            icon = icon_map.get(cat, "")
-            prefix = f"{icon} " if icon else ""
-            lines.append(f"{prefix}{self._escape_md(cat)}: `${total:.2f}`")
-
-        transactions = _storage.query_transactions(start_date=start_date, end_date=end_date, limit=200)
-        if transactions:
-            lines.append("")
-            lines.append("*Transactions:*")
-            for tx in transactions:
-                lines.append("─────────")
-                lines.append(self._format_tx_block(tx, icon_map))
-
-        return "\n".join(lines)
-
     def format_daily_summary(self, date: str, storage=None) -> str:
-        _storage = storage if storage is not None else self.storage
-        summary = _storage.get_spending_summary(start_date=date, end_date=date)
-        if summary["total"] == 0:
-            return "Nothing logged yet."
-
-        return self._build_summary_with_transactions(
-            f"*Spending for {date}*", summary, date, date, storage=_storage
-        )
+        from datetime import date as calendar_date
+        storage = storage if storage is not None else self.storage
+        return self._format_spending_period(storage, "day", as_of=calendar_date.fromisoformat(date))
 
     async def _delete_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         ctx = await self._require_ctx(update)
@@ -678,24 +654,6 @@ class TelegramBotService:
             return
         today = self._local_now().strftime("%Y-%m-%d")
         text = self.format_daily_summary(today, storage=ctx.storage)
-        # Append daily pace note if budget data is available
-        try:
-            summary = ctx.storage.get_spending_summary(start_date=today, end_date=today)
-            total_spent = summary["total"]
-            daily_budget = 0.0
-            progress = ctx.storage.get_budget_progress()
-            for b in progress:
-                if b["category"] is None and b["period"] == "monthly" and b["budget_amount"] > 0:
-                    days_in_month = self._local_now().replace(day=1)
-                    import calendar as _cal
-                    dim = _cal.monthrange(self._local_now().year, self._local_now().month)[1]
-                    daily_budget = b["budget_amount"] / dim
-                    break
-            note = self._build_pace_note_daily(total_spent, daily_budget)
-            if note:
-                text = text + "\n\n" + note
-        except Exception:
-            pass
         keyboard = InlineKeyboardMarkup([
             [
                 InlineKeyboardButton("📅 Yesterday", callback_data="cmd_yesterday"),
@@ -724,8 +682,10 @@ class TelegramBotService:
 
         as_of = as_of or self._local_now().date()
         with storage.reconciliation_lock():
-            facts = (storage.get_week_spending_facts(as_of, self.timezone) if period == "week"
-                     else storage.get_month_spending_facts(as_of, self.timezone))
+            get_facts = {"day": storage.get_day_spending_facts,
+                         "week": storage.get_week_spending_facts,
+                         "month": storage.get_month_spending_facts}[period]
+            facts = get_facts(as_of, self.timezone)
             current = facts["current"]
             evidence = {
                 measure: storage.get_spending_evidence(
@@ -733,8 +693,9 @@ class TelegramBotService:
                     timezone=self.timezone, measure=measure, limit=50, offset=0,
                 ) for measure in (("spending", "income") if include_evidence else ())
             }
+        period_label = {"day": "Daily", "week": "Weekly", "month": "Monthly"}[period]
         lines = [
-            f"*{'Weekly' if period == 'week' else 'Monthly'} Summary ({current['start']} to {current['end']})*",
+            f"*{period_label} Summary ({current['start']} to {current['end']})*",
             f"Spending{' known subtotal' if current['status'] == 'partial' else ''}: `{amount(current['spending'])}`",
             f"Status: {current['status']}",
         ]
@@ -1749,20 +1710,6 @@ class TelegramBotService:
             pass
 
         return ""
-
-    def _build_pace_note_daily(self, spent: float, daily_budget: float) -> str:
-        if daily_budget <= 0:
-            return ""
-        pct = spent / daily_budget * 100
-        if pct <= 50:
-            return "On track."
-        elif pct <= 90:
-            return f"Pacing {pct:.0f}% of daily budget."
-        elif pct <= 100:
-            return "Nearly at daily limit."
-        else:
-            overage = spent - daily_budget
-            return f"Over daily by ${overage:.2f}."
 
     async def _check_and_alert_budgets(
         self, category: Optional[str], amount_sgd: float, storage=None, chat_id: Optional[int] = None

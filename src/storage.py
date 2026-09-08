@@ -49,6 +49,11 @@ class Storage:
         self.outbox_dispatch_lock = threading.Lock()
 
     @_locked
+    def get_day_spending_facts(self, as_of=None, timezone="Asia/Singapore") -> dict:
+        from src.spending_facts import day_facts
+        return day_facts(self._conn, as_of, timezone)
+
+    @_locked
     def get_month_spending_facts(self, as_of=None, timezone="Asia/Singapore") -> dict:
         from src.spending_facts import month_facts
         return month_facts(self._conn, as_of, timezone)

@@ -301,8 +301,8 @@ All config values can be set via environment variables (for Railway or Docker). 
 
 | Command | Description |
 |---------|-------------|
-| `/today` | Today's spending summary |
-| `/yesterday` | Yesterday's spending summary |
+| `/today` | Today's shared spending facts and evidence |
+| `/yesterday` | Yesterday's shared spending facts and evidence |
 | `/week` | Monday-to-date spending, comparable prior weekdays, and evidence |
 | `/month` | Month-to-date spending, comparable prior-month dates, and evidence |
 | `/balance` | Month-to-date recorded income, spending, and recorded net flow |

@@ -726,3 +726,21 @@ async def test_capture_resolution_api_auth_privacy_and_reopen(client, in_memory_
     for action in ('resolve', 'reopen'):
         assert (await client.post(route + '/' + action)).status_code == 401
     assert (await client.get('/api/v2/capture/issues?include_handled=true')).status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_daily_spending_api_contract_dates_and_auth(client, in_memory_db):
+    storage = Storage(in_memory_db)
+    storage.insert_transaction(source='manual', source_id='private-daily-source', amount=12.005,
+                               transaction_date='2026-09-07T18:00:00+00:00', raw_data='private-daily-payload')
+    response = await client.get('/api/v2/spending/day?as_of=2026-09-08')
+    assert response.status_code == 200
+    facts = response.json()
+    assert facts['current']['spending']['minor_units'] == 1201
+    assert facts['current']['start'] == facts['current']['end'] == '2026-09-08'
+    assert facts['previous']['start'] == facts['previous']['end'] == '2026-09-01'
+    assert 'private-daily' not in response.text
+    assert (await client.get('/api/v2/spending/day?as_of=0001-01-01')).status_code == 422
+    assert (await client.get('/api/v2/spending/day?as_of=invalid')).status_code == 422
+    await client.post('/api/logout')
+    assert (await client.get('/api/v2/spending/day')).status_code == 401

@@ -1,9 +1,10 @@
 # Spending facts compatibility slice
 
-`src/spending_facts.py` is the shared read-only reporting interface for the new client. `Storage.get_month_spending_facts()`, `Storage.get_week_spending_facts()`, and `Storage.get_spending_evidence()` run it under the per-user database lock. Home and Telegram /week, /month, and /balance consume these shared facts. Scheduled weekly/monthly Telegram summaries also use these facts. Other dashboard reports and daily Telegram reports retain their legacy interfaces; moving those consumers happens in later slices.
+`src/spending_facts.py` is the shared read-only reporting interface for the new client. `Storage.get_day_spending_facts()`, `Storage.get_month_spending_facts()`, `Storage.get_week_spending_facts()`, and `Storage.get_spending_evidence()` run it under the per-user database lock. Home and Telegram /today, /yesterday, /week, /month, and /balance consume these shared facts. Scheduled weekly/monthly Telegram summaries also use these facts. Other dashboard reports and the morning Telegram digest retain their legacy interfaces; moving those consumers happens in later slices.
 
 Authenticated endpoints:
 
+- `GET /api/v2/spending/day?as_of=2026-09-08`
 - `GET /api/v2/spending/month?as_of=2026-09-06`
 - `GET /api/v2/spending/week?as_of=2026-09-09`
 - `GET /api/v2/spending/evidence?start=2026-09-01&end=2026-09-06&measure=spending&category=Food&limit=50&offset=0`
@@ -75,7 +76,7 @@ Monthly JSON was about 1.6 KB; each 50-row evidence response was under 9.7 KB. T
 
 Reports include the three largest category changes and up to 50 spending plus 50 income evidence records, with explicit shown/total counts and an Activity pointer when truncated. Evidence includes projected dates, signed refund amounts, unresolved conversions, and transaction IDs; no raw payload or source identifier is included. Totals are not truncated with the evidence list. Recorded-data status does not establish capture completeness.
 
-These commands no longer append legacy budget-pace advice. Daily commands are outside this migration; their compatibility limits remain. This change does not migrate money storage.
+These commands no longer append legacy budget-pace advice. The morning digest is outside this migration; its compatibility limits remain. This change does not migrate money storage.
 
 
 ## Scheduled Telegram period reports
@@ -91,4 +92,11 @@ Scheduled weekly/monthly reports no longer generate or append legacy AI narrativ
 
 `/balance` now reads the current month from the shared facts interface in the bot's configured timezone. It shows recorded income, spending, and **recorded net flow**; it does not claim an account balance. Missing income is absent rather than zero, explicitly recorded zero income remains zero, and negative flow is retained. Unresolved money/classification or undated records produce partial known subtotals and suppress net flow. Indicative conversions remain labeled.
 
-The empty-month response retains navigation and shows recorded zero spending with absent income. It does not infer successful capture or invent a net-flow figure. This command does not query the legacy balance calculation. Daily reports, daily optional AI, remaining dashboard reports, and money-storage migration remain separate work.
+The empty-month response retains navigation and shows recorded zero spending with absent income. It does not infer successful capture or invent a net-flow figure. This command does not query the legacy balance calculation. The morning digest, daily optional AI, remaining dashboard reports, and money-storage migration remain separate work.
+
+
+## Daily spending facts and commands
+
+`GET /api/v2/spending/day?as_of=2026-09-08` returns the same authenticated response contract as week/month. Its current period contains only the requested local date; its comparison contains only the same weekday seven days earlier. The intervening days do not contribute to either total. The default date comes from the configured local calendar, and dates without a representable preceding weekday return 422.
+
+`/today` and `/yesterday` use this shared calculation and the existing evidence formatter. They retain partial/indicative status, absent income, signed refunds, excluded transfers, negative recorded net flow, undated-observation warnings, and up to 50 evidence records per measure with explicit counts. Legacy daily budget-pace advice is removed. The morning digest's combined totals/alerts/cached prose and daily AI generation remain pending migration; this slice adds no cloud calls or storage migration.

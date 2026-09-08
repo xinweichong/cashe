@@ -404,3 +404,16 @@ Scheduled shared-facts reports were committed as `e5bc50f`; this continuation st
 - No frontend or schema changes, live Telegram/model calls, production data/service changes, push, or deployment.
 
 Verification: **969 backend tests passed** (four existing datetime deprecation warnings), including the eight new balance cases. Coverage verifies shared rounding/classification, negative flow, absent versus recorded zero income, unresolved foreign expense/income, undated observations, indicative conversions, empty-state navigation, linked-user isolation, and timezone boundaries. The 83-test focused Telegram run and whitespace checks passed. No frontend files changed; the previous baseline remains **69 frontend tests** and a successful production build. This verified increment is committed separately.
+
+
+## 2026-09-08 continuation — shared daily facts and Telegram commands
+
+Shared Telegram balance was committed as `1526e56`; this continuation started with a clean working tree.
+
+- Added locked daily spending facts and authenticated `GET /api/v2/spending/day`, using the existing typed response contract, Decimal rounding, classification, timezone projection, and evidence rules. A day compares only with the same weekday seven days earlier; unrepresentable previous dates return 422.
+- `/today` and `/yesterday` now reuse the shared period/evidence formatter, retaining explicit partial/indicative states, absent income, negative recorded net flow, bounded evidence, and navigation. Local date selection handles month/year boundaries; totals and displayed evidence use the same timezone.
+- Removed the unused legacy daily summary builder and daily budget-pace helper, including eight tests for the retired helper. No budget-pace advice is appended to the migrated commands.
+- Updated user/operator/agent documentation. The morning digest still combines legacy totals, alerts, and cached AI prose; that path, daily AI operating controls, remaining dashboard consumers, and money-storage migration remain pending.
+- No frontend or schema changes, live Telegram/model calls, production data/service changes, push, or deployment.
+
+Verification: **970 backend tests passed** (four existing datetime deprecation warnings): nine new daily-facts/command/API cases replace eight obsolete pace-helper tests. Coverage includes same-weekday and year boundaries, evidence reconciliation, NULL expenses, refunds/transfers, negative flow, indicative/unknown money, undated observations, configured timezone/default date, invalid/minimum API dates, private-payload exclusion, authentication, and daily command navigation without legacy queries. The 95-test focused run and whitespace checks passed. No frontend files changed; the previous baseline remains **69 frontend tests** and a successful production build. This verified increment is committed separately.
