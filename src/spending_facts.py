@@ -38,7 +38,7 @@ def convert_legacy_sgd(row: dict) -> tuple[int | None, str]:
     never computed (conversion_status IS NULL): straggler pre-R02 rows, or
     a raw fixture that bypassed Storage.insert_transaction/update_transaction.
     Every row written through Storage has canonical columns already, which
-    _resolve_money prefers — this recomputation has no currency validation
+    resolve_money prefers — this recomputation has no currency validation
     and must not be trusted over stored canonical truth."""
     try:
         amount = Decimal(str(row["amount"]))
@@ -58,7 +58,7 @@ def convert_legacy_sgd(row: dict) -> tuple[int | None, str]:
         return None, "unresolved"
 
 
-def _resolve_money(row: dict) -> tuple[int | None, str]:
+def resolve_money(row: dict) -> tuple[int | None, str]:
     """Prefer the canonical reporting_minor_units/conversion_status Storage
     already computed at write time (single source of truth); a NULL
     conversion_status means canonical money was genuinely never computed for
@@ -99,7 +99,7 @@ def _rows(conn, start: date, end: date, timezone: str) -> list[dict]:
             row["day"] = day
             row["type"] = row["type"] or "expense"
             row["category"] = row["category"] or "Other"
-            row["minor"], row["conversion_status"] = _resolve_money(row)
+            row["minor"], row["conversion_status"] = resolve_money(row)
             if day is None:
                 row["minor"], row["conversion_status"] = None, "unresolved"
             result.append(row)
@@ -200,7 +200,7 @@ def spending_review(conn, *, timezone: str = DEFAULT_TIMEZONE,
         # Date uncertainty alone must not be described as a conversion problem —
         # row["minor"] is forced to None for undated rows regardless of money
         # resolvability (see _rows), so re-resolve independently of that override.
-        if _resolve_money(row)[0] is None:
+        if resolve_money(row)[0] is None:
             reasons.append("unresolved_money")
         if row["type"] not in ("expense", "refund", "income"):
             reasons.append("unknown_type")

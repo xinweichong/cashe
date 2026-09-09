@@ -113,12 +113,12 @@ class Storage:
 
     @_locked
     def get_home_briefing(self, timezone="Asia/Singapore") -> dict:
-        from src.spending_facts import convert_legacy_sgd, money
+        from src.spending_facts import convert_legacy_sgd, money, resolve_money
         today = local_now(timezone).date()
         facts = self.get_month_spending_facts(today, timezone)
         recent = []
         for row in self.query_transactions(limit=5):
-            minor, status = convert_legacy_sgd(row)
+            minor, status = resolve_money(row)
             recent.append({
                 "id": row["id"], "merchant": row["merchant"], "category": row["category"] or "Other",
                 "type": row["type"] or "expense", "date": row["transaction_date"],
@@ -2581,8 +2581,8 @@ class Storage:
             expected_date = datetime.fromisoformat(tx["transaction_date"]).date().isoformat()
         except (ValueError, TypeError):
             raise ValueError("Transaction needs a valid date before linking") from None
-        from src.spending_facts import convert_legacy_sgd
-        minor, _ = convert_legacy_sgd(tx)
+        from src.spending_facts import resolve_money
+        minor, _ = resolve_money(tx)
         expected_amount = minor / 100 if minor is not None else None
         with self._conn:
             self._conn.execute(

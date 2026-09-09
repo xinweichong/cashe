@@ -283,3 +283,19 @@ def test_week_timezone_projects_sunday_utc_into_monday(ledger):
     assert report['current']['spending']['minor_units'] == 1000
     report = storage.get_week_spending_facts(date(2026, 9, 7), 'UTC')
     assert report['current']['spending']['minor_units'] == 0
+
+
+def test_home_briefing_recent_list_uses_canonical_money_not_legacy_recompute(ledger):
+    """R04: get_home_briefing's 'recent' list called convert_legacy_sgd
+    directly on rows from query_transactions, bypassing the canonical-money
+    resolution used everywhere else. convert_legacy_sgd has no currency
+    validation, so an unsupported currency code with a plausible-looking
+    rate was silently treated as a resolved/indicative conversion instead
+    of unresolved — same bug class as spending_facts._rows before its R04
+    fix, just reachable through Home's own recent-transactions list."""
+    storage, add = ledger
+    add(10, currency='AED', exchange_rate=0.27)
+    briefing = storage.get_home_briefing()
+    recent = briefing['recent'][0]
+    assert recent['amount'] is None
+    assert recent['conversion_status'] == 'unresolved'

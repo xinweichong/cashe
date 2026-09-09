@@ -87,6 +87,18 @@ def test_link_unknown_foreign_amount_remains_unknown(charges, in_memory_db, rate
     assert [r for r in storage.list_upcoming_transactions(subs[0]) if r['status'] == 'matched'][0]['expected_amount'] is None
 
 
+def test_link_unsupported_currency_remains_unknown_not_fabricated(charges, in_memory_db):
+    """R04: link_transaction_to_subscription called convert_legacy_sgd
+    directly, which has no currency validation — an unsupported currency
+    code with a plausible-looking rate was silently treated as a resolved
+    conversion instead of unknown."""
+    storage, subs, _, tx = charges
+    in_memory_db.execute("UPDATE transactions SET currency='AED', exchange_rate=0.27 WHERE id=?", (tx,))
+    in_memory_db.commit()
+    storage.link_transaction_to_subscription(subs[0], tx)
+    assert [r for r in storage.list_upcoming_transactions(subs[0]) if r['status'] == 'matched'][0]['expected_amount'] is None
+
+
 @pytest.mark.parametrize('value', [None, 'invalid'])
 def test_link_requires_date(charges, in_memory_db, value):
     storage, subs, _, tx = charges
