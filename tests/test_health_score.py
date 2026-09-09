@@ -162,6 +162,35 @@ class TestHealthScoreAnomalyFrequency:
         assert result["components"]["anomaly_frequency"]["score"] == pytest.approx(0.0, abs=0.1)
         assert result["components"]["anomaly_frequency"]["value"] == 5
 
+    def test_unresolved_foreign_transactions_never_crash_or_flag(self, in_memory_db):
+        """R04: an unresolved conversion (legacy exchange_rate=1.0 on a
+        foreign currency) must not be comparable to a merchant average —
+        previously `amount * exchange_rate` was never NULL so this couldn't
+        crash; the canonical-aware expression can be NULL for a genuinely
+        unresolved transaction, and both the merchant-average AVG() and the
+        per-transaction comparison must tolerate that."""
+        storage = Storage(connection=in_memory_db)
+        _seed_categories(in_memory_db)
+        in_memory_db.execute("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('anomaly_multiplier', '2.0')")
+        in_memory_db.commit()
+        _insert_tx(in_memory_db, "inc1", 1000.0, "Income", tx_type="income")
+        for i in range(5):
+            _insert_tx(in_memory_db, f"e{i}", 50.0, "Dining", merchant="RestaurantA")
+        # A merchant with only unresolved historical data (AVG -> NULL).
+        _insert_tx(in_memory_db, "hist-unresolved", 5000.0, "Dining", merchant="RestaurantB",
+                   exchange_rate=1.0, date="2025-01-15")
+        in_memory_db.execute(
+            "UPDATE transactions SET currency = 'THB' WHERE source_id = 'hist-unresolved'"
+        )
+        # And an unresolved transaction in the scoring period itself.
+        _insert_tx(in_memory_db, "period-unresolved", 5000.0, "Dining", merchant="RestaurantA", exchange_rate=1.0)
+        in_memory_db.execute(
+            "UPDATE transactions SET currency = 'THB' WHERE source_id = 'period-unresolved'"
+        )
+        in_memory_db.commit()
+        result = storage.get_health_score(months=1)
+        assert result["components"]["anomaly_frequency"]["value"] == 0
+
 
 class TestHealthScoreTotal:
     def test_score_sums_components(self, in_memory_db):

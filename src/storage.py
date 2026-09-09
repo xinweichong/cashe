@@ -912,7 +912,7 @@ class Storage:
         self, start_date: str, end_date: str
     ) -> dict:
         rows = self._conn.execute(
-            """SELECT category, SUM(amount * exchange_rate) as total
+            """SELECT category, SUM((CASE WHEN reporting_minor_units IS NOT NULL THEN reporting_minor_units / 100.0 WHEN currency = 'SGD' OR currency IS NULL THEN amount WHEN exchange_rate IS NOT NULL AND exchange_rate > 0 AND exchange_rate != 1 THEN amount * exchange_rate ELSE NULL END)) as total
                FROM transactions
                WHERE DATE(transaction_date) >= ? AND DATE(transaction_date) <= ?
                AND (type IS NULL OR type = 'expense')
@@ -942,7 +942,7 @@ class Storage:
     @_locked
     def get_income_summary(self, start_date: str, end_date: str) -> dict:
         rows = self._conn.execute(
-            """SELECT category, SUM(amount * exchange_rate) as total
+            """SELECT category, SUM((CASE WHEN reporting_minor_units IS NOT NULL THEN reporting_minor_units / 100.0 WHEN currency = 'SGD' OR currency IS NULL THEN amount WHEN exchange_rate IS NOT NULL AND exchange_rate > 0 AND exchange_rate != 1 THEN amount * exchange_rate ELSE NULL END)) as total
                FROM transactions
                WHERE DATE(transaction_date) >= ? AND DATE(transaction_date) <= ?
                AND type = 'income'
@@ -961,7 +961,7 @@ class Storage:
     @_locked
     def get_merchant_ranking(self, start_date: str, end_date: str, limit: int = 10) -> list[dict]:
         rows = self._conn.execute(
-            """SELECT merchant, COUNT(*) as visits, SUM(amount * exchange_rate) as total
+            """SELECT merchant, COUNT(*) as visits, SUM((CASE WHEN reporting_minor_units IS NOT NULL THEN reporting_minor_units / 100.0 WHEN currency = 'SGD' OR currency IS NULL THEN amount WHEN exchange_rate IS NOT NULL AND exchange_rate > 0 AND exchange_rate != 1 THEN amount * exchange_rate ELSE NULL END)) as total
                FROM transactions
                WHERE DATE(transaction_date) >= ? AND DATE(transaction_date) <= ?
                AND merchant IS NOT NULL AND (type IS NULL OR type = 'expense')
@@ -973,7 +973,7 @@ class Storage:
     @_locked
     def get_average_daily(self, start_date: str, end_date: str) -> float:
         row = self._conn.execute(
-            """SELECT COALESCE(SUM(amount * exchange_rate), 0) as total
+            """SELECT COALESCE(SUM((CASE WHEN reporting_minor_units IS NOT NULL THEN reporting_minor_units / 100.0 WHEN currency = 'SGD' OR currency IS NULL THEN amount WHEN exchange_rate IS NOT NULL AND exchange_rate > 0 AND exchange_rate != 1 THEN amount * exchange_rate ELSE NULL END)), 0) as total
                FROM transactions
                WHERE DATE(transaction_date) >= ? AND DATE(transaction_date) <= ?
                AND (type IS NULL OR type = 'expense')""",
@@ -988,7 +988,7 @@ class Storage:
     @_locked
     def get_trend(self, start_date: str, end_date: str) -> list[dict]:
         rows = self._conn.execute(
-            """SELECT DATE(transaction_date) as date, SUM(amount * exchange_rate) as amount
+            """SELECT DATE(transaction_date) as date, SUM((CASE WHEN reporting_minor_units IS NOT NULL THEN reporting_minor_units / 100.0 WHEN currency = 'SGD' OR currency IS NULL THEN amount WHEN exchange_rate IS NOT NULL AND exchange_rate > 0 AND exchange_rate != 1 THEN amount * exchange_rate ELSE NULL END)) as amount
                FROM transactions
                WHERE DATE(transaction_date) >= ? AND DATE(transaction_date) <= ?
                AND (type IS NULL OR type = 'expense')
@@ -1002,7 +1002,7 @@ class Storage:
         rows = self._conn.execute(
             """SELECT DATE(transaction_date) as date,
                       COALESCE(category, 'Other') as category,
-                      SUM(amount * exchange_rate) as amount
+                      SUM((CASE WHEN reporting_minor_units IS NOT NULL THEN reporting_minor_units / 100.0 WHEN currency = 'SGD' OR currency IS NULL THEN amount WHEN exchange_rate IS NOT NULL AND exchange_rate > 0 AND exchange_rate != 1 THEN amount * exchange_rate ELSE NULL END)) as amount
                FROM transactions
                WHERE DATE(transaction_date) >= ? AND DATE(transaction_date) <= ?
                AND (type IS NULL OR type = 'expense')
@@ -1280,9 +1280,9 @@ class Storage:
             WITH merchant_stats AS (
                 SELECT
                     t.merchant,
-                    ROUND(SUM(t.amount * t.exchange_rate), 2) as total_sgd,
+                    ROUND(SUM((CASE WHEN t.reporting_minor_units IS NOT NULL THEN t.reporting_minor_units / 100.0 WHEN t.currency = 'SGD' OR t.currency IS NULL THEN t.amount WHEN t.exchange_rate IS NOT NULL AND t.exchange_rate > 0 AND t.exchange_rate != 1 THEN t.amount * t.exchange_rate ELSE NULL END)), 2) as total_sgd,
                     COUNT(*) as transaction_count,
-                    ROUND(AVG(t.amount * t.exchange_rate), 2) as avg_amount_sgd,
+                    ROUND(AVG((CASE WHEN t.reporting_minor_units IS NOT NULL THEN t.reporting_minor_units / 100.0 WHEN t.currency = 'SGD' OR t.currency IS NULL THEN t.amount WHEN t.exchange_rate IS NOT NULL AND t.exchange_rate > 0 AND t.exchange_rate != 1 THEN t.amount * t.exchange_rate ELSE NULL END)), 2) as avg_amount_sgd,
                     DATE(MIN(t.transaction_date)) as first_seen,
                     DATE(MAX(t.transaction_date)) as last_seen
                 FROM transactions t
@@ -1325,9 +1325,9 @@ class Storage:
             """
             SELECT
                 t.merchant,
-                ROUND(SUM(t.amount * t.exchange_rate), 2) as total_sgd,
+                ROUND(SUM((CASE WHEN t.reporting_minor_units IS NOT NULL THEN t.reporting_minor_units / 100.0 WHEN t.currency = 'SGD' OR t.currency IS NULL THEN t.amount WHEN t.exchange_rate IS NOT NULL AND t.exchange_rate > 0 AND t.exchange_rate != 1 THEN t.amount * t.exchange_rate ELSE NULL END)), 2) as total_sgd,
                 COUNT(*) as transaction_count,
-                ROUND(AVG(t.amount * t.exchange_rate), 2) as avg_amount_sgd,
+                ROUND(AVG((CASE WHEN t.reporting_minor_units IS NOT NULL THEN t.reporting_minor_units / 100.0 WHEN t.currency = 'SGD' OR t.currency IS NULL THEN t.amount WHEN t.exchange_rate IS NOT NULL AND t.exchange_rate > 0 AND t.exchange_rate != 1 THEN t.amount * t.exchange_rate ELSE NULL END)), 2) as avg_amount_sgd,
                 DATE(MIN(t.transaction_date)) as first_seen,
                 DATE(MAX(t.transaction_date)) as last_seen
             FROM transactions t
@@ -1397,7 +1397,7 @@ class Storage:
         rows = self._conn.execute(
             """
             SELECT strftime('%Y-%m', transaction_date) as month,
-                   ROUND(SUM(amount * exchange_rate), 2) as total,
+                   ROUND(SUM((CASE WHEN reporting_minor_units IS NOT NULL THEN reporting_minor_units / 100.0 WHEN currency = 'SGD' OR currency IS NULL THEN amount WHEN exchange_rate IS NOT NULL AND exchange_rate > 0 AND exchange_rate != 1 THEN amount * exchange_rate ELSE NULL END)), 2) as total,
                    COUNT(*) as count
             FROM transactions
             WHERE merchant = ?
@@ -1487,7 +1487,7 @@ class Storage:
 
             if b["category"] is None:
                 spent_row = self._conn.execute(
-                    """SELECT COALESCE(SUM(amount * exchange_rate), 0) as total
+                    """SELECT COALESCE(SUM((CASE WHEN reporting_minor_units IS NOT NULL THEN reporting_minor_units / 100.0 WHEN currency = 'SGD' OR currency IS NULL THEN amount WHEN exchange_rate IS NOT NULL AND exchange_rate > 0 AND exchange_rate != 1 THEN amount * exchange_rate ELSE NULL END)), 0) as total
                        FROM transactions
                        WHERE (type IS NULL OR type = 'expense')
                          AND DATE(transaction_date) BETWEEN ? AND ?""",
@@ -1495,7 +1495,7 @@ class Storage:
                 ).fetchone()
             else:
                 spent_row = self._conn.execute(
-                    """SELECT COALESCE(SUM(amount * exchange_rate), 0) as total
+                    """SELECT COALESCE(SUM((CASE WHEN reporting_minor_units IS NOT NULL THEN reporting_minor_units / 100.0 WHEN currency = 'SGD' OR currency IS NULL THEN amount WHEN exchange_rate IS NOT NULL AND exchange_rate > 0 AND exchange_rate != 1 THEN amount * exchange_rate ELSE NULL END)), 0) as total
                        FROM transactions
                        WHERE (type IS NULL OR type = 'expense') AND category = ?
                          AND DATE(transaction_date) BETWEEN ? AND ?""",
@@ -1746,13 +1746,13 @@ class Storage:
         end = f"{month}-{last_day:02d}"
 
         income = self._conn.execute(
-            """SELECT COALESCE(SUM(amount * exchange_rate), 0) as total
+            """SELECT COALESCE(SUM((CASE WHEN reporting_minor_units IS NOT NULL THEN reporting_minor_units / 100.0 WHEN currency = 'SGD' OR currency IS NULL THEN amount WHEN exchange_rate IS NOT NULL AND exchange_rate > 0 AND exchange_rate != 1 THEN amount * exchange_rate ELSE NULL END)), 0) as total
                FROM transactions WHERE type = 'income'
                AND DATE(transaction_date) BETWEEN ? AND ?""",
             (start, end),
         ).fetchone()["total"]
         expenses = self._conn.execute(
-            """SELECT COALESCE(SUM(amount * exchange_rate), 0) as total
+            """SELECT COALESCE(SUM((CASE WHEN reporting_minor_units IS NOT NULL THEN reporting_minor_units / 100.0 WHEN currency = 'SGD' OR currency IS NULL THEN amount WHEN exchange_rate IS NOT NULL AND exchange_rate > 0 AND exchange_rate != 1 THEN amount * exchange_rate ELSE NULL END)), 0) as total
                FROM transactions WHERE (type IS NULL OR type = 'expense')
                AND DATE(transaction_date) BETWEEN ? AND ?""",
             (start, end),
@@ -1800,7 +1800,7 @@ class Storage:
 
         # ── Income ──────────────────────────────────────────────────────────
         income = self._conn.execute(
-            """SELECT COALESCE(SUM(amount * exchange_rate), 0.0)
+            """SELECT COALESCE(SUM((CASE WHEN reporting_minor_units IS NOT NULL THEN reporting_minor_units / 100.0 WHEN currency = 'SGD' OR currency IS NULL THEN amount WHEN exchange_rate IS NOT NULL AND exchange_rate > 0 AND exchange_rate != 1 THEN amount * exchange_rate ELSE NULL END)), 0.0)
                FROM transactions WHERE type = 'income'
                AND DATE(transaction_date) BETWEEN ? AND ?""",
             (start, end),
@@ -1817,7 +1817,7 @@ class Storage:
 
         # ── Total expenses ───────────────────────────────────────────────────
         total_expense = self._conn.execute(
-            """SELECT COALESCE(SUM(amount * exchange_rate), 0.0)
+            """SELECT COALESCE(SUM((CASE WHEN reporting_minor_units IS NOT NULL THEN reporting_minor_units / 100.0 WHEN currency = 'SGD' OR currency IS NULL THEN amount WHEN exchange_rate IS NOT NULL AND exchange_rate > 0 AND exchange_rate != 1 THEN amount * exchange_rate ELSE NULL END)), 0.0)
                FROM transactions WHERE (type IS NULL OR type = 'expense')
                AND DATE(transaction_date) BETWEEN ? AND ?""",
             (start, end),
@@ -1825,7 +1825,7 @@ class Storage:
 
         # ── Needs (expenses in categories with type='needs') ─────────────────
         needs = self._conn.execute(
-            """SELECT COALESCE(SUM(t.amount * t.exchange_rate), 0.0)
+            """SELECT COALESCE(SUM((CASE WHEN t.reporting_minor_units IS NOT NULL THEN t.reporting_minor_units / 100.0 WHEN t.currency = 'SGD' OR t.currency IS NULL THEN t.amount WHEN t.exchange_rate IS NOT NULL AND t.exchange_rate > 0 AND t.exchange_rate != 1 THEN t.amount * t.exchange_rate ELSE NULL END)), 0.0)
                FROM transactions t
                LEFT JOIN categories c ON t.category = c.name
                WHERE (t.type IS NULL OR t.type = 'expense')
@@ -1836,7 +1836,7 @@ class Storage:
 
         # ── Wants (expenses in categories with type='wants') ─────────────────
         wants = self._conn.execute(
-            """SELECT COALESCE(SUM(t.amount * t.exchange_rate), 0.0)
+            """SELECT COALESCE(SUM((CASE WHEN t.reporting_minor_units IS NOT NULL THEN t.reporting_minor_units / 100.0 WHEN t.currency = 'SGD' OR t.currency IS NULL THEN t.amount WHEN t.exchange_rate IS NOT NULL AND t.exchange_rate > 0 AND t.exchange_rate != 1 THEN t.amount * t.exchange_rate ELSE NULL END)), 0.0)
                FROM transactions t
                LEFT JOIN categories c ON t.category = c.name
                WHERE (t.type IS NULL OR t.type = 'expense')
@@ -1872,7 +1872,7 @@ class Storage:
         merchant_avgs = {
             row["merchant"]: row["avg_amt"]
             for row in self._conn.execute(
-                """SELECT merchant, AVG(amount * exchange_rate) as avg_amt
+                """SELECT merchant, AVG((CASE WHEN reporting_minor_units IS NOT NULL THEN reporting_minor_units / 100.0 WHEN currency = 'SGD' OR currency IS NULL THEN amount WHEN exchange_rate IS NOT NULL AND exchange_rate > 0 AND exchange_rate != 1 THEN amount * exchange_rate ELSE NULL END)) as avg_amt
                    FROM transactions WHERE (type IS NULL OR type = 'expense') AND merchant IS NOT NULL
                    AND DATE(transaction_date) < ?
                    GROUP BY merchant""",
@@ -1882,7 +1882,7 @@ class Storage:
 
         # Period transactions
         period_txs = self._conn.execute(
-            """SELECT merchant, amount * exchange_rate as amt_sgd
+            """SELECT merchant, (CASE WHEN reporting_minor_units IS NOT NULL THEN reporting_minor_units / 100.0 WHEN currency = 'SGD' OR currency IS NULL THEN amount WHEN exchange_rate IS NOT NULL AND exchange_rate > 0 AND exchange_rate != 1 THEN amount * exchange_rate ELSE NULL END) as amt_sgd
                FROM transactions WHERE (type IS NULL OR type = 'expense') AND merchant IS NOT NULL
                AND DATE(transaction_date) BETWEEN ? AND ?""",
             (start, end),
@@ -1891,7 +1891,8 @@ class Storage:
         anomaly_count = sum(
             1
             for r in period_txs
-            if r["merchant"] in merchant_avgs
+            if r["amt_sgd"] is not None
+            and merchant_avgs.get(r["merchant"]) is not None
             and merchant_avgs[r["merchant"]] > 0
             and r["amt_sgd"] > multiplier * merchant_avgs[r["merchant"]]
         )
@@ -2110,7 +2111,7 @@ class Storage:
             return None
 
         rows = self._conn.execute(
-            """SELECT t.amount * t.exchange_rate as amt_sgd,
+            """SELECT (CASE WHEN t.reporting_minor_units IS NOT NULL THEN t.reporting_minor_units / 100.0 WHEN t.currency = 'SGD' OR t.currency IS NULL THEN t.amount WHEN t.exchange_rate IS NOT NULL AND t.exchange_rate > 0 AND t.exchange_rate != 1 THEN t.amount * t.exchange_rate ELSE NULL END) as amt_sgd,
                       t.category,
                       DATE(t.transaction_date) as tx_date,
                       t.currency
@@ -2121,7 +2122,10 @@ class Storage:
             (trip_id,),
         ).fetchall()
 
-        total_sgd = sum(r["amt_sgd"] for r in rows)
+        # An unresolved conversion (amt_sgd is None) excludes that transaction
+        # from the SGD totals below rather than crashing — same "unresolved
+        # is excluded, not fabricated" rule as spending_facts/analytics.
+        total_sgd = sum(r["amt_sgd"] or 0 for r in rows)
         count = len(rows)
 
         start_dt = datetime.strptime(trip["start_date"], "%Y-%m-%d")
@@ -2136,14 +2140,14 @@ class Storage:
             cat = r["category"] or "Other"
             if cat not in cat_totals:
                 cat_totals[cat] = {"category": cat, "amount_sgd": 0.0, "count": 0}
-            cat_totals[cat]["amount_sgd"] = round(cat_totals[cat]["amount_sgd"] + r["amt_sgd"], 2)
+            cat_totals[cat]["amount_sgd"] = round(cat_totals[cat]["amount_sgd"] + (r["amt_sgd"] or 0), 2)
             cat_totals[cat]["count"] += 1
         by_category = sorted(cat_totals.values(), key=lambda x: x["amount_sgd"], reverse=True)
 
         day_totals: dict[str, float] = {}
         for r in rows:
             d = r["tx_date"] or "unknown"
-            day_totals[d] = round(day_totals.get(d, 0.0) + r["amt_sgd"], 2)
+            day_totals[d] = round(day_totals.get(d, 0.0) + (r["amt_sgd"] or 0), 2)
         by_day = [{"date": d, "amount_sgd": v} for d, v in sorted(day_totals.items())]
 
         currencies = list({r["currency"] for r in rows if r["currency"]})
@@ -2421,7 +2425,7 @@ class Storage:
     def _get_subscription_last_amount(self, sub_id: int) -> float | None:
         """Not locked — only called from within locked methods."""
         row = self._conn.execute(
-            """SELECT t.amount * t.exchange_rate AS sgd_amount
+            """SELECT (CASE WHEN t.reporting_minor_units IS NOT NULL THEN t.reporting_minor_units / 100.0 WHEN t.currency = 'SGD' OR t.currency IS NULL THEN t.amount WHEN t.exchange_rate IS NOT NULL AND t.exchange_rate > 0 AND t.exchange_rate != 1 THEN t.amount * t.exchange_rate ELSE NULL END) AS sgd_amount
                FROM upcoming_transactions u
                JOIN transactions t ON t.id = u.matched_transaction_id
                WHERE u.subscription_id = ? AND u.status = 'matched'

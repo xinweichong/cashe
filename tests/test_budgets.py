@@ -179,6 +179,22 @@ class TestBudgetProgress:
         in_memory_db.commit()
         assert storage.get_budget_progress()[0]["spent"] == pytest.approx(10.0, 0.01)
 
+    def test_unresolved_foreign_amount_excluded_from_progress(self, in_memory_db):
+        """R04: a legacy exchange_rate of 1.0 is a silent unresolved fallback,
+        not real conversion evidence — must not be summed at face value."""
+        storage = Storage(connection=in_memory_db)
+        storage.create_budget(category=None, amount=200.0, period="monthly")
+        today = date.today().isoformat()
+        storage.insert_transaction(
+            source="manual", source_id="b1", amount=50.0,
+            merchant="M", transaction_date=today,
+        )
+        storage.insert_transaction(
+            source="manual", source_id="b2", amount=500.0, currency="THB", exchange_rate=1.0,
+            merchant="M", transaction_date=today,
+        )
+        assert storage.get_budget_progress()[0]["spent"] == pytest.approx(50.0, 0.01)
+
 
 import bcrypt
 import pytest_asyncio

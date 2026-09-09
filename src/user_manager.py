@@ -376,10 +376,13 @@ def _generate_llm_insight(storage, llm_service) -> None:
         categories = get_category_comparison(storage._conn, period="month")
         velocity = get_spending_velocity(storage._conn)
 
+        # reporting_minor_units (R02 canonical money) rather than amount *
+        # exchange_rate — a legacy exchange_rate of 1.0 is a silent
+        # unresolved fallback, not real conversion evidence.
         balance_row = storage._conn.execute(
             """SELECT
-                 COALESCE(SUM(CASE WHEN type='income' THEN amount*exchange_rate END), 0) AS income,
-                 COALESCE(SUM(CASE WHEN (type IS NULL OR type='expense') THEN amount*exchange_rate END), 0) AS expenses
+                 COALESCE(SUM(CASE WHEN type='income' THEN reporting_minor_units END), 0) / 100.0 AS income,
+                 COALESCE(SUM(CASE WHEN (type IS NULL OR type='expense') THEN reporting_minor_units END), 0) / 100.0 AS expenses
                FROM transactions
                WHERE DATE(transaction_date) BETWEEN ? AND ?""",
             (start, end),

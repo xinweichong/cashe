@@ -267,6 +267,32 @@ class TestTripSummary:
         storage = Storage(connection=in_memory_db)
         assert storage.get_trip_summary(999) is None
 
+    def test_summary_excludes_unresolved_foreign_amount_without_crashing(self, in_memory_db):
+        """R04: a legacy exchange_rate of 1.0 is unresolved, not real
+        conversion evidence — an unresolved transaction must be excluded
+        from trip totals, not summed at face value or crash the aggregation
+        (previously a bare `amount * exchange_rate` was never NULL; the
+        canonical-money-aware expression can be, for a genuinely unresolved
+        conversion, and the Python-side sum()/round() calls must tolerate
+        that)."""
+        storage = Storage(connection=in_memory_db)
+        trip_id = storage.create_trip(name="Bangkok", start_date="2026-04-10")
+        known_id = storage.insert_transaction(
+            source="manual", source_id="known", amount=100.0,
+            category="Dining", transaction_date="2026-04-10",
+        )
+        unresolved_id = storage.insert_transaction(
+            source="manual", source_id="unresolved", amount=5000.0,
+            currency="THB", exchange_rate=1.0,
+            category="Dining", transaction_date="2026-04-10",
+        )
+        storage.enlist_transaction(trip_id, known_id)
+        storage.enlist_transaction(trip_id, unresolved_id)
+        summary = storage.get_trip_summary(trip_id)
+        assert summary["total_sgd"] == pytest.approx(100.0, abs=0.01)
+        assert summary["transaction_count"] == 2
+        assert summary["by_category"][0]["amount_sgd"] == pytest.approx(100.0, abs=0.01)
+
 
 @pytest.fixture
 def trip_app(in_memory_db):
