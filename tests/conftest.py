@@ -59,6 +59,15 @@ def in_memory_admin_db():
             username    TEXT NOT NULL REFERENCES users(username) ON DELETE CASCADE,
             expires_at  DATETIME NOT NULL
         );
+        CREATE TABLE job_runs (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            job_name      TEXT NOT NULL,
+            status        TEXT NOT NULL DEFAULT 'running' CHECK(status IN ('running', 'succeeded', 'failed')),
+            started_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            finished_at   DATETIME,
+            error_code    TEXT
+        );
+        CREATE INDEX idx_job_runs_job_name ON job_runs(job_name, id);
     """)
     conn.row_factory = sqlite3.Row
     return conn

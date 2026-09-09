@@ -294,6 +294,15 @@ def init_app_db(db_path: str) -> sqlite3.Connection:
             username    TEXT NOT NULL REFERENCES users(username) ON DELETE CASCADE,
             expires_at  DATETIME NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS job_runs (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            job_name      TEXT NOT NULL,
+            status        TEXT NOT NULL DEFAULT 'running' CHECK(status IN ('running', 'succeeded', 'failed')),
+            started_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            finished_at   DATETIME,
+            error_code    TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_job_runs_job_name ON job_runs(job_name, id);
     """)
     # Migration: add force_password_change if missing (existing app.db)
     try:

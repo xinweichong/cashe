@@ -2800,6 +2800,63 @@ class AdminStorage:
         self._conn.commit()
         return row["username"]
 
+    # ── Job health ────────────────────────────────────────────────────────────
+
+    _ERROR_CODE_MAX_LEN = 200
+
+    @_locked
+    def record_job_start(self, job_name: str) -> int:
+        """Record that a named job (scheduler job, backup, capture retry, ...)
+        has started. Returns a run_id to pass to record_job_success/_failure."""
+        cursor = self._conn.execute(
+            "INSERT INTO job_runs (job_name, status) VALUES (?, 'running')", (job_name,)
+        )
+        self._conn.commit()
+        return cursor.lastrowid
+
+    @_locked
+    def record_job_success(self, run_id: int) -> None:
+        self._conn.execute(
+            "UPDATE job_runs SET status = 'succeeded', finished_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (run_id,),
+        )
+        self._conn.commit()
+
+    @_locked
+    def record_job_failure(self, run_id: int, error_code: str) -> None:
+        """error_code is bounded and must never contain private financial values."""
+        self._conn.execute(
+            "UPDATE job_runs SET status = 'failed', finished_at = CURRENT_TIMESTAMP, error_code = ? WHERE id = ?",
+            (error_code[: self._ERROR_CODE_MAX_LEN], run_id),
+        )
+        self._conn.commit()
+
+    @_locked
+    def get_job_health(self) -> list[dict]:
+        """Latest run per job_name, plus how many runs in a row have failed
+        (0 if the latest run succeeded)."""
+        job_names = [
+            row["job_name"] for row in
+            self._conn.execute("SELECT DISTINCT job_name FROM job_runs")
+        ]
+        results = []
+        for job_name in sorted(job_names):
+            runs = [
+                dict(row) for row in self._conn.execute(
+                    "SELECT * FROM job_runs WHERE job_name = ? ORDER BY id DESC LIMIT 50",
+                    (job_name,),
+                )
+            ]
+            latest = dict(runs[0])
+            consecutive_failures = 0
+            for run in runs:
+                if run["status"] != "failed":
+                    break
+                consecutive_failures += 1
+            latest["consecutive_failures"] = consecutive_failures
+            results.append(latest)
+        return results
+
 
 def _to_monthly(amount: float, frequency: str) -> float:
     """Normalise an amount to monthly SGD equivalent."""
