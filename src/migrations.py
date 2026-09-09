@@ -157,6 +157,39 @@ MIGRATIONS = (
         _add_column_if_table_exists("goal_contributions", "amount_minor_units INTEGER"),
         _add_column_if_table_exists("upcoming_transactions", "expected_minor_units INTEGER"),
     )),
+    (13, (
+        # R03: optimistic concurrency + retained mutation/deletion history.
+        # revision starts at 1 (SQLite's ADD COLUMN default backfills existing
+        # rows), and is bumped by Storage.update_transaction on every
+        # successful correction.
+        _add_column_if_table_exists("transactions", "revision INTEGER NOT NULL DEFAULT 1"),
+        """CREATE TABLE IF NOT EXISTS transaction_mutations (
+            id               INTEGER PRIMARY KEY AUTOINCREMENT,
+            transaction_id   INTEGER NOT NULL,
+            revision_before  INTEGER NOT NULL,
+            revision_after   INTEGER NOT NULL,
+            changed_fields   TEXT NOT NULL,
+            mutated_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )""",
+        "CREATE INDEX idx_transaction_mutations_tx ON transaction_mutations(transaction_id, id)",
+        # Retains a snapshot at delete time — never resurrected under the same
+        # id; a later create is always a new row. Gives a 409 conflict (the
+        # transaction was deleted concurrently) a real current-state summary,
+        # and is the evidence a future undo UI would restore from.
+        """CREATE TABLE IF NOT EXISTS deleted_transactions (
+            id                INTEGER PRIMARY KEY,
+            source            TEXT NOT NULL,
+            source_id         TEXT,
+            amount            REAL NOT NULL,
+            currency          TEXT,
+            merchant          TEXT,
+            category          TEXT,
+            transaction_date  TEXT,
+            type              TEXT,
+            revision          INTEGER NOT NULL,
+            deleted_at        TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )""",
+    )),
 )
 
 

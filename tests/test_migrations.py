@@ -11,9 +11,9 @@ def test_migrations_preserve_old_transactions_and_are_idempotent():
     migrate(conn)
     migrate(conn)
     assert conn.execute("SELECT * FROM transactions").fetchall() == [
-        (42, "original-id", 1.25, None, None, None, None, None, None, None, None)
+        (42, "original-id", 1.25, None, None, None, None, None, None, None, None, 1)
     ]
-    assert conn.execute("SELECT version FROM schema_migrations").fetchall() == [(1,), (2,), (3,), (4,), (5,), (6,), (7,), (8,), (9,), (10,), (11,), (12,)]
+    assert conn.execute("SELECT version FROM schema_migrations").fetchall() == [(1,), (2,), (3,), (4,), (5,), (6,), (7,), (8,), (9,), (10,), (11,), (12,), (13,)]
     assert conn.execute("SELECT COUNT(*) FROM source_events").fetchone()[0] == 0
     conn.close()
 
@@ -133,4 +133,34 @@ def test_canonical_money_migration_tolerates_a_missing_baseline_table(monkeypatc
     columns = {row[1] for row in conn.execute("PRAGMA table_info(transactions)")}
     assert "original_minor_units" in columns
     assert conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='budgets'").fetchone() is None
+    conn.close()
+
+
+def test_revision_and_mutation_tables_are_added_and_idempotent(tmp_path):
+    conn = init_db(str(tmp_path / 'user.db'))
+    conn.execute(
+        "INSERT INTO transactions(source, source_id, amount) VALUES ('manual', 'preserve-me', 12.5)"
+    )
+    conn.commit()
+
+    migrate(conn)  # already applied by init_db(); re-running must be a no-op
+    migrate(conn)
+
+    row = conn.execute("SELECT source_id, amount, revision FROM transactions").fetchone()
+    assert tuple(row) == ('preserve-me', 12.5, 1)  # existing rows default to revision 1
+
+    for table in ("transaction_mutations", "deleted_transactions"):
+        assert conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table,)
+        ).fetchone() is not None
+    conn.close()
+
+
+def test_revision_migration_tolerates_a_missing_transactions_table(monkeypatch):
+    import src.migrations as migrations
+    conn = sqlite3.connect(':memory:')
+    released = migrations.MIGRATIONS
+    monkeypatch.setattr(migrations, 'MIGRATIONS', released)
+    migrate(conn)  # no transactions table at all — must not raise
+    assert conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='transactions'").fetchone() is None
     conn.close()

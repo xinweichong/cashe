@@ -85,7 +85,7 @@ def audit_database(path: Path) -> dict:
         # survives subscription deletion, not a strict current-state FK either.
         retained_subscription_links = {}
         if kind == "user":
-            for table in ("source_events", "ingestion_outbox", "transaction_requests"):
+            for table in ("source_events", "ingestion_outbox", "transaction_requests", "transaction_mutations"):
                 if table in tables:
                     retained[table] = _orphan_count(conn, table, "transaction_id", "transactions", "id")
             for table in ("recurring_suggestions", "subscription_suggestion_acceptances"):
