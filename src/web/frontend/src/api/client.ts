@@ -605,6 +605,8 @@ export const api = {
 
   getBudgetProgress: () => request<BudgetProgress[]>('/api/budgets/progress'),
 
+  getBudgetProgressV2: () => request<BudgetProgressV2[]>('/api/v2/budgets/progress'),
+
   createBudget: (data: { category: string | null; amount: number; period: string }) =>
     request<Budget>('/api/budgets', {
       method: 'POST',

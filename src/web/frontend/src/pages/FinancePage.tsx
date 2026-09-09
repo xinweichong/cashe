@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { api, type BudgetProgress, type Category, type GoalProgress, type Trip, type RecurringTransaction } from '@/api/client';
+import { api, type BudgetProgressV2, type Category, type GoalProgress, type Trip, type RecurringTransaction } from '@/api/client';
 import { PageCard, HeroCard, HighlightCard } from '@/components/ui/cards';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -83,12 +83,16 @@ function BudgetRow({
   onDelete,
   onEdit,
 }: {
-  b: BudgetProgress;
+  b: BudgetProgressV2;
   onDelete: (id: number) => void;
   onEdit: (id: number, amount: number) => void;
 }) {
   const [editing, setEditing] = useState(false);
-  const [inputVal, setInputVal] = useState(String(b.budget_amount));
+  const budgetAmount = b.budget_amount.minor_units / 100;
+  const spent = b.spent.minor_units / 100;
+  const remaining = b.remaining.minor_units / 100;
+  const projected = b.projected.minor_units / 100;
+  const [inputVal, setInputVal] = useState(String(budgetAmount));
 
   const handleSave = () => {
     const v = parseFloat(inputVal);
@@ -130,13 +134,13 @@ function BudgetRow({
       <ProgressBar percent={b.percent} color={color} />
       <div className="flex justify-between text-xs text-muted font-mono">
         <span>
-          <span style={{ color }} className="font-medium">${b.spent.toFixed(2)}</span>
-          {' '}spent of ${b.budget_amount.toFixed(2)}
+          <span style={{ color }} className="font-medium">${spent.toFixed(2)}</span>
+          {' '}spent of ${budgetAmount.toFixed(2)}
         </span>
         <span>
           {b.status === 'over_budget'
-            ? `$${(b.spent - b.budget_amount).toFixed(2)} over`
-            : `$${b.remaining.toFixed(2)} left · proj $${b.projected.toFixed(2)}`}
+            ? `$${(spent - budgetAmount).toFixed(2)} over`
+            : `$${remaining.toFixed(2)} left · proj $${projected.toFixed(2)}`}
         </span>
       </div>
     </div>
@@ -159,6 +163,7 @@ function AddBudgetForm({ categories, onAdd }: { categories: Category[]; onAdd: (
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['budget-progress'] });
+      qc.invalidateQueries({ queryKey: ['budget-progress-v2'] });
       setAmount('');
       setCategory('__overall__');
       setPeriod('monthly');
@@ -1089,8 +1094,8 @@ export function FinancePage() {
   });
 
   const { data: progress = [], isLoading } = useQuery({
-    queryKey: ['budget-progress'],
-    queryFn: () => api.getBudgetProgress(),
+    queryKey: ['budget-progress-v2'],
+    queryFn: () => api.getBudgetProgressV2(),
     enabled: settings?.budgets_enabled === true,
     staleTime: 30_000,
   });
@@ -1103,13 +1108,19 @@ export function FinancePage() {
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => api.deleteBudget(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['budget-progress'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['budget-progress'] });
+      qc.invalidateQueries({ queryKey: ['budget-progress-v2'] });
+    },
   });
 
   const editMutation = useMutation({
     mutationFn: ({ id, amount }: { id: number; amount: number }) =>
       api.updateBudget(id, amount),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['budget-progress'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['budget-progress'] });
+      qc.invalidateQueries({ queryKey: ['budget-progress-v2'] });
+    },
   });
 
   if (!settings) return null;
