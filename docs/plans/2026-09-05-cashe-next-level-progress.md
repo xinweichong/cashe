@@ -2,6 +2,8 @@
 
 Working branch: `feature/cashe-next-level`, created from `develop` on 2026-09-05. The original plan remains the product scope. This log records incremental implementation; the five-phase transformation is **not complete**.
 
+For the consolidated current assessment at `f409441`, see the [2026-09-09 implementation audit](2026-09-09-cashe-next-level-audit.md) and [completion roadmap](2026-09-09-cashe-completion-roadmap.md). These supersede historical remaining-work lists below; the dated entries remain an execution history.
+
 ## First trust-foundation slice implemented
 
 - Transactional, ordered additive migrations, shared with production-backed test fixtures.
@@ -547,3 +549,12 @@ Web recurring Review was committed as `4a43721`; this continuation started with 
 - Updated operator/agent documentation. Home suggestion counts, richer evidence/amount provenance, and notification controls remain pending. No frontend changes, production DB migration, live Telegram/model call, service change, push, or deployment.
 
 Verification: **1085 backend tests passed** (four existing datetime deprecation warnings). Seven new cases cover no-callback Review visibility, upgrading pending legacy jobs without redetection, stable retry identity and web-dismissal suppression, rollback/retry when Review insertion fails, binding/stored-field authority and skipped resolved delivery, migration preservation of existing bindings/states, and real detector behavior after historical versus live capture. Focused ingestion/Telegram/migration checks and whitespace checks passed. No frontend files changed; the prior **88 frontend tests**, production build, and focused Review lint remain the baseline. This verified increment is committed separately.
+
+
+## 2026-09-09 audit — consolidated completion roadmap
+
+Audited application revision `f409441` against the original plan, implementation, tests, and this execution history. Added a requirement inventory and phase assessment in [the audit](2026-09-09-cashe-next-level-audit.md), and dependency-ordered implementation details, acceptance checks, sizing assumptions, and operational inputs in [the roadmap](2026-09-09-cashe-completion-roadmap.md). No application behavior changed.
+
+The next recommended increment closes browser cache isolation, malformed new merchant routes, and optional AI policy gaps before proceeding to canonical money and shared command/reporting contracts. Native remains deferred. No original web phase is claimed release-complete.
+
+Fresh verification: synthetic QueryClient retention and redirect-expression checks; full frontend lint reported **45 errors and 2 warnings across 19 files**; document links, package estimates, and whitespace checked. The prior **1085 backend tests**, **88 frontend tests**, and production build are implementation baselines, not suites rerun during this documentation-only audit. Production operations, real devices, remote CI, and current vendor policies remain unverified.
