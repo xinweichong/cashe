@@ -21,6 +21,41 @@ class TestCreateManual:
         assert result["conversion"]["status"] == "native"
 
 
+class TestCreateManualWebParity:
+    """R03 exit check: identical accepted values across clients — the
+    Telegram-facing command (create_manual, wrapping
+    create_manual_transaction) and the web v2 HTTP command (create_web,
+    wrapping create_web_transaction) must classify and canonicalize the
+    same logical input identically. They diverge only in caller-supplied
+    identity (source/source_id), which this test excludes."""
+
+    def test_identical_input_produces_identical_canonical_output(self):
+        from src.main import init_db
+        storage_a = Storage(connection=init_db(":memory:"))
+        storage_b = Storage(connection=init_db(":memory:"))
+
+        telegram_result = commands.create_manual(
+            storage_a, source_id="tg1", amount=15.00, currency="THB", exchange_rate=0.039,
+            merchant="Thai Cafe", category="Food", description="Lunch",
+            transaction_date="2026-04-16T12:00:00", tx_type="expense",
+        )
+        web_result = commands.create_web(
+            storage_b, {
+                "amount": 15.00, "currency": "THB", "exchange_rate": 0.039,
+                "merchant": "Thai Cafe", "category": "Food", "description": "Lunch",
+                "transaction_date": "2026-04-16T12:00:00", "type": "expense",
+            },
+            source_id="web1",
+        )
+
+        for key in ("type", "merchant", "category", "description", "transaction_date",
+                    "revision", "original", "reporting", "conversion"):
+            assert telegram_result[key] == web_result[key], key
+        # The only expected divergence is caller-supplied identity.
+        assert telegram_result["source"] == "manual"
+        assert web_result["source"] == "manual"
+
+
 class TestCorrect:
     def test_applies_fields_and_returns_updated_shape(self, storage):
         tx_id = storage.insert_transaction(

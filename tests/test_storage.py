@@ -1124,3 +1124,22 @@ def test_category_and_rule_commit_atomically(storage, in_memory_db):
         storage.update_transaction(tx_id, category='Food', remember_category=True)
     assert storage.get_transaction(tx_id)['category'] == 'Other'
     assert storage.get_merchant_overrides() == {}
+
+
+def test_remember_rule_is_not_applied_on_a_stale_revision_conflict(storage):
+    """A remember_category=True correction that loses a revision race must
+    not remember a rule for a category change that never actually applied —
+    the revision check happens before any write, so this should already
+    hold, but R03 never had a test pinning it for the remember-rule path
+    specifically (only for the pre-existing trigger-abort atomicity case)."""
+    from src.storage import RevisionConflict
+    tx_id = storage.insert_transaction(
+        source='manual', source_id='atomic-revision', amount=12,
+        merchant='Cafe', category='Other', transaction_date='2026-04-16T12:00:00',
+    )
+    with pytest.raises(RevisionConflict):
+        storage.update_transaction(
+            tx_id, category='Food', remember_category=True, expected_revision=99,
+        )
+    assert storage.get_transaction(tx_id)['category'] == 'Other'
+    assert storage.get_merchant_overrides() == {}

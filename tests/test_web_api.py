@@ -187,6 +187,32 @@ class TestCreateTransactionV2:
         listing = await client.get("/api/transactions")
         assert sum(1 for tx in listing.json() if tx["merchant"] == "Coffee") == 1
 
+    @pytest.mark.asyncio
+    async def test_same_key_different_payload_returns_409_without_creating(self, client, in_memory_db):
+        payload = {"amount": 9.00, "merchant": "Coffee", "type": "expense"}
+        headers = {"Idempotency-Key": "key-v2-conflict"}
+        first = await client.post("/api/v2/transactions", json=payload, headers=headers)
+        assert first.status_code == 201
+
+        conflict = await client.post(
+            "/api/v2/transactions", json={**payload, "amount": 20.00}, headers=headers,
+        )
+        assert conflict.status_code == 409
+        assert len(Storage(in_memory_db).query_transactions(limit=50)) == 1
+
+    @pytest.mark.asyncio
+    async def test_replay_after_deletion_returns_409_and_does_not_resurrect(self, client, in_memory_db):
+        payload = {"amount": 9.00, "merchant": "Coffee", "type": "expense"}
+        headers = {"Idempotency-Key": "key-v2-deleted"}
+        first = await client.post("/api/v2/transactions", json=payload, headers=headers)
+        tx_id = first.json()["id"]
+        await client.delete(f"/api/v2/transactions/{tx_id}")
+
+        replay = await client.post("/api/v2/transactions", json=payload, headers=headers)
+
+        assert replay.status_code == 409
+        assert Storage(in_memory_db).query_transactions(limit=50) == []
+
 
 class TestUpdateTransaction:
     @pytest.mark.asyncio
