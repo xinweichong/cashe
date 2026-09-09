@@ -36,8 +36,13 @@ export function TransactionsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const returnTo = searchParams.get('returnTo');
   const closeDetail = () => navigate(returnTo?.startsWith('/evidence?') || returnTo === '/review' || returnTo?.startsWith('/review?') ? returnTo : `${activityPath}${location.search}`);
+  // Consumes a one-time "open the add form" signal from a deep link, then
+  // strips it from the URL — the URL mutation itself requires an effect
+  // (it updates the router, an external system), and opening the form is
+  // the same one-time signal-consumption step.
   useEffect(() => {
     if (searchParams.get('add') === '1') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setShowForm(true);
       setSearchParams({}, { replace: true });
     }
@@ -192,6 +197,7 @@ export function TransactionsPage() {
             exit="exit"
           >
             <TransactionDetail
+              key={selectedTransaction.id}
               transaction={selectedTransaction}
               onClose={closeDetail}
             />

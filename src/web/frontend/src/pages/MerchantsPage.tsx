@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -37,11 +37,14 @@ export function MerchantsPage() {
   const [sortBy, setSortBy] = useState('total_spent');
   const [tagFilter, setTagFilter] = useState('');
   const [selectedMerchant, setSelectedMerchant] = useState<string | null>(merchantName ?? null);
-
-  // Sync URL param → panel
-  useEffect(() => {
-    if (merchantName) setSelectedMerchant(merchantName);
-  }, [merchantName]);
+  // Tracks the merchantName this render has already synced from, so a direct
+  // navigation to a new /merchants/:merchantName URL (not routed through
+  // handleRowClick) still opens the matching panel.
+  const [syncedMerchantName, setSyncedMerchantName] = useState(merchantName);
+  if (merchantName && merchantName !== syncedMerchantName) {
+    setSyncedMerchantName(merchantName);
+    setSelectedMerchant(merchantName);
+  }
 
   const { data: merchants = [], isLoading, isError, refetch } = useQuery({
     queryKey: ['merchant-intelligence', sortBy, tagFilter, search],

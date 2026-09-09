@@ -61,9 +61,14 @@ export function MerchantProfile({
     },
   });
 
+  // Syncs the editable draft from server data — profile arrives asynchronously
+  // after `merchant` changes, so this must react to profile?.notes too (a
+  // prior [merchant]-only dependency list left the draft stuck on the
+  // previous merchant's notes once the new profile loaded).
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setNotes(profile?.notes ?? '');
-  }, [merchant]); // reset notes when merchant changes
+  }, [merchant, profile?.notes]);
 
   const toggleTag = (tag: string) => {
     if (!profile) return;

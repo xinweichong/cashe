@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { api, type Subscription } from '@/api/client';
@@ -90,9 +90,13 @@ export function SubscriptionForm({ onClose, onSave, initial }: SubscriptionFormP
     },
   });
 
-  useEffect(() => {
+  // Clear the submit error as soon as the user edits any field.
+  const fieldsKey = `${merchant}|${frequency}|${billingDay}|${label}|${notes}`;
+  const [errorClearedForKey, setErrorClearedForKey] = useState(fieldsKey);
+  if (fieldsKey !== errorClearedForKey) {
+    setErrorClearedForKey(fieldsKey);
     setError(null);
-  }, [merchant, frequency, billingDay, label, notes]);
+  }
 
   return (
     <Sheet open onOpenChange={(open) => { if (!open) onClose(); }}>

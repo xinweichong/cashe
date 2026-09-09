@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, CalendarDays } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
@@ -256,9 +256,13 @@ export function OverviewPage() {
   const projection = dailyAvg * daysInMonth;
   const saved = income - expenses;
 
-  useEffect(() => {
+  // Reset pagination whenever the active filters change.
+  const filterKey = `${start}|${end}|${txCategoryFilter}`;
+  const [syncedFilterKey, setSyncedFilterKey] = useState(filterKey);
+  if (filterKey !== syncedFilterKey) {
+    setSyncedFilterKey(filterKey);
     setTxPage(1);
-  }, [start, end, txCategoryFilter]);
+  }
 
   const filteredTransactions = useMemo(
     () => txCategoryFilter === ''

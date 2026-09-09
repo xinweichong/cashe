@@ -182,8 +182,12 @@ export function SettingsPage() {
     queryFn: () => api.getSettings(),
   });
 
+  // Syncs the editable draft from server data, which arrives asynchronously
+  // after mount (and again on refetch) — there's no prop/render-time value to
+  // derive this from directly.
   useEffect(() => {
     if (settings) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setAnomalyMultiplier(String(settings.anomaly_multiplier));
       setVelocityThreshold(String(settings.velocity_alert_threshold));
     }

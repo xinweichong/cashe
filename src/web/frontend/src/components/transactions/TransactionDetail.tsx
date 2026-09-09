@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { type Transaction, type Trip, api } from '@/api/client';
@@ -54,14 +54,6 @@ export function TransactionDetail({
     setCurrency(tx.currency ?? '');
     setExchangeRate(tx.exchange_rate == null ? '' : String(tx.exchange_rate));
   }, [tx.merchant, tx.category, tx.description, tx.exchange_rate, tx.transaction_date, tx.type, tx.amount, tx.currency]);
-
-  // Reset form + exit edit mode when switching to a different transaction
-  useEffect(() => {
-    resetFields();
-    setEditing(false);
-    setSaveError(null);
-    setConfirmingDelete(false);
-  }, [tx.id, resetFields]);
 
   const updateTx = useUpdateTransaction();
   const deleteTx = useDeleteTransaction();

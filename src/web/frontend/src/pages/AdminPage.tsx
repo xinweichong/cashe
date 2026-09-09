@@ -160,15 +160,21 @@ function AdminDashboard({ token, onLogout }: { token: string; onLogout: () => vo
 
   const loadUsers = async () => {
     try {
-      setLoadError('');
       const list = await adminApi.listUsers();
       setUsers(list);
+      setLoadError('');
     } catch (err) {
       setLoadError(err instanceof Error ? err.message : 'Couldn\'t load this — try refreshing.');
     }
   };
 
-  useEffect(() => { loadUsers(); }, []);
+  // Fetch on mount only; loadUsers is intentionally excluded from deps (it's
+  // redefined every render and is also invoked directly after create/delete).
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadUsers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleCreate = async () => {
     setCreateError('');

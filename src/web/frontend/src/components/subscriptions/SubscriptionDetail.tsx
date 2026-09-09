@@ -66,9 +66,12 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
     staleTime: 60_000,
   });
 
-  // Transactions for upcoming match picker (last 90 days, all merchants)
-  const today = new Date().toISOString().slice(0, 10);
-  const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  // Transactions for upcoming match picker (last 90 days, all merchants).
+  // Computed once per mount so the query key stays stable across re-renders.
+  const [{ today, ninetyDaysAgo }] = useState(() => ({
+    today: new Date().toISOString().slice(0, 10),
+    ninetyDaysAgo: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+  }));
   const { data: recentTxs = [] } = useQuery({
     queryKey: ['transactions', 'match-picker', ninetyDaysAgo, today],
     queryFn: () =>
