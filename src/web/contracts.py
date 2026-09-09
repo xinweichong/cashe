@@ -308,3 +308,18 @@ class TripSummary(BaseModel):
     currencies_used: list[str]
     by_category: list[TripCategoryTotal]
     by_day: list[TripDayTotal]
+
+
+class BudgetProgress(BaseModel):
+    id: int
+    category: str | None
+    label: str
+    period: Literal["monthly", "weekly"]
+    budget_amount: Money
+    spent: Money
+    remaining: Money
+    percent: float
+    projected: Money
+    status: Literal["over_budget", "warning", "on_track"]
+    period_start: str
+    period_end: str

@@ -23,7 +23,7 @@ from src import transaction_commands
 from src.money import to_minor_units
 from src.config import local_now
 from src.web.auth import verify_password, create_session, verify_session, destroy_session
-from src.web.contracts import CaptureFollowup, CaptureIssue, CaptureResolution, HomeBriefing, MerchantRanking, OverviewSummary, QueuedResponse, SpendingEvidence, SpendingFacts, SpendingReview, TransactionCorrection, TransactionCreate, TransactionDeletion, TransactionProvenance, TransactionUndo, TransactionV2, TrendPoint, TripSummary, UpcomingPlan, PlanMutationResponse, RecurringReview, RecurringResolution
+from src.web.contracts import BudgetProgress, CaptureFollowup, CaptureIssue, CaptureResolution, HomeBriefing, MerchantRanking, OverviewSummary, QueuedResponse, SpendingEvidence, SpendingFacts, SpendingReview, TransactionCorrection, TransactionCreate, TransactionDeletion, TransactionProvenance, TransactionUndo, TransactionV2, TrendPoint, TripSummary, UpcomingPlan, PlanMutationResponse, RecurringReview, RecurringResolution
 from src.analytics import (
     load_summary,
     get_yoy_comparison,
@@ -1196,6 +1196,21 @@ def create_dashboard_app(
     @app.get("/api/budgets/progress")
     async def budget_progress(storage=Depends(_get_storage)):
         return await _db(storage.get_budget_progress)
+
+    @app.get("/api/v2/budgets/progress", response_model=list[BudgetProgress])
+    async def budget_progress_v2(username: str = Depends(require_auth)):
+        storage = user_manager.get(username).storage
+        rows = await _db(storage.get_budget_progress)
+        return [
+            {
+                **row,
+                "budget_amount": _sgd_money(row["budget_amount"]),
+                "spent": _sgd_money(row["spent"]),
+                "remaining": _sgd_money(row["remaining"]),
+                "projected": _sgd_money(row["projected"]),
+            }
+            for row in rows
+        ]
 
     @app.put("/api/budgets/{budget_id}")
     async def update_budget(budget_id: int, request: Request, storage=Depends(_get_storage)):

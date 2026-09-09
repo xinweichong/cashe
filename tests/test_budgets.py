@@ -270,6 +270,25 @@ class TestBudgetAPI:
         assert data[0]["status"] == "on_track"
 
     @pytest.mark.asyncio
+    async def test_get_budget_progress_v2_returns_canonical_money(self, api):
+        ac, storage = api
+        await ac.post("/api/budgets", json={"category": None, "amount": 100, "period": "monthly"})
+        today = date.today().isoformat()
+        storage.insert_transaction(
+            source="manual", source_id="v2-1", amount=110.0,
+            merchant="M", transaction_date=today,
+        )
+        resp = await ac.get("/api/v2/budgets/progress")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 1
+        assert data[0]["label"] == "Overall"
+        assert data[0]["budget_amount"] == {"minor_units": 10000, "currency": "SGD"}
+        assert data[0]["spent"] == {"minor_units": 11000, "currency": "SGD"}
+        assert data[0]["remaining"] == {"minor_units": -1000, "currency": "SGD"}
+        assert data[0]["status"] == "over_budget"
+
+    @pytest.mark.asyncio
     async def test_update_budget(self, api):
         ac, _ = api
         create = await ac.post("/api/budgets", json={"category": None, "amount": 1000, "period": "monthly"})

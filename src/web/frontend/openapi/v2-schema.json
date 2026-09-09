@@ -1,6 +1,86 @@
 {
   "components": {
     "schemas": {
+      "BudgetProgress": {
+        "properties": {
+          "budget_amount": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "percent": {
+            "title": "Percent",
+            "type": "number"
+          },
+          "period": {
+            "enum": [
+              "monthly",
+              "weekly"
+            ],
+            "title": "Period",
+            "type": "string"
+          },
+          "period_end": {
+            "title": "Period End",
+            "type": "string"
+          },
+          "period_start": {
+            "title": "Period Start",
+            "type": "string"
+          },
+          "projected": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "remaining": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "spent": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "status": {
+            "enum": [
+              "over_budget",
+              "warning",
+              "on_track"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "category",
+          "label",
+          "period",
+          "budget_amount",
+          "spent",
+          "remaining",
+          "percent",
+          "projected",
+          "status",
+          "period_start",
+          "period_end"
+        ],
+        "title": "BudgetProgress",
+        "type": "object"
+      },
       "CaptureFollowup": {
         "properties": {
           "attempts": {
@@ -1712,6 +1792,28 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v2/budgets/progress": {
+      "get": {
+        "operationId": "budget_progress_v2_api_v2_budgets_progress_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/BudgetProgress"
+                  },
+                  "title": "Response Budget Progress V2 Api V2 Budgets Progress Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Budget Progress V2"
+      }
+    },
     "/api/v2/capture/followups": {
       "get": {
         "operationId": "capture_followups_api_v2_capture_followups_get",
