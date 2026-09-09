@@ -1392,6 +1392,170 @@
         "title": "TrendPoint",
         "type": "object"
       },
+      "TripCategoryTotal": {
+        "properties": {
+          "amount": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "category",
+          "amount",
+          "count"
+        ],
+        "title": "TripCategoryTotal",
+        "type": "object"
+      },
+      "TripDayTotal": {
+        "properties": {
+          "amount": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "date": {
+            "title": "Date",
+            "type": "string"
+          }
+        },
+        "required": [
+          "date",
+          "amount"
+        ],
+        "title": "TripDayTotal",
+        "type": "object"
+      },
+      "TripInfo": {
+        "properties": {
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "destination": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Destination"
+          },
+          "end_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End Date"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "primary_currency": {
+            "title": "Primary Currency",
+            "type": "string"
+          },
+          "start_date": {
+            "title": "Start Date",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "inactive",
+              "active"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "destination",
+          "start_date",
+          "end_date",
+          "primary_currency",
+          "status",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "TripInfo",
+        "type": "object"
+      },
+      "TripSummary": {
+        "properties": {
+          "by_category": {
+            "items": {
+              "$ref": "#/components/schemas/TripCategoryTotal"
+            },
+            "title": "By Category",
+            "type": "array"
+          },
+          "by_day": {
+            "items": {
+              "$ref": "#/components/schemas/TripDayTotal"
+            },
+            "title": "By Day",
+            "type": "array"
+          },
+          "currencies_used": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Currencies Used",
+            "type": "array"
+          },
+          "daily_average": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "days": {
+            "title": "Days",
+            "type": "integer"
+          },
+          "total": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "transaction_count": {
+            "title": "Transaction Count",
+            "type": "integer"
+          },
+          "trip": {
+            "$ref": "#/components/schemas/TripInfo"
+          }
+        },
+        "required": [
+          "trip",
+          "total",
+          "transaction_count",
+          "days",
+          "daily_average",
+          "currencies_used",
+          "by_category",
+          "by_day"
+        ],
+        "title": "TripSummary",
+        "type": "object"
+      },
       "UpcomingCharge": {
         "properties": {
           "amount": {
@@ -2864,6 +3028,45 @@
           }
         },
         "summary": "Undo Transaction V2"
+      }
+    },
+    "/api/v2/trips/{trip_id}/summary": {
+      "get": {
+        "operationId": "trip_summary_v2_api_v2_trips__trip_id__summary_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "trip_id",
+            "required": true,
+            "schema": {
+              "title": "Trip Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TripSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Trip Summary V2"
       }
     }
   }

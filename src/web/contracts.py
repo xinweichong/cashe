@@ -274,3 +274,37 @@ class MerchantRanking(BaseModel):
     merchant: str
     visits: int
     total: Money
+
+
+class TripInfo(BaseModel):
+    id: int
+    name: str
+    destination: str | None
+    start_date: str
+    end_date: str | None
+    primary_currency: str
+    status: Literal["inactive", "active"]
+    created_at: str
+    updated_at: str
+
+
+class TripCategoryTotal(BaseModel):
+    category: str
+    amount: Money
+    count: int
+
+
+class TripDayTotal(BaseModel):
+    date: str
+    amount: Money
+
+
+class TripSummary(BaseModel):
+    trip: TripInfo
+    total: Money
+    transaction_count: int
+    days: int
+    daily_average: Money
+    currencies_used: list[str]
+    by_category: list[TripCategoryTotal]
+    by_day: list[TripDayTotal]

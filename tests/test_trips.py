@@ -403,6 +403,34 @@ class TestTripAPI:
         assert "by_day" in data
 
     @pytest.mark.asyncio
+    async def test_get_trip_summary_v2_returns_canonical_money(self, api):
+        ac, storage = api
+        create = await ac.post("/api/trips", json={"name": "Tokyo", "destination": "Japan", "start_date": "2026-04-10"})
+        trip_id = create.json()["id"]
+        tx_id = storage.insert_transaction(
+            source="manual", source_id="v2-1", amount=150.0,
+            category="Dining", transaction_date="2026-04-10T12:00:00",
+        )
+        storage.enlist_transaction(trip_id, tx_id)
+
+        resp = await ac.get(f"/api/v2/trips/{trip_id}/summary")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["trip"]["id"] == trip_id
+        assert data["trip"]["name"] == "Tokyo"
+        assert data["trip"]["destination"] == "Japan"
+        assert data["total"] == {"minor_units": 15000, "currency": "SGD"}
+        assert data["transaction_count"] == 1
+        assert data["by_category"] == [{"category": "Dining", "amount": {"minor_units": 15000, "currency": "SGD"}, "count": 1}]
+        assert data["by_day"] == [{"date": "2026-04-10", "amount": {"minor_units": 15000, "currency": "SGD"}}]
+
+    @pytest.mark.asyncio
+    async def test_get_trip_summary_v2_unknown_trip_returns_404(self, api):
+        ac, _ = api
+        resp = await ac.get("/api/v2/trips/999/summary")
+        assert resp.status_code == 404
+
+    @pytest.mark.asyncio
     async def test_enlist_and_delist_transaction(self, api):
         ac, storage = api
         db = storage._conn

@@ -430,6 +430,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/trips/{trip_id}/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Trip Summary V2 */
+        get: operations["trip_summary_v2_api_v2_trips__trip_id__summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -896,6 +913,60 @@ export interface components {
             amount: components["schemas"]["Money"];
             /** Date */
             date: string;
+        };
+        /** TripCategoryTotal */
+        TripCategoryTotal: {
+            amount: components["schemas"]["Money"];
+            /** Category */
+            category: string;
+            /** Count */
+            count: number;
+        };
+        /** TripDayTotal */
+        TripDayTotal: {
+            amount: components["schemas"]["Money"];
+            /** Date */
+            date: string;
+        };
+        /** TripInfo */
+        TripInfo: {
+            /** Created At */
+            created_at: string;
+            /** Destination */
+            destination: string | null;
+            /** End Date */
+            end_date: string | null;
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /** Primary Currency */
+            primary_currency: string;
+            /** Start Date */
+            start_date: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "inactive" | "active";
+            /** Updated At */
+            updated_at: string;
+        };
+        /** TripSummary */
+        TripSummary: {
+            /** By Category */
+            by_category: components["schemas"]["TripCategoryTotal"][];
+            /** By Day */
+            by_day: components["schemas"]["TripDayTotal"][];
+            /** Currencies Used */
+            currencies_used: string[];
+            daily_average: components["schemas"]["Money"];
+            /** Days */
+            days: number;
+            total: components["schemas"]["Money"];
+            /** Transaction Count */
+            transaction_count: number;
+            trip: components["schemas"]["TripInfo"];
         };
         /** UpcomingCharge */
         UpcomingCharge: {
@@ -1773,6 +1844,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TransactionV2"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    trip_summary_v2_api_v2_trips__trip_id__summary_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                trip_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TripSummary"];
                 };
             };
             /** @description Validation Error */

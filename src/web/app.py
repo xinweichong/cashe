@@ -23,7 +23,7 @@ from src import transaction_commands
 from src.money import to_minor_units
 from src.config import local_now
 from src.web.auth import verify_password, create_session, verify_session, destroy_session
-from src.web.contracts import CaptureFollowup, CaptureIssue, CaptureResolution, HomeBriefing, MerchantRanking, OverviewSummary, QueuedResponse, SpendingEvidence, SpendingFacts, SpendingReview, TransactionCorrection, TransactionCreate, TransactionDeletion, TransactionProvenance, TransactionUndo, TransactionV2, TrendPoint, UpcomingPlan, PlanMutationResponse, RecurringReview, RecurringResolution
+from src.web.contracts import CaptureFollowup, CaptureIssue, CaptureResolution, HomeBriefing, MerchantRanking, OverviewSummary, QueuedResponse, SpendingEvidence, SpendingFacts, SpendingReview, TransactionCorrection, TransactionCreate, TransactionDeletion, TransactionProvenance, TransactionUndo, TransactionV2, TrendPoint, TripSummary, UpcomingPlan, PlanMutationResponse, RecurringReview, RecurringResolution
 from src.analytics import (
     load_summary,
     get_yoy_comparison,
@@ -1405,6 +1405,29 @@ def create_dashboard_app(
         if summary is None:
             raise HTTPException(status_code=404, detail="Trip not found")
         return summary
+
+    @app.get("/api/v2/trips/{trip_id}/summary", response_model=TripSummary)
+    async def trip_summary_v2(trip_id: int, username: str = Depends(require_auth)):
+        storage = user_manager.get(username).storage
+        summary = await _db(storage.get_trip_summary, trip_id)
+        if summary is None:
+            raise HTTPException(status_code=404, detail="Trip not found")
+        return {
+            "trip": summary["trip"],
+            "total": _sgd_money(summary["total_sgd"]),
+            "transaction_count": summary["transaction_count"],
+            "days": summary["days"],
+            "daily_average": _sgd_money(summary["daily_average_sgd"]),
+            "currencies_used": summary["currencies_used"],
+            "by_category": [
+                {"category": c["category"], "amount": _sgd_money(c["amount_sgd"]), "count": c["count"]}
+                for c in summary["by_category"]
+            ],
+            "by_day": [
+                {"date": d["date"], "amount": _sgd_money(d["amount_sgd"])}
+                for d in summary["by_day"]
+            ],
+        }
 
     @app.get("/api/trips/{trip_id}/transactions")
     async def trip_transactions(
