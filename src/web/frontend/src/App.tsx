@@ -134,8 +134,8 @@ function AppContent() {
           <Route path="plan/manage" element={<FinancePage />} />
           <Route path="explore" element={<ExplorePage />}>
             <Route index element={<AnalyticsPage />} />
-            <Route path="merchants" element={settings?.home_briefing_enabled ? <LegacyRedirect from="/merchants" to="/explore/merchants" /> : <MerchantsPage />} />
-            <Route path="merchants/:merchantName" element={settings?.home_briefing_enabled ? <LegacyRedirect from="/merchants" to="/explore/merchants" /> : <MerchantsPage />} />
+            <Route path="merchants" element={<MerchantsPage />} />
+            <Route path="merchants/:merchantName" element={<MerchantsPage />} />
           </Route>
           <Route path="home" element={<HomePage />} />
           <Route path="evidence" element={<EvidencePage />} />
