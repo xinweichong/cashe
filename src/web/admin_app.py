@@ -144,6 +144,11 @@ def create_admin_app(
 
     @app.get("/api/health", dependencies=[Depends(require_admin_session)])
     async def job_health():
+        capture = {}
+        for user in admin_storage.list_users():
+            ctx = user_manager.get(user["username"])
+            if ctx is not None:
+                capture[user["username"]] = ctx.storage.get_capture_health()
         return {
             "jobs": [
                 {
@@ -156,6 +161,7 @@ def create_admin_app(
                 }
                 for row in admin_storage.get_job_health()
             ],
+            "capture": capture,
         }
 
     # ── Serve admin SPA ───────────────────────────────────────────────────────

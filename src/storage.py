@@ -224,6 +224,34 @@ class Storage:
         ).fetchall()]
 
     @_locked
+    def get_capture_health(self) -> dict:
+        """Bounded operational signal for this user's capture pipeline: never
+        exposes payloads, source identifiers, or financial values."""
+        oldest_queued_at = self._conn.execute(
+            """SELECT MIN(created_at) FROM (
+                 SELECT created_at FROM source_events WHERE status IN ('pending', 'failed') AND attempts < 5
+                 UNION ALL
+                 SELECT created_at FROM ingestion_outbox WHERE status IN ('pending', 'failed') AND attempts < 5
+               )"""
+        ).fetchone()[0]
+        exhausted_retry_count = (
+            self._conn.execute(
+                "SELECT COUNT(*) FROM source_events WHERE attempts >= 5 AND status != 'processed'"
+            ).fetchone()[0]
+            + self._conn.execute(
+                "SELECT COUNT(*) FROM ingestion_outbox WHERE attempts >= 5 AND status != 'done'"
+            ).fetchone()[0]
+        )
+        last_capture_processed_at = self._conn.execute(
+            "SELECT MAX(updated_at) FROM source_events WHERE status = 'processed'"
+        ).fetchone()[0]
+        return {
+            "oldest_queued_at": oldest_queued_at,
+            "exhausted_retry_count": exhausted_retry_count,
+            "last_capture_processed_at": last_capture_processed_at,
+        }
+
+    @_locked
     def get_transaction_by_source_id(self, source_id: str) -> Optional[dict]:
         row = self._conn.execute(
             "SELECT * FROM transactions WHERE source_id = ?", (source_id,),

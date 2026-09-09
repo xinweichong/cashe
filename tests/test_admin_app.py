@@ -69,6 +69,7 @@ class FakeUserManager:
         self._storage = admin_storage
         self.created = []
         self.deleted = []
+        self.contexts = {}
 
     def create_user(self, username, password_hash):
         self._storage.create_user(username, password_hash)
@@ -76,6 +77,9 @@ class FakeUserManager:
 
     def delete_user(self, username):
         self.deleted.append(username)
+
+    def get(self, username):
+        return self.contexts.get(username)
 
 
 @pytest.fixture
@@ -156,6 +160,25 @@ async def test_admin_health_reports_job_runs(app, admin_db):
     assert jobs[0]["status"] == "failed"
     assert jobs[0]["error_code"] == "UploadError"
     assert jobs[0]["consecutive_failures"] == 1
+
+
+@pytest.mark.asyncio
+async def test_admin_health_reports_per_user_capture_freshness(app, admin_db, user_manager):
+    from types import SimpleNamespace
+    from src.main import init_db
+    from src.storage import Storage
+    user_manager._storage.create_user("alice", bcrypt.hashpw(b"x", bcrypt.gensalt()).decode())
+    alice_storage = Storage(init_db(":memory:"))
+    alice_storage.record_source_event("apple_wallet", "evidence-1", "{}", timestamp_precision="second")
+    user_manager.contexts["alice"] = SimpleNamespace(storage=alice_storage)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        login = await client.post("/api/login", json={"password": ADMIN_PASSWORD})
+        token = login.json()["token"]
+        resp = await client.get("/api/health", headers={"X-Admin-Token": token})
+    capture = resp.json()["capture"]
+    assert "alice" in capture
+    assert capture["alice"]["oldest_queued_at"] is not None
+    assert capture["alice"]["exhausted_retry_count"] == 0
 
 
 # ── User CRUD ─────────────────────────────────────────────────────────────────
