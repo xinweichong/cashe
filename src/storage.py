@@ -1030,14 +1030,18 @@ class Storage:
 
     @_locked
     def get_period_comparison(self, current_start: str, current_end: str, prev_start: str, prev_end: str) -> dict:
+        # reporting_minor_units (R02 canonical money) rather than amount *
+        # exchange_rate — see src.analytics._query_total for why: a legacy
+        # exchange_rate of 1.0 is a silent unresolved fallback, not real
+        # conversion evidence.
         curr_rows = self._conn.execute(
-            """SELECT category, SUM(amount * exchange_rate) as total FROM transactions
+            """SELECT category, COALESCE(SUM(reporting_minor_units), 0) / 100.0 as total FROM transactions
                WHERE DATE(transaction_date) >= ? AND DATE(transaction_date) <= ?
                AND (type IS NULL OR type = 'expense') GROUP BY category""",
             (current_start, current_end),
         ).fetchall()
         prev_rows = self._conn.execute(
-            """SELECT category, SUM(amount * exchange_rate) as total FROM transactions
+            """SELECT category, COALESCE(SUM(reporting_minor_units), 0) / 100.0 as total FROM transactions
                WHERE DATE(transaction_date) >= ? AND DATE(transaction_date) <= ?
                AND (type IS NULL OR type = 'expense') GROUP BY category""",
             (prev_start, prev_end),

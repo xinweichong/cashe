@@ -108,6 +108,26 @@ class TestPeriodComparison:
         assert result["previous_total"] == 0
         conn.close()
 
+    def test_unresolved_foreign_amount_is_excluded_not_face_valued(self):
+        """R04: a legacy exchange_rate of 1.0 is a silent unresolved fallback,
+        not real conversion evidence (src.canonical_money's rule) — analytics
+        must not sum a foreign amount at face value just because the legacy
+        column happens to be 1."""
+        conn = make_db()
+        storage = Storage(conn)
+        now = datetime.now().strftime("%Y-%m-%d")
+        storage.insert_transaction(
+            source="manual", source_id="known", amount=50.0,
+            transaction_date=now,
+        )
+        storage.insert_transaction(
+            source="manual", source_id="unresolved-foreign", amount=500.0,
+            currency="THB", exchange_rate=1.0, transaction_date=now,
+        )
+        result = get_period_comparison(conn, period="month")
+        assert result["current_total"] == 50.0
+        conn.close()
+
 
 class TestMerchantAnalysis:
     def test_top_merchants_by_spend(self, db_with_transactions):
@@ -199,6 +219,27 @@ class TestAnomalies:
         result = get_anomalies(conn)
         assert len(result) > 0
         assert result[0]["amount"] == 500.0
+        conn.close()
+
+    def test_unresolved_foreign_amount_is_never_flagged(self):
+        """A legacy exchange_rate of 1.0 is unresolved, not real conversion
+        evidence — an unresolved foreign amount must not be comparable to
+        (and possibly flagged against) a category average at all."""
+        conn = make_db()
+        storage = Storage(conn)
+        for i in range(5):
+            storage.insert_transaction(
+                source="manual", source_id=f"normal-{i}",
+                amount=15.0, merchant="Normal shop",
+                category="Food", transaction_date=datetime.now().strftime("%Y-%m-%d"),
+            )
+        storage.insert_transaction(
+            source="manual", source_id="unresolved-foreign",
+            amount=5000.0, currency="THB", exchange_rate=1.0, merchant="Bangkok Cafe",
+            category="Food", transaction_date=datetime.now().strftime("%Y-%m-%d"),
+        )
+        result = get_anomalies(conn)
+        assert all(row["merchant"] != "Bangkok Cafe" for row in result)
         conn.close()
 
 
@@ -325,6 +366,19 @@ class TestYoYComparison:
         result = get_yoy_comparison(in_memory_db, months=3)
         assert all(r["this_year_expenses"] == 0.0 for r in result)
         assert all(r["last_year_expenses"] == 0.0 for r in result)
+
+    def test_unresolved_foreign_amount_is_excluded_not_face_valued(self, in_memory_db):
+        storage = Storage(in_memory_db)
+        now = datetime.now().strftime("%Y-%m-%d")
+        storage.insert_transaction(
+            source="manual", source_id="known", amount=50.0, transaction_date=now,
+        )
+        storage.insert_transaction(
+            source="manual", source_id="unresolved-foreign", amount=500.0,
+            currency="THB", exchange_rate=1.0, transaction_date=now,
+        )
+        result = get_yoy_comparison(in_memory_db, months=1)
+        assert result[0]["this_year_expenses"] == 50.0
 
     def test_ordered_oldest_to_newest(self, in_memory_db):
         result = get_yoy_comparison(in_memory_db, months=6)

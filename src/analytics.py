@@ -45,9 +45,16 @@ def _get_previous_period(start: str, end: str):
 
 
 def _query_total(conn: sqlite3.Connection, start: str, end: str, category: str | None = None):
-    """Query total spending for a date range, optionally filtered by category."""
+    """Query total spending for a date range, optionally filtered by category.
+
+    Uses reporting_minor_units (R02 canonical money, computed once at write
+    time) rather than amount * exchange_rate: a legacy exchange_rate of 1.0
+    is a silent unresolved fallback, not real conversion evidence, and the
+    raw multiplication has no currency validation. reporting_minor_units is
+    NULL for anything unresolved, which SUM already excludes.
+    """
     query = """
-        SELECT COALESCE(SUM(amount * exchange_rate), 0) as total
+        SELECT COALESCE(SUM(reporting_minor_units), 0) / 100.0 as total
         FROM transactions
         WHERE (type IS NULL OR type = 'expense')
           AND DATE(transaction_date) >= ? AND DATE(transaction_date) <= ?
@@ -139,8 +146,8 @@ def get_top_merchants(
         """
         SELECT merchant,
                COUNT(*) as count,
-               ROUND(SUM(amount * exchange_rate), 2) as total,
-               ROUND(AVG(amount * exchange_rate), 2) as avg_amount
+               ROUND(COALESCE(SUM(reporting_minor_units), 0) / 100.0, 2) as total,
+               ROUND(COALESCE(AVG(reporting_minor_units), 0) / 100.0, 2) as avg_amount
         FROM transactions
         WHERE (type IS NULL OR type = 'expense')
           AND merchant IS NOT NULL
@@ -162,7 +169,7 @@ def get_merchant_trend(
     rows = conn.execute(
         """
         SELECT strftime('%Y-%m', transaction_date) as month,
-               ROUND(SUM(amount * exchange_rate), 2) as total,
+               ROUND(COALESCE(SUM(reporting_minor_units), 0) / 100.0, 2) as total,
                COUNT(*) as count
         FROM transactions
         WHERE (type IS NULL OR type = 'expense') AND merchant = ?
@@ -245,20 +252,20 @@ def get_anomalies(conn: sqlite3.Connection, multiplier: float = 2.0) -> list[dic
     rows = conn.execute(
         """
         WITH cat_avg AS (
-            SELECT category, AVG(amount * exchange_rate) as avg_amount
+            SELECT category, AVG(reporting_minor_units) as avg_reporting_minor
             FROM transactions
             WHERE (type IS NULL OR type = 'expense') AND category IS NOT NULL
             GROUP BY category
             HAVING COUNT(*) >= 3
         )
         SELECT t.id, t.merchant, t.amount, t.currency, t.category,
-               t.transaction_date, ca.avg_amount
+               t.transaction_date, ca.avg_reporting_minor / 100.0 as avg_amount
         FROM transactions t
         JOIN cat_avg ca ON t.category = ca.category
         WHERE (t.type IS NULL OR t.type = 'expense')
-          AND t.amount * t.exchange_rate > ca.avg_amount * ?
+          AND t.reporting_minor_units > ca.avg_reporting_minor * ?
           AND t.transaction_date >= date('now', '-30 days')
-        ORDER BY t.amount DESC
+        ORDER BY t.reporting_minor_units DESC
         """,
         [multiplier],
     ).fetchall()
@@ -314,7 +321,7 @@ def generate_summary(
 
     top_cat = conn.execute(
         """
-        SELECT category, ROUND(SUM(amount * exchange_rate), 2) as total
+        SELECT category, ROUND(COALESCE(SUM(reporting_minor_units), 0) / 100.0, 2) as total
         FROM transactions
         WHERE type='expense' AND category IS NOT NULL
           AND DATE(transaction_date) >= ? AND DATE(transaction_date) <= ?
@@ -329,7 +336,7 @@ def generate_summary(
         SELECT merchant, amount, currency, category, transaction_date
         FROM transactions
         WHERE type='expense' AND DATE(transaction_date) >= ? AND DATE(transaction_date) <= ?
-        ORDER BY amount * exchange_rate DESC LIMIT 1
+        ORDER BY reporting_minor_units DESC LIMIT 1
         """,
         [start, end],
     ).fetchone()
@@ -426,9 +433,9 @@ def get_yoy_comparison(conn: sqlite3.Connection, months: int = 12) -> list[dict]
             row = conn.execute(
                 """SELECT
                      COALESCE(SUM(CASE WHEN (type IS NULL OR type='expense')
-                                  THEN amount*exchange_rate END), 0) AS expenses,
+                                  THEN reporting_minor_units END), 0) / 100.0 AS expenses,
                      COALESCE(SUM(CASE WHEN type='income'
-                                  THEN amount*exchange_rate END), 0) AS income
+                                  THEN reporting_minor_units END), 0) / 100.0 AS income
                    FROM transactions
                    WHERE DATE(transaction_date) BETWEEN ? AND ?""",
                 (start, end),
