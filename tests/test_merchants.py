@@ -188,7 +188,13 @@ def client():
             transaction_date DATETIME,
             ingested_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             raw_data TEXT,
-            type TEXT DEFAULT 'expense'
+            type TEXT DEFAULT 'expense',
+            original_minor_units INTEGER,
+            reporting_minor_units INTEGER,
+            conversion_status TEXT,
+            conversion_rate TEXT,
+            conversion_source TEXT,
+            conversion_quoted_at TEXT
         );
         CREATE TABLE IF NOT EXISTS merchant_tags (
             merchant   TEXT PRIMARY KEY,

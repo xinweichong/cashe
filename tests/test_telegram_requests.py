@@ -95,12 +95,13 @@ async def test_distinct_messages_in_same_second_are_distinct_purchases(in_memory
 async def test_replay_ignores_changed_fx_and_categorizer(in_memory_db):
     storage = Storage(in_memory_db)
     bot = TelegramBotService(storage=storage, bot_token='test-token')
-    bot.exchange_service = Mock(get_rate=Mock(return_value=1.3))
+    from src.exchange import RateResult
+    bot.exchange_service = Mock(get_rate=Mock(return_value=RateResult(status='resolved', rate=1.3, source='api')))
     bot.categorizer = Mock(categorize=Mock(return_value=('Food', 'default')))
     args = SimpleNamespace(args=['12', 'USD', 'Cafe'])
     await bot._add(update(), args)
     original = storage.query_transactions(limit=50)[0]
-    bot.exchange_service.get_rate.return_value = 1.5
+    bot.exchange_service.get_rate.return_value = RateResult(status='resolved', rate=1.5, source='api')
     bot.categorizer.categorize.return_value = ('Other', 'default')
     await bot._add(update(), args)
     assert storage.query_transactions(limit=50) == [original]

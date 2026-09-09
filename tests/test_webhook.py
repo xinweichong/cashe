@@ -72,8 +72,9 @@ class TestAppleWalletWebhook:
     @pytest.mark.asyncio
     async def test_foreign_currency_payload(self, in_memory_db):
         storage = Storage(connection=in_memory_db)
+        from src.exchange import RateResult
         mock_exchange = MagicMock()
-        mock_exchange.get_rate.return_value = 0.35
+        mock_exchange.get_rate.return_value = RateResult(status="resolved", rate=0.35, source="api")
         ctx = FakeContext(storage, exchange_service=mock_exchange)
         app = create_webhook_app(FakeUserManager(ctx))
         transport = ASGITransport(app=app)

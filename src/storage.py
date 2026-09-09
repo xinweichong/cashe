@@ -335,16 +335,28 @@ class Storage:
         manual_evidence: Optional[str] = None,
         request_receipt: Optional[tuple[str, str]] = None,
         consumed_draft_id: Optional[str] = None,
+        rate_result=None,  # Optional[src.exchange.RateResult] — a fresh get_rate() call
     ) -> int:
+        from src.canonical_money import compute_transaction_canonical
+        canonical = compute_transaction_canonical(
+            {"amount": amount, "currency": currency, "exchange_rate": exchange_rate},
+            rate_override=rate_result,
+            quoted_at=local_now().isoformat() if rate_result is not None and rate_result.status != "unresolved" else None,
+        )
         try:
             with self._conn:
                 cursor = self._conn.execute(
                     """INSERT INTO transactions
                        (source, source_id, amount, currency, exchange_rate, merchant, description,
-                        category, transaction_date, raw_data, type)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                        category, transaction_date, raw_data, type,
+                        original_minor_units, reporting_minor_units, conversion_status,
+                        conversion_rate, conversion_source, conversion_quoted_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (source, source_id, amount, currency, exchange_rate, merchant, description,
-                     category, transaction_date, raw_data, tx_type),
+                     category, transaction_date, raw_data, tx_type,
+                     canonical["original_minor_units"], canonical["reporting_minor_units"],
+                     canonical["conversion_status"], canonical["conversion_rate"],
+                     canonical["conversion_source"], canonical["conversion_quoted_at"]),
                 )
                 tx_id = cursor.lastrowid
                 for kind, payload in followups or []:

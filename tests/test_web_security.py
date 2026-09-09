@@ -219,7 +219,13 @@ def _make_in_memory_user_db():
             transaction_date DATETIME,
             ingested_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             raw_data TEXT,
-            type TEXT DEFAULT 'expense'
+            type TEXT DEFAULT 'expense',
+            original_minor_units INTEGER,
+            reporting_minor_units INTEGER,
+            conversion_status TEXT,
+            conversion_rate TEXT,
+            conversion_source TEXT,
+            conversion_quoted_at TEXT
         );
         CREATE TABLE categories (name TEXT PRIMARY KEY, keywords TEXT, icon TEXT, color TEXT, type TEXT DEFAULT 'neutral');
         CREATE TABLE ingestion_state (source TEXT PRIMARY KEY, last_processed_id TEXT, last_processed_at DATETIME, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP);

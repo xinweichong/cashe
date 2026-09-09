@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 import logging
 import os
 from datetime import datetime, timedelta
@@ -8,6 +9,24 @@ import httpx
 from src.config import local_now
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class RateResult:
+    """Replaces the old numeric-only get_rate() contract.
+
+    status is one of:
+      'native'     — SGD, no conversion needed (rate is always 1.0)
+      'resolved'   — a live-fetched rate for this exact currency
+      'indicative' — a hardcoded fallback estimate, not a live quote
+      'unresolved' — no live rate and no fallback; rate is None
+
+    Never conflate 'indicative' with 'resolved' — a fallback estimate must
+    stay labeled as one. Unknown is always 'unresolved', never a silent 1.0.
+    """
+    status: str
+    rate: Optional[float] = None
+    source: Optional[str] = None
 
 CURRENCY_CODES = {
     "USD", "EUR", "GBP", "JPY", "THB", "MYR", "IDR", "PHP",
@@ -63,16 +82,21 @@ class ExchangeRateService:
             logger.warning("Failed to fetch exchange rates: %s. Using fallback.", e)
             return FALLBACK_RATES
 
-    def get_rate(self, currency: str) -> float:
+    def get_rate(self, currency: str) -> RateResult:
         if currency == "SGD":
-            return 1.0
+            return RateResult(status="native", rate=1.0, source="native")
         if self._is_cache_stale():
             self._fetch_rates()
-        rate = self._rates.get(currency)
-        if rate is None:
-            logger.warning("No rate for %s, using fallback", currency)
-            return FALLBACK_RATES.get(currency, 1.0)
-        return rate
+        if not self.using_fallback:
+            rate = self._rates.get(currency)
+            if rate is not None:
+                return RateResult(status="resolved", rate=rate, source="api")
+        fallback = FALLBACK_RATES.get(currency)
+        if fallback is not None:
+            logger.warning("No live rate for %s, using indicative fallback", currency)
+            return RateResult(status="indicative", rate=fallback, source="fallback")
+        logger.warning("No rate or fallback for %s; unresolved", currency)
+        return RateResult(status="unresolved")
 
     def parse_currency_amount(self, text: str) -> tuple[float, str]:
         parts = text.strip().split()

@@ -2,13 +2,14 @@ import pytest
 from datetime import datetime
 
 from src.config import local_now
-from src.exchange import ExchangeRateService, FALLBACK_RATES
+from src.exchange import ExchangeRateService, FALLBACK_RATES, RateResult
 
 
 class TestExchangeRateService:
-    def test_get_rate_sgd_returns_1(self):
+    def test_get_rate_sgd_is_native(self):
         svc = ExchangeRateService()
-        assert svc.get_rate("SGD") == 1.0
+        result = svc.get_rate("SGD")
+        assert result == RateResult(status="native", rate=1.0, source="native")
 
     def test_parse_currency_detects_thb(self):
         svc = ExchangeRateService()
@@ -28,12 +29,14 @@ class TestExchangeRateService:
         assert amount == 2000.0
         assert currency == "JPY"
 
-    def test_fallback_rate_used_when_no_fetch(self):
+    def test_fallback_rate_is_labeled_indicative_not_resolved(self):
         svc = ExchangeRateService()
         svc._rates = {}  # Empty cache, no fetch
         svc._rates_fetched_at = local_now()  # Not stale
-        rate = svc.get_rate("THB")
-        assert rate == FALLBACK_RATES["THB"]
+        result = svc.get_rate("THB")
+        assert result.status == "indicative"
+        assert result.rate == FALLBACK_RATES["THB"]
+        assert result.source == "fallback"
 
     def test_parse_currency_invalid_amount(self):
         svc = ExchangeRateService()
@@ -59,12 +62,32 @@ class TestExchangeRateService:
         assert amount == 500.0
         assert currency == "SGD"
 
-    def test_get_rate_unknown_currency_uses_fallback(self):
+    def test_get_rate_unknown_but_has_fallback_is_indicative(self):
         svc = ExchangeRateService()
         svc._rates = {}
         svc._rates_fetched_at = local_now()
-        rate = svc.get_rate("USD")
-        assert rate == FALLBACK_RATES["USD"]
+        result = svc.get_rate("USD")
+        assert result.status == "indicative"
+        assert result.rate == FALLBACK_RATES["USD"]
+
+    def test_get_rate_with_no_fallback_is_unresolved_never_one(self):
+        """The core fix: a currency with no live rate and no fallback must
+        never silently become a 1.0 rate — that's exactly the sentinel
+        legacy readers already treat as an unresolved conversion."""
+        svc = ExchangeRateService()
+        svc._rates = {}
+        svc._rates_fetched_at = local_now()
+        result = svc.get_rate("KRW")  # not in FALLBACK_RATES
+        assert result == RateResult(status="unresolved", rate=None, source=None)
+
+    def test_get_rate_live_fetch_is_resolved(self):
+        svc = ExchangeRateService()
+        svc._rates = {"USD": 0.74}  # what _fetch_rates stores after inverting
+        svc._rates_fetched_at = local_now()
+        result = svc.get_rate("USD")
+        assert result.status == "resolved"
+        assert result.rate == 0.74
+        assert result.source == "api"
 
     def test_cache_stale_when_no_fetch_time(self):
         svc = ExchangeRateService()

@@ -136,8 +136,13 @@ class IngestionPipeline:
 
         # Exchange rate
         exchange_rate = 1.0
+        rate_result = None
         if self.exchange_service and result.currency != "SGD":
-            exchange_rate = self.exchange_service.get_rate(result.currency)
+            rate_result = self.exchange_service.get_rate(result.currency)
+            # Legacy column keeps its existing sentinel convention: 1.0 means
+            # unresolved. The canonical columns get the richer status/source
+            # directly from rate_result instead of re-inferring it.
+            exchange_rate = rate_result.rate if rate_result.rate is not None else 1.0
 
         # Categorize — reload overrides from DB so web-dashboard changes are picked up
         category: Optional[str] = None
@@ -166,6 +171,7 @@ class IngestionPipeline:
                 raw_data=result.raw_data,
                 currency=result.currency,
                 exchange_rate=exchange_rate,
+                rate_result=rate_result,
                 category=category,
                 tx_type=result.tx_type,
                 followups=followups,

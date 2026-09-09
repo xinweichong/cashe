@@ -61,6 +61,50 @@ class TestInsertTransaction:
         tx = storage.get_transaction(tx_id)
         assert tx["raw_data"] == "original email body here"
 
+    def test_new_sgd_transaction_is_canonically_native_immediately(self, storage):
+        tx_id = storage.insert_transaction(
+            source="manual", source_id="sgd-1", amount=12.50,
+            transaction_date="2026-04-16T12:00:00",
+        )
+        tx = storage.get_transaction(tx_id)
+        assert tx["original_minor_units"] == 1250
+        assert tx["reporting_minor_units"] == 1250
+        assert tx["conversion_status"] == "native"
+
+    def test_new_transaction_with_a_rate_result_gets_that_richer_provenance(self, storage):
+        from src.exchange import RateResult
+        tx_id = storage.insert_transaction(
+            source="dbs_card", source_id="usd-1", amount=20.0, currency="USD",
+            exchange_rate=1.34, rate_result=RateResult(status="resolved", rate=1.34, source="api"),
+            transaction_date="2026-04-16T12:00:00",
+        )
+        tx = storage.get_transaction(tx_id)
+        assert tx["conversion_status"] == "resolved"
+        assert tx["conversion_source"] == "api"
+        assert tx["reporting_minor_units"] == 2680
+        assert tx["conversion_quoted_at"] is not None
+
+    def test_new_transaction_without_a_rate_result_falls_back_to_legacy_inference(self, storage):
+        tx_id = storage.insert_transaction(
+            source="manual", source_id="usd-2", amount=20.0, currency="USD",
+            exchange_rate=1.34, transaction_date="2026-04-16T12:00:00",
+        )
+        tx = storage.get_transaction(tx_id)
+        assert tx["conversion_status"] == "indicative"
+        assert tx["conversion_source"] == "legacy_backfill"
+
+    def test_new_transaction_with_unresolved_rate_result_has_no_reporting_amount(self, storage):
+        from src.exchange import RateResult
+        tx_id = storage.insert_transaction(
+            source="dbs_card", source_id="usd-3", amount=20.0, currency="USD",
+            exchange_rate=1.0, rate_result=RateResult(status="unresolved"),
+            transaction_date="2026-04-16T12:00:00",
+        )
+        tx = storage.get_transaction(tx_id)
+        assert tx["conversion_status"] == "unresolved"
+        assert tx["reporting_minor_units"] is None
+        assert tx["original_minor_units"] == 2000
+
 
 class TestGetTransaction:
     def test_get_existing(self, storage):

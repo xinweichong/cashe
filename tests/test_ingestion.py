@@ -57,11 +57,24 @@ class TestIngestionPipelineIngest:
         assert result["category"] == "Food"
 
     def test_exchange_rate_is_applied(self, storage):
+        from src.exchange import RateResult
         exchange_service = MagicMock()
-        exchange_service.get_rate.return_value = 3.5
+        exchange_service.get_rate.return_value = RateResult(status="resolved", rate=3.5, source="api")
         pipeline = IngestionPipeline(storage, exchange_service=exchange_service)
-        result = pipeline.ingest(_result(currency="PLN"))
+        result = pipeline.ingest(_result(currency="USD"))
         assert result["exchange_rate"] == 3.5
+        assert result["conversion_status"] == "resolved"
+        assert result["conversion_source"] == "api"
+
+    def test_unresolved_exchange_rate_stores_legacy_sentinel_but_not_canonical_one(self, storage):
+        from src.exchange import RateResult
+        exchange_service = MagicMock()
+        exchange_service.get_rate.return_value = RateResult(status="unresolved")
+        pipeline = IngestionPipeline(storage, exchange_service=exchange_service)
+        result = pipeline.ingest(_result(currency="USD"))
+        assert result["exchange_rate"] == 1.0  # legacy sentinel, unchanged convention
+        assert result["conversion_status"] == "unresolved"
+        assert result["reporting_minor_units"] is None
 
     def test_recurring_detector_is_called(self, storage):
         detector = MagicMock()

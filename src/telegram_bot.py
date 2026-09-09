@@ -816,7 +816,8 @@ class TelegramBotService:
                 amount_text = f"{context.args[0]} {context.args[1]}"
                 # Rebuild text without currency for parse_add_command
                 text = " ".join([context.args[0]] + list(context.args[2:]))
-                exchange_rate = self.exchange_service.get_rate(currency) if self.exchange_service else None
+                rate_result = self.exchange_service.get_rate(currency) if self.exchange_service else None
+                exchange_rate = rate_result.rate if rate_result is not None else None
 
         parsed = self.parse_add_command(text)
         if not parsed:
@@ -1459,7 +1460,7 @@ class TelegramBotService:
         if action == "nl_confirm":
             exchange_rate = 1.0 if pending["currency"] == "SGD" else None
             if self.exchange_service and pending["currency"] != "SGD":
-                exchange_rate = self.exchange_service.get_rate(pending["currency"])
+                exchange_rate = self.exchange_service.get_rate(pending["currency"]).rate
 
             retry_markup = InlineKeyboardMarkup([[
                 InlineKeyboardButton("Edit", callback_data=f"nl_edit:{draft_id}"),

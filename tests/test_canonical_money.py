@@ -5,6 +5,7 @@ from decimal import Decimal
 import pytest
 
 from src.canonical_money import compute_transaction_canonical
+from src.exchange import RateResult
 
 
 def _row(amount, currency="SGD", exchange_rate=1.0):
@@ -102,3 +103,41 @@ class TestReportingComparedAgainstLegacyFloatMath:
         legacy = round(amount * rate, 2)
         result = compute_transaction_canonical(_row(amount, "USD", rate))
         assert Decimal(result["reporting_minor_units"]) / 100 == Decimal(str(legacy))
+
+
+class TestRateOverride:
+    """A caller with a fresh ExchangeRateService.RateResult (a live capture,
+    not a backfill) should get that richer provenance instead of the
+    legacy 1.0-sentinel inference."""
+
+    def test_live_resolved_rate_is_labeled_resolved_not_indicative(self):
+        override = RateResult(status="resolved", rate=1.34, source="api")
+        result = compute_transaction_canonical(
+            _row(20.0, "USD", 1.34), rate_override=override, quoted_at="2026-09-09T12:00:00"
+        )
+        assert result["conversion_status"] == "resolved"
+        assert result["conversion_source"] == "api"
+        assert result["conversion_rate"] == "1.34"
+        assert result["reporting_minor_units"] == 2680
+        assert result["conversion_quoted_at"] == "2026-09-09T12:00:00"
+
+    def test_unresolved_override_ignores_the_stored_legacy_rate(self):
+        # Even if the legacy column happens to hold some float, an
+        # unresolved override must win — it's the more trustworthy signal.
+        override = RateResult(status="unresolved")
+        result = compute_transaction_canonical(_row(20.0, "USD", 1.5), rate_override=override)
+        assert result["conversion_status"] == "unresolved"
+        assert result["reporting_minor_units"] is None
+        assert result["original_minor_units"] == 2000  # original amount still known
+
+    def test_native_currency_ignores_any_override(self):
+        override = RateResult(status="resolved", rate=1.34, source="api")
+        result = compute_transaction_canonical(_row(12.50, "SGD", 1.0), rate_override=override)
+        assert result["conversion_status"] == "native"
+        assert result["conversion_source"] == "native"
+
+    def test_no_override_falls_back_to_legacy_inference_unchanged(self):
+        result = compute_transaction_canonical(_row(20.0, "USD", 1.34))
+        assert result["conversion_status"] == "indicative"
+        assert result["conversion_source"] == "legacy_backfill"
+        assert result["conversion_quoted_at"] is None
