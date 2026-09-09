@@ -7,6 +7,19 @@ of a transaction and is not exposed by ordinary transaction responses.
 import sqlite3
 
 
+def _add_column_if_table_exists(table: str, column_def: str):
+    """Statement factory for MIGRATIONS: ADD COLUMN only if `table` exists.
+
+    Needed because some baseline tables (budgets, goals, ...) predate the
+    migration system and aren't guaranteed present on every connection
+    migrate() is exercised against (e.g. isolated migration tests).
+    """
+    def _apply(conn: sqlite3.Connection) -> None:
+        if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone():
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column_def}")
+    return _apply
+
+
 MIGRATIONS = (
     (1, (
         """CREATE TABLE source_events (
@@ -118,6 +131,32 @@ MIGRATIONS = (
         "DROP TABLE recurring_suggestions_v10",
         "CREATE INDEX idx_recurring_suggestions_pending ON recurring_suggestions(chat_id, merchant, frequency, status)",
     )),
+    (12, (
+        # Canonical money columns (see docs/plans/2026-09-09-cashe-completion-
+        # roadmap.md R02): additive and nullable only. Nothing is backfilled
+        # here — a separate tool computes values via src/money.py — and no
+        # reader/writer is switched to these columns by this migration.
+        # Tables predate the migration system (created by init_db()'s
+        # baseline executescript), so each ADD COLUMN tolerates a missing
+        # table rather than assuming it exists.
+        _add_column_if_table_exists("transactions", "original_minor_units INTEGER"),
+        _add_column_if_table_exists("transactions", "reporting_minor_units INTEGER"),
+        _add_column_if_table_exists(
+            "transactions",
+            "conversion_status TEXT CHECK(conversion_status IN ('native','resolved','indicative','unresolved'))",
+        ),
+        # Rate stored as decimal text, never float — avoids binary rounding drift.
+        _add_column_if_table_exists("transactions", "conversion_rate TEXT"),
+        _add_column_if_table_exists("transactions", "conversion_source TEXT"),
+        _add_column_if_table_exists("transactions", "conversion_quoted_at TEXT"),
+        # No FK yet: the settlement-evidence table doesn't exist until R07 (CSV import).
+        _add_column_if_table_exists("transactions", "settlement_evidence_id INTEGER"),
+        _add_column_if_table_exists("budgets", "amount_minor_units INTEGER"),
+        _add_column_if_table_exists("goals", "target_minor_units INTEGER"),
+        _add_column_if_table_exists("goals", "saved_minor_units INTEGER"),
+        _add_column_if_table_exists("goal_contributions", "amount_minor_units INTEGER"),
+        _add_column_if_table_exists("upcoming_transactions", "expected_minor_units INTEGER"),
+    )),
 )
 
 
@@ -133,5 +172,8 @@ def migrate(conn: sqlite3.Connection) -> None:
         with conn:
             conn.execute("BEGIN IMMEDIATE")
             for statement in statements:
-                conn.execute(statement)
+                if callable(statement):
+                    statement(conn)
+                else:
+                    conn.execute(statement)
             conn.execute("INSERT INTO schema_migrations(version) VALUES (?)", (version,))
