@@ -6,15 +6,19 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-User=xinweichong
-WorkingDirectory=/home/xinweichong/cashe
+User=ubuntu
+WorkingDirectory=/home/ubuntu/expense-tracker
 # R2_ENDPOINT_URL and R2_BACKUP_BUCKET live here, mode 0600, not in git.
 EnvironmentFile=/etc/cashe/backup.env
-ExecStart=/home/xinweichong/cashe/venv/bin/python -m scripts.backup upload \
+# This venv is separate from the app's Docker image on purpose — the app
+# container only installs requirements.txt (no boto3/cryptography), and the
+# backup tool needs broader read access (all user DBs + credentials.json)
+# than the running app process should have.
+ExecStart=/home/ubuntu/expense-tracker/backup-venv/bin/python -m scripts.backup upload \
     --key-file /secure/cashe-backup.key \
-    --data-dir /home/xinweichong/cashe/data \
-    --config /home/xinweichong/cashe/config.yaml \
-    --credentials /home/xinweichong/cashe/credentials.json
+    --data-dir /home/ubuntu/expense-tracker/data \
+    --config /home/ubuntu/expense-tracker/config.yaml \
+    --credentials /home/ubuntu/expense-tracker/credentials.json
 # Keep a single job execution: systemd will not start a new run of this
 # unit while a previous one is still active (Type=oneshot default).
 TimeoutStartSec=600

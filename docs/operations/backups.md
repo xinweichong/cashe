@@ -66,7 +66,23 @@ Automated tests use synthetic fixtures. A real OCI/R2 restore drill has not yet 
 
 ## Scheduling and health
 
-`deploy/cashe-backup.service` and `deploy/cashe-backup.timer` are systemd unit templates for the daily upload job (adjust the hardcoded paths/username to match the host before installing):
+`deploy/cashe-backup.service` and `deploy/cashe-backup.timer` are systemd unit templates for the daily upload job, defaulting to the paths from the Oracle Cloud Ubuntu deployment (`ubuntu@<vm>:~/expense-tracker`, app running via Docker Compose). Adjust them if the actual host differs.
+
+The app's Docker image only installs `requirements.txt` (no `boto3`/`cryptography`), so the backup job runs in a **separate host-level venv**, not inside the app container — this also keeps the running app process from needing read access to every user's database and `credentials.json`. On a fresh Ubuntu 22.04 VM (ships with Python 3.10, not 3.12):
+
+```sh
+sudo apt update && sudo apt install -y software-properties-common
+sudo add-apt-repository -y ppa:deadsnakes/ppa && sudo apt update
+sudo apt install -y python3.12 python3.12-venv
+
+cd ~/expense-tracker
+python3.12 -m venv backup-venv
+./backup-venv/bin/pip install -r requirements-backup.txt
+
+python -m scripts.backup keygen --key-file /secure/cashe-backup.key   # once; back the key up off-host
+```
+
+Then install the timer:
 
 ```sh
 sudo cp deploy/cashe-backup.service deploy/cashe-backup.timer /etc/systemd/system/
@@ -75,9 +91,12 @@ sudo mkdir -p /etc/cashe && sudo touch /etc/cashe/backup.env && sudo chmod 600 /
 sudo systemctl daemon-reload
 sudo systemctl enable --now cashe-backup.timer
 sudo systemctl start cashe-backup.service   # run once immediately to verify
+sudo systemctl status cashe-backup.service
 ```
 
 `Type=oneshot` means systemd will not start a second run of `cashe-backup.service` while one is already active, giving single-job execution without extra locking. Each run records a `job_runs` row (`job_name=backup`) in `app.db` if it already exists — see [job health](#job-health) below.
+
+If a naive `cp`-based cron backup (copying the SQLite file unencrypted to a local directory) is already running on this host, this systemd timer is a stronger replacement — encrypted, integrity-checked, uploaded off-host, and retained on a schedule. Disable the old cron entry (`crontab -e`) once this timer is verified working, rather than running both indefinitely.
 
 An **external** heartbeat/overdue-backup alert (e.g. a dead-man's-switch service the systemd unit pings on success, and that pages when no ping arrives) is not configured by this repository. That decision — which provider, what account, what alert channel — is an operator choice outside code scope; verify it independently before relying on it.
 
