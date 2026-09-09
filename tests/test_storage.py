@@ -1,3 +1,4 @@
+import json
 import pytest
 from datetime import datetime
 from src.storage import Storage
@@ -144,6 +145,70 @@ class TestUpdateTransaction:
         with pytest.raises(ValueError, match="not found"):
             storage.update_transaction(999, merchant="Test")
 
+    def test_new_transaction_starts_at_revision_one(self, storage):
+        tx_id = storage.insert_transaction(
+            source="manual", source_id="m1", amount=12.50,
+            transaction_date="2026-04-16T12:00:00",
+        )
+        assert storage.get_transaction(tx_id)["revision"] == 1
+
+    def test_update_bumps_revision(self, storage):
+        tx_id = storage.insert_transaction(
+            source="manual", source_id="m1", amount=12.50,
+            transaction_date="2026-04-16T12:00:00",
+        )
+        storage.update_transaction(tx_id, merchant="Ya Kun")
+        assert storage.get_transaction(tx_id)["revision"] == 2
+        storage.update_transaction(tx_id, merchant="Toast Box")
+        assert storage.get_transaction(tx_id)["revision"] == 3
+
+    def test_update_with_matching_expected_revision_succeeds(self, storage):
+        tx_id = storage.insert_transaction(
+            source="manual", source_id="m1", amount=12.50,
+            transaction_date="2026-04-16T12:00:00",
+        )
+        storage.update_transaction(tx_id, merchant="Ya Kun", expected_revision=1)
+        assert storage.get_transaction(tx_id)["merchant"] == "Ya Kun"
+
+    def test_update_with_stale_expected_revision_raises_conflict_with_current_state(self, storage):
+        from src.storage import RevisionConflict
+        tx_id = storage.insert_transaction(
+            source="manual", source_id="m1", amount=12.50, merchant="Toast Box",
+            transaction_date="2026-04-16T12:00:00",
+        )
+        storage.update_transaction(tx_id, merchant="Ya Kun")  # revision -> 2
+        with pytest.raises(RevisionConflict) as exc_info:
+            storage.update_transaction(tx_id, merchant="Somewhere Else", expected_revision=1)
+        assert exc_info.value.current["revision"] == 2
+        assert exc_info.value.current["merchant"] == "Ya Kun"
+        # The conflicting update must not have been applied.
+        assert storage.get_transaction(tx_id)["merchant"] == "Ya Kun"
+
+    def test_update_without_expected_revision_still_works_last_write_wins(self, storage):
+        """v1 callers that never send a revision keep working unchanged."""
+        tx_id = storage.insert_transaction(
+            source="manual", source_id="m1", amount=12.50,
+            transaction_date="2026-04-16T12:00:00",
+        )
+        storage.update_transaction(tx_id, merchant="Ya Kun")
+        storage.update_transaction(tx_id, merchant="Toast Box")  # no expected_revision
+        assert storage.get_transaction(tx_id)["merchant"] == "Toast Box"
+
+    def test_update_records_mutation_history_with_changed_fields_only(self, storage):
+        tx_id = storage.insert_transaction(
+            source="manual", source_id="m1", amount=12.50, merchant="Toast Box",
+            category="Food", transaction_date="2026-04-16T12:00:00",
+        )
+        storage.update_transaction(tx_id, merchant="Ya Kun")
+        mutations = storage._conn.execute(
+            "SELECT transaction_id, revision_before, revision_after, changed_fields FROM transaction_mutations"
+        ).fetchall()
+        assert len(mutations) == 1
+        tx_row_id, revision_before, revision_after, changed_fields = mutations[0]
+        assert (tx_row_id, revision_before, revision_after) == (tx_id, 1, 2)
+        changed = json.loads(changed_fields)
+        assert changed == {"merchant": {"old": "Toast Box", "new": "Ya Kun"}}
+
 
 class TestDeleteTransaction:
     def test_delete_existing(self, storage):
@@ -175,6 +240,31 @@ class TestDeleteTransaction:
         upcoming = storage.get_upcoming_transaction(upcoming_id)
         assert upcoming["status"] == "pending"
         assert upcoming["matched_transaction_id"] is None
+
+    def test_delete_retains_a_snapshot_for_conflict_summaries_and_undo(self, storage):
+        tx_id = storage.insert_transaction(
+            source="manual", source_id="m1", amount=12.50, currency="SGD",
+            merchant="Toast Box", category="Food", transaction_date="2026-04-16T12:00:00",
+        )
+        storage.update_transaction(tx_id, merchant="Ya Kun")  # revision -> 2
+
+        storage.delete_transaction(tx_id)
+
+        row = storage._conn.execute(
+            "SELECT id, source, source_id, amount, currency, merchant, category, type, revision "
+            "FROM deleted_transactions WHERE id = ?", (tx_id,)
+        ).fetchone()
+        assert tuple(row) == (tx_id, "manual", "m1", 12.50, "SGD", "Ya Kun", "Food", "expense", 2)
+
+    def test_deleted_transaction_id_is_never_reused(self, storage):
+        tx_id = storage.insert_transaction(
+            source="manual", source_id="m1", amount=12.50, transaction_date="2026-04-16T12:00:00",
+        )
+        storage.delete_transaction(tx_id)
+        new_id = storage.insert_transaction(
+            source="manual", source_id="m2", amount=5.0, transaction_date="2026-04-17T12:00:00",
+        )
+        assert new_id != tx_id
 
 
 class TestQueryTransactions:

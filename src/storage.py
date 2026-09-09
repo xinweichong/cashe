@@ -44,6 +44,14 @@ class SubscriptionMatchConflict(ValueError):
     """A prediction or transaction already has an incompatible disposition."""
 
 
+class RevisionConflict(ValueError):
+    """expected_revision did not match the transaction's current revision."""
+
+    def __init__(self, current: dict):
+        self.current = current
+        super().__init__(f"Expected revision does not match current revision {current['revision']}")
+
+
 class Storage:
     def __init__(self, connection: sqlite3.Connection):
         self._conn = connection
@@ -678,12 +686,17 @@ class Storage:
                                        consumed_draft_id=_consumed_draft_id, **fields)
 
     @_locked
-    def update_transaction(self, tx_id: int, *, remember_category: bool = False, **fields) -> None:
+    def update_transaction(
+        self, tx_id: int, *, remember_category: bool = False,
+        expected_revision: Optional[int] = None, **fields,
+    ) -> None:
         if not fields:
             return
         tx = self.get_transaction(tx_id)
         if tx is None:
             raise ValueError(f"transaction {tx_id} not found")
+        if expected_revision is not None and expected_revision != tx["revision"]:
+            raise RevisionConflict(tx)
         fields = normalize_transaction_fields(fields)
         if "currency" in fields:
             if fields["currency"] != tx["currency"]:
@@ -697,12 +710,43 @@ class Storage:
             or not isinstance(fields.get("category"), str) or not fields["category"].strip()
         ):
             raise ValueError("Remembering a category requires a merchant and category")
+
+        # A correction to any legacy money input must recompute the canonical
+        # columns too — otherwise they'd silently go stale relative to the
+        # edited amount/currency/exchange_rate.
+        if fields.keys() & {"amount", "currency", "exchange_rate"}:
+            from src.canonical_money import compute_transaction_canonical
+            canonical = compute_transaction_canonical({
+                "amount": fields.get("amount", tx["amount"]),
+                "currency": fields.get("currency", tx["currency"]),
+                "exchange_rate": fields.get("exchange_rate", tx["exchange_rate"]),
+            })
+            fields["original_minor_units"] = canonical["original_minor_units"]
+            fields["reporting_minor_units"] = canonical["reporting_minor_units"]
+            fields["conversion_status"] = canonical["conversion_status"]
+            fields["conversion_rate"] = canonical["conversion_rate"]
+            fields["conversion_source"] = canonical["conversion_source"]
+            fields["conversion_quoted_at"] = canonical["conversion_quoted_at"]
+
+        changed_fields = {
+            key: {"old": tx.get(key), "new": value}
+            for key, value in fields.items()
+            if key in tx and tx[key] != value
+        }
+        new_revision = tx["revision"] + 1
+        fields["revision"] = new_revision
         set_clauses = ", ".join(f"{k} = ?" for k in fields)
         values = list(fields.values()) + [tx_id]
         with self._conn:
             self._conn.execute(
                 f"UPDATE transactions SET {set_clauses} WHERE id = ?", values
             )
+            if changed_fields:
+                self._conn.execute(
+                    "INSERT INTO transaction_mutations"
+                    "(transaction_id, revision_before, revision_after, changed_fields) VALUES (?, ?, ?, ?)",
+                    (tx_id, tx["revision"], new_revision, json.dumps(changed_fields)),
+                )
             if remember_category:
                 self._conn.execute(
                     "INSERT OR REPLACE INTO merchant_overrides (merchant, category, updated_at) "
@@ -711,7 +755,8 @@ class Storage:
 
     @_locked
     def delete_transaction(self, tx_id: int) -> None:
-        if self.get_transaction(tx_id) is None:
+        tx = self.get_transaction(tx_id)
+        if tx is None:
             raise ValueError(f"transaction {tx_id} not found")
         # Revert any upcoming_transactions row this actual charge was matched
         # to back to a pending forecast, rather than leaving it (or a FK
@@ -720,6 +765,16 @@ class Storage:
             "UPDATE upcoming_transactions SET status = 'pending', matched_transaction_id = NULL "
             "WHERE matched_transaction_id = ?",
             (tx_id,),
+        )
+        # Retained snapshot: gives a future 409 (someone deleted this
+        # concurrently) a real current-state summary, and is the evidence an
+        # undo UI would restore from. The id is never reused for a new row.
+        self._conn.execute(
+            """INSERT INTO deleted_transactions
+               (id, source, source_id, amount, currency, merchant, category, transaction_date, type, revision)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (tx["id"], tx["source"], tx["source_id"], tx["amount"], tx["currency"],
+             tx["merchant"], tx["category"], tx["transaction_date"], tx["type"], tx["revision"]),
         )
         self._conn.execute("DELETE FROM transactions WHERE id = ?", (tx_id,))
         self._conn.commit()
