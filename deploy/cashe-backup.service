@@ -6,14 +6,19 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-User=ubuntu
+# Runs as root: the app's Docker container runs as root and writes data/ on
+# the host, so every .db/.db-wal/.db-shm file it creates is root-owned. A
+# WAL-mode SQLite database needs its -shm sidecar accessible even for a
+# read-only connection (to coordinate with the app, which keeps writing
+# while the backup runs) — an unprivileged user cannot do this safely. The
+# backup already needs to read every user's database and credentials.json
+# regardless, so there is no meaningful privilege reduction being given up.
+User=root
 WorkingDirectory=/home/ubuntu/expense-tracker
 # R2_ENDPOINT_URL and R2_BACKUP_BUCKET live here, mode 0600, not in git.
 EnvironmentFile=/etc/cashe/backup.env
 # This venv is separate from the app's Docker image on purpose — the app
-# container only installs requirements.txt (no boto3/cryptography), and the
-# backup tool needs broader read access (all user DBs + credentials.json)
-# than the running app process should have.
+# container only installs requirements.txt (no boto3/cryptography).
 ExecStart=/home/ubuntu/expense-tracker/backup-venv/bin/python -m scripts.backup upload \
     --key-file /secure/cashe-backup.key \
     --data-dir /home/ubuntu/expense-tracker/data \
