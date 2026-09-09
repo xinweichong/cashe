@@ -114,6 +114,24 @@ class TestDeleteTransaction:
         with pytest.raises(ValueError, match="not found"):
             storage.delete_transaction(999)
 
+    def test_delete_unlinks_a_matched_upcoming_transaction_instead_of_leaving_it_dangling(self, storage):
+        """delete_transaction must not leave upcoming_transactions.matched_transaction_id
+        pointing at a deleted row — that's an orphan the app previously relied on
+        (silently absent) FK enforcement to hide."""
+        sub_id = storage.create_subscription(merchant="Netflix", frequency="monthly", billing_day=15)
+        tx_id = storage.insert_transaction(
+            source="manual", source_id="netflix-may", amount=15.98,
+            merchant="Netflix", transaction_date="2026-05-15T10:00:00",
+        )
+        upcoming_id = storage.create_upcoming_transaction(sub_id, "2026-05-15", 15.98)
+        storage.match_upcoming_transaction(upcoming_id, tx_id)
+
+        storage.delete_transaction(tx_id)
+
+        upcoming = storage.get_upcoming_transaction(upcoming_id)
+        assert upcoming["status"] == "pending"
+        assert upcoming["matched_transaction_id"] is None
+
 
 class TestQueryTransactions:
     def test_query_by_date_range(self, storage):

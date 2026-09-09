@@ -25,6 +25,16 @@ def test_current_database_is_clean_and_unchanged(tmp_path, initialize, kind):
     assert hashlib.sha256(path.read_bytes()).digest() == before
 
 
+def test_init_db_enables_foreign_key_enforcement_for_new_connections(tmp_path):
+    """A repair (see scripts/repair_orphans.py) validated that existing
+    orphans were cleaned before this was safe to turn on; see delete_transaction
+    and delete_trip, which now explicitly handle the relations that declare
+    ON DELETE CASCADE or would otherwise reject a normal delete."""
+    conn = init_db(str(tmp_path / 'user.db'))
+    assert conn.execute('PRAGMA foreign_keys').fetchone()[0] == 1
+    conn.close()
+
+
 def test_audit_sees_committed_wal_orphans_without_exposing_records(tmp_path):
     path = tmp_path / 'user.db'
     conn = init_db(str(path))

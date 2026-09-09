@@ -701,6 +701,14 @@ class Storage:
     def delete_transaction(self, tx_id: int) -> None:
         if self.get_transaction(tx_id) is None:
             raise ValueError(f"transaction {tx_id} not found")
+        # Revert any upcoming_transactions row this actual charge was matched
+        # to back to a pending forecast, rather than leaving it (or a FK
+        # constraint) pointing at a row that's about to be deleted.
+        self._conn.execute(
+            "UPDATE upcoming_transactions SET status = 'pending', matched_transaction_id = NULL "
+            "WHERE matched_transaction_id = ?",
+            (tx_id,),
+        )
         self._conn.execute("DELETE FROM transactions WHERE id = ?", (tx_id,))
         self._conn.commit()
 

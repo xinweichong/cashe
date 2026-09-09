@@ -81,6 +81,17 @@ class TestTripCRUD:
         with pytest.raises(ValueError):
             storage.delete_trip(999)
 
+    def test_deleting_an_enlisted_transaction_cascades_its_trip_link(self, in_memory_db):
+        """trip_transactions.transaction_id declares ON DELETE CASCADE and relies
+        on FK enforcement actually being on to take effect."""
+        storage = Storage(connection=in_memory_db)
+        trip_id = storage.create_trip(name="X", start_date="2026-04-01")
+        tx_id = _insert_tx(in_memory_db, "t1")
+        storage.enlist_transaction(trip_id, tx_id)
+        storage.delete_transaction(tx_id)
+        rows = in_memory_db.execute("SELECT * FROM trip_transactions WHERE transaction_id = ?", (tx_id,)).fetchall()
+        assert len(rows) == 0
+
 
 class TestTripActivation:
     def test_activate_trip_sets_status_active(self, in_memory_db):
