@@ -64,6 +64,8 @@ Make separate reviewable commits for cache isolation, routing, and AI gating.
 
 Two synthetic users in one browser cannot see each other's cached financial values after logout, 401 expiry, slow response completion, or account switch. Both new and old merchant deep links preserve suffix/query/hash and render a merchant view. AI client/call spies show zero calls without the approved gate, including NL, daily jobs, and analytics GET paths.
 
+**Status (2026-09-09): closed.** All five implementation bullets and both exit checks landed across 14 reviewable commits — cache isolation with cross-tab logout/expiry, the merchant route fix, the `gemini_policy_confirmed` fail-closed gate, full ESLint at 0 errors/0 warnings with a CI gate (not a ratchet), and the `spending-facts.md` reconciliation. Verified with new/updated tests, not just inspection.
+
 ## R01 — Close the operational trust gate
 
 **Implementation**
@@ -78,6 +80,18 @@ Two synthetic users in one browser cannot see each other's cached financial valu
 **Exit checks**
 
 Create an encrypted off-host snapshot, restore it into an isolated directory, boot with external capture/AI/notifications disabled, compare identities/counts/money/source links, then rehearse rollback plus later source-event replay. Demonstrate a failed/overdue backup alert and a missing heartbeat. Complete a real Shortcut credential migration before globally closing legacy unauthenticated intake. Attach evidence; local fake-cloud tests alone do not close this package.
+
+**Status (2026-09-09): partial — real production evidence attached for most, three follow-ups remain open.**
+
+Done, with production evidence (not just synthetic tests): `db_audit` extended for the recurring-suggestion/subscription-acceptance relations; `job_runs` persisted history and `GET /admin/api/health` covering backup, subscription-matcher, and capture-retry jobs plus per-user capture freshness; versioned systemd service/timer for `scripts.backup` on the real Oracle Cloud Ubuntu host, running as root (justified — reading a live WAL database needs `-shm` access the app's Docker-root-owned files don't grant an unprivileged user), single-job execution via `Type=oneshot`; a real encrypted snapshot created, uploaded to R2, downloaded, restored into an isolated directory, and audited against production; a genuine orphan (8 `goal_contributions` rows, caused by `delete_goal` assuming FK cascade that was never enforced) found by that drill, repaired with a new dry-run-first `scripts/repair_orphans.py`, and `PRAGMA foreign_keys = ON` enabled for user connections afterward — which also surfaced and fixed a second latent bug (`delete_transaction` didn't unlink matched `upcoming_transactions` rows, which would have started raising `IntegrityError` on ordinary deletes). A dead-man's-switch heartbeat (`ExecStartPost` → healthchecks.io) is wired into the service, pinging only on success.
+
+**Follow-up (not done):**
+- Confirm the heartbeat actually alerts on a missed ping (provider-side verification, not yet demonstrated).
+- Verify actual R2/OCI storage allocation and usage against the hardcoded 128 MiB snapshot / 8 GB bucket ceilings — unmeasured guesses.
+- Gmail history backfill controls (date-range request, bounded pages, persisted progress/cancellation, historical follow-up suppression) — not started.
+- A real Apple Wallet Shortcut credential migration — not exercised; still simulated/assumed.
+- A full isolated boot-and-compare of the restored copy (identities/counts/money/source links) with capture/AI/notifications disabled — the restore + audit was done; the boot-and-compare step was not.
+- Rollback rehearsal and later source-event replay after a restore — not exercised.
 
 ## R02 — Establish canonical money and audited migration
 
