@@ -167,6 +167,16 @@ Remaining exit checks — same-key/different-payload conflict, deletion/replay a
 
 The same fixture produces equal money/classification on Home, Explore, Activity day totals, finance views, Telegram, and exports. Test refunds across months, transfers/card repayments, sparse income, timezone offsets, unresolved FX, and end-of-short-month comparisons. Record intentional compatibility changes rather than retaining a wrong legacy total to satisfy parity.
 
+**Status (2026-09-09): started — `spending_facts.py` reads canonical money; `analytics.py` and the other consumers are not migrated yet.**
+
+Done: `spending_facts._rows()`/`_resolve_money` now prefer the `reporting_minor_units`/`conversion_status` Storage already computed at write time (R02's `canonical_money.py`) instead of unconditionally recomputing conversion from raw `amount`/`currency`/`exchange_rate` via `convert_legacy_sgd` on every read. This surfaced and fixed a real bug: the old recompute had no currency validation, so an unsupported currency code with a plausible-looking `exchange_rate` was silently treated as a resolved/indicative conversion instead of unresolved. Falls back to `convert_legacy_sgd` only for a row whose canonical columns are genuinely NULL (predates the R02 backfill, or bypassed `Storage`) and only for a currency this codebase actually reviews (`src.money.CURRENCY_EXPONENTS`) — an unrecognized code is always unresolved regardless of source. `spending_review`'s "unresolved_money" reason now reuses this same resolution instead of a second, separately-drifting `convert_legacy_sgd` call. `money_basis` renamed from `"legacy_values_rounded_per_transaction"` to `"canonical_minor_units_with_legacy_fallback"` to describe what it now actually does (nothing pinned the old literal).
+
+**Follow-up (not done):**
+- `analytics.py`, Overview/Analytics/Merchants APIs, budget/trip summaries, goal contexts, remaining Telegram analytics commands, and scheduled calculations still compute independently from legacy float columns — this was the larger part of R04's inventory-and-migrate task and hasn't started.
+- Shared trend, merchant/category contribution, trip, and forecast-input contracts don't exist yet.
+- Legacy financial scores/advice where required observations are absent haven't been reviewed for removal/qualification.
+- Exit checks not yet exercised: the same-fixture-equal-money-on-Home/Explore/Activity/Telegram/exports check, and refunds-across-months/transfers/sparse-income/timezone/end-of-short-month parity specifically for the not-yet-migrated consumers.
+
 ## R05 — Add correct refunds, transfers and splits
 
 **Implementation**
