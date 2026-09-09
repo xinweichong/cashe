@@ -754,6 +754,47 @@ class Storage:
                 )
 
     @_locked
+    def undo_last_mutation(self, tx_id: int, *, expected_revision: Optional[int] = None) -> None:
+        """Revert the most recent recorded correction to `tx_id`.
+
+        Always targets the mutation whose revision_after equals the
+        transaction's current revision — i.e. "undo the last thing that
+        happened", not a specific past edit. An intervening edit since the
+        caller last saw the transaction changes what gets undone rather than
+        blocking it; expected_revision lets a caller detect that and re-fetch.
+        The undo itself is appended as a new mutation (old/new swapped), so
+        the history stays append-only and undoing twice redoes the edit.
+        """
+        tx = self.get_transaction(tx_id)
+        if tx is None:
+            raise ValueError(f"transaction {tx_id} not found")
+        if expected_revision is not None and expected_revision != tx["revision"]:
+            raise RevisionConflict(tx)
+        mutation = self._conn.execute(
+            "SELECT * FROM transaction_mutations WHERE transaction_id = ? AND revision_after = ? "
+            "ORDER BY id DESC LIMIT 1",
+            (tx_id, tx["revision"]),
+        ).fetchone()
+        if mutation is None:
+            raise ValueError(f"transaction {tx_id} has no correction to undo")
+        changed = json.loads(mutation["changed_fields"])
+        revert_fields = {key: entry["old"] for key, entry in changed.items()}
+        new_revision = tx["revision"] + 1
+        revert_fields["revision"] = new_revision
+        set_clauses = ", ".join(f"{k} = ?" for k in revert_fields)
+        values = list(revert_fields.values()) + [tx_id]
+        with self._conn:
+            self._conn.execute(f"UPDATE transactions SET {set_clauses} WHERE id = ?", values)
+            undo_changed = {
+                key: {"old": entry["new"], "new": entry["old"]} for key, entry in changed.items()
+            }
+            self._conn.execute(
+                "INSERT INTO transaction_mutations"
+                "(transaction_id, revision_before, revision_after, changed_fields) VALUES (?, ?, ?, ?)",
+                (tx_id, tx["revision"], new_revision, json.dumps(undo_changed)),
+            )
+
+    @_locked
     def delete_transaction(self, tx_id: int) -> str:
         tx = self.get_transaction(tx_id)
         if tx is None:

@@ -21,7 +21,7 @@ from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 from src.storage import RevisionConflict, SubscriptionMatchConflict, TransactionRequestConflict
 from src.config import local_now
 from src.web.auth import verify_password, create_session, verify_session, destroy_session
-from src.web.contracts import CaptureFollowup, CaptureIssue, CaptureResolution, HomeBriefing, QueuedResponse, SpendingEvidence, SpendingFacts, SpendingReview, TransactionCorrection, TransactionCreate, TransactionDeletion, TransactionProvenance, TransactionV2, UpcomingPlan, PlanMutationResponse, RecurringReview, RecurringResolution
+from src.web.contracts import CaptureFollowup, CaptureIssue, CaptureResolution, HomeBriefing, QueuedResponse, SpendingEvidence, SpendingFacts, SpendingReview, TransactionCorrection, TransactionCreate, TransactionDeletion, TransactionProvenance, TransactionUndo, TransactionV2, UpcomingPlan, PlanMutationResponse, RecurringReview, RecurringResolution
 from src.analytics import (
     load_summary,
     get_yoy_comparison,
@@ -650,6 +650,24 @@ def create_dashboard_app(
             })
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc))
+        updated = await _db(storage.get_transaction, tx_id)
+        return _transaction_to_v2(updated)
+
+    @app.post("/api/v2/transactions/{tx_id}/undo", response_model=TransactionV2)
+    async def undo_transaction_v2(tx_id: int, payload: TransactionUndo | None = None, username: str = Depends(require_auth)):
+        storage = user_manager.get(username).storage
+        tx = await _db(storage.get_transaction, tx_id)
+        if not tx:
+            raise HTTPException(status_code=404, detail="Transaction not found")
+        expected_revision = payload.expected_revision if payload else None
+        try:
+            await _db(storage.undo_last_mutation, tx_id, expected_revision=expected_revision)
+        except RevisionConflict as exc:
+            raise HTTPException(status_code=409, detail={
+                "message": str(exc), "current": _transaction_to_v2(exc.current),
+            })
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
         updated = await _db(storage.get_transaction, tx_id)
         return _transaction_to_v2(updated)
 

@@ -274,6 +274,104 @@ class TestUpdateTransactionV2:
         assert response.status_code == 400
 
 
+class TestUndoTransactionV2:
+    @pytest.mark.asyncio
+    async def test_undo_reverts_last_correction(self, client):
+        create_resp = await client.post("/api/transactions", json={
+            "amount": 15.00, "merchant": "Old Name", "category": "Food", "type": "expense",
+        })
+        tx_id = create_resp.json()["id"]
+        await client.put(f"/api/v2/transactions/{tx_id}", json={"merchant": "New Name"})  # revision -> 2
+
+        response = await client.post(f"/api/v2/transactions/{tx_id}/undo", json={})
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["merchant"] == "Old Name"
+        assert data["revision"] == 3
+
+    @pytest.mark.asyncio
+    async def test_undo_reverts_canonical_money_together_with_amount(self, client):
+        create_resp = await client.post("/api/transactions", json={"amount": 15.00, "type": "expense"})
+        tx_id = create_resp.json()["id"]
+        await client.put(f"/api/v2/transactions/{tx_id}", json={"amount": 25.00})
+
+        response = await client.post(f"/api/v2/transactions/{tx_id}/undo", json={})
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["original"] == {"minor_units": 1500, "currency": "SGD"}
+        assert data["reporting"] == {"minor_units": 1500, "currency": "SGD"}
+
+    @pytest.mark.asyncio
+    async def test_undo_with_matching_expected_revision_succeeds(self, client):
+        create_resp = await client.post("/api/transactions", json={"amount": 15.00, "type": "expense"})
+        tx_id = create_resp.json()["id"]
+        await client.put(f"/api/v2/transactions/{tx_id}", json={"merchant": "New Name"})  # revision -> 2
+
+        response = await client.post(
+            f"/api/v2/transactions/{tx_id}/undo", json={"expected_revision": 2},
+        )
+        assert response.status_code == 200
+        assert response.json()["revision"] == 3
+
+    @pytest.mark.asyncio
+    async def test_undo_with_stale_expected_revision_returns_409_with_current_state(self, client):
+        create_resp = await client.post("/api/transactions", json={"amount": 15.00, "type": "expense"})
+        tx_id = create_resp.json()["id"]
+        await client.put(f"/api/v2/transactions/{tx_id}", json={"merchant": "First Edit"})  # revision -> 2
+        await client.put(f"/api/v2/transactions/{tx_id}", json={"merchant": "Second Edit"})  # revision -> 3
+
+        response = await client.post(
+            f"/api/v2/transactions/{tx_id}/undo", json={"expected_revision": 2},
+        )
+
+        assert response.status_code == 409
+        current = response.json()["detail"]["current"]
+        assert current["revision"] == 3
+        assert current["merchant"] == "Second Edit"
+        unchanged = await client.get(f"/api/transactions/{tx_id}")
+        assert unchanged.json()["merchant"] == "Second Edit"
+
+    @pytest.mark.asyncio
+    async def test_undo_always_reverts_the_most_recent_edit(self, client):
+        """An intervening edit changes what undo reverts, rather than being blocked by it."""
+        create_resp = await client.post("/api/transactions", json={
+            "amount": 15.00, "merchant": "Original", "type": "expense",
+        })
+        tx_id = create_resp.json()["id"]
+        await client.put(f"/api/v2/transactions/{tx_id}", json={"merchant": "First Edit"})  # revision -> 2
+        await client.put(f"/api/v2/transactions/{tx_id}", json={"merchant": "Second Edit"})  # revision -> 3
+
+        response = await client.post(f"/api/v2/transactions/{tx_id}/undo", json={})
+
+        assert response.status_code == 200
+        assert response.json()["merchant"] == "First Edit"
+
+    @pytest.mark.asyncio
+    async def test_undo_with_no_prior_mutation_returns_400(self, client):
+        create_resp = await client.post("/api/transactions", json={"amount": 15.00, "type": "expense"})
+        tx_id = create_resp.json()["id"]
+
+        response = await client.post(f"/api/v2/transactions/{tx_id}/undo", json={})
+        assert response.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_undo_nonexistent_returns_404(self, client):
+        response = await client.post("/api/v2/transactions/99999/undo", json={})
+        assert response.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_undo_without_body_uses_latest_revision(self, client):
+        create_resp = await client.post("/api/transactions", json={"amount": 15.00, "type": "expense"})
+        tx_id = create_resp.json()["id"]
+        await client.put(f"/api/v2/transactions/{tx_id}", json={"merchant": "New Name"})
+
+        response = await client.post(f"/api/v2/transactions/{tx_id}/undo")
+        assert response.status_code == 200
+        assert response.json()["revision"] == 3
+
+
 class TestDeleteTransaction:
     @pytest.mark.asyncio
     async def test_delete_transaction(self, client):

@@ -237,6 +237,13 @@ class TransactionCreate(BaseModel):
     type: Literal["expense", "income"] = "expense"
 
 
+class TransactionUndo(BaseModel):
+    """POST /api/v2/transactions/{id}/undo body. expected_revision is
+    optional — omitted, undo always reverts whatever correction most
+    recently happened."""
+    expected_revision: int | None = None
+
+
 class TransactionDeletion(TransactionV2):
     """DELETE /api/v2/transactions/{id} response — the retained snapshot,
     as it stood immediately before deletion."""
