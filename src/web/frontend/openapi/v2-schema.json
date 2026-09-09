@@ -334,6 +334,28 @@
         "title": "HomeBriefing",
         "type": "object"
       },
+      "MerchantRanking": {
+        "properties": {
+          "merchant": {
+            "title": "Merchant",
+            "type": "string"
+          },
+          "total": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "visits": {
+            "title": "Visits",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "merchant",
+          "visits",
+          "total"
+        ],
+        "title": "MerchantRanking",
+        "type": "object"
+      },
       "Money": {
         "properties": {
           "currency": {
@@ -377,6 +399,36 @@
           "currency"
         ],
         "title": "OriginalMoney",
+        "type": "object"
+      },
+      "OverviewSummary": {
+        "properties": {
+          "by_category": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Money"
+            },
+            "title": "By Category",
+            "type": "object"
+          },
+          "end": {
+            "title": "End",
+            "type": "string"
+          },
+          "start": {
+            "title": "Start",
+            "type": "string"
+          },
+          "total": {
+            "$ref": "#/components/schemas/Money"
+          }
+        },
+        "required": [
+          "start",
+          "end",
+          "total",
+          "by_category"
+        ],
+        "title": "OverviewSummary",
         "type": "object"
       },
       "PlanMutationResponse": {
@@ -1323,6 +1375,23 @@
         "title": "TransactionV2",
         "type": "object"
       },
+      "TrendPoint": {
+        "properties": {
+          "amount": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "date": {
+            "title": "Date",
+            "type": "string"
+          }
+        },
+        "required": [
+          "date",
+          "amount"
+        ],
+        "title": "TrendPoint",
+        "type": "object"
+      },
       "UpcomingCharge": {
         "properties": {
           "amount": {
@@ -1775,6 +1844,210 @@
           }
         },
         "summary": "Home Briefing"
+      }
+    },
+    "/api/v2/overview/merchants": {
+      "get": {
+        "operationId": "overview_merchants_v2_api_v2_overview_merchants_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "start_date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Start Date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "end_date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "End Date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/MerchantRanking"
+                  },
+                  "title": "Response Overview Merchants V2 Api V2 Overview Merchants Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Overview Merchants V2"
+      }
+    },
+    "/api/v2/overview/summary": {
+      "get": {
+        "operationId": "overview_summary_v2_api_v2_overview_summary_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "start_date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Start Date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "end_date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "End Date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OverviewSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Overview Summary V2"
+      }
+    },
+    "/api/v2/overview/trend": {
+      "get": {
+        "operationId": "overview_trend_v2_api_v2_overview_trend_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "start_date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Start Date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "end_date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "End Date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TrendPoint"
+                  },
+                  "title": "Response Overview Trend V2 Api V2 Overview Trend Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Overview Trend V2"
       }
     },
     "/api/v2/plan/upcoming": {

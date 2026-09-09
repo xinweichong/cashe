@@ -524,6 +524,82 @@ class TestRestoreTransactionV2:
         assert response.json()["revision"] == 3
 
 
+class TestOverviewV2:
+    @pytest.mark.asyncio
+    async def test_summary_returns_canonical_money(self, client):
+        await client.post("/api/v2/transactions", json={
+            "amount": 15.00, "category": "Food", "type": "expense", "transaction_date": "2026-04-16T12:00:00",
+        })
+        await client.post("/api/v2/transactions", json={
+            "amount": 5.00, "category": "Transport", "type": "expense", "transaction_date": "2026-04-16T12:00:00",
+        })
+        response = await client.get("/api/v2/overview/summary", params={
+            "start_date": "2026-04-01", "end_date": "2026-04-30",
+        })
+        assert response.status_code == 200
+        data = response.json()
+        assert data["start"] == "2026-04-01"
+        assert data["end"] == "2026-04-30"
+        assert data["total"] == {"minor_units": 2000, "currency": "SGD"}
+        assert data["by_category"]["Food"] == {"minor_units": 1500, "currency": "SGD"}
+        assert data["by_category"]["Transport"] == {"minor_units": 500, "currency": "SGD"}
+
+    @pytest.mark.asyncio
+    async def test_summary_excludes_unresolved_foreign_amount(self, client):
+        await client.post("/api/v2/transactions", json={
+            "amount": 50.00, "type": "expense", "transaction_date": "2026-04-16T12:00:00",
+        })
+        await client.post("/api/v2/transactions", json={
+            "amount": 500.00, "currency": "THB", "exchange_rate": 1.0,
+            "type": "expense", "transaction_date": "2026-04-16T12:00:00",
+        })
+        response = await client.get("/api/v2/overview/summary", params={
+            "start_date": "2026-04-01", "end_date": "2026-04-30",
+        })
+        assert response.json()["total"] == {"minor_units": 5000, "currency": "SGD"}
+
+    @pytest.mark.asyncio
+    async def test_trend_returns_daily_points(self, client):
+        await client.post("/api/v2/transactions", json={
+            "amount": 10.00, "type": "expense", "transaction_date": "2026-04-10T12:00:00",
+        })
+        await client.post("/api/v2/transactions", json={
+            "amount": 20.00, "type": "expense", "transaction_date": "2026-04-12T12:00:00",
+        })
+        response = await client.get("/api/v2/overview/trend", params={
+            "start_date": "2026-04-01", "end_date": "2026-04-30",
+        })
+        assert response.status_code == 200
+        data = response.json()
+        assert data == [
+            {"date": "2026-04-10", "amount": {"minor_units": 1000, "currency": "SGD"}},
+            {"date": "2026-04-12", "amount": {"minor_units": 2000, "currency": "SGD"}},
+        ]
+
+    @pytest.mark.asyncio
+    async def test_merchants_returns_ranking(self, client):
+        await client.post("/api/v2/transactions", json={
+            "amount": 10.00, "merchant": "Toast Box", "type": "expense", "transaction_date": "2026-04-10T12:00:00",
+        })
+        await client.post("/api/v2/transactions", json={
+            "amount": 25.00, "merchant": "Grab", "type": "expense", "transaction_date": "2026-04-11T12:00:00",
+        })
+        response = await client.get("/api/v2/overview/merchants", params={
+            "start_date": "2026-04-01", "end_date": "2026-04-30",
+        })
+        assert response.status_code == 200
+        data = response.json()
+        assert data[0]["merchant"] == "Grab"
+        assert data[0]["total"] == {"minor_units": 2500, "currency": "SGD"}
+        assert data[0]["visits"] == 1
+
+    @pytest.mark.asyncio
+    async def test_requires_auth(self, client):
+        await client.post("/api/logout")
+        response = await client.get("/api/v2/overview/summary")
+        assert response.status_code == 401
+
+
 @pytest.mark.asyncio
 async def test_get_settings_returns_defaults(client):
     """GET /api/settings should return the two default threshold values."""

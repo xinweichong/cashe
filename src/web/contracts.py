@@ -249,3 +249,28 @@ class TransactionDeletion(TransactionV2):
     """DELETE /api/v2/transactions/{id} response — the retained snapshot,
     as it stood immediately before deletion."""
     deleted_at: str
+
+
+# ── Overview (R04) ──────────────────────────────────────────────────────────
+# Typed wrappers over the existing (canonical-money-correct as of R04)
+# Storage summary/trend functions. Calendar-month/week period semantics —
+# deliberately distinct from spending_facts' equal-elapsed-days/weekday-
+# aligned periods, which serve Home's day-over-day comparison instead of
+# Overview's plain calendar-range browsing.
+
+class OverviewSummary(BaseModel):
+    start: str
+    end: str
+    total: Money
+    by_category: dict[str, Money]
+
+
+class TrendPoint(BaseModel):
+    date: str
+    amount: Money
+
+
+class MerchantRanking(BaseModel):
+    merchant: str
+    visits: int
+    total: Money

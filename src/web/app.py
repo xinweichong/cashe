@@ -20,9 +20,10 @@ from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 
 from src.storage import RevisionConflict, SubscriptionMatchConflict, TransactionRequestConflict
 from src import transaction_commands
+from src.money import to_minor_units
 from src.config import local_now
 from src.web.auth import verify_password, create_session, verify_session, destroy_session
-from src.web.contracts import CaptureFollowup, CaptureIssue, CaptureResolution, HomeBriefing, QueuedResponse, SpendingEvidence, SpendingFacts, SpendingReview, TransactionCorrection, TransactionCreate, TransactionDeletion, TransactionProvenance, TransactionUndo, TransactionV2, UpcomingPlan, PlanMutationResponse, RecurringReview, RecurringResolution
+from src.web.contracts import CaptureFollowup, CaptureIssue, CaptureResolution, HomeBriefing, MerchantRanking, OverviewSummary, QueuedResponse, SpendingEvidence, SpendingFacts, SpendingReview, TransactionCorrection, TransactionCreate, TransactionDeletion, TransactionProvenance, TransactionUndo, TransactionV2, TrendPoint, UpcomingPlan, PlanMutationResponse, RecurringReview, RecurringResolution
 from src.analytics import (
     load_summary,
     get_yoy_comparison,
@@ -876,6 +877,41 @@ def create_dashboard_app(
         start = start_date or f"{today.year}-{today.month:02d}-01"
         end = end_date or today.strftime("%Y-%m-%d")
         return await _db(storage.get_merchants_in_range, start, end)
+
+    def _default_month_range(start_date: Optional[str], end_date: Optional[str]) -> tuple[str, str]:
+        today = local_now()
+        return (
+            start_date or f"{today.year}-{today.month:02d}-01",
+            end_date or today.strftime("%Y-%m-%d"),
+        )
+
+    def _sgd_money(value: float) -> dict:
+        return {"minor_units": to_minor_units(value, "SGD"), "currency": "SGD"}
+
+    @app.get("/api/v2/overview/summary", response_model=OverviewSummary)
+    async def overview_summary_v2(start_date: Optional[str] = None, end_date: Optional[str] = None, username: str = Depends(require_auth)):
+        storage = user_manager.get(username).storage
+        start, end = _default_month_range(start_date, end_date)
+        result = await _db(storage.get_spending_summary, start_date=start, end_date=end)
+        return {
+            "start": start, "end": end,
+            "total": _sgd_money(result["total"]),
+            "by_category": {k: _sgd_money(v) for k, v in result["by_category"].items()},
+        }
+
+    @app.get("/api/v2/overview/trend", response_model=list[TrendPoint])
+    async def overview_trend_v2(start_date: Optional[str] = None, end_date: Optional[str] = None, username: str = Depends(require_auth)):
+        storage = user_manager.get(username).storage
+        start, end = _default_month_range(start_date, end_date)
+        rows = await _db(storage.get_trend, start, end)
+        return [{"date": r["date"], "amount": _sgd_money(r["amount"])} for r in rows]
+
+    @app.get("/api/v2/overview/merchants", response_model=list[MerchantRanking])
+    async def overview_merchants_v2(start_date: Optional[str] = None, end_date: Optional[str] = None, limit: int = 10, username: str = Depends(require_auth)):
+        storage = user_manager.get(username).storage
+        start, end = _default_month_range(start_date, end_date)
+        rows = await _db(storage.get_merchant_ranking, start, end, limit)
+        return [{"merchant": r["merchant"], "visits": r["visits"], "total": _sgd_money(r["total"])} for r in rows]
 
     @app.get("/api/insights")
     async def insights(start_date: Optional[str] = None, end_date: Optional[str] = None, storage=Depends(_get_storage)):
