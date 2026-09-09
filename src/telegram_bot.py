@@ -16,6 +16,7 @@ from src.categorizer import Categorizer
 from src.config import local_now
 from src.exchange import ExchangeRateService
 from src.storage import Storage, TransactionRequestConflict
+from src import transaction_commands
 
 logger = logging.getLogger(__name__)
 
@@ -335,7 +336,7 @@ class TelegramBotService:
                 await query.edit_message_text("Account not linked.")
                 return
             try:
-                ctx.storage.delete_transaction(tx_id)
+                transaction_commands.delete(ctx.storage, tx_id)
                 await query.edit_message_text(f"Transaction #{tx_id} deleted.")
             except ValueError:
                 await query.edit_message_text("Transaction not found (may have already been deleted).")
@@ -446,7 +447,7 @@ class TelegramBotService:
             context.user_data.clear()
             return ConversationHandler.END
 
-        edit_ctx.storage.update_transaction(tx_id, category=category)
+        transaction_commands.correct(edit_ctx.storage, tx_id, {"category": category})
         await query.edit_message_text(
             f"Category updated to {category} for this transaction only.\n"
             f"To remember its current category for future purchases: /recategorize {tx_id} --remember"
@@ -477,7 +478,7 @@ class TelegramBotService:
             except ValueError:
                 await update.message.reply_text("Invalid amount. Enter a number like 12.50:")
                 return EDIT_ENTER_VALUE
-            edit_ctx.storage.update_transaction(tx_id, amount=value)
+            transaction_commands.correct(edit_ctx.storage, tx_id, {"amount": value})
             await update.message.reply_text(f"Amount updated to {value:.2f}.")
 
         elif field == "date":
@@ -499,16 +500,16 @@ class TelegramBotService:
             if iso is None:
                 await update.message.reply_text("Invalid date. Use YYYY-MM-DD or DD/MM/YYYY:")
                 return EDIT_ENTER_VALUE
-            edit_ctx.storage.update_transaction(tx_id, transaction_date=f"{iso}T00:00:00")
+            transaction_commands.correct(edit_ctx.storage, tx_id, {"transaction_date": f"{iso}T00:00:00"})
             await update.message.reply_text(f"Date updated to {iso}.")
 
         elif field == "description":
             value = None if text.lower() == "clear" else text
-            edit_ctx.storage.update_transaction(tx_id, description=value)
+            transaction_commands.correct(edit_ctx.storage, tx_id, {"description": value})
             await update.message.reply_text("Description updated." if value else "Description cleared.")
 
         elif field == "merchant":
-            edit_ctx.storage.update_transaction(tx_id, merchant=text)
+            transaction_commands.correct(edit_ctx.storage, tx_id, {"merchant": text})
             await update.message.reply_text(f"Merchant updated to *{text}*.", parse_mode="Markdown")
 
         context.user_data.clear()
@@ -776,7 +777,7 @@ class TelegramBotService:
                 )
             else:
                 # Legacy/in-process direct callers have no Telegram message identity.
-                tx_id = ctx.storage.create_manual_transaction(**fields)
+                tx_id = transaction_commands.create_manual(ctx.storage, **fields)["id"]
         except TransactionRequestConflict:
             await reply("This message was already saved or its transaction was deleted. Check Activity to make corrections.")
             return None
@@ -947,7 +948,7 @@ class TelegramBotService:
 
             old_category = tx["category"]
             try:
-                ctx.storage.update_transaction(tx_id, category=new_category, remember_category=remember)
+                transaction_commands.correct(ctx.storage, tx_id, {"category": new_category}, remember_category=remember)
             except ValueError as exc:
                 await update.message.reply_text(str(exc))
                 return
@@ -1833,7 +1834,9 @@ class TelegramBotService:
         if not tx:
             await query.edit_message_text("Transaction not found.")
             return
-        await loop.run_in_executor(None, functools.partial(_storage.update_transaction, tx_id, category=category))
+        await loop.run_in_executor(
+            None, functools.partial(transaction_commands.correct, _storage, tx_id, {"category": category})
+        )
         icon_map = await loop.run_in_executor(None, _storage.get_category_icon_map)
         updated_tx = await loop.run_in_executor(None, _storage.get_transaction, tx_id)
         await query.edit_message_text(

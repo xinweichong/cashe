@@ -19,6 +19,7 @@ import io
 from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 
 from src.storage import RevisionConflict, SubscriptionMatchConflict, TransactionRequestConflict
+from src import transaction_commands
 from src.config import local_now
 from src.web.auth import verify_password, create_session, verify_session, destroy_session
 from src.web.contracts import CaptureFollowup, CaptureIssue, CaptureResolution, HomeBriefing, QueuedResponse, SpendingEvidence, SpendingFacts, SpendingReview, TransactionCorrection, TransactionCreate, TransactionDeletion, TransactionProvenance, TransactionUndo, TransactionV2, UpcomingPlan, PlanMutationResponse, RecurringReview, RecurringResolution
@@ -573,39 +574,13 @@ def create_dashboard_app(
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc))
 
-    def _transaction_to_v2(tx: dict) -> dict:
-        return {
-            "id": tx["id"],
-            "revision": tx["revision"],
-            "source": tx["source"],
-            "type": tx["type"],
-            "merchant": tx.get("merchant"),
-            "category": tx.get("category"),
-            "description": tx.get("description"),
-            "transaction_date": tx.get("transaction_date"),
-            "original": {
-                "minor_units": tx.get("original_minor_units"),
-                "currency": tx.get("currency") or "SGD",
-            },
-            "reporting": (
-                {"minor_units": tx["reporting_minor_units"], "currency": "SGD"}
-                if tx.get("reporting_minor_units") is not None else None
-            ),
-            "conversion": {
-                "status": tx.get("conversion_status"),
-                "rate": tx.get("conversion_rate"),
-                "source": tx.get("conversion_source"),
-                "quoted_at": tx.get("conversion_quoted_at"),
-            },
-        }
-
     @app.post("/api/v2/transactions", response_model=TransactionV2, status_code=201)
     async def create_transaction_v2(payload: TransactionCreate, request: Request, username: str = Depends(require_auth)):
         storage = user_manager.get(username).storage
         body = payload.model_dump(exclude_none=True)
         try:
-            tx = await _db(
-                storage.create_web_transaction, body,
+            return await _db(
+                transaction_commands.create_web, storage, body,
                 source_id=f"manual_{uuid.uuid4().hex[:12]}",
                 request_key=request.headers.get("Idempotency-Key"), timezone=timezone,
             )
@@ -613,18 +588,14 @@ def create_dashboard_app(
             raise HTTPException(status_code=409, detail=str(e))
         except ValueError as e:
             raise HTTPException(status_code=409 if str(e).startswith("duplicate source_id:") else 400, detail=str(e))
-        return _transaction_to_v2(tx)
 
     @app.delete("/api/v2/transactions/{tx_id}", response_model=TransactionDeletion)
     async def delete_transaction_v2(tx_id: int, username: str = Depends(require_auth)):
         storage = user_manager.get(username).storage
-        tx = await _db(storage.get_transaction, tx_id)
-        if not tx:
+        try:
+            return await _db(transaction_commands.delete, storage, tx_id)
+        except ValueError:
             raise HTTPException(status_code=404, detail="Transaction not found")
-        deleted_at = await _db(storage.delete_transaction, tx_id)
-        result = _transaction_to_v2(tx)
-        result["deleted_at"] = deleted_at
-        return result
 
     @app.put("/api/v2/transactions/{tx_id}", response_model=TransactionV2)
     async def update_transaction_v2(tx_id: int, correction: TransactionCorrection, username: str = Depends(require_auth)):
@@ -638,50 +609,41 @@ def create_dashboard_app(
         if not fields:
             raise HTTPException(status_code=400, detail="No valid fields to update")
         try:
-            await _db(
-                storage.update_transaction, tx_id,
+            return await _db(
+                transaction_commands.correct, storage, tx_id, fields,
                 remember_category=correction.remember_category,
                 expected_revision=correction.expected_revision,
-                **fields,
             )
         except RevisionConflict as exc:
             raise HTTPException(status_code=409, detail={
-                "message": str(exc), "current": _transaction_to_v2(exc.current),
+                "message": str(exc), "current": transaction_commands.to_v2(exc.current),
             })
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc))
-        updated = await _db(storage.get_transaction, tx_id)
-        return _transaction_to_v2(updated)
 
     @app.post("/api/v2/transactions/{tx_id}/undo", response_model=TransactionV2)
     async def undo_transaction_v2(tx_id: int, payload: TransactionUndo | None = None, username: str = Depends(require_auth)):
         storage = user_manager.get(username).storage
-        tx = await _db(storage.get_transaction, tx_id)
-        if not tx:
-            raise HTTPException(status_code=404, detail="Transaction not found")
         expected_revision = payload.expected_revision if payload else None
         try:
-            await _db(storage.undo_last_mutation, tx_id, expected_revision=expected_revision)
+            return await _db(transaction_commands.undo, storage, tx_id, expected_revision=expected_revision)
         except RevisionConflict as exc:
             raise HTTPException(status_code=409, detail={
-                "message": str(exc), "current": _transaction_to_v2(exc.current),
+                "message": str(exc), "current": transaction_commands.to_v2(exc.current),
             })
         except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc))
-        updated = await _db(storage.get_transaction, tx_id)
-        return _transaction_to_v2(updated)
+            status_code = 404 if str(exc).endswith("not found") else 400
+            raise HTTPException(status_code=status_code, detail=str(exc))
 
     @app.post("/api/v2/transactions/{tx_id}/restore", response_model=TransactionV2)
     async def restore_transaction_v2(tx_id: int, username: str = Depends(require_auth)):
         storage = user_manager.get(username).storage
         try:
-            await _db(storage.restore_deleted_transaction, tx_id)
+            return await _db(transaction_commands.restore, storage, tx_id)
         except ValueError as exc:
             msg = str(exc)
             status_code = 404 if "no deletion record" in msg else 409
             raise HTTPException(status_code=status_code, detail=msg)
-        restored = await _db(storage.get_transaction, tx_id)
-        return _transaction_to_v2(restored)
 
     @app.get("/api/transactions/{tx_id}")
     async def get_transaction(tx_id: int, username: str = Depends(require_auth)):
