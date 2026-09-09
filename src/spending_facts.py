@@ -9,6 +9,7 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from zoneinfo import ZoneInfo
 
 from src.config import DEFAULT_TIMEZONE, local_now
+from src.money import CURRENCY_EXPONENTS
 
 
 def money(minor: int) -> dict:
@@ -33,6 +34,12 @@ def week_periods(as_of: date) -> tuple[date, date, date, date]:
 
 
 def convert_legacy_sgd(row: dict) -> tuple[int | None, str]:
+    """Read-time fallback only — used for rows whose canonical columns were
+    never computed (conversion_status IS NULL): straggler pre-R02 rows, or
+    a raw fixture that bypassed Storage.insert_transaction/update_transaction.
+    Every row written through Storage has canonical columns already, which
+    _resolve_money prefers — this recomputation has no currency validation
+    and must not be trusted over stored canonical truth."""
     try:
         amount = Decimal(str(row["amount"]))
         if not amount.is_finite() or amount < 0:
@@ -51,11 +58,29 @@ def convert_legacy_sgd(row: dict) -> tuple[int | None, str]:
         return None, "unresolved"
 
 
+def _resolve_money(row: dict) -> tuple[int | None, str]:
+    """Prefer the canonical reporting_minor_units/conversion_status Storage
+    already computed at write time (single source of truth); a NULL
+    conversion_status means canonical money was genuinely never computed for
+    this row — it predates the R02 migration/backfill, or was written by
+    something that bypassed Storage. Fall back to legacy read-time
+    conversion only for a currency this codebase actually reviews
+    (src.money.CURRENCY_EXPONENTS) — never for an unrecognized code, which
+    convert_legacy_sgd has no way to validate and would otherwise fabricate
+    a conversion for."""
+    if row["conversion_status"] is not None:
+        return row["reporting_minor_units"], row["conversion_status"]
+    if (row["currency"] or "SGD").upper() not in CURRENCY_EXPONENTS:
+        return None, "unresolved"
+    return convert_legacy_sgd(row)
+
+
 def _rows(conn, start: date, end: date, timezone: str) -> list[dict]:
     tz = ZoneInfo(timezone)
     # Include the adjacent UTC days before projecting offset timestamps locally.
     rows = conn.execute(
-        """SELECT id, amount, currency, exchange_rate, merchant, category, type, transaction_date
+        """SELECT id, amount, currency, exchange_rate, merchant, category, type, transaction_date,
+                  reporting_minor_units, conversion_status
            FROM transactions WHERE (DATE(transaction_date) >= ? AND DATE(transaction_date) <= ?)
            OR DATE(transaction_date) IS NULL
            ORDER BY transaction_date DESC, id DESC""",
@@ -74,7 +99,7 @@ def _rows(conn, start: date, end: date, timezone: str) -> list[dict]:
             row["day"] = day
             row["type"] = row["type"] or "expense"
             row["category"] = row["category"] or "Other"
-            row["minor"], row["conversion_status"] = convert_legacy_sgd(row)
+            row["minor"], row["conversion_status"] = _resolve_money(row)
             if day is None:
                 row["minor"], row["conversion_status"] = None, "unresolved"
             result.append(row)
@@ -149,7 +174,7 @@ def _facts(conn, as_of: date, timezone: str, periods: tuple[date, date, date, da
             period["recorded_net_flow"] = None
     return {
         "as_of": as_of.isoformat(), "timezone": timezone, "undated_count": undated,
-        "money_basis": "legacy_values_rounded_per_transaction",
+        "money_basis": "canonical_minor_units_with_legacy_fallback",
         "current": current, "comparison_current": comparable, "previous": previous,
         "change": money(comparable["spending"]["minor_units"] - previous["spending"]["minor_units"]) if available else None,
         "category_changes": drivers,
@@ -172,8 +197,10 @@ def spending_review(conn, *, timezone: str = DEFAULT_TIMEZONE,
         reasons = []
         if row["day"] is None:
             reasons.append("missing_date")
-        # Date uncertainty alone must not be described as a conversion problem.
-        if convert_legacy_sgd(row)[0] is None:
+        # Date uncertainty alone must not be described as a conversion problem —
+        # row["minor"] is forced to None for undated rows regardless of money
+        # resolvability (see _rows), so re-resolve independently of that override.
+        if _resolve_money(row)[0] is None:
             reasons.append("unresolved_money")
         if row["type"] not in ("expense", "refund", "income"):
             reasons.append("unknown_type")

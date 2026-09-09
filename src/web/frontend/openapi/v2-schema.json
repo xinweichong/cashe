@@ -675,7 +675,7 @@
             "$ref": "#/components/schemas/SpendingPeriod"
           },
           "money_basis": {
-            "const": "legacy_values_rounded_per_transaction",
+            "const": "canonical_minor_units_with_legacy_fallback",
             "title": "Money Basis",
             "type": "string"
           },

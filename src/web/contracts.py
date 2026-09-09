@@ -73,7 +73,7 @@ class SpendingFacts(BaseModel):
     undated_count: int
     as_of: str
     timezone: str
-    money_basis: Literal["legacy_values_rounded_per_transaction"]
+    money_basis: Literal["canonical_minor_units_with_legacy_fallback"]
     current: SpendingPeriod
     comparison_current: SpendingPeriod
     previous: SpendingPeriod

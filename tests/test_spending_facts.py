@@ -127,6 +127,41 @@ def test_missing_or_unverified_fx_is_partial_not_a_zero_total(ledger, rate):
     assert evidence['items'][0]['conversion_status'] == 'unresolved'
 
 
+def test_unsupported_currency_is_unresolved_not_a_fabricated_conversion(ledger):
+    """R04: spending_facts must read the canonical conversion_status Storage
+    already computed at write time, not blindly recompute from raw
+    amount/currency/exchange_rate — the raw recompute has no currency
+    validation and would treat any three-letter code as convertible."""
+    storage, add = ledger
+    add(10, currency='AED', exchange_rate=0.27)
+    report = facts(storage)
+    assert report['current']['status'] == 'partial'
+    assert report['current']['unresolved_count'] == 1
+    assert report['current']['indicative_count'] == 0
+    evidence = storage.get_spending_evidence(date(2026, 9, 1), date(2026, 9, 6), measure='unresolved')
+    assert evidence['items'][0]['conversion_status'] == 'unresolved'
+    review = storage.get_spending_review()
+    assert review['items'][0]['reasons'] == ['unresolved_money']
+
+
+def test_rows_without_canonical_columns_still_resolve_a_known_currency(ledger, in_memory_db):
+    """A row that bypassed Storage.insert_transaction (raw SQL — the shape
+    of genuinely pre-R02 legacy data) has no canonical columns at all, not
+    just an unresolved status. For a currency this codebase actually
+    reviews, that must still resolve via the legacy read-time fallback —
+    only an unrecognized currency code should be treated as unresolved."""
+    storage, add = ledger
+    in_memory_db.execute(
+        """INSERT INTO transactions (source, source_id, amount, currency, exchange_rate,
+               merchant, category, transaction_date, type)
+           VALUES ('manual', 'raw-1', 10.0, 'SGD', 1.0, 'Cafe', 'Food', '2026-09-05T12:00:00', 'expense')"""
+    )
+    in_memory_db.commit()
+    report = facts(storage)
+    assert report['current']['spending']['minor_units'] == 1000
+    assert report['current']['status'] == 'complete'
+
+
 def test_stored_foreign_rates_are_indicative_and_native_ignores_bad_rate(ledger):
     storage, add = ledger
     add(10, currency='USD', exchange_rate=1.34)

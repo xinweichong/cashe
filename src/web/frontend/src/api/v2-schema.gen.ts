@@ -625,7 +625,7 @@ export interface components {
              * Money Basis
              * @constant
              */
-            money_basis: "legacy_values_rounded_per_transaction";
+            money_basis: "canonical_minor_units_with_legacy_fallback";
             previous: components["schemas"]["SpendingPeriod"];
             /** Timezone */
             timezone: string;
