@@ -195,10 +195,24 @@ Spending context: {json.dumps(spending, indent=2)}"""
 
 
 def create_llm_service(config: dict) -> Optional[LLMService]:
-    """Return LLMService if gemini_api_key is configured, else None."""
+    """Return LLMService only when both an API key and an explicit policy
+    acknowledgement are configured, else None.
+
+    An API key alone is not sufficient. `gemini_policy_confirmed: true` must
+    only be set by an operator who has verified the current project's
+    billing/quota status and applicable data terms — this flag is a manual
+    gate, not evidence of that verification.
+    """
     api_key = config.get("gemini_api_key", "")
     if not api_key:
         logger.info("LLMService disabled — gemini_api_key not configured")
+        return None
+    if not config.get("gemini_policy_confirmed", False):
+        logger.warning(
+            "LLMService disabled — gemini_api_key is set but gemini_policy_confirmed "
+            "is not true. Set gemini_policy_confirmed: true only after verifying "
+            "billing/quota and data-handling terms for the configured project."
+        )
         return None
     model = config.get("gemini_model", "gemini-2.0-flash")
     return LLMService(api_key=api_key, model=model)

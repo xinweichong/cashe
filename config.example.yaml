@@ -45,6 +45,11 @@ exchange_rates:
   api_url: "https://open.er-api.com/v6/latest/SGD"
   cache_hours: 24
 
-# LLM Intelligence (optional — leave blank to disable)
+# LLM Intelligence (optional — disabled by default)
+# An API key alone does not enable cloud calls. Set gemini_policy_confirmed
+# to true only after you have personally verified this project's billing is
+# unlinked/free, its quotas, and that its data terms permit the financial
+# summaries sent to it.
 gemini_api_key: ""
+gemini_policy_confirmed: false
 # gemini_model: "gemini-2.0-flash"   # default

@@ -139,9 +139,18 @@ class TestCreateLlmService:
         result = create_llm_service({"gemini_api_key": ""})
         assert result is None
 
-    def test_returns_service_when_key_present(self):
+    def test_returns_none_when_key_present_but_policy_not_confirmed(self):
+        """An API key alone must not enable cloud calls (fail-closed gate)."""
+        result = create_llm_service({"gemini_api_key": "abc123"})
+        assert result is None
+
+    def test_returns_none_when_policy_confirmed_but_no_key(self):
+        result = create_llm_service({"gemini_policy_confirmed": True})
+        assert result is None
+
+    def test_returns_service_when_key_present_and_policy_confirmed(self):
         with patch("google.genai.Client"):
-            result = create_llm_service({"gemini_api_key": "abc123"})
+            result = create_llm_service({"gemini_api_key": "abc123", "gemini_policy_confirmed": True})
         assert result is not None
         assert isinstance(result, LLMService)
 
