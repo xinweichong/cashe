@@ -1,15 +1,8 @@
 import {
-  createContext, useCallback, useContext, useRef, useState,
+  useCallback, useRef, useState,
 } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-
-type ToastFn = (message: string) => void;
-
-const ToastContext = createContext<ToastFn>(() => {});
-
-export function useToast(): ToastFn {
-  return useContext(ToastContext);
-}
+import { ToastContext } from '@/hooks/useToastContext';
 
 const DISMISS_MS = 3000;
 

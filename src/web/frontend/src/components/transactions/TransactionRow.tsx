@@ -1,6 +1,6 @@
 import { type Transaction } from '@/api/client';
 import { cn, formatCurrency, formatDateTime, getCategoryColor } from '@/lib/utils';
-import { SOURCE_DISPLAY_LABELS } from '@/components/icons/sources';
+import { SOURCE_DISPLAY_LABELS } from '@/lib/sourceLabels';
 import { Button } from '@/components/ui/button';
 import { Trash2 } from 'lucide-react';
 

@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { type Transaction } from '@/api/client';
 import { TransactionRow } from './TransactionRow';
 import { Skeleton } from '@/components/ui/skeleton';
-import { springs } from '@/lib/animations';
+import { springs } from '@/lib/motionPresets';
 
 const STAGGER_LIMIT = 10;
 

@@ -53,4 +53,8 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 )
 Button.displayName = "Button"
 
+// buttonVariants is a cva() config object, not a component; standard shadcn/ui
+// pattern. Fast-refresh HMR still works for Button — this only means editing
+// buttonVariants alone triggers a full reload instead of a component patch.
+// eslint-disable-next-line react-refresh/only-export-components
 export { Button, buttonVariants }

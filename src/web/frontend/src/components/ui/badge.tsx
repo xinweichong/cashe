@@ -33,4 +33,8 @@ function Badge({ className, variant, ...props }: BadgeProps) {
   )
 }
 
+// badgeVariants is a cva() config object, not a component; standard shadcn/ui
+// pattern. Fast-refresh HMR still works for Badge — this only means editing
+// badgeVariants alone triggers a full reload instead of a component patch.
+// eslint-disable-next-line react-refresh/only-export-components
 export { Badge, badgeVariants }

@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import { useAuth } from '@/hooks/useAuth';
+import { useAuth } from '@/hooks/useAuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { CasheWordmark, B1_WASH } from '@/components/ui/Brand';
 import { motion } from 'framer-motion';
-import { fadeUpVariants } from '@/lib/animations';
+import { fadeUpVariants } from '@/lib/motionPresets';
 
 const taglineStyle: React.CSSProperties = {
   color: 'var(--color-muted)',

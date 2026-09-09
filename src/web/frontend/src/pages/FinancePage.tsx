@@ -7,7 +7,7 @@ import { PageCard, HeroCard, HighlightCard } from '@/components/ui/cards';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn, getBudgetTone, getGoalTone, getCategoryColor } from '@/lib/utils';
-import { springs, staggerContainerVariants, staggerItemVariants, slideInRightVariants } from '@/lib/animations';
+import { springs, staggerContainerVariants, staggerItemVariants, slideInRightVariants } from '@/lib/motionPresets';
 import { Pencil, Trash2, X, Check, ChevronDown, ChevronUp, ChevronLeft, ChevronRight } from 'lucide-react';
 import { ActiveTripCard } from '@/components/trips/ActiveTripCard';
 import { TransactionRow } from '@/components/transactions/TransactionRow';

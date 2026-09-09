@@ -11,7 +11,7 @@ import { TransactionForm } from '@/components/transactions/TransactionForm';
 import { useCategories } from '@/hooks/useCategories';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { api, type Transaction } from '@/api/client';
-import { slideInRightVariants, fadeUpVariants } from '@/lib/animations';
+import { slideInRightVariants, fadeUpVariants } from '@/lib/motionPresets';
 import { Plus } from 'lucide-react';
 import { LoadFailed } from '@/components/ui/LoadFailed';
 

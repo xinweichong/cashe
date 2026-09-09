@@ -1,6 +1,7 @@
 import { test, expect } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { ToastProvider, useToast } from '../toast';
+import { ToastProvider } from '../toast';
+import { useToast } from '@/hooks/useToastContext';
 
 function Trigger({ message }: { message: string }) {
   const toast = useToast();

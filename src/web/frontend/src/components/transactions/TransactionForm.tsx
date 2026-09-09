@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { useCreateTransaction } from '@/hooks/useTransactions';
-import { useToast } from '@/components/ui/toast';
+import { useToast } from '@/hooks/useToastContext';
 import { type Category } from '@/api/client';
 
 const TX_TYPES = [

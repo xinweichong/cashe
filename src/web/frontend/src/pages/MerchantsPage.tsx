@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { StatCard } from '@/components/ui/StatCard';
 import { MerchantProfile } from '@/components/merchants/MerchantProfile';
-import { slideInRightVariants } from '@/lib/animations';
+import { slideInRightVariants } from '@/lib/motionPresets';
 import { Search } from 'lucide-react';
 import { LoadFailed } from '@/components/ui/LoadFailed';
 import { TAG_COLORS, ALL_TAGS, formatSGD } from '@/lib/merchants';

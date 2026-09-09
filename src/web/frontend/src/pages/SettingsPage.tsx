@@ -22,10 +22,10 @@ import {
   useMerchantOverrides,
 } from '@/hooks/useCategories';
 import { useCurrentUser, useInvalidateCurrentUser } from '@/hooks/useCurrentUser';
-import { useAuth } from '@/hooks/useAuth';
+import { useAuth } from '@/hooks/useAuthContext';
 import { api, type Category, type SessionInfo } from '@/api/client';
 import { setCategoryColors, PALETTE, getCategoryColor } from '@/lib/utils';
-import { springs, staggerContainerVariants, staggerItemVariants } from '@/lib/animations';
+import { springs, staggerContainerVariants, staggerItemVariants } from '@/lib/motionPresets';
 import {
   Pencil, Trash2, Plus, X, ChevronDown,
   CheckCircle2, Wifi, WifiOff, AlertTriangle,

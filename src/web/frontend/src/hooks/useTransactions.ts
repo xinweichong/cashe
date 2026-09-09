@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, type Transaction } from '@/api/client';
-import { useToast } from '@/components/ui/toast';
+import { useToast } from '@/hooks/useToastContext';
 
 type TxCache =
   | Transaction[]

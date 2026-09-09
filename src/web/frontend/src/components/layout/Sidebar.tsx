@@ -6,7 +6,7 @@ import { motion } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/api/client';
 import { CasheWordmark, CasheIcon } from '@/components/ui/Brand';
-import { springs } from '@/lib/animations';
+import { springs } from '@/lib/motionPresets';
 
 export function Sidebar({ newExperience = false }: { newExperience?: boolean }) {
   const { data: settings } = useQuery({

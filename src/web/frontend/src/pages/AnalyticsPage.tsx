@@ -14,7 +14,7 @@ import { useQuery } from '@tanstack/react-query';
 import { formatCurrency } from '@/lib/utils';
 import { AlertTriangle, TrendingUp } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { springs } from '@/lib/animations';
+import { springs } from '@/lib/motionPresets';
 import { useChartTheme } from '@/lib/chartTheme';
 
 const PILLAR_ORDER = [

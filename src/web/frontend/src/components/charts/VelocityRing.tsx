@@ -1,6 +1,6 @@
 import { formatCurrency, getPaceColor } from '@/lib/utils';
 import { motion } from 'framer-motion';
-import { springs } from '@/lib/animations';
+import { springs } from '@/lib/motionPresets';
 import { useChartTheme } from '@/lib/chartTheme';
 
 interface VelocityData {

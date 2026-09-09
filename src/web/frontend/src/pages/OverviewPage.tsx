@@ -18,7 +18,8 @@ import { PageCard, HeroCard, HighlightCard } from '@/components/ui/cards';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LoadFailed } from '@/components/ui/LoadFailed';
 import { ActiveTripCard } from '@/components/trips/ActiveTripCard';
-import { springs, staggerContainerVariants, staggerItemVariants, AnimatedCurrency } from '@/lib/animations';
+import { springs, staggerContainerVariants, staggerItemVariants } from '@/lib/motionPresets';
+import { AnimatedCurrency } from '@/lib/animations';
 import { COLOR_HONEY, COLOR_TANGERINE, COLOR_CORAL, useChartTheme } from '@/lib/chartTheme';
 
 function toDateStr(d: Date): string {

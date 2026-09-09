@@ -2,7 +2,8 @@ import type { ReactNode } from 'react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { springs, DeltaBadge, Sparkline } from '@/lib/animations';
+import { springs } from '@/lib/motionPresets';
+import { DeltaBadge, Sparkline } from '@/lib/animations';
 
 type StatColor = 'teal' | 'warm' | 'coral' | 'mint' | 'default';
 

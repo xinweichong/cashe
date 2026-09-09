@@ -2,7 +2,7 @@ import { MAIN_DESTINATIONS } from '@/lib/navigation';
 import { NavLink } from 'react-router-dom';
 import { LayoutDashboard, List, BarChart3, Store, Wallet, Settings } from 'lucide-react';
 import { motion, useReducedMotion } from 'framer-motion';
-import { springs } from '@/lib/animations';
+import { springs } from '@/lib/motionPresets';
 
 const TABS = [
   { to: '/',             icon: LayoutDashboard, label: 'Overview'     },

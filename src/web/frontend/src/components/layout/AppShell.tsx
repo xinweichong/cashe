@@ -7,7 +7,7 @@ import { BottomTabs } from './BottomTabs';
 import { CasheWordmark, B2_WASH } from '@/components/ui/Brand';
 import { CommandPalette } from '@/components/CommandPalette';
 import { PullToRefresh } from './PullToRefresh';
-import { pageVariants } from '@/lib/animations';
+import { pageVariants } from '@/lib/motionPresets';
 
 export function AppShell({ newExperience = false }: { newExperience?: boolean }) {
   const location = useLocation();

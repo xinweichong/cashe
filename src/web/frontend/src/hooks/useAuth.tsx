@@ -1,15 +1,7 @@
-import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
+import { useState, useEffect, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { api } from '@/api/client';
-
-interface AuthContextType {
-  isAuthenticated: boolean;
-  login: (username: string, password: string) => Promise<boolean>;
-  logout: () => void;
-  loading: boolean;
-}
-
-const AuthContext = createContext<AuthContextType>(null!);
+import { AuthContext } from '@/hooks/useAuthContext';
 
 // Broadcasts a logout/expiry to other tabs sharing this browser profile.
 const AUTH_BROADCAST_KEY = 'cashe-auth-generation';
@@ -86,8 +78,4 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       {children}
     </AuthContext.Provider>
   );
-}
-
-export function useAuth() {
-  return useContext(AuthContext);
 }

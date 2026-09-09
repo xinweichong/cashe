@@ -2,7 +2,8 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/api/client';
-import { AuthProvider, useAuth } from '../useAuth';
+import { AuthProvider } from '../useAuth';
+import { useAuth } from '../useAuthContext';
 
 vi.mock('@/api/client', async (orig) => {
   const actual = await orig<typeof import('@/api/client')>();
