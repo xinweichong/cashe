@@ -163,9 +163,9 @@ class UserManager:
 
         bot = self._bot
 
-        def suggestion_callback(merchant, frequency, amount):
+        def suggestion_callback(merchant, frequency, amount, suggestion_id):
             if bot is not None:
-                return bot.notify_subscription_suggestion(username, merchant, frequency, amount)
+                return bot.notify_subscription_suggestion(username, merchant, frequency, amount, suggestion_id)
 
         poller = GmailPoller(
             credentials_path=credentials_path,

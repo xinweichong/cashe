@@ -386,6 +386,13 @@ class Storage:
                                 suggestion: Optional[dict] = None) -> None:
         with self._conn:
             if suggestion is not None:
+                existing = self._conn.execute(
+                    """SELECT 1 FROM ingestion_outbox WHERE kind = 'suggestion' AND transaction_id =
+                       (SELECT transaction_id FROM ingestion_outbox WHERE id = ?)""", (effect_id,),
+                ).fetchone()
+                if not existing:
+                    recorded = self._prepare_recurring_suggestion(None, suggestion["merchant"], suggestion["frequency"], suggestion["avg_amount"])
+                    suggestion = {**suggestion, "suggestion_id": recorded["id"]}
                 self._conn.execute(
                     """INSERT OR IGNORE INTO ingestion_outbox(transaction_id, kind, payload)
                        SELECT transaction_id, 'suggestion', ? FROM ingestion_outbox WHERE id = ?""",
@@ -2023,26 +2030,62 @@ class Storage:
         return sub_id
 
     @_locked
-    def prepare_recurring_suggestion(self, chat_id: int, merchant: str, frequency: str, avg_amount: float) -> dict:
-        if type(chat_id) is not int or chat_id == 0:
+    def prepare_recurring_suggestion(self, chat_id: int | None, merchant: str, frequency: str, avg_amount: float) -> dict:
+        with self._conn:
+            return self._prepare_recurring_suggestion(chat_id, merchant, frequency, avg_amount)
+
+    def _prepare_recurring_suggestion(self, chat_id, merchant, frequency, avg_amount) -> dict:
+        """Caller owns the Storage lock and transaction."""
+        if chat_id is not None and (type(chat_id) is not int or chat_id == 0):
             raise ValueError("Suggestion needs a Telegram chat identity")
         if not isinstance(merchant, str) or not merchant.strip() or frequency not in ("weekly", "biweekly", "monthly"):
             raise ValueError("Invalid recurring suggestion")
         amount = normalize_transaction_fields({"amount": avg_amount})["amount"]
         row = self._conn.execute(
-            """SELECT * FROM recurring_suggestions WHERE chat_id = ? AND merchant = ? AND frequency = ?
+            """SELECT * FROM recurring_suggestions WHERE (chat_id IS ? OR ? IS NULL) AND merchant = ? AND frequency = ?
                AND avg_amount = ? AND status = 'pending' ORDER BY created_at, id LIMIT 1""",
-            (chat_id, merchant, frequency, amount),
+            (chat_id, chat_id, merchant, frequency, amount),
         ).fetchone()
         if row:
             return dict(row)
         suggestion_id = secrets.token_hex(16)
-        with self._conn:
-            self._conn.execute(
-                "INSERT INTO recurring_suggestions(id, chat_id, merchant, frequency, avg_amount) VALUES (?, ?, ?, ?, ?)",
-                (suggestion_id, chat_id, merchant, frequency, amount),
-            )
+        self._conn.execute(
+            "INSERT INTO recurring_suggestions(id, chat_id, merchant, frequency, avg_amount) VALUES (?, ?, ?, ?, ?)",
+            (suggestion_id, chat_id, merchant, frequency, amount),
+        )
         return dict(self._conn.execute("SELECT * FROM recurring_suggestions WHERE id = ?", (suggestion_id,)).fetchone())
+
+    @_locked
+    def prepare_ingestion_suggestion(self, effect_id: int) -> dict:
+        """Upgrade old pending outbox payloads once, before optional delivery."""
+        job = self._conn.execute("SELECT payload FROM ingestion_outbox WHERE id = ? AND kind = 'suggestion'", (effect_id,)).fetchone()
+        if job is None:
+            raise ValueError("Suggestion follow-up not found")
+        payload = json.loads(job["payload"])
+        with self._conn:
+            if "suggestion_id" not in payload:
+                recorded = self._prepare_recurring_suggestion(None, payload["merchant"], payload["frequency"], payload["avg_amount"])
+                payload["suggestion_id"] = recorded["id"]
+                self._conn.execute("UPDATE ingestion_outbox SET payload = ? WHERE id = ?", (json.dumps(payload), effect_id))
+            row = self._conn.execute("SELECT * FROM recurring_suggestions WHERE id = ?", (payload["suggestion_id"],)).fetchone()
+            if row is None:
+                raise ValueError("Recorded suggestion not found")
+        return dict(row)
+
+    @_locked
+    def bind_recurring_suggestion(self, suggestion_id: str, chat_id: int) -> dict | None:
+        if type(chat_id) is not int or chat_id == 0:
+            raise ValueError("Suggestion needs a Telegram chat identity")
+        row = self._conn.execute("SELECT * FROM recurring_suggestions WHERE id = ?", (suggestion_id,)).fetchone()
+        if row is None:
+            raise ValueError("Suggestion not found")
+        if row["status"] != "pending":
+            return None
+        if row["chat_id"] not in (None, chat_id):
+            raise SubscriptionMatchConflict("Suggestion belongs to another chat")
+        with self._conn:
+            self._conn.execute("UPDATE recurring_suggestions SET chat_id = ? WHERE id = ?", (chat_id, suggestion_id))
+        return {**dict(row), "chat_id": chat_id}
 
     @_locked
     def get_recurring_review(self, limit=50, offset=0) -> dict:
@@ -2064,11 +2107,11 @@ class Storage:
         return self.resolve_recurring_suggestion(suggestion_id, row["chat_id"], action)
 
     @_locked
-    def resolve_recurring_suggestion(self, suggestion_id: str, chat_id: int, action: str) -> int | None:
+    def resolve_recurring_suggestion(self, suggestion_id: str, chat_id: int | None, action: str) -> int | None:
         if action not in ("accept", "dismiss"):
             raise ValueError("Invalid suggestion action")
         row = self._conn.execute(
-            "SELECT * FROM recurring_suggestions WHERE id = ? AND chat_id = ?", (suggestion_id, chat_id),
+            "SELECT * FROM recurring_suggestions WHERE id = ? AND chat_id IS ?", (suggestion_id, chat_id),
         ).fetchone()
         if row is None:
             raise ValueError("Suggestion not found; review subscriptions in the app")

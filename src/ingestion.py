@@ -223,11 +223,11 @@ class IngestionPipeline:
                         suggestion = {"merchant": tx["merchant"], "frequency": rec["frequency"],
                                       "avg_amount": rec["avg_amount"]}
                 elif job["kind"] == "suggestion":
-                    if not self.storage.find_subscription_by_merchant(payload["merchant"]):
-                        if self._on_recurring_pattern is None:
-                            return
+                    recorded = self.storage.prepare_ingestion_suggestion(job["id"])
+                    if (recorded["status"] == "pending" and self._on_recurring_pattern is not None
+                            and not self.storage.find_subscription_by_merchant(recorded["merchant"])):
                         future = self._on_recurring_pattern(
-                            payload["merchant"], payload["frequency"], payload["avg_amount"],
+                            recorded["merchant"], recorded["frequency"], recorded["avg_amount"], recorded["id"],
                         )
                 elif job["kind"] == "notification":
                     if self.on_transaction is None:

@@ -1518,7 +1518,7 @@ class TelegramBotService:
         )
         return fut
 
-    def notify_subscription_suggestion(self, username: str, merchant: str, frequency: str, avg_amount: float):
+    def notify_subscription_suggestion(self, username: str, merchant: str, frequency: str, avg_amount: float, suggestion_id: str | None = None):
         """Suggest adding a detected recurring pattern as a subscription. Thread-safe bridge."""
         chat_id = self._resolve_chat_id(username)
         if not chat_id:
@@ -1532,20 +1532,26 @@ class TelegramBotService:
                 raise ValueError("Suggestion user not found")
             storage = ctx.storage
         fut = asyncio.run_coroutine_threadsafe(
-            self._async_notify_subscription_suggestion(chat_id, merchant, frequency, avg_amount, storage),
+            self._async_notify_subscription_suggestion(chat_id, merchant, frequency, avg_amount, storage, suggestion_id),
             self._loop,
         )
         return fut
 
     async def _async_notify_subscription_suggestion(
-        self, chat_id: int, merchant: str, frequency: str, avg_amount: float, storage=None,
+        self, chat_id: int, merchant: str, frequency: str, avg_amount: float, storage=None, suggestion_id: str | None = None,
     ) -> None:
         storage = storage if storage is not None else self.storage
         loop = asyncio.get_running_loop()
-        suggestion = await loop.run_in_executor(
-            None, storage.prepare_recurring_suggestion, chat_id, merchant, frequency, avg_amount,
-        )
+        if suggestion_id is None:
+            suggestion = await loop.run_in_executor(
+                None, storage.prepare_recurring_suggestion, chat_id, merchant, frequency, avg_amount,
+            )
+        else:
+            suggestion = await loop.run_in_executor(None, storage.bind_recurring_suggestion, suggestion_id, chat_id)
+            if suggestion is None:
+                return
         suggestion_id = suggestion["id"]
+        merchant, frequency, avg_amount = suggestion["merchant"], suggestion["frequency"], suggestion["avg_amount"]
         text = (
             f"🔄 Recurring pattern: *{self._escape_md(merchant)}* charged "
             f"~${avg_amount:.2f} ({frequency})\\. Add as subscription?"

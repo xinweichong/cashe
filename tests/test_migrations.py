@@ -10,7 +10,7 @@ def test_migrations_preserve_old_transactions_and_are_idempotent():
     migrate(conn)
     migrate(conn)
     assert conn.execute("SELECT * FROM transactions").fetchall() == [(42, "original-id", 1.25, None)]
-    assert conn.execute("SELECT version FROM schema_migrations").fetchall() == [(1,), (2,), (3,), (4,), (5,), (6,), (7,), (8,), (9,), (10,)]
+    assert conn.execute("SELECT version FROM schema_migrations").fetchall() == [(1,), (2,), (3,), (4,), (5,), (6,), (7,), (8,), (9,), (10,), (11,)]
     assert conn.execute("SELECT COUNT(*) FROM source_events").fetchone()[0] == 0
     conn.close()
 
@@ -56,4 +56,23 @@ def test_subscription_confirmation_migration_does_not_backfill_legacy(monkeypatc
     assert conn.execute('SELECT * FROM subscription_confirmations').fetchall() == []
     assert conn.execute('SELECT * FROM subscription_suggestion_acceptances').fetchall() == []
     assert conn.execute('SELECT * FROM recurring_suggestions').fetchall() == []
+    conn.close()
+
+
+def test_unbound_suggestion_migration_preserves_old_chat_binding(monkeypatch):
+    import src.migrations as migrations
+    conn = sqlite3.connect(':memory:')
+    released = migrations.MIGRATIONS
+    monkeypatch.setattr(migrations, 'MIGRATIONS', released[:10])
+    migrate(conn)
+    conn.execute("""INSERT INTO recurring_suggestions(id, chat_id, merchant, frequency, avg_amount, status, subscription_id)
+        VALUES ('retained', 123, 'Original', 'monthly', 12, 'accepted', 42)""")
+    before = conn.execute('SELECT * FROM recurring_suggestions').fetchall()
+    conn.commit()
+    monkeypatch.setattr(migrations, 'MIGRATIONS', released)
+    migrate(conn)
+    migrate(conn)
+    assert conn.execute('SELECT * FROM recurring_suggestions').fetchall() == before
+    conn.execute("INSERT INTO recurring_suggestions(id, merchant, frequency, avg_amount) VALUES ('unbound', 'Web', 'weekly', 1)")
+    assert conn.execute("SELECT chat_id FROM recurring_suggestions WHERE id='unbound'").fetchone()[0] is None
     conn.close()

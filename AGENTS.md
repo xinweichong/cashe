@@ -665,4 +665,10 @@ System/light/dark preferences are supplied by `ThemeProvider` and selected in Pr
 
 - Authenticated `/api/v2/recurring/review` exposes bounded pending suggestions with only opaque ID, merchant, and frequency. Do not expose destination chat IDs or treat stored observed averages as SGD.
 - Web accept/dismiss resolves inside the authenticated user's Storage through `resolve_recurring_review`, which delegates under the same lock to Telegram's command. Browser requests never supply chat identity. Cross-channel replay/conflict/deletion rules remain shared.
-- Review lists already-prepared durable suggestions; generating suggestions independently of Telegram and adding Home suggestion counts remain pending. Invalidate `recurring-review`, subscription/upcoming, Plan, and Home queries after resolution.
+- Review lists durable suggestions from live ingestion analysis independently of Telegram linkage; adding Home suggestion counts remains pending. Invalidate `recurring-review`, subscription/upcoming, Plan, and Home queries after resolution.
+
+### Telegram-independent recurring capture
+
+- Migration 11 preserves existing recurring suggestions while allowing an unbound NULL chat. Successful recurring analysis atomically commits the Review record, a delivery job carrying its ID, and acknowledgement. `_prepare_recurring_suggestion` is an uncommitted helper owned by the caller transaction.
+- Suggestion delivery callbacks now receive `(merchant, frequency, avg_amount, suggestion_id)`. The bot binds that retained pending ID before sending and uses its stored fields. Already resolved IDs skip sending; never recreate them on delivery retry or silently overwrite an existing different chat binding.
+- Missing Telegram linkage/callback leaves the Review record available and completes optional delivery without sending; no bulk replay on later linkage. Pending legacy delivery jobs gain an ID without redetection. Historical capture still creates no follow-ups; completed legacy jobs are not backfilled.

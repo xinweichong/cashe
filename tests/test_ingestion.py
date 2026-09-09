@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import MagicMock
+from unittest.mock import ANY, MagicMock
 
 from src.ingestion import IngestionPipeline
 from src.parsers.base import ParseResult
@@ -76,7 +76,7 @@ class TestIngestionPipelineIngest:
         callback = MagicMock()
         pipeline = IngestionPipeline(storage, detector=detector, on_recurring_pattern=callback)
         pipeline.ingest(_result(merchant="Spotify"))
-        callback.assert_called_once_with("Spotify", "monthly", 12.50)
+        callback.assert_called_once_with("Spotify", "monthly", 12.50, ANY)
 
     def test_suggestion_suppressed_when_subscription_exists(self, storage, in_memory_db):
         """Suggestion callback is NOT invoked when a subscription already exists for the merchant."""

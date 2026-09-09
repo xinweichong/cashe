@@ -106,6 +106,18 @@ MIGRATIONS = (
         )""",
         "CREATE INDEX idx_recurring_suggestions_pending ON recurring_suggestions(chat_id, merchant, frequency, status)",
     )),
+    (11, (
+        "ALTER TABLE recurring_suggestions RENAME TO recurring_suggestions_v10",
+        """CREATE TABLE recurring_suggestions (
+            id TEXT PRIMARY KEY, chat_id INTEGER, merchant TEXT NOT NULL,
+            frequency TEXT NOT NULL, avg_amount REAL NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'accepted', 'dismissed')),
+            subscription_id INTEGER, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )""",
+        "INSERT INTO recurring_suggestions SELECT * FROM recurring_suggestions_v10",
+        "DROP TABLE recurring_suggestions_v10",
+        "CREATE INDEX idx_recurring_suggestions_pending ON recurring_suggestions(chat_id, merchant, frequency, status)",
+    )),
 )
 
 

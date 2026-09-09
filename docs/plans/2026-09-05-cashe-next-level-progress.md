@@ -534,3 +534,16 @@ Durable full-merchant suggestions were committed as `fca0a56`; this continuation
 - Updated operator/agent documentation. No schema change, production data/service change, live Telegram/model call, push, or deployment. Browser/device visual acceptance remains unverified.
 
 Verification: **1078 backend tests passed** (four existing datetime deprecation warnings), **88 frontend tests passed**, production build and focused Review/test lint passed. Three new backend cases cover pending-only pagination/full counts, sanitized response fields, paging/action validation, shared web/Telegram resolution and replay/conflict behavior, isolation, missing IDs, and authentication. Four UI cases cover acceptance and billing links, dismissal/refresh, retained conflict errors, failed-load retry, inferred labels, and navigation after a later page empties. Whitespace checks passed. This verified increment is committed separately.
+
+
+## 2026-09-09 continuation — recurring Review independent of Telegram
+
+Web recurring Review was committed as `4a43721`; this continuation started with a clean working tree and resumed across the date change.
+
+- Migration 11 allows unbound suggestion records while preserving existing IDs, fields, chat bindings, resolution states, and indexes. Successful live recurring analysis atomically commits a Review record, its delivery job carrying the ID, and analysis acknowledgement.
+- Suggestions are available without a Telegram callback or linked account. Optional delivery completes without sending in those cases; linking later does not bulk-send old completed jobs. Pending legacy jobs acquire a durable ID without rerunning analysis; completed legacy jobs are not backfilled.
+- Delivery callbacks carry the exact suggestion ID through UserManager. The bot binds unbound pending records to the destination chat and reads stored fields. It does not overwrite a different binding or recreate/send an already resolved record. Web resolution handles unbound records; Telegram requires a matching bound chat.
+- Identical pending fields reuse one record, including after binding. Notification delivery remains at least once, and a race after the final pending check can still send a stale protected button. Historical capture, detector heuristics, and observed-average money semantics remain unchanged.
+- Updated operator/agent documentation. Home suggestion counts, richer evidence/amount provenance, and notification controls remain pending. No frontend changes, production DB migration, live Telegram/model call, service change, push, or deployment.
+
+Verification: **1085 backend tests passed** (four existing datetime deprecation warnings). Seven new cases cover no-callback Review visibility, upgrading pending legacy jobs without redetection, stable retry identity and web-dismissal suppression, rollback/retry when Review insertion fails, binding/stored-field authority and skipped resolved delivery, migration preservation of existing bindings/states, and real detector behavior after historical versus live capture. Focused ingestion/Telegram/migration checks and whitespace checks passed. No frontend files changed; the prior **88 frontend tests**, production build, and focused Review lint remain the baseline. This verified increment is committed separately.

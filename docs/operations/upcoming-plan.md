@@ -57,7 +57,7 @@ Legacy callback payloads still contain truncated merchant text, so these guarant
 
 ## Durable recurring suggestions
 
-Migration 10 adds `recurring_suggestions` in each user's database. Before a new notification is sent, Cashe commits the complete merchant, frequency, observed average, destination chat, and pending state. A short opaque ID replaces merchant text in the accept/dismiss buttons, keeping Unicode and delimiter-containing names intact and callback payloads below 64 bytes. Persistence happens off the bot event loop, and sending holds no Storage lock. The existing notification Future still gates outbox acknowledgement.
+Migration 10 adds `recurring_suggestions` in each user's database. Cashe commits the complete merchant, frequency, observed average, and pending state before optional notification delivery; a destination chat is bound when delivery is attempted. A short opaque ID replaces merchant text in the accept/dismiss buttons, keeping Unicode and delimiter-containing names intact and callback payloads below 64 bytes. Persistence happens off the bot event loop, and sending holds no Storage lock. The existing notification Future still gates outbox acknowledgement.
 
 Pending suggestions with identical chat, merchant, frequency, and average reuse their record during retries. Both callbacks resolve the ID inside the authenticated user's Storage and check its destination chat. Acceptance atomically resolves the record and creates/reuses a uniquely matching schedule with confirmation. Replay retains the accepted schedule after edits; deletion leaves a retained link so the same button cannot resurrect it. Dismissal is also durable and replayable. Competing accept/dismiss actions cannot overwrite one another.
 
@@ -72,4 +72,15 @@ Authenticated `GET /api/v2/recurring/review` lists pending durable suggestions w
 
 Authenticated `POST /api/v2/recurring/suggestions/{id}/accept` or `/dismiss` resolves through the same Storage command as Telegram. Web authentication establishes the owning user; the browser does not supply a chat identity. Responses include only status and the accepted schedule ID (null for dismissal). Missing/other-user IDs return 404, conflicting actions or deleted accepted schedules 409, and invalid actions/paging 422. Same-action replay remains safe across web and Telegram.
 
-Review displays a separate recurring group with pagination, loading/failure/empty states, retryable action errors, refresh, and a billing-details link after acceptance. Successful actions refresh recurring review, subscriptions, expected charges, Plan, and Home. The group lists records already prepared for Telegram delivery; this increment does not detect additional patterns or create suggestions for accounts without linked Telegram. It does not change inferred money semantics or add a Home suggestion count.
+Review displays a separate recurring group with pagination, loading/failure/empty states, retryable action errors, refresh, and a billing-details link after acceptance. Successful actions refresh recurring review, subscriptions, expected charges, Plan, and Home. The group lists durable suggestions recorded by successful live ingestion analysis, including accounts without linked Telegram. It does not change inferred money semantics or add a Home suggestion count.
+
+
+## Suggestions independent of Telegram
+
+Migration 11 makes the suggestion chat binding nullable, preserving every existing record and index. Successful ingestion recurring analysis now commits an unbound Review suggestion, its delivery job carrying the suggestion ID, and analysis acknowledgement in one transaction. Identical pending fields reuse an existing record, including one already bound to a chat. Historical capture still creates no follow-up jobs.
+
+Telegram delivery is optional. A missing callback or unlinked Telegram does not prevent Review visibility, and the delivery job completes without sending; linking later does not bulk-send old completed jobs. Existing pending legacy suggestion jobs acquire a durable ID before optional delivery, without rerunning detection. Already completed legacy jobs are not backfilled.
+
+The callback carries the retained suggestion ID through UserManager to the bot. Sending binds an unbound pending record to the destination chat; a different existing chat binding is never overwritten. It reads fields from the record, not from stale callback arguments. Already resolved records skip delivery and are not recreated by an old job. A race after that check can still deliver a stale button, whose action remains protected by the shared resolution command.
+
+Binding and pending/resolved checks use the Storage lock; sending remains outside that lock. Web resolution works for unbound records, while a Telegram callback must match a recorded chat. Notification delivery remains at least once. Detector heuristics, observed-average currency semantics, and historical-import behavior are unchanged.

@@ -1,7 +1,7 @@
 from concurrent.futures import Future, ThreadPoolExecutor
 import threading
 import sqlite3
-from unittest.mock import MagicMock
+from unittest.mock import ANY, MagicMock
 
 import pytest
 
@@ -88,7 +88,7 @@ def test_recurring_failure_retries_and_suggestion_survives_new_detector(storage)
     replacement_detector = MagicMock(side_effect=AssertionError('must not recompute'))
     replacement = IngestionPipeline(storage, detector=replacement_detector, on_recurring_pattern=delivered)
     replacement.process_outbox()
-    delivered.assert_called_once_with('Cafe', 'monthly', 12.5)
+    delivered.assert_called_once_with('Cafe', 'monthly', 12.5, ANY)
     replacement_detector.detect.assert_not_called()
     assert storage.list_ingestion_effects() == []
 
@@ -203,4 +203,83 @@ def test_crash_after_send_replays_at_least_once(storage, monkeypatch):
     monkeypatch.setattr(storage, 'finish_ingestion_effect', finish)
     IngestionPipeline(storage, on_transaction=sent).retry_pending()
     assert sent.call_count == 2
+    assert storage.list_ingestion_effects() == []
+
+
+def test_recurring_capture_is_reviewable_without_notification_callback(storage):
+    detector = MagicMock()
+    detector.detect.return_value = {'frequency': 'monthly', 'avg_amount': 12.5}
+    pipeline = IngestionPipeline(storage, detector=detector, on_transaction=lambda tx: None)
+    pipeline.ingest(purchase())
+    report = storage.get_recurring_review()
+    assert report['total'] == 1
+    assert report['items'][0]['merchant'] == 'Cafe'
+    assert storage.list_ingestion_effects() == []
+    suggestion_id = report['items'][0]['id']
+    # Unbound records cannot be acted on by a Telegram chat.
+    with pytest.raises(ValueError, match='not found'):
+        storage.resolve_recurring_suggestion(suggestion_id, 123, 'accept')
+    assert storage.resolve_recurring_review(suggestion_id, 'accept') is not None
+
+
+def test_legacy_suggestion_job_gets_review_record_without_redetection(storage):
+    import json
+    tx = IngestionPipeline(storage, on_transaction=lambda tx: None).ingest(purchase())
+    storage._conn.execute("INSERT INTO ingestion_outbox(transaction_id, kind, payload) VALUES (?, 'suggestion', ?)",
+                          (tx['id'], json.dumps({'merchant': 'Cafe', 'frequency': 'monthly', 'avg_amount': 12.5})))
+    storage._conn.commit()
+    IngestionPipeline(storage).process_outbox()
+    report = storage.get_recurring_review()
+    assert report['total'] == 1
+    payload = json.loads(storage._conn.execute("SELECT payload FROM ingestion_outbox WHERE kind='suggestion'").fetchone()[0])
+    assert payload['suggestion_id'] == report['items'][0]['id']
+    assert storage.list_ingestion_effects() == []
+
+
+def test_failed_delivery_keeps_identity_and_web_dismissal_stops_retry(storage):
+    detector = MagicMock()
+    detector.detect.return_value = {'frequency': 'monthly', 'avg_amount': 12.5}
+    delivery = MagicMock(side_effect=RuntimeError('offline'))
+    pipeline = IngestionPipeline(storage, detector=detector, on_transaction=lambda tx: None, on_recurring_pattern=delivery)
+    pipeline.ingest(purchase())
+    suggestion_id = storage.get_recurring_review()['items'][0]['id']
+    assert delivery.call_args.args[3] == suggestion_id
+    pipeline.process_outbox()
+    assert delivery.call_args.args[3] == suggestion_id
+    assert storage.get_recurring_review()['total'] == 1
+    storage.resolve_recurring_review(suggestion_id, 'dismiss')
+    pipeline.process_outbox()
+    assert delivery.call_count == 2
+    assert storage.get_recurring_review()['total'] == 0
+    assert storage.list_ingestion_effects() == []
+
+
+def test_review_insert_failure_keeps_analysis_retryable(storage):
+    storage._conn.execute("""CREATE TRIGGER reject_review BEFORE INSERT ON recurring_suggestions
+        BEGIN SELECT RAISE(ABORT, 'review unavailable'); END""")
+    detector = MagicMock()
+    detector.detect.return_value = {'frequency': 'monthly', 'avg_amount': 12.5}
+    pipeline = IngestionPipeline(storage, detector=detector, on_transaction=lambda tx: None)
+    assert pipeline.ingest(purchase()) is not None
+    assert storage.get_recurring_review()['total'] == 0
+    assert [r['kind'] for r in storage.list_ingestion_effects()] == ['recurring']
+    storage._conn.execute('DROP TRIGGER reject_review')
+    pipeline.process_outbox()
+    assert storage.get_recurring_review()['total'] == 1
+    assert storage.list_ingestion_effects() == []
+
+
+def test_real_detector_creates_review_after_live_capture_without_telegram(storage):
+    from dataclasses import replace
+    from datetime import timedelta
+    from src.config import local_now
+    pipeline = IngestionPipeline(storage, on_transaction=lambda tx: None)
+    today = local_now().date()
+    for days in (14, 7):
+        pipeline.ingest(replace(purchase(f'history-{days}'), transaction_date=(today - timedelta(days=days)).isoformat()), historical=True)
+    assert storage.get_recurring_review()['total'] == 0
+    pipeline.ingest(replace(purchase('live'), transaction_date=today.isoformat()))
+    report = storage.get_recurring_review()
+    assert report['total'] == 1
+    assert report['items'][0]['frequency'] == 'weekly'
     assert storage.list_ingestion_effects() == []

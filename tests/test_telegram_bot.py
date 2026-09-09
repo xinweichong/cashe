@@ -1247,3 +1247,22 @@ async def test_suggestion_bridge_persists_only_in_target_user_storage(bot_servic
     assert conn.execute('SELECT merchant FROM recurring_suggestions').fetchone()[0] == 'Cafe'
     assert bot_service.storage._conn.execute('SELECT COUNT(*) FROM recurring_suggestions').fetchone()[0] == 0
     conn.close()
+
+
+@pytest.mark.asyncio
+async def test_delivery_binds_existing_web_suggestion_and_skips_resolved(bot_service):
+    storage = bot_service.storage
+    suggestion = storage.prepare_recurring_suggestion(None, 'Original', 'monthly', 12)
+    bot_service.app = SimpleNamespace(bot=SimpleNamespace(send_message=AsyncMock()))
+    await bot_service._async_notify_subscription_suggestion(123, 'Wrong', 'weekly', 999, storage, suggestion['id'])
+    assert 'Original' in bot_service.app.bot.send_message.call_args.kwargs['text']
+    assert 'Wrong' not in bot_service.app.bot.send_message.call_args.kwargs['text']
+    assert storage.get_recurring_review()['total'] == 1
+    # A later analysis reuses the pending record even after Telegram binding.
+    assert storage.prepare_recurring_suggestion(None, 'Original', 'monthly', 12)['id'] == suggestion['id']
+    with pytest.raises(ValueError):
+        await bot_service._async_notify_subscription_suggestion(999, 'Original', 'monthly', 12, storage, suggestion['id'])
+    storage.resolve_recurring_review(suggestion['id'], 'dismiss')
+    await bot_service._async_notify_subscription_suggestion(123, 'Original', 'monthly', 12, storage, suggestion['id'])
+    assert bot_service.app.bot.send_message.call_count == 1
+    assert storage.get_recurring_review()['total'] == 0
