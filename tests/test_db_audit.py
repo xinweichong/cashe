@@ -74,6 +74,36 @@ def test_intentionally_retained_evidence_is_informational(tmp_path):
     conn.close()
 
 
+def test_recurring_suggestion_orphan_subscription_link_is_informational(tmp_path):
+    path = tmp_path / 'user.db'
+    conn = init_db(str(path))
+    conn.execute(
+        "INSERT INTO recurring_suggestions(id, chat_id, merchant, frequency, avg_amount, status, subscription_id) "
+        "VALUES ('sugg-1', 1, 'Netflix', 'monthly', 15.98, 'accepted', 987654)"
+    )
+    conn.commit()
+    report = audit_database(path)
+    assert report['status'] == 'ok'
+    assert report['retained_links_to_deleted_subscriptions']['recurring_suggestions'] == 1
+    assert report['foreign_key_violations'] == []
+    conn.close()
+
+
+def test_subscription_suggestion_acceptance_orphan_link_is_informational(tmp_path):
+    path = tmp_path / 'user.db'
+    conn = init_db(str(path))
+    conn.execute(
+        "INSERT INTO subscription_suggestion_acceptances(message_key, merchant, frequency, subscription_id) "
+        "VALUES ('msg-1', 'Netflix', 'monthly', 987654)"
+    )
+    conn.commit()
+    report = audit_database(path)
+    assert report['status'] == 'ok'
+    assert report['retained_links_to_deleted_subscriptions']['subscription_suggestion_acceptances'] == 1
+    assert report['foreign_key_violations'] == []
+    conn.close()
+
+
 def test_missing_constraint_cannot_hide_orphans(tmp_path):
     path = tmp_path / 'user.db'
     conn = init_db(str(path))

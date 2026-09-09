@@ -80,10 +80,17 @@ def audit_database(path: Path) -> dict:
 
         # These links deliberately survive transaction deletion. They are not FKs.
         retained = {}
+        # A suggestion/acceptance is provenance of what was suggested/accepted at
+        # the time — its subscription_id is a historical pointer that deliberately
+        # survives subscription deletion, not a strict current-state FK either.
+        retained_subscription_links = {}
         if kind == "user":
             for table in ("source_events", "ingestion_outbox", "transaction_requests"):
                 if table in tables:
                     retained[table] = _orphan_count(conn, table, "transaction_id", "transactions", "id")
+            for table in ("recurring_suggestions", "subscription_suggestion_acceptances"):
+                if table in tables:
+                    retained_subscription_links[table] = _orphan_count(conn, table, "subscription_id", "subscriptions", "id")
         applied = []
         pending = []
         unknown = []
@@ -102,6 +109,7 @@ def audit_database(path: Path) -> dict:
             "missing_foreign_keys": missing_constraints,
             "absent_feature_tables": sorted(missing_tables),
             "retained_links_to_deleted_transactions": retained,
+            "retained_links_to_deleted_subscriptions": retained_subscription_links,
             "applied_migrations": applied,
             "pending_migrations": pending,
             "unknown_migrations": unknown,
