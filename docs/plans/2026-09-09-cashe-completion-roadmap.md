@@ -108,6 +108,16 @@ Done, with production evidence (not just synthetic tests): `db_audit` extended f
 
 Golden fixtures for zero-, two-, and three-decimal currencies, large values, unknown codes, missing/legacy parity rates, settlement precedence, per-row rounding, and preserved corrections. Upgrade twice without change; compare all financial-table totals on representative restored data. No writer silently creates a resolved foreign conversion from missing data. Rollback uses the validated snapshot/replay procedure.
 
+**Status (2026-09-09): schema and backfill done and verified against production; readers/writers not yet switched.**
+
+Done: `src/money.py` (exponent lookup, integer minor units, Decimal half-up rounding, safe client bounds — golden fixtures for 0/2/3-decimal currencies); migration 12 (additive, nullable columns on `transactions`, `budgets`, `goals`, `goal_contributions`, `upcoming_transactions`; tolerates a missing baseline table since those predate the migration system); `src/canonical_money.py` (this app's native/resolved/indicative/unresolved rules, legacy `1.0` never trusted as a real rate, unknown currency reported as an issue not skipped); `scripts/backfill_canonical_money.py` (dry-run-first, all five tables). Applied to real production data: 320/320 transactions (312 native, 8 indicative, 0 unresolved, 0 issues), 2/2 budgets, 1/1 upcoming charge — dry run, apply, and idempotency re-run all confirmed, plus a manual spot-check of three indicative rows verified the stored `original_minor_units`/`reporting_minor_units` against hand-computed `amount`/`amount × exchange_rate`. Found and fixed a real gap along the way: `money.to_minor_units` raised a raw `decimal.InvalidOperation` instead of `ValueError` for a non-numeric string (reachable via SQLite's dynamic typing on a REAL-affinity column).
+
+**Follow-up (not done):**
+- `ExchangeRateService.get_rate`'s numeric-only fallback contract — new captures still don't populate `conversion_source='api'`/`conversion_quoted_at`; every row today is either `native` or backfill-derived `indicative`/`unresolved`.
+- Settlement precedence — `settlement_evidence_id` exists as a column but nothing populates or reads it (waits on R07 CSV import).
+- Shadow-read/reconcile/switch — no reader or writer uses the new columns yet; `spending_facts.convert_legacy_sgd` and all legacy float-math consumers are unchanged and still authoritative.
+- Rollback rehearsal specifically for this migration (the general restore/audit drill from R01 was exercised, not a rollback of migration 12 itself).
+
 ## R03 — Finish shared transaction commands and v2 Transaction
 
 **Implementation**
