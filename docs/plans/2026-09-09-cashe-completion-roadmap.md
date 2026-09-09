@@ -138,11 +138,13 @@ Done: migration 13 (`transactions.revision`, `transaction_mutations`, `deleted_t
 
 `POST /api/v2/transactions` (`TransactionCreate`) and `DELETE /api/v2/transactions/{id}` (`TransactionDeletion`) now round out the typed command surface: create returns the same canonical-money/revision `TransactionV2` shape as correct/update (reusing `create_web_transaction`'s existing `Idempotency-Key` replay behavior), and delete returns the pre-deletion snapshot plus `deleted_at` instead of a bare status. Both are auth-scoped like the existing PUT route. v1 `POST`/`DELETE /api/transactions` are untouched.
 
+`POST /api/v2/transactions/{id}/undo` (`TransactionUndo`) reads `transaction_mutations` back: it reverts a transaction to its state before its most recent recorded correction (the mutation whose `revision_after` equals the transaction's current revision), applying the stored `old` values including the canonical-money columns when amount/currency/exchange_rate changed. It always targets whichever correction most recently happened rather than a specific past edit, so an intervening edit changes what gets undone instead of blocking it; `expected_revision` lets a caller detect that and gets the same 409-with-current-state shape as PUT. The undo is itself appended as a new mutation with old/new swapped, keeping the log append-only — a second undo redoes the edit.
+
 **Follow-up (not done):**
 - TypeScript contract generation from the v2 schema + CI drift check.
 - Routing Telegram `/add`/`/cash`, NL confirmation, and future imports/OCR through the same shared command path — they still call `Storage.create_manual_transaction`/`update_transaction` directly, not through the v2 HTTP contract.
 - Frontend still uses the v1 client (`api/client.ts`) for all transaction CRUD; nothing consumes `TransactionV2` yet.
-- Undo (restoring a prior revision from `transaction_mutations`, or a deleted transaction from `deleted_transactions`) — the history is recorded but nothing reads it back yet.
+- Restoring a deleted transaction from `deleted_transactions` — that table only retains a handful of legacy columns (amount/currency/merchant/category/transaction_date/type), not enough for a full restore (missing description, exchange_rate, canonical money/conversion columns); needs a migration before it can be built.
 - Exit checks not yet exercised: crash/replay, atomic remember-rule updates under conflict, deletion/replay interaction with the retry-key idempotency table, and identical accepted values across clients.
 
 ## R04 — Migrate every financial consumer to shared facts
