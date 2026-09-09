@@ -87,7 +87,8 @@ Then install the timer:
 ```sh
 sudo cp deploy/cashe-backup.service deploy/cashe-backup.timer /etc/systemd/system/
 sudo mkdir -p /etc/cashe && sudo touch /etc/cashe/backup.env && sudo chmod 600 /etc/cashe/backup.env
-# Put R2_ENDPOINT_URL, R2_BACKUP_BUCKET, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY in that file.
+# Put R2_ENDPOINT_URL, R2_BACKUP_BUCKET, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY,
+# and HEALTHCHECK_URL (from healthchecks.io or similar) in that file.
 sudo systemctl daemon-reload
 sudo systemctl enable --now cashe-backup.timer
 sudo systemctl start cashe-backup.service   # run once immediately to verify
@@ -95,6 +96,8 @@ sudo systemctl status cashe-backup.service
 ```
 
 `Type=oneshot` means systemd will not start a second run of `cashe-backup.service` while one is already active, giving single-job execution without extra locking. Each run records a `job_runs` row (`job_name=backup`) in `app.db` if it already exists — see [job health](#job-health) below.
+
+`ExecStartPost` pings `HEALTHCHECK_URL` only when `ExecStart` exits successfully. Configure the matching check on the provider's dashboard with the daily schedule and a grace period (e.g. a few hours) before it alerts on a missed ping — a failed upload, a timer that never fired, or the VM being down all show up the same way: silence.
 
 If a naive `cp`-based cron backup (copying the SQLite file unencrypted to a local directory) is already running on this host, this systemd timer is a stronger replacement — encrypted, integrity-checked, uploaded off-host, and retained on a schedule. Disable the old cron entry (`crontab -e`) once this timer is verified working, rather than running both indefinitely.
 

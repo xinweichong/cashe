@@ -24,6 +24,10 @@ ExecStart=/home/ubuntu/expense-tracker/backup-venv/bin/python -m scripts.backup 
     --data-dir /home/ubuntu/expense-tracker/data \
     --config /home/ubuntu/expense-tracker/config.yaml \
     --credentials /home/ubuntu/expense-tracker/credentials.json
+# Dead-man's-switch ping: only fires if ExecStart exited 0. HEALTHCHECK_URL
+# lives in backup.env (private, not in git) — nothing pings if the backup
+# itself failed, so a missed ping is exactly the signal that should alert.
+ExecStartPost=/usr/bin/curl -fsS -m 10 --retry 3 ${HEALTHCHECK_URL}
 # Keep a single job execution: systemd will not start a new run of this
 # unit while a previous one is still active (Type=oneshot default).
 TimeoutStartSec=600
