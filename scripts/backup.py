@@ -10,6 +10,7 @@ from cryptography.fernet import Fernet
 
 from src.backups import MAX_SNAPSHOT_BYTES, create_snapshot, restore_snapshot
 from src.config import local_now
+from src.storage import AdminStorage
 
 
 def upload_snapshot(client, bucket: str, snapshot: bytes, *, max_bytes: int) -> str:
@@ -58,7 +59,7 @@ def _write_private(path: Path, content: bytes) -> None:
         output.write(content)
 
 
-def main() -> None:
+def main(argv=None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("command", choices=["keygen", "create", "restore", "upload"])
     parser.add_argument("--key-file", required=True, type=Path)
@@ -68,7 +69,7 @@ def main() -> None:
     parser.add_argument("--snapshot", type=Path)
     parser.add_argument("--destination", type=Path)
     parser.add_argument("--max-remote-bytes", type=int, default=8_000_000_000)
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     if args.command == "keygen":
         _write_private(args.key_file, Fernet.generate_key())
         print("Created private key file. Keep a separate off-host copy.")
@@ -82,24 +83,47 @@ def main() -> None:
         manifest = restore_snapshot(args.snapshot.read_bytes(), args.destination, key)
         print(f"Restored {len(manifest['files'])} verified files into an isolated directory.")
         return
-    protected = {"config.yaml": args.config, "credentials.json": args.credentials}
-    if any(path.resolve() == args.key_file.resolve() for path in protected.values()):
-        parser.error("Encryption key cannot be included in protected files")
-    snapshot = create_snapshot(args.data_dir, protected, key)
-    if args.command == "create":
-        if not args.snapshot:
-            parser.error("create requires --snapshot")
-        _write_private(args.snapshot, snapshot)
-        print("Created encrypted snapshot.")
-        return
-    import boto3
-    endpoint = os.environ["R2_ENDPOINT_URL"]
-    if not endpoint.startswith("https://") or not endpoint.endswith(".r2.cloudflarestorage.com"):
-        parser.error("Use the account's HTTPS R2 endpoint")
-    client = boto3.client("s3", endpoint_url=endpoint, region_name="auto")
-    object_key = upload_snapshot(client, os.environ["R2_BACKUP_BUCKET"], snapshot,
-                                 max_bytes=args.max_remote_bytes)
-    print(f"Uploaded and verified {object_key}")
+
+    # "create" and "upload" are the recurring backup job — record a bounded,
+    # private-value-free run history in app.db's job_runs table if it already
+    # exists (skip if the admin DB itself is missing; create_snapshot below
+    # will raise its own clear error for that case).
+    admin_conn = None
+    admin_store = None
+    run_id = None
+    if (args.data_dir / "app.db").is_file():
+        from src.main import init_app_db
+        admin_conn = init_app_db(str(args.data_dir / "app.db"))
+        admin_store = AdminStorage(admin_conn)
+        run_id = admin_store.record_job_start("backup")
+    try:
+        protected = {"config.yaml": args.config, "credentials.json": args.credentials}
+        if any(path.resolve() == args.key_file.resolve() for path in protected.values()):
+            parser.error("Encryption key cannot be included in protected files")
+        snapshot = create_snapshot(args.data_dir, protected, key)
+        if args.command == "create":
+            if not args.snapshot:
+                parser.error("create requires --snapshot")
+            _write_private(args.snapshot, snapshot)
+            print("Created encrypted snapshot.")
+        else:
+            import boto3
+            endpoint = os.environ["R2_ENDPOINT_URL"]
+            if not endpoint.startswith("https://") or not endpoint.endswith(".r2.cloudflarestorage.com"):
+                parser.error("Use the account's HTTPS R2 endpoint")
+            client = boto3.client("s3", endpoint_url=endpoint, region_name="auto")
+            object_key = upload_snapshot(client, os.environ["R2_BACKUP_BUCKET"], snapshot,
+                                         max_bytes=args.max_remote_bytes)
+            print(f"Uploaded and verified {object_key}")
+        if run_id is not None:
+            admin_store.record_job_success(run_id)
+    except BaseException as exc:
+        if run_id is not None:
+            admin_store.record_job_failure(run_id, type(exc).__name__)
+        raise
+    finally:
+        if admin_conn is not None:
+            admin_conn.close()
 
 
 if __name__ == "__main__":

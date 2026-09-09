@@ -49,6 +49,70 @@ def test_snapshot_rejects_unsafe_paths_and_missing_admin(tmp_path):
     conn.close()
 
 
+def test_create_command_records_job_success(tmp_path):
+    from scripts.backup import main
+    data = tmp_path / "data"
+    user_dir = data / "users" / "alice"
+    user_dir.mkdir(parents=True)
+    init_app_db(str(data / "app.db")).close()
+    init_db(str(user_dir / "expense_tracker.db")).close()
+    key_file = tmp_path / "key"
+    key_file.write_bytes(Fernet.generate_key())
+    config = tmp_path / "config.yaml"
+    config.write_text("synthetic: config")
+    creds = tmp_path / "credentials.json"
+    creds.write_text("{}")
+    snapshot_path = tmp_path / "snapshot.fernet"
+    main([
+        "create", "--key-file", str(key_file), "--data-dir", str(data),
+        "--config", str(config), "--credentials", str(creds), "--snapshot", str(snapshot_path),
+    ])
+    assert snapshot_path.exists()
+    admin = sqlite3.connect(str(data / "app.db"))
+    row = admin.execute("SELECT job_name, status, error_code FROM job_runs").fetchone()
+    assert row == ("backup", "succeeded", None)
+    admin.close()
+
+
+def test_create_command_records_job_failure(tmp_path, monkeypatch):
+    import scripts.backup as backup_module
+    data = tmp_path / "data"
+    user_dir = data / "users" / "alice"
+    user_dir.mkdir(parents=True)
+    init_app_db(str(data / "app.db")).close()
+    init_db(str(user_dir / "expense_tracker.db")).close()
+    key_file = tmp_path / "key"
+    key_file.write_bytes(Fernet.generate_key())
+
+    def _boom(*args, **kwargs):
+        raise ValueError("synthetic failure")
+    monkeypatch.setattr(backup_module, "create_snapshot", _boom)
+
+    with pytest.raises(ValueError, match="synthetic failure"):
+        backup_module.main([
+            "create", "--key-file", str(key_file), "--data-dir", str(data),
+            "--config", str(tmp_path / "config.yaml"), "--credentials", str(tmp_path / "credentials.json"),
+            "--snapshot", str(tmp_path / "snapshot.fernet"),
+        ])
+    admin = sqlite3.connect(str(data / "app.db"))
+    row = admin.execute("SELECT job_name, status, error_code FROM job_runs").fetchone()
+    assert row == ("backup", "failed", "ValueError")
+    admin.close()
+
+
+def test_missing_admin_db_skips_job_tracking(tmp_path):
+    from scripts.backup import main
+    key_file = tmp_path / "key"
+    key_file.write_bytes(Fernet.generate_key())
+    with pytest.raises(ValueError, match="missing"):
+        main([
+            "create", "--key-file", str(key_file), "--data-dir", str(tmp_path / "data"),
+            "--config", str(tmp_path / "config.yaml"), "--credentials", str(tmp_path / "credentials.json"),
+            "--snapshot", str(tmp_path / "snapshot.fernet"),
+        ])
+    assert not (tmp_path / "data" / "app.db").exists()
+
+
 def test_remote_upload_verifies_before_retention_and_obeys_ceiling():
     from io import BytesIO
     from unittest.mock import MagicMock
