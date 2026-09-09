@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 import sqlite3
 
@@ -111,6 +112,38 @@ def test_missing_admin_db_skips_job_tracking(tmp_path):
             "--snapshot", str(tmp_path / "snapshot.fernet"),
         ])
     assert not (tmp_path / "data" / "app.db").exists()
+
+
+def test_unwritable_admin_db_does_not_block_the_actual_backup(tmp_path):
+    """The backup running as a host user distinct from the Docker container's
+    user (e.g. app.db owned by root, backup run as an unprivileged operator)
+    must still produce a snapshot — job-health tracking is a diagnostic
+    nice-to-have, not on the critical path for data protection."""
+    from scripts.backup import main
+    data = tmp_path / "data"
+    user_dir = data / "users" / "alice"
+    user_dir.mkdir(parents=True)
+    init_app_db(str(data / "app.db")).close()
+    init_db(str(user_dir / "expense_tracker.db")).close()
+    os.chmod(data / "app.db", 0o444)
+    os.chmod(data, 0o555)  # also block creating app.db-wal/-journal in this dir
+    key_file = tmp_path / "key"
+    key_file.write_bytes(Fernet.generate_key())
+    config = tmp_path / "config.yaml"
+    config.write_text("synthetic: config")
+    creds = tmp_path / "credentials.json"
+    creds.write_text("{}")
+    snapshot_path = tmp_path / "snapshot.fernet"
+    try:
+        main([
+            "create", "--key-file", str(key_file), "--data-dir", str(data),
+            "--config", str(config), "--credentials", str(creds),
+            "--snapshot", str(snapshot_path),
+        ])
+    finally:
+        os.chmod(data, 0o755)
+        os.chmod(data / "app.db", 0o644)
+    assert snapshot_path.exists()
 
 
 def test_remote_upload_verifies_before_retention_and_obeys_ceiling():

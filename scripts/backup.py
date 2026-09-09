@@ -5,6 +5,7 @@ import hashlib
 import os
 from pathlib import Path
 import secrets
+import sqlite3
 
 from cryptography.fernet import Fernet
 
@@ -87,15 +88,24 @@ def main(argv=None) -> None:
     # "create" and "upload" are the recurring backup job — record a bounded,
     # private-value-free run history in app.db's job_runs table if it already
     # exists (skip if the admin DB itself is missing; create_snapshot below
-    # will raise its own clear error for that case).
+    # will raise its own clear error for that case). This is diagnostic only:
+    # the backup running as a different host user than the app's Docker
+    # container (a common permission split) must never block the actual
+    # backup just because it can't write to app.db.
     admin_conn = None
     admin_store = None
     run_id = None
     if (args.data_dir / "app.db").is_file():
-        from src.main import init_app_db
-        admin_conn = init_app_db(str(args.data_dir / "app.db"))
-        admin_store = AdminStorage(admin_conn)
-        run_id = admin_store.record_job_start("backup")
+        try:
+            from src.main import init_app_db
+            admin_conn = init_app_db(str(args.data_dir / "app.db"))
+            admin_store = AdminStorage(admin_conn)
+            run_id = admin_store.record_job_start("backup")
+        except sqlite3.Error as exc:
+            print(f"Note: job-health tracking unavailable ({type(exc).__name__}); continuing without it.")
+            if admin_conn is not None:
+                admin_conn.close()
+            admin_conn = admin_store = run_id = None
     try:
         protected = {"config.yaml": args.config, "credentials.json": args.credentials}
         if any(path.resolve() == args.key_file.resolve() for path in protected.values()):
