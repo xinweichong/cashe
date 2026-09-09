@@ -178,3 +178,48 @@ class RecurringReview(BaseModel):
 class RecurringResolution(BaseModel):
     status: Literal["ok"] = "ok"
     subscription_id: int | None
+
+
+# ── v2 Transaction (R03) ────────────────────────────────────────────────────
+
+class OriginalMoney(BaseModel):
+    """The amount in its own currency — unlike Money, not always SGD."""
+    minor_units: int | None
+    currency: str
+
+
+class ConversionProvenance(BaseModel):
+    status: Literal["native", "resolved", "indicative", "unresolved"] | None
+    rate: str | None
+    source: str | None
+    quoted_at: str | None
+
+
+class TransactionV2(BaseModel):
+    id: int
+    revision: int
+    source: str
+    type: str
+    merchant: str | None
+    category: str | None
+    description: str | None
+    transaction_date: str | None
+    original: OriginalMoney
+    reporting: Money | None
+    conversion: ConversionProvenance
+
+
+class TransactionCorrection(BaseModel):
+    """PUT /api/v2/transactions/{id} body. All fields optional — only
+    supplied ones are changed. expected_revision is optional so existing
+    v1-style callers (that never read a revision back) still work."""
+    merchant: str | None = None
+    amount: float | None = None
+    currency: str | None = None
+    exchange_rate: float | None = None
+    category: str | None = None
+    description: str | None = None
+    transaction_date: str | None = None
+    type: str | None = None
+    remember_category: bool = False
+    expected_revision: int | None = None

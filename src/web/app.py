@@ -18,10 +18,10 @@ import csv
 import io
 from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 
-from src.storage import SubscriptionMatchConflict, TransactionRequestConflict
+from src.storage import RevisionConflict, SubscriptionMatchConflict, TransactionRequestConflict
 from src.config import local_now
 from src.web.auth import verify_password, create_session, verify_session, destroy_session
-from src.web.contracts import CaptureFollowup, CaptureIssue, CaptureResolution, HomeBriefing, QueuedResponse, SpendingEvidence, SpendingFacts, SpendingReview, TransactionProvenance, UpcomingPlan, PlanMutationResponse, RecurringReview, RecurringResolution
+from src.web.contracts import CaptureFollowup, CaptureIssue, CaptureResolution, HomeBriefing, QueuedResponse, SpendingEvidence, SpendingFacts, SpendingReview, TransactionCorrection, TransactionProvenance, TransactionV2, UpcomingPlan, PlanMutationResponse, RecurringReview, RecurringResolution
 from src.analytics import (
     load_summary,
     get_yoy_comparison,
@@ -572,6 +572,59 @@ def create_dashboard_app(
             return await _db(storage.get_transaction_provenance, tx_id)
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc))
+
+    def _transaction_to_v2(tx: dict) -> dict:
+        return {
+            "id": tx["id"],
+            "revision": tx["revision"],
+            "source": tx["source"],
+            "type": tx["type"],
+            "merchant": tx.get("merchant"),
+            "category": tx.get("category"),
+            "description": tx.get("description"),
+            "transaction_date": tx.get("transaction_date"),
+            "original": {
+                "minor_units": tx.get("original_minor_units"),
+                "currency": tx.get("currency") or "SGD",
+            },
+            "reporting": (
+                {"minor_units": tx["reporting_minor_units"], "currency": "SGD"}
+                if tx.get("reporting_minor_units") is not None else None
+            ),
+            "conversion": {
+                "status": tx.get("conversion_status"),
+                "rate": tx.get("conversion_rate"),
+                "source": tx.get("conversion_source"),
+                "quoted_at": tx.get("conversion_quoted_at"),
+            },
+        }
+
+    @app.put("/api/v2/transactions/{tx_id}", response_model=TransactionV2)
+    async def update_transaction_v2(tx_id: int, correction: TransactionCorrection, username: str = Depends(require_auth)):
+        storage = user_manager.get(username).storage
+        tx = await _db(storage.get_transaction, tx_id)
+        if not tx:
+            raise HTTPException(status_code=404, detail="Transaction not found")
+        fields = correction.model_dump(
+            exclude={"remember_category", "expected_revision"}, exclude_none=True,
+        )
+        if not fields:
+            raise HTTPException(status_code=400, detail="No valid fields to update")
+        try:
+            await _db(
+                storage.update_transaction, tx_id,
+                remember_category=correction.remember_category,
+                expected_revision=correction.expected_revision,
+                **fields,
+            )
+        except RevisionConflict as exc:
+            raise HTTPException(status_code=409, detail={
+                "message": str(exc), "current": _transaction_to_v2(exc.current),
+            })
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+        updated = await _db(storage.get_transaction, tx_id)
+        return _transaction_to_v2(updated)
 
     @app.get("/api/transactions/{tx_id}")
     async def get_transaction(tx_id: int, username: str = Depends(require_auth)):

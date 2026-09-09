@@ -159,6 +159,68 @@ class TestUpdateTransaction:
         assert response.status_code == 404
 
 
+class TestUpdateTransactionV2:
+    @pytest.mark.asyncio
+    async def test_returns_canonical_money_and_revision(self, client):
+        create_resp = await client.post("/api/transactions", json={
+            "amount": 15.00, "merchant": "Old Name", "category": "Food", "type": "expense",
+        })
+        tx_id = create_resp.json()["id"]
+
+        response = await client.put(f"/api/v2/transactions/{tx_id}", json={"merchant": "New Name"})
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["merchant"] == "New Name"
+        assert data["revision"] == 2
+        assert data["original"] == {"minor_units": 1500, "currency": "SGD"}
+        assert data["reporting"] == {"minor_units": 1500, "currency": "SGD"}
+        assert data["conversion"]["status"] == "native"
+
+    @pytest.mark.asyncio
+    async def test_matching_expected_revision_succeeds(self, client):
+        create_resp = await client.post("/api/transactions", json={"amount": 15.00, "type": "expense"})
+        tx_id = create_resp.json()["id"]
+
+        response = await client.put(
+            f"/api/v2/transactions/{tx_id}",
+            json={"merchant": "New Name", "expected_revision": 1},
+        )
+        assert response.status_code == 200
+        assert response.json()["revision"] == 2
+
+    @pytest.mark.asyncio
+    async def test_stale_expected_revision_returns_409_with_current_state(self, client):
+        create_resp = await client.post("/api/transactions", json={"amount": 15.00, "type": "expense"})
+        tx_id = create_resp.json()["id"]
+        await client.put(f"/api/v2/transactions/{tx_id}", json={"merchant": "First Edit"})  # revision -> 2
+
+        response = await client.put(
+            f"/api/v2/transactions/{tx_id}",
+            json={"merchant": "Conflicting Edit", "expected_revision": 1},
+        )
+
+        assert response.status_code == 409
+        current = response.json()["detail"]["current"]
+        assert current["revision"] == 2
+        assert current["merchant"] == "First Edit"
+        # The conflicting edit must not have been applied.
+        unchanged = await client.get(f"/api/transactions/{tx_id}")
+        assert unchanged.json()["merchant"] == "First Edit"
+
+    @pytest.mark.asyncio
+    async def test_nonexistent_returns_404(self, client):
+        response = await client.put("/api/v2/transactions/99999", json={"merchant": "Ghost"})
+        assert response.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_no_fields_returns_400(self, client):
+        create_resp = await client.post("/api/transactions", json={"amount": 15.00, "type": "expense"})
+        tx_id = create_resp.json()["id"]
+        response = await client.put(f"/api/v2/transactions/{tx_id}", json={})
+        assert response.status_code == 400
+
+
 class TestDeleteTransaction:
     @pytest.mark.asyncio
     async def test_delete_transaction(self, client):
