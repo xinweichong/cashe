@@ -56,10 +56,31 @@ The JSON report contains schema identifiers and counts, without row IDs, financi
 - `1`: integrity/reference problems, absent finance tables, missing constraints, or unknown migration versions require review.
 - `2`: the database could not be read or its schema was not recognized. A mistyped path does not create a new database.
 
-`pending_migrations` reports upgrades without applying them. `retained_links_to_deleted_transactions` counts source observations and outbox records whose transactions were deleted; these links intentionally survive deletion and are informational. Do not delete them merely to clear an audit report. A clean audit does not validate monetary semantics, capture completeness, or application boot behavior.
+`pending_migrations` reports upgrades without applying them. `retained_links_to_deleted_transactions` counts source observations and outbox records whose transactions were deleted; `retained_links_to_deleted_subscriptions` counts recurring-suggestion/acceptance records whose subscription was deleted. Both intentionally survive deletion and are informational. Do not delete them merely to clear an audit report. A clean audit does not validate monetary semantics, capture completeness, or application boot behavior.
 
 Review any issues against a representative isolated copy before planning repairs or consistently enabling foreign-key enforcement. Preserve the verified snapshot and record decisions about each orphan; the audit performs no automatic cleanup. Repeat the audit after an isolated upgrade and compare the results with the pre-upgrade report.
 
 Before a production cutover, boot the restored copy in an isolated environment with pollers, Telegram, webhooks, and external AI disabled. Check users, transaction counts, source-event links, and key reports. Preserve the current production data directory and post-snapshot source evidence for replay. Do not point production services at the restored directory until those checks pass.
 
 Automated tests use synthetic fixtures. A real OCI/R2 restore drill has not yet been performed by this implementation.
+
+## Scheduling and health
+
+`deploy/cashe-backup.service` and `deploy/cashe-backup.timer` are systemd unit templates for the daily upload job (adjust the hardcoded paths/username to match the host before installing):
+
+```sh
+sudo cp deploy/cashe-backup.service deploy/cashe-backup.timer /etc/systemd/system/
+sudo mkdir -p /etc/cashe && sudo touch /etc/cashe/backup.env && sudo chmod 600 /etc/cashe/backup.env
+# Put R2_ENDPOINT_URL, R2_BACKUP_BUCKET, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY in that file.
+sudo systemctl daemon-reload
+sudo systemctl enable --now cashe-backup.timer
+sudo systemctl start cashe-backup.service   # run once immediately to verify
+```
+
+`Type=oneshot` means systemd will not start a second run of `cashe-backup.service` while one is already active, giving single-job execution without extra locking. Each run records a `job_runs` row (`job_name=backup`) in `app.db` if it already exists — see [job health](#job-health) below.
+
+An **external** heartbeat/overdue-backup alert (e.g. a dead-man's-switch service the systemd unit pings on success, and that pages when no ping arrives) is not configured by this repository. That decision — which provider, what account, what alert channel — is an operator choice outside code scope; verify it independently before relying on it.
+
+## Job health
+
+`AdminStorage` persists a bounded run history in `app.db`'s `job_runs` table for the backup job, the per-user subscription matcher, and the per-user Gmail/Wallet capture retry job: last started/finished timestamp, status, a bounded error code (job/exception type name only — never a message or financial value), and how many runs in a row have failed. `GET /admin/api/health` (admin-session-protected, distinct from the public `/health` liveness check) returns this history plus, per registered user, `get_capture_health()`: the oldest still-retryable queued source/outbox item, how many rows exhausted their 5-attempt retry budget, and the last successful capture timestamp. This is a diagnostic view for the operator, not a dashboard exposed to end users, and it does not itself alert — pair it with the external heartbeat above or a manual check.

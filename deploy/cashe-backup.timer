@@ -1,0 +1,12 @@
+[Unit]
+Description=Run the Cashe encrypted backup upload daily
+
+[Timer]
+OnCalendar=*-*-* 03:00:00
+# Catch up on the next boot if the VM was off at the scheduled time.
+Persistent=true
+# Spread load if this unit is ever templated across multiple hosts.
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target
