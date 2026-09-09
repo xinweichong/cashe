@@ -223,3 +223,21 @@ class TransactionCorrection(BaseModel):
     type: str | None = None
     remember_category: bool = False
     expected_revision: int | None = None
+
+
+class TransactionCreate(BaseModel):
+    """POST /api/v2/transactions body."""
+    amount: float
+    currency: str = "SGD"
+    exchange_rate: float | None = None
+    merchant: str | None = None
+    category: str | None = None
+    description: str | None = None
+    transaction_date: str | None = None
+    type: Literal["expense", "income"] = "expense"
+
+
+class TransactionDeletion(TransactionV2):
+    """DELETE /api/v2/transactions/{id} response — the retained snapshot,
+    as it stood immediately before deletion."""
+    deleted_at: str

@@ -754,7 +754,7 @@ class Storage:
                 )
 
     @_locked
-    def delete_transaction(self, tx_id: int) -> None:
+    def delete_transaction(self, tx_id: int) -> str:
         tx = self.get_transaction(tx_id)
         if tx is None:
             raise ValueError(f"transaction {tx_id} not found")
@@ -777,7 +777,11 @@ class Storage:
              tx["merchant"], tx["category"], tx["transaction_date"], tx["type"], tx["revision"]),
         )
         self._conn.execute("DELETE FROM transactions WHERE id = ?", (tx_id,))
+        deleted_at = self._conn.execute(
+            "SELECT deleted_at FROM deleted_transactions WHERE id = ?", (tx_id,)
+        ).fetchone()["deleted_at"]
         self._conn.commit()
+        return deleted_at
 
     @_locked
     def query_transactions(

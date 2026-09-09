@@ -127,6 +127,59 @@ class TestListTransactions:
         assert len(data) == 2
 
 
+class TestCreateTransactionV2:
+    @pytest.mark.asyncio
+    async def test_returns_canonical_money_and_revision(self, client):
+        response = await client.post("/api/v2/transactions", json={
+            "amount": 15.00, "merchant": "New Name", "category": "Food", "type": "expense",
+        })
+        assert response.status_code == 201
+        data = response.json()
+        assert data["merchant"] == "New Name"
+        assert data["category"] == "Food"
+        assert data["type"] == "expense"
+        assert data["source"] == "manual"
+        assert data["revision"] == 1
+        assert data["original"] == {"minor_units": 1500, "currency": "SGD"}
+        assert data["reporting"] == {"minor_units": 1500, "currency": "SGD"}
+        assert data["conversion"]["status"] == "native"
+        assert "id" in data
+
+    @pytest.mark.asyncio
+    async def test_defaults_type_and_currency(self, client):
+        response = await client.post("/api/v2/transactions", json={"amount": 5.00})
+        assert response.status_code == 201
+        data = response.json()
+        assert data["type"] == "expense"
+        assert data["original"]["currency"] == "SGD"
+
+    @pytest.mark.asyncio
+    async def test_missing_amount_returns_422(self, client):
+        response = await client.post("/api/v2/transactions", json={"merchant": "Test"})
+        assert response.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_invalid_type_returns_422(self, client):
+        response = await client.post("/api/v2/transactions", json={"amount": 10.00, "type": "transfer"})
+        assert response.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_idempotency_key_replays_same_transaction(self, client):
+        payload = {"amount": 9.00, "merchant": "Coffee", "type": "expense"}
+        first = await client.post(
+            "/api/v2/transactions", json=payload, headers={"Idempotency-Key": "key-v2-abc"},
+        )
+        second = await client.post(
+            "/api/v2/transactions", json=payload, headers={"Idempotency-Key": "key-v2-abc"},
+        )
+        assert first.status_code == 201
+        assert second.status_code == 201
+        assert first.json()["id"] == second.json()["id"]
+
+        listing = await client.get("/api/transactions")
+        assert sum(1 for tx in listing.json() if tx["merchant"] == "Coffee") == 1
+
+
 class TestUpdateTransaction:
     @pytest.mark.asyncio
     async def test_update_transaction(self, client):
@@ -242,6 +295,32 @@ class TestDeleteTransaction:
     @pytest.mark.asyncio
     async def test_delete_nonexistent_returns_404(self, client):
         response = await client.delete("/api/transactions/99999")
+        assert response.status_code == 404
+
+
+class TestDeleteTransactionV2:
+    @pytest.mark.asyncio
+    async def test_returns_deletion_snapshot(self, client):
+        create_resp = await client.post("/api/v2/transactions", json={
+            "amount": 8.00, "merchant": "To Delete", "type": "expense",
+        })
+        tx_id = create_resp.json()["id"]
+
+        delete_resp = await client.delete(f"/api/v2/transactions/{tx_id}")
+        assert delete_resp.status_code == 200
+        data = delete_resp.json()
+        assert data["id"] == tx_id
+        assert data["merchant"] == "To Delete"
+        assert data["revision"] == 1
+        assert data["original"] == {"minor_units": 800, "currency": "SGD"}
+        assert "deleted_at" in data and data["deleted_at"]
+
+        get_resp = await client.get(f"/api/transactions/{tx_id}")
+        assert get_resp.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_nonexistent_returns_404(self, client):
+        response = await client.delete("/api/v2/transactions/99999")
         assert response.status_code == 404
 
 

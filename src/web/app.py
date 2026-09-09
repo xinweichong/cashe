@@ -21,7 +21,7 @@ from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 from src.storage import RevisionConflict, SubscriptionMatchConflict, TransactionRequestConflict
 from src.config import local_now
 from src.web.auth import verify_password, create_session, verify_session, destroy_session
-from src.web.contracts import CaptureFollowup, CaptureIssue, CaptureResolution, HomeBriefing, QueuedResponse, SpendingEvidence, SpendingFacts, SpendingReview, TransactionCorrection, TransactionProvenance, TransactionV2, UpcomingPlan, PlanMutationResponse, RecurringReview, RecurringResolution
+from src.web.contracts import CaptureFollowup, CaptureIssue, CaptureResolution, HomeBriefing, QueuedResponse, SpendingEvidence, SpendingFacts, SpendingReview, TransactionCorrection, TransactionCreate, TransactionDeletion, TransactionProvenance, TransactionV2, UpcomingPlan, PlanMutationResponse, RecurringReview, RecurringResolution
 from src.analytics import (
     load_summary,
     get_yoy_comparison,
@@ -598,6 +598,33 @@ def create_dashboard_app(
                 "quoted_at": tx.get("conversion_quoted_at"),
             },
         }
+
+    @app.post("/api/v2/transactions", response_model=TransactionV2, status_code=201)
+    async def create_transaction_v2(payload: TransactionCreate, request: Request, username: str = Depends(require_auth)):
+        storage = user_manager.get(username).storage
+        body = payload.model_dump(exclude_none=True)
+        try:
+            tx = await _db(
+                storage.create_web_transaction, body,
+                source_id=f"manual_{uuid.uuid4().hex[:12]}",
+                request_key=request.headers.get("Idempotency-Key"), timezone=timezone,
+            )
+        except TransactionRequestConflict as e:
+            raise HTTPException(status_code=409, detail=str(e))
+        except ValueError as e:
+            raise HTTPException(status_code=409 if str(e).startswith("duplicate source_id:") else 400, detail=str(e))
+        return _transaction_to_v2(tx)
+
+    @app.delete("/api/v2/transactions/{tx_id}", response_model=TransactionDeletion)
+    async def delete_transaction_v2(tx_id: int, username: str = Depends(require_auth)):
+        storage = user_manager.get(username).storage
+        tx = await _db(storage.get_transaction, tx_id)
+        if not tx:
+            raise HTTPException(status_code=404, detail="Transaction not found")
+        deleted_at = await _db(storage.delete_transaction, tx_id)
+        result = _transaction_to_v2(tx)
+        result["deleted_at"] = deleted_at
+        return result
 
     @app.put("/api/v2/transactions/{tx_id}", response_model=TransactionV2)
     async def update_transaction_v2(tx_id: int, correction: TransactionCorrection, username: str = Depends(require_auth)):
