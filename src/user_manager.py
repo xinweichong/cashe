@@ -225,6 +225,18 @@ class UserManager:
 
         return on_auth_error
 
+    def _tracked(self, job_name: str, fn):
+        """Wrap a zero-arg scheduler callable with persisted job-run health tracking."""
+        def wrapped():
+            run_id = self._admin_storage.record_job_start(job_name)
+            try:
+                fn()
+                self._admin_storage.record_job_success(run_id)
+            except Exception as exc:
+                self._admin_storage.record_job_failure(run_id, type(exc).__name__)
+                raise
+        return wrapped
+
     def _register_scheduler_jobs(self, username: str) -> None:
         """Register weekly/monthly/daily summary APScheduler jobs for one user."""
         if self._scheduler is None:
@@ -267,12 +279,14 @@ class UserManager:
             id=f"daily_{username}", replace_existing=True,
         )
         self._scheduler.add_job(
-            run_subscriptions, "cron", hour=6, minute=0, timezone=tz,
+            self._tracked(f"subscription_matcher_{username}", run_subscriptions),
+            "cron", hour=6, minute=0, timezone=tz,
             id=f"subscription_matcher_{username}", replace_existing=True,
         )
         if ctx and ctx.poller and ctx.poller.pipeline:
             self._scheduler.add_job(
-                ctx.poller.pipeline.retry_pending, "interval", seconds=120,
+                self._tracked(f"capture_retry_{username}", ctx.poller.pipeline.retry_pending),
+                "interval", seconds=120,
                 id=f"capture_retry_{username}", replace_existing=True, max_instances=1,
             )
 

@@ -140,6 +140,24 @@ def create_admin_app(
         admin_storage.destroy_all_sessions(username)
         return {"status": "ok"}
 
+    # ── Operational health (private; distinct from the public /health liveness check) ──
+
+    @app.get("/api/health", dependencies=[Depends(require_admin_session)])
+    async def job_health():
+        return {
+            "jobs": [
+                {
+                    "job_name": row["job_name"],
+                    "status": row["status"],
+                    "started_at": row["started_at"],
+                    "finished_at": row["finished_at"],
+                    "error_code": row["error_code"],
+                    "consecutive_failures": row["consecutive_failures"],
+                }
+                for row in admin_storage.get_job_health()
+            ],
+        }
+
     # ── Serve admin SPA ───────────────────────────────────────────────────────
     static_dist = os.path.join(os.path.dirname(__file__), "dist")
     if os.path.isdir(static_dist):
