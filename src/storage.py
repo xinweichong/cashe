@@ -808,14 +808,23 @@ class Storage:
             (tx_id,),
         )
         # Retained snapshot: gives a future 409 (someone deleted this
-        # concurrently) a real current-state summary, and is the evidence an
-        # undo UI would restore from. The id is never reused for a new row.
+        # concurrently) a real current-state summary, and is the evidence
+        # restore_deleted_transaction restores from. The id is never reused
+        # for a new row. Carries the canonical-money columns too, not just
+        # the legacy amount/currency, so a restore doesn't need to recompute
+        # (and can't silently diverge from) what the row had when deleted.
         self._conn.execute(
             """INSERT INTO deleted_transactions
-               (id, source, source_id, amount, currency, merchant, category, transaction_date, type, revision)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (tx["id"], tx["source"], tx["source_id"], tx["amount"], tx["currency"],
-             tx["merchant"], tx["category"], tx["transaction_date"], tx["type"], tx["revision"]),
+               (id, source, source_id, amount, currency, exchange_rate, merchant, description,
+                category, transaction_date, type, revision, original_minor_units,
+                reporting_minor_units, conversion_status, conversion_rate, conversion_source,
+                conversion_quoted_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (tx["id"], tx["source"], tx["source_id"], tx["amount"], tx["currency"], tx["exchange_rate"],
+             tx["merchant"], tx["description"], tx["category"], tx["transaction_date"], tx["type"],
+             tx["revision"], tx.get("original_minor_units"), tx.get("reporting_minor_units"),
+             tx.get("conversion_status"), tx.get("conversion_rate"), tx.get("conversion_source"),
+             tx.get("conversion_quoted_at")),
         )
         self._conn.execute("DELETE FROM transactions WHERE id = ?", (tx_id,))
         deleted_at = self._conn.execute(
@@ -823,6 +832,44 @@ class Storage:
         ).fetchone()["deleted_at"]
         self._conn.commit()
         return deleted_at
+
+    @_locked
+    def restore_deleted_transaction(self, tx_id: int) -> int:
+        """Restore a transaction deleted via delete_transaction, using its
+        retained snapshot. Not itself logged to transaction_mutations —
+        that table's changed_fields are applied as literal column names by
+        undo_last_mutation, and "was deleted" isn't a real transactions
+        column. Returns the restored row's new (bumped) revision.
+        """
+        if self.get_transaction(tx_id) is not None:
+            raise ValueError(f"transaction {tx_id} already exists")
+        snapshot = self._conn.execute(
+            "SELECT * FROM deleted_transactions WHERE id = ?", (tx_id,)
+        ).fetchone()
+        if snapshot is None:
+            raise ValueError(f"transaction {tx_id} has no deletion record")
+        if snapshot["original_minor_units"] is None:
+            raise ValueError(
+                f"transaction {tx_id} deletion predates full snapshot retention and cannot be restored"
+            )
+        new_revision = snapshot["revision"] + 1
+        with self._conn:
+            self._conn.execute(
+                """INSERT INTO transactions
+                   (id, source, source_id, amount, currency, exchange_rate, merchant, description,
+                    category, transaction_date, type, revision, original_minor_units,
+                    reporting_minor_units, conversion_status, conversion_rate, conversion_source,
+                    conversion_quoted_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (snapshot["id"], snapshot["source"], snapshot["source_id"], snapshot["amount"],
+                 snapshot["currency"], snapshot["exchange_rate"], snapshot["merchant"], snapshot["description"],
+                 snapshot["category"], snapshot["transaction_date"], snapshot["type"], new_revision,
+                 snapshot["original_minor_units"], snapshot["reporting_minor_units"],
+                 snapshot["conversion_status"], snapshot["conversion_rate"], snapshot["conversion_source"],
+                 snapshot["conversion_quoted_at"]),
+            )
+            self._conn.execute("DELETE FROM deleted_transactions WHERE id = ?", (tx_id,))
+        return new_revision
 
     @_locked
     def query_transactions(

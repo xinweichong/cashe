@@ -267,6 +267,59 @@ class TestDeleteTransaction:
         assert new_id != tx_id
 
 
+class TestRestoreDeletedTransaction:
+    def test_restore_recreates_row_with_bumped_revision(self, storage):
+        tx_id = storage.insert_transaction(
+            source="manual", source_id="m1", amount=12.50, currency="SGD",
+            merchant="Toast Box", category="Food", transaction_date="2026-04-16T12:00:00",
+        )
+        storage.delete_transaction(tx_id)
+
+        new_revision = storage.restore_deleted_transaction(tx_id)
+
+        assert new_revision == 2
+        restored = storage.get_transaction(tx_id)
+        assert restored["merchant"] == "Toast Box"
+        assert restored["category"] == "Food"
+        assert restored["revision"] == 2
+        assert restored["original_minor_units"] == 1250
+        assert restored["reporting_minor_units"] == 1250
+        assert storage._conn.execute(
+            "SELECT 1 FROM deleted_transactions WHERE id = ?", (tx_id,)
+        ).fetchone() is None
+
+    def test_restore_nonexistent_raises(self, storage):
+        with pytest.raises(ValueError, match="no deletion record"):
+            storage.restore_deleted_transaction(999)
+
+    def test_restore_a_still_existing_transaction_raises(self, storage):
+        tx_id = storage.insert_transaction(
+            source="manual", source_id="m1", amount=12.50, transaction_date="2026-04-16T12:00:00",
+        )
+        with pytest.raises(ValueError, match="already exists"):
+            storage.restore_deleted_transaction(tx_id)
+
+    def test_restore_of_a_pre_migration_14_snapshot_is_refused(self, storage):
+        """A deletion recorded before migration 14 only has the legacy summary
+        columns — no canonical money to restore. Simulate that by inserting a
+        deleted_transactions row the same way the old code did, skipping the
+        columns migration 14 added."""
+        tx_id = storage.insert_transaction(
+            source="manual", source_id="m1", amount=12.50, transaction_date="2026-04-16T12:00:00",
+        )
+        storage._conn.execute("DELETE FROM transactions WHERE id = ?", (tx_id,))
+        storage._conn.execute(
+            """INSERT INTO deleted_transactions
+               (id, source, source_id, amount, currency, merchant, category, transaction_date, type, revision)
+               VALUES (?, 'manual', 'm1', 12.50, 'SGD', NULL, NULL, '2026-04-16T12:00:00', 'expense', 1)""",
+            (tx_id,),
+        )
+        storage._conn.commit()
+
+        with pytest.raises(ValueError, match="predates full snapshot retention"):
+            storage.restore_deleted_transaction(tx_id)
+
+
 class TestQueryTransactions:
     def test_query_by_date_range(self, storage):
         storage.insert_transaction(

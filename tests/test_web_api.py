@@ -422,6 +422,74 @@ class TestDeleteTransactionV2:
         assert response.status_code == 404
 
 
+class TestRestoreTransactionV2:
+    @pytest.mark.asyncio
+    async def test_restore_recreates_the_deleted_transaction(self, client):
+        create_resp = await client.post("/api/v2/transactions", json={
+            "amount": 8.00, "merchant": "To Delete", "category": "Food", "type": "expense",
+        })
+        tx_id = create_resp.json()["id"]
+        await client.delete(f"/api/v2/transactions/{tx_id}")
+
+        response = await client.post(f"/api/v2/transactions/{tx_id}/restore")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["id"] == tx_id
+        assert data["merchant"] == "To Delete"
+        assert data["category"] == "Food"
+        assert data["revision"] == 2  # bumped past the revision it had when deleted
+        assert data["original"] == {"minor_units": 800, "currency": "SGD"}
+        assert data["reporting"] == {"minor_units": 800, "currency": "SGD"}
+        assert data["conversion"]["status"] == "native"
+
+        get_resp = await client.get(f"/api/transactions/{tx_id}")
+        assert get_resp.status_code == 200
+        assert get_resp.json()["merchant"] == "To Delete"
+
+    @pytest.mark.asyncio
+    async def test_restore_preserves_foreign_currency_conversion(self, client):
+        create_resp = await client.post("/api/v2/transactions", json={
+            "amount": 350.00, "currency": "THB", "exchange_rate": 0.039, "type": "expense",
+        })
+        tx_id = create_resp.json()["id"]
+        await client.delete(f"/api/v2/transactions/{tx_id}")
+
+        response = await client.post(f"/api/v2/transactions/{tx_id}/restore")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["original"] == {"minor_units": 35000, "currency": "THB"}
+        assert data["conversion"]["status"] == "indicative"
+
+    @pytest.mark.asyncio
+    async def test_restore_a_never_deleted_transaction_returns_404(self, client):
+        response = await client.post("/api/v2/transactions/99999/restore")
+        assert response.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_restore_twice_returns_409(self, client):
+        create_resp = await client.post("/api/v2/transactions", json={"amount": 8.00, "type": "expense"})
+        tx_id = create_resp.json()["id"]
+        await client.delete(f"/api/v2/transactions/{tx_id}")
+        await client.post(f"/api/v2/transactions/{tx_id}/restore")
+
+        response = await client.post(f"/api/v2/transactions/{tx_id}/restore")
+        assert response.status_code == 409
+
+    @pytest.mark.asyncio
+    async def test_restore_can_be_deleted_and_restored_again(self, client):
+        create_resp = await client.post("/api/v2/transactions", json={"amount": 8.00, "type": "expense"})
+        tx_id = create_resp.json()["id"]
+        await client.delete(f"/api/v2/transactions/{tx_id}")
+        await client.post(f"/api/v2/transactions/{tx_id}/restore")
+        await client.delete(f"/api/v2/transactions/{tx_id}")
+
+        response = await client.post(f"/api/v2/transactions/{tx_id}/restore")
+        assert response.status_code == 200
+        assert response.json()["revision"] == 3
+
+
 @pytest.mark.asyncio
 async def test_get_settings_returns_defaults(client):
     """GET /api/settings should return the two default threshold values."""

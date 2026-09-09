@@ -671,6 +671,18 @@ def create_dashboard_app(
         updated = await _db(storage.get_transaction, tx_id)
         return _transaction_to_v2(updated)
 
+    @app.post("/api/v2/transactions/{tx_id}/restore", response_model=TransactionV2)
+    async def restore_transaction_v2(tx_id: int, username: str = Depends(require_auth)):
+        storage = user_manager.get(username).storage
+        try:
+            await _db(storage.restore_deleted_transaction, tx_id)
+        except ValueError as exc:
+            msg = str(exc)
+            status_code = 404 if "no deletion record" in msg else 409
+            raise HTTPException(status_code=status_code, detail=msg)
+        restored = await _db(storage.get_transaction, tx_id)
+        return _transaction_to_v2(restored)
+
     @app.get("/api/transactions/{tx_id}")
     async def get_transaction(tx_id: int, username: str = Depends(require_auth)):
         storage = user_manager.get(username).storage

@@ -190,6 +190,21 @@ MIGRATIONS = (
             deleted_at        TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )""",
     )),
+    (14, (
+        # R03: retain enough of the pre-deletion row to actually restore it —
+        # migration 13's columns were only ever enough for a summary.
+        _add_column_if_table_exists("deleted_transactions", "description TEXT"),
+        _add_column_if_table_exists("deleted_transactions", "exchange_rate REAL"),
+        _add_column_if_table_exists("deleted_transactions", "original_minor_units INTEGER"),
+        _add_column_if_table_exists("deleted_transactions", "reporting_minor_units INTEGER"),
+        _add_column_if_table_exists(
+            "deleted_transactions",
+            "conversion_status TEXT CHECK(conversion_status IN ('native','resolved','indicative','unresolved'))",
+        ),
+        _add_column_if_table_exists("deleted_transactions", "conversion_rate TEXT"),
+        _add_column_if_table_exists("deleted_transactions", "conversion_source TEXT"),
+        _add_column_if_table_exists("deleted_transactions", "conversion_quoted_at TEXT"),
+    )),
 )
 
 
