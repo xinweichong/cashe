@@ -146,6 +146,14 @@ class TestCreateTransactionV2:
         assert "id" in data
 
     @pytest.mark.asyncio
+    async def test_cash_source_is_accepted(self, client):
+        response = await client.post("/api/v2/transactions", json={
+            "amount": 5.00, "merchant": "Hawker Stall", "type": "expense", "source": "cash",
+        })
+        assert response.status_code == 201
+        assert response.json()["source"] == "cash"
+
+    @pytest.mark.asyncio
     async def test_defaults_type_and_currency(self, client):
         response = await client.post("/api/v2/transactions", json={"amount": 5.00})
         assert response.status_code == 201

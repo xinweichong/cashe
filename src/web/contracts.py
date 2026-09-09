@@ -235,6 +235,7 @@ class TransactionCreate(BaseModel):
     description: str | None = None
     transaction_date: str | None = None
     type: Literal["expense", "income"] = "expense"
+    source: Literal["manual", "cash"] = "manual"
 
 
 class TransactionUndo(BaseModel):

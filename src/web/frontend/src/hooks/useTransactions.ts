@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api, type Transaction } from '@/api/client';
+import { api, type Transaction, type TransactionCreateV2, type TransactionCorrectionV2 } from '@/api/client';
 import { useToast } from '@/hooks/useToastContext';
 
 type TxCache =
@@ -32,7 +32,7 @@ export function useTransactions(params?: Record<string, string | number>) {
 export function useCreateTransaction() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ data, requestKey }: { data: Partial<Transaction>; requestKey: string }) =>
+    mutationFn: ({ data, requestKey }: { data: Partial<TransactionCreateV2> & { amount: number }; requestKey: string }) =>
       api.createTransaction(data, requestKey),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['transactions'] });
@@ -48,17 +48,24 @@ export function useCreateTransaction() {
 export function useUpdateTransaction() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, data }: { id: number; data: Partial<Transaction> & { remember_category?: boolean } }) =>
+    mutationFn: ({ id, data }: { id: number; data: Partial<TransactionCorrectionV2> }) =>
       api.updateTransaction(id, data),
     onMutate: async ({ id, data }) => {
       await qc.cancelQueries({ queryKey: ['transactions'] });
       await qc.cancelQueries({ queryKey: ['transaction', id] });
       const listSnapshots = qc.getQueriesData<TxCache>({ queryKey: ['transactions'] });
       const single = qc.getQueryData<Transaction>(['transaction', id]);
-      qc.setQueriesData<TxCache>({ queryKey: ['transactions'] }, (old) =>
-        mapTxCache(old, (tx) => (tx.id === id ? { ...tx, ...data } : tx))
+      // Only merge fields the caller actually set (never null/undefined) —
+      // the correction contract allows amount/currency/etc. to be null, but
+      // the cached Transaction shape requires them; an optimistic patch
+      // should never blank out a required display field.
+      const patch = Object.fromEntries(
+        Object.entries(data).filter(([, v]) => v !== null && v !== undefined)
       );
-      if (single) qc.setQueryData(['transaction', id], { ...single, ...data });
+      qc.setQueriesData<TxCache>({ queryKey: ['transactions'] }, (old) =>
+        mapTxCache(old, (tx) => (tx.id === id ? { ...tx, ...patch } : tx))
+      );
+      if (single) qc.setQueryData(['transaction', id], { ...single, ...patch });
       return { listSnapshots, single, id };
     },
     onError: (_err, _vars, ctx) => {

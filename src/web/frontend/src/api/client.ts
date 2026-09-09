@@ -1,5 +1,11 @@
 import type { SubscriptionConfirmation } from '@/lib/subscriptionConfirmation';
+import type { components } from './v2-schema.gen';
 const BASE = '';
+
+export type TransactionV2 = components['schemas']['TransactionV2'];
+export type TransactionCreateV2 = components['schemas']['TransactionCreate'];
+export type TransactionCorrectionV2 = components['schemas']['TransactionCorrection'];
+export type TransactionDeletionV2 = components['schemas']['TransactionDeletion'];
 
 export async function request<T>(path: string, opts?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
@@ -446,21 +452,21 @@ export const api = {
   getTransactionProvenance: (id: number) =>
     request<TransactionProvenance>(`/api/v2/transactions/${id}/provenance`),
 
-  createTransaction: (data: Partial<Transaction> & { source?: string }, requestKey?: string) =>
-    request<Transaction>('/api/transactions', {
+  createTransaction: (data: Partial<TransactionCreateV2> & { amount: number }, requestKey?: string) =>
+    request<TransactionV2>('/api/v2/transactions', {
       method: 'POST',
       headers: requestKey ? { 'Idempotency-Key': requestKey } : undefined,
       body: JSON.stringify(data),
     }),
 
-  updateTransaction: (id: number, data: Partial<Transaction> & { remember_category?: boolean }) =>
-    request<Transaction>(`/api/transactions/${id}`, {
+  updateTransaction: (id: number, data: Partial<TransactionCorrectionV2>) =>
+    request<TransactionV2>(`/api/v2/transactions/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
 
   deleteTransaction: (id: number) =>
-    request<{ status: string }>(`/api/transactions/${id}`, { method: 'DELETE' }),
+    request<TransactionDeletionV2>(`/api/v2/transactions/${id}`, { method: 'DELETE' }),
 
   // Summary & Analytics
   getSummary: (start_date: string, end_date: string) =>

@@ -728,6 +728,12 @@ export interface components {
             exchange_rate?: number | null;
             /** Merchant */
             merchant?: string | null;
+            /**
+             * Source
+             * @default manual
+             * @enum {string}
+             */
+            source: "manual" | "cash";
             /** Transaction Date */
             transaction_date?: string | null;
             /**

@@ -1027,6 +1027,15 @@
             ],
             "title": "Merchant"
           },
+          "source": {
+            "default": "manual",
+            "enum": [
+              "manual",
+              "cash"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
           "transaction_date": {
             "anyOf": [
               {
