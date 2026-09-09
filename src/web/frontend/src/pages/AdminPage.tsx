@@ -90,8 +90,8 @@ function AdminLogin({ onSuccess }: { onSuccess: (token: string) => void }) {
     try {
       const { token } = await adminLogin(password);
       onSuccess(token);
-    } catch (err: any) {
-      setError(err.message ?? 'Incorrect password');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Incorrect password');
       setPassword('');
     } finally {
       setLoading(false);
@@ -163,8 +163,8 @@ function AdminDashboard({ token, onLogout }: { token: string; onLogout: () => vo
       setLoadError('');
       const list = await adminApi.listUsers();
       setUsers(list);
-    } catch (err: any) {
-      setLoadError(err.message ?? 'Couldn\'t load this — try refreshing.');
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : 'Couldn\'t load this — try refreshing.');
     }
   };
 
@@ -179,8 +179,8 @@ function AdminDashboard({ token, onLogout }: { token: string; onLogout: () => vo
       setCreateResult(result);
       setNewUsername('');
       loadUsers();
-    } catch (err: any) {
-      setCreateError(err.message ?? 'Couldn\'t create user — try again.');
+    } catch (err) {
+      setCreateError(err instanceof Error ? err.message : 'Couldn\'t create user — try again.');
     } finally {
       setCreateLoading(false);
     }
@@ -194,8 +194,8 @@ function AdminDashboard({ token, onLogout }: { token: string; onLogout: () => vo
       await adminApi.resetPassword(resetTarget, resetPassword);
       setResetTarget(null);
       setResetPassword('');
-    } catch (err: any) {
-      setResetError(err.message ?? 'Couldn\'t reset password — try again.');
+    } catch (err) {
+      setResetError(err instanceof Error ? err.message : 'Couldn\'t reset password — try again.');
     } finally {
       setResetLoading(false);
     }

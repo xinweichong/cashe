@@ -70,13 +70,13 @@ export function IncomeExpenseBar() {
 
   let chartData: object[] = [];
   if (isYoY && yoyData) {
-    chartData = (yoyData as any[]).map((d) => ({
+    chartData = yoyData.map((d) => ({
       month: d.month_label.split(' ')[0],
       'This Year': d.this_year_expenses,
       'Last Year': d.last_year_expenses,
     }));
   } else if (standardData) {
-    chartData = (standardData as any[]).map((d) => ({
+    chartData = standardData.map((d) => ({
       month: formatMonth(d.month),
       Income: d.income,
       Expenses: d.expenses,

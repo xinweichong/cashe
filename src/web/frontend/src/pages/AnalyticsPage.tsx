@@ -321,7 +321,7 @@ export function AnalyticsPage() {
                   Unusual = transaction is over 2× the category average (last 30 days, min 3 transactions).
                   New merchant = first appearance this month.
                 </p>
-                {alerts.anomalies?.map((a: any) => (
+                {alerts?.anomalies?.map((a) => (
                   <div key={a.id} className="space-y-0.5">
                     <p className="text-sm">
                       Unusual: <span className="font-medium">{a.merchant}</span>{' '}
@@ -332,7 +332,7 @@ export function AnalyticsPage() {
                     )}
                   </div>
                 ))}
-                {alerts.new_merchants?.slice(0, 3).map((m: any) => (
+                {alerts?.new_merchants?.slice(0, 3).map((m) => (
                   <p key={m.merchant} className="text-sm flex items-center gap-2">
                     <Badge variant="default" className="text-[10px] px-1.5 py-0">New</Badge>
                     <span className="font-medium">{m.merchant}</span>

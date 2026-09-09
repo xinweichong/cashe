@@ -252,6 +252,125 @@ export interface SessionInfo {
   last_used_at: string;
 }
 
+// Legacy analytics response shapes — these endpoints are slated for
+// migration onto shared spending facts; see docs/plans completion roadmap R04.
+export interface SpendingSummary {
+  total: number;
+  by_category: Record<string, number>;
+}
+
+export interface Balance {
+  income: number;
+  expenses: number;
+  net: number;
+}
+
+export interface TrendPoint {
+  date: string;
+  amount: number;
+}
+
+export interface TrendByCategoryPoint {
+  date: string;
+  [category: string]: string | number | null;
+}
+
+export interface SpendingInsights {
+  merchants: { merchant: string; visits: number; total: number }[];
+  average_daily: number;
+}
+
+export interface PeriodComparison {
+  current_start: string;
+  current_end: string;
+  previous_start: string;
+  previous_end: string;
+  current_total: number;
+  previous_total: number;
+  change: number;
+  change_percent: number | null;
+}
+
+export interface CategoryComparison {
+  category: string;
+  current: number;
+  previous: number;
+  change: number;
+  change_percent: number | null;
+}
+
+export interface AnalyticsComparison {
+  overall: PeriodComparison;
+  categories: CategoryComparison[];
+}
+
+export interface TopMerchant {
+  merchant: string;
+  count: number;
+  total: number;
+  avg_amount: number;
+}
+
+export interface MerchantTrend {
+  merchant: string;
+  months: { month: string; total: number; count: number }[];
+  current_month: number;
+  previous_month: number;
+  trend: 'up' | 'down' | 'stable';
+}
+
+export interface AnalyticsMerchants {
+  top: TopMerchant[];
+  trend: MerchantTrend | null;
+}
+
+export interface SpendingVelocity {
+  current_mtd: number;
+  last_month_total: number;
+  projected_total: number;
+  days_elapsed: number;
+  total_days: number;
+  pace_percent: number;
+  status: string;
+}
+
+export interface Anomaly {
+  id: number;
+  merchant: string | null;
+  amount: number;
+  currency: string;
+  category: string | null;
+  transaction_date: string;
+  avg_amount: number;
+  explanation?: string;
+}
+
+export interface NewMerchant {
+  merchant: string;
+  first_date: string;
+  category: string | null;
+  amount: number;
+}
+
+export interface AnalyticsAlerts {
+  anomalies: Anomaly[];
+  new_merchants: NewMerchant[];
+}
+
+export interface AnalyticsSummaries {
+  monthly: Record<string, unknown> | null;
+  weekly: Record<string, unknown> | null;
+}
+
+export interface YoyComparisonPoint {
+  month_label: string;
+  month: string;
+  this_year_expenses: number;
+  last_year_expenses: number;
+  this_year_income: number;
+  last_year_income: number;
+}
+
 export const api = {
   // Auth
   login: (username: string, password: string) =>
@@ -345,19 +464,19 @@ export const api = {
 
   // Summary & Analytics
   getSummary: (start_date: string, end_date: string) =>
-    request<any>(`/api/summary?start_date=${start_date}&end_date=${end_date}`),
+    request<SpendingSummary>(`/api/summary?start_date=${start_date}&end_date=${end_date}`),
 
   getTrend: (start_date: string, end_date: string) =>
-    request<any>(`/api/trend?start_date=${start_date}&end_date=${end_date}`),
+    request<TrendPoint[]>(`/api/trend?start_date=${start_date}&end_date=${end_date}`),
 
   getTrendByCategory: (start_date: string, end_date: string) =>
-    request<any>(`/api/trend/by-category?start_date=${start_date}&end_date=${end_date}`),
+    request<TrendByCategoryPoint[]>(`/api/trend/by-category?start_date=${start_date}&end_date=${end_date}`),
 
   getBalance: (start_date: string, end_date: string) =>
-    request<any>(`/api/balance?start_date=${start_date}&end_date=${end_date}`),
+    request<Balance>(`/api/balance?start_date=${start_date}&end_date=${end_date}`),
 
   getInsights: (start_date: string, end_date: string) =>
-    request<any>(`/api/insights?start_date=${start_date}&end_date=${end_date}`),
+    request<SpendingInsights>(`/api/insights?start_date=${start_date}&end_date=${end_date}`),
 
   getMerchants: (start_date: string, end_date: string) =>
     request<string[]>(`/api/merchants?start_date=${start_date}&end_date=${end_date}`),
@@ -405,26 +524,26 @@ export const api = {
   getAnalyticsComparison: (period: string, date?: string) => {
     const params = new URLSearchParams({ period });
     if (date) params.set('date', date);
-    return request<any>(`/api/analytics/comparison?${params}`);
+    return request<AnalyticsComparison>(`/api/analytics/comparison?${params}`);
   },
 
   getAnalyticsMerchants: (limit = 10, merchant?: string) => {
     const params = new URLSearchParams({ limit: String(limit) });
     if (merchant) params.set('merchant', merchant);
-    return request<any>(`/api/analytics/merchants?${params}`);
+    return request<AnalyticsMerchants>(`/api/analytics/merchants?${params}`);
   },
 
   getAnalyticsVelocity: () =>
-    request<any>('/api/analytics/velocity'),
+    request<SpendingVelocity>('/api/analytics/velocity'),
 
   getAnalyticsAlerts: () =>
-    request<any>('/api/analytics/alerts'),
+    request<AnalyticsAlerts>('/api/analytics/alerts'),
 
   getAnalyticsSummaries: () =>
-    request<any>('/api/analytics/summaries'),
+    request<AnalyticsSummaries>('/api/analytics/summaries'),
 
   getAnalyticsYoY: (months = 12) =>
-    request<any[]>(`/api/analytics/yoy?months=${months}`),
+    request<YoyComparisonPoint[]>(`/api/analytics/yoy?months=${months}`),
 
   getAnalyticsInsight: () =>
     request<LLMInsight>('/api/analytics/insight'),

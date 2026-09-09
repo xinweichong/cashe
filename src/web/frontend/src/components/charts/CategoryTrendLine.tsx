@@ -5,7 +5,7 @@ import {
 import { formatCurrency, getCategoryColor } from '@/lib/utils';
 import { formatDateTick, formatDateLabel, useChartTheme } from '@/lib/chartTheme';
 
-export function CategoryTrendLine({ data }: { data: Record<string, any>[] }) {
+export function CategoryTrendLine({ data }: { data: Record<string, string | number | null>[] }) {
   const { CHART_AXIS_PROPS, CHART_TOOLTIP_STYLE, CHART_CURSOR_LINE, CHART_LEGEND_STYLE } = useChartTheme();
   const categories = useMemo(() => {
     const cats = new Set<string>();
@@ -33,7 +33,7 @@ export function CategoryTrendLine({ data }: { data: Record<string, any>[] }) {
           <Tooltip
             cursor={CHART_CURSOR_LINE}
             contentStyle={CHART_TOOLTIP_STYLE}
-            formatter={(value: any, name: any) => [formatCurrency(Number(value ?? 0)), String(name ?? '')]}
+            formatter={(value: unknown, name: unknown) => [formatCurrency(Number(value ?? 0)), String(name ?? '')]}
             labelFormatter={formatDateLabel}
           />
           <Legend wrapperStyle={{ ...CHART_LEGEND_STYLE, paddingTop: '8px' }} />
