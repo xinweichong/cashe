@@ -477,8 +477,14 @@ export const api = {
   getSummary: (start_date: string, end_date: string) =>
     request<SpendingSummary>(`/api/summary?start_date=${start_date}&end_date=${end_date}`),
 
+  getSummaryV2: (start_date: string, end_date: string) =>
+    request<OverviewSummaryV2>(`/api/v2/overview/summary?start_date=${start_date}&end_date=${end_date}`),
+
   getTrend: (start_date: string, end_date: string) =>
     request<TrendPoint[]>(`/api/trend?start_date=${start_date}&end_date=${end_date}`),
+
+  getTrendV2: (start_date: string, end_date: string) =>
+    request<TrendPointV2[]>(`/api/v2/overview/trend?start_date=${start_date}&end_date=${end_date}`),
 
   getTrendByCategory: (start_date: string, end_date: string) =>
     request<TrendByCategoryPoint[]>(`/api/trend/by-category?start_date=${start_date}&end_date=${end_date}`),

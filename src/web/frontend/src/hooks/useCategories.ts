@@ -40,10 +40,24 @@ export function useSummary(start_date: string, end_date: string) {
   });
 }
 
+export function useSummaryV2(start_date: string, end_date: string) {
+  return useQuery({
+    queryKey: ['summary-v2', start_date, end_date],
+    queryFn: () => api.getSummaryV2(start_date, end_date),
+  });
+}
+
 export function useTrend(start_date: string, end_date: string) {
   return useQuery({
     queryKey: ['trend', start_date, end_date],
     queryFn: () => api.getTrend(start_date, end_date),
+  });
+}
+
+export function useTrendV2(start_date: string, end_date: string) {
+  return useQuery({
+    queryKey: ['trend-v2', start_date, end_date],
+    queryFn: () => api.getTrendV2(start_date, end_date),
   });
 }
 

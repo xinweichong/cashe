@@ -6,9 +6,9 @@ import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { usePeriod, type Period } from '@/hooks/usePeriod';
-import { useSummary, useTrend, useTrendByCategory, useBalance } from '@/hooks/useCategories';
+import { useSummaryV2, useTrendV2, useTrendByCategory, useBalance } from '@/hooks/useCategories';
 import { useTransactions } from '@/hooks/useTransactions';
-import { api, type Transaction, type BudgetProgress, type GoalProgress } from '@/api/client';
+import { api, type Transaction, type BudgetProgressV2, type GoalProgress } from '@/api/client';
 import { formatCurrency, formatCurrencyWhole, formatDate, getCategoryColor, cn } from '@/lib/utils';
 import { CategoryDonut } from '@/components/charts/CategoryDonut';
 import { TrendLine } from '@/components/charts/TrendLine';
@@ -198,8 +198,8 @@ export function OverviewPage() {
   const [txPage, setTxPage] = useState(1);
   const [txCategoryFilter, setTxCategoryFilter] = useState('');
 
-  const { data: summary } = useSummary(start, end);
-  const { data: trend } = useTrend(start, end);
+  const { data: summary } = useSummaryV2(start, end);
+  const { data: trend } = useTrendV2(start, end);
   const { data: trendByCategory } = useTrendByCategory(start, end);
   const { data: balance } = useBalance(start, end);
   const { data: recentTransactions } = useTransactions({ start_date: start, end_date: end, limit: 200 });
@@ -211,8 +211,8 @@ export function OverviewPage() {
   });
 
   const { data: budgetProgress = [] } = useQuery({
-    queryKey: ['budget-progress'],
-    queryFn: () => api.getBudgetProgress(),
+    queryKey: ['budget-progress-v2'],
+    queryFn: () => api.getBudgetProgressV2(),
     enabled: settings?.budgets_enabled === true,
     staleTime: 30_000,
   });
@@ -224,13 +224,16 @@ export function OverviewPage() {
     staleTime: 30_000,
   });
 
-  // API returns { by_category: { "Food": 50, ... } } — transform to array
+  // v2 returns { by_category: { "Food": { minor_units, currency }, ... } } — transform to array of dollar amounts
   const categories = useMemo(() => {
     const byCat = summary?.by_category;
     if (!byCat || typeof byCat !== 'object') return [];
-    return Object.entries(byCat).map(([category, total]) => ({ category, total: total as number }));
+    return Object.entries(byCat).map(([category, money]) => ({ category, total: money.minor_units / 100 }));
   }, [summary]);
-  const trendData = trend ?? [];
+  const trendData = useMemo(
+    () => (trend ?? []).map(t => ({ date: t.date, amount: t.amount.minor_units / 100 })),
+    [trend],
+  );
   const trendByCategoryData = trendByCategory ?? [];
   const income = balance?.income ?? 0;
   const expenses = balance?.expenses ?? 0;
@@ -415,13 +418,13 @@ export function OverviewPage() {
                 </Link>
               }
             >
-              {budgetProgress.every((b: BudgetProgress) => b.status === 'on_track') ? (
+              {budgetProgress.every((b: BudgetProgressV2) => b.status === 'on_track') ? (
                 <p className="text-sm text-success">All budgets on track.</p>
               ) : (
                 <div className="space-y-2">
                   {budgetProgress
-                    .filter((b: BudgetProgress) => b.status !== 'on_track')
-                    .map((b: BudgetProgress) => (
+                    .filter((b: BudgetProgressV2) => b.status !== 'on_track')
+                    .map((b: BudgetProgressV2) => (
                       <div key={b.id} className="space-y-1">
                         <div className="flex justify-between text-xs">
                           <span className="text-foreground">
