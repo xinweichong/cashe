@@ -6,6 +6,11 @@ export type TransactionV2 = components['schemas']['TransactionV2'];
 export type TransactionCreateV2 = components['schemas']['TransactionCreate'];
 export type TransactionCorrectionV2 = components['schemas']['TransactionCorrection'];
 export type TransactionDeletionV2 = components['schemas']['TransactionDeletion'];
+export type TripSummaryV2 = components['schemas']['TripSummary'];
+export type OverviewSummaryV2 = components['schemas']['OverviewSummary'];
+export type TrendPointV2 = components['schemas']['TrendPoint'];
+export type MerchantRankingV2 = components['schemas']['MerchantRanking'];
+export type BudgetProgressV2 = components['schemas']['BudgetProgress'];
 
 export async function request<T>(path: string, opts?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
@@ -722,6 +727,8 @@ export const api = {
   getActiveTrip: () => request<Trip>('/api/trips/active'),
 
   getTripSummary: (id: number) => request<TripSummary>(`/api/trips/${id}/summary`),
+
+  getTripSummaryV2: (id: number) => request<TripSummaryV2>(`/api/v2/trips/${id}/summary`),
 
   getTripTransactions: (id: number, limit?: number, offset?: number) =>
     request<Transaction[]>(`/api/trips/${id}/transactions?limit=${limit ?? 50}&offset=${offset ?? 0}`),

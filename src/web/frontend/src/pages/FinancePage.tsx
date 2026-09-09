@@ -798,7 +798,7 @@ function TripRow({ trip }: { trip: Trip }) {
 
   const { data: summary } = useQuery({
     queryKey: ['trip-summary', trip.id],
-    queryFn: () => api.getTripSummary(trip.id),
+    queryFn: () => api.getTripSummaryV2(trip.id),
     enabled: expanded,
     staleTime: 60_000,
   });
@@ -908,8 +908,8 @@ function TripRow({ trip }: { trip: Trip }) {
           <div className="mt-3 ml-9 space-y-3">
             {summary && (
               <p className="text-xs text-muted font-mono">
-                S${summary.total_sgd.toFixed(2)} · {summary.transaction_count} transactions ·
-                S${summary.daily_average_sgd.toFixed(2)}/day
+                S${(summary.total.minor_units / 100).toFixed(2)} · {summary.transaction_count} transactions ·
+                S${(summary.daily_average.minor_units / 100).toFixed(2)}/day
               </p>
             )}
             <div className="flex items-center justify-between">
