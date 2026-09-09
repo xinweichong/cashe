@@ -76,6 +76,13 @@ class TestToMinorUnits:
         with pytest.raises(ValueError, match="finite"):
             to_minor_units(float("inf"), "SGD")
 
+    def test_non_numeric_string_input_rejected(self):
+        # SQLite's dynamic typing can let a stray TEXT value sit in a
+        # REAL-affinity column from old/corrupt data — must not raise a raw
+        # decimal.InvalidOperation callers aren't expecting.
+        with pytest.raises(ValueError):
+            to_minor_units("not-a-number", "SGD")
+
     def test_unknown_currency_raises(self):
         with pytest.raises(UnsupportedCurrencyError):
             to_minor_units(Decimal("1.00"), "XYZ")

@@ -16,6 +16,17 @@ from pathlib import Path
 import sqlite3
 
 from src.canonical_money import compute_transaction_canonical
+from src.money import to_minor_units
+
+# The only tables/columns this script is allowed to touch — never derived
+# from CLI input, so this is a closed set rather than a runtime whitelist.
+_SGD_TARGETS = (
+    ("budgets", "amount", "amount_minor_units"),
+    ("goals", "target_amount", "target_minor_units"),
+    ("goals", "saved_amount", "saved_minor_units"),
+    ("goal_contributions", "amount", "amount_minor_units"),
+    ("upcoming_transactions", "expected_amount", "expected_minor_units"),
+)
 
 
 def backfill_transactions(conn: sqlite3.Connection, apply: bool) -> dict:
@@ -63,6 +74,42 @@ def backfill_transactions(conn: sqlite3.Connection, apply: bool) -> dict:
     }
 
 
+def backfill_sgd_minor_units(conn: sqlite3.Connection, table: str, amount_column: str, minor_column: str, apply: bool) -> dict:
+    """Backfill a plain SGD-only integer minor-units mirror of `amount_column`.
+
+    No FX involved — these tables have no currency column, so the amount is
+    already implicitly SGD. NULL amounts (e.g. an unset upcoming charge) are
+    never candidates; that's absence, not an issue.
+    """
+    rows = conn.execute(
+        f"SELECT id, {amount_column} FROM {table} WHERE {minor_column} IS NULL AND {amount_column} IS NOT NULL"
+    ).fetchall()
+
+    issues: Counter = Counter()
+    updated = 0
+    for row_id, amount in rows:
+        try:
+            minor = to_minor_units(amount, "SGD")
+        except ValueError:
+            issues["invalid_amount"] += 1
+            continue
+        if apply:
+            conn.execute(f"UPDATE {table} SET {minor_column} = ? WHERE id = ?", (minor, row_id))
+            updated += 1
+
+    if apply:
+        conn.commit()
+
+    return {
+        "dry_run": not apply,
+        "table": table,
+        "column": minor_column,
+        "rows_scanned": len(rows),
+        "updated": updated,
+        "issues": dict(issues),
+    }
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("database", type=Path)
@@ -70,8 +117,15 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
 
     conn = sqlite3.connect(args.database)
+    conn.row_factory = sqlite3.Row
     try:
-        report = backfill_transactions(conn, args.apply)
+        report = {
+            "dry_run": not args.apply,
+            "transactions": backfill_transactions(conn, args.apply),
+        }
+        for table, amount_column, minor_column in _SGD_TARGETS:
+            key = f"{table}.{minor_column}"
+            report[key] = backfill_sgd_minor_units(conn, table, amount_column, minor_column, args.apply)
         print(json.dumps(report, indent=2, sort_keys=True))
         return 0
     finally:

@@ -1,7 +1,7 @@
 import json
 
 from src.main import init_db
-from scripts.backfill_canonical_money import backfill_transactions, main
+from scripts.backfill_canonical_money import backfill_sgd_minor_units, backfill_transactions, main
 
 
 def _insert(conn, source_id, amount, currency="SGD", exchange_rate=1.0, transaction_date="2026-05-01"):
@@ -109,10 +109,97 @@ def test_cli_dry_run_then_apply(tmp_path, capsys):
     assert exit_code == 0
     report = json.loads(capsys.readouterr().out)
     assert report["dry_run"] is True
-    assert report["updated"] == 0
+    assert report["transactions"]["updated"] == 0
 
     exit_code = main([str(path), "--apply"])
     assert exit_code == 0
     report = json.loads(capsys.readouterr().out)
     assert report["dry_run"] is False
-    assert report["updated"] == 1
+    assert report["transactions"]["updated"] == 1
+
+
+class TestBackfillSgdMinorUnits:
+    def test_budgets(self, tmp_path):
+        conn = init_db(str(tmp_path / "user.db"))
+        conn.execute("INSERT INTO budgets(category, period, amount) VALUES ('Food', 'monthly', 500.0)")
+        conn.commit()
+
+        report = backfill_sgd_minor_units(conn, "budgets", "amount", "amount_minor_units", apply=True)
+
+        assert report["updated"] == 1
+        row = conn.execute("SELECT amount, amount_minor_units FROM budgets").fetchone()
+        assert tuple(row) == (500.0, 50000)
+        conn.close()
+
+    def test_goals_target_and_saved_are_independent_columns(self, tmp_path):
+        conn = init_db(str(tmp_path / "user.db"))
+        conn.execute("INSERT INTO goals(name, target_amount, saved_amount) VALUES ('Trip', 1000.0, 250.5)")
+        conn.commit()
+
+        backfill_sgd_minor_units(conn, "goals", "target_amount", "target_minor_units", apply=True)
+        backfill_sgd_minor_units(conn, "goals", "saved_amount", "saved_minor_units", apply=True)
+
+        row = conn.execute("SELECT target_minor_units, saved_minor_units FROM goals").fetchone()
+        assert tuple(row) == (100000, 25050)
+        conn.close()
+
+    def test_goal_contributions(self, tmp_path):
+        conn = init_db(str(tmp_path / "user.db"))
+        conn.execute("INSERT INTO goals(id, name, target_amount) VALUES (1, 'Trip', 1000.0)")
+        conn.execute("INSERT INTO goal_contributions(goal_id, amount, month) VALUES (1, 42.5, '2026-09')")
+        conn.commit()
+
+        report = backfill_sgd_minor_units(conn, "goal_contributions", "amount", "amount_minor_units", apply=True)
+
+        assert report["updated"] == 1
+        row = conn.execute("SELECT amount_minor_units FROM goal_contributions").fetchone()
+        assert row[0] == 4250
+        conn.close()
+
+    def test_upcoming_transactions_skips_null_expected_amount(self, tmp_path):
+        conn = init_db(str(tmp_path / "user.db"))
+        sub_id = conn.execute(
+            "INSERT INTO subscriptions(merchant, frequency) VALUES ('Netflix', 'monthly')"
+        ).lastrowid
+        conn.execute(
+            "INSERT INTO upcoming_transactions(subscription_id, expected_date, expected_amount) VALUES (?, '2026-10-01', NULL)",
+            (sub_id,),
+        )
+        conn.execute(
+            "INSERT INTO upcoming_transactions(subscription_id, expected_date, expected_amount) VALUES (?, '2026-10-01', 15.98)",
+            (sub_id,),
+        )
+        conn.commit()
+
+        report = backfill_sgd_minor_units(conn, "upcoming_transactions", "expected_amount", "expected_minor_units", apply=True)
+
+        assert report["rows_scanned"] == 1  # the NULL row is never a candidate
+        assert report["updated"] == 1
+        rows = [r[0] for r in conn.execute("SELECT expected_minor_units FROM upcoming_transactions ORDER BY id")]
+        assert rows == [None, 1598]
+        conn.close()
+
+    def test_invalid_amount_is_reported_as_an_issue(self, tmp_path):
+        # SQLite's dynamic typing lets a non-numeric TEXT value sit in a
+        # REAL-affinity column (legacy/corrupt-data scenario) — must be
+        # reported as an issue, not raise an unhandled decimal error.
+        conn = init_db(str(tmp_path / "user.db"))
+        conn.execute("INSERT INTO budgets(category, period, amount) VALUES ('Food', 'monthly', 'not-a-number')")
+        conn.commit()
+
+        report = backfill_sgd_minor_units(conn, "budgets", "amount", "amount_minor_units", apply=True)
+
+        assert report["issues"] == {"invalid_amount": 1}
+        assert report["updated"] == 0
+        conn.close()
+
+    def test_dry_run_does_not_write(self, tmp_path):
+        conn = init_db(str(tmp_path / "user.db"))
+        conn.execute("INSERT INTO budgets(category, period, amount) VALUES ('Food', 'monthly', 500.0)")
+        conn.commit()
+
+        backfill_sgd_minor_units(conn, "budgets", "amount", "amount_minor_units", apply=False)
+
+        row = conn.execute("SELECT amount_minor_units FROM budgets").fetchone()
+        assert row[0] is None
+        conn.close()

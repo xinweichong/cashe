@@ -4,6 +4,7 @@ conversion, Decimal arithmetic, explicit rounding.
 Pure and side-effect-free — no database access, no I/O. See
 docs/plans/2026-09-09-cashe-completion-roadmap.md R02.
 """
+import decimal
 import math
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Union
@@ -55,7 +56,10 @@ def _to_decimal(amount: Numeric) -> Decimal:
         # Route through str() to avoid binary-float artifacts (e.g. 19.99
         # stored as 19.989999999999998...) leaking into the Decimal.
         return Decimal(str(amount))
-    return Decimal(amount)
+    try:
+        return Decimal(amount)
+    except decimal.InvalidOperation:
+        raise ValueError(f"amount is not a valid number: {amount!r}") from None
 
 
 def to_minor_units(amount: Numeric, currency: str) -> int:
