@@ -1214,6 +1214,64 @@
         "title": "RecurringReviewItem",
         "type": "object"
       },
+      "RefundEvidence": {
+        "properties": {
+          "amount": {
+            "title": "Amount",
+            "type": "number"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "merchant": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Merchant"
+          },
+          "transaction_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transaction Date"
+          },
+          "transaction_id": {
+            "title": "Transaction Id",
+            "type": "integer"
+          },
+          "warning": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warning"
+          }
+        },
+        "required": [
+          "transaction_id",
+          "merchant",
+          "transaction_date",
+          "amount",
+          "currency"
+        ],
+        "title": "RefundEvidence",
+        "type": "object"
+      },
       "SpendingAlerts": {
         "properties": {
           "anomalies": {
@@ -1811,6 +1869,17 @@
             ],
             "title": "Merchant"
           },
+          "refund_of_transaction_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Refund Of Transaction Id"
+          },
           "remember_category": {
             "default": false,
             "title": "Remember Category",
@@ -1984,6 +2053,24 @@
           "original": {
             "$ref": "#/components/schemas/OriginalMoney"
           },
+          "refund_of": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RefundEvidence"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "refunded_by": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/RefundEvidence"
+            },
+            "title": "Refunded By",
+            "type": "array"
+          },
           "reporting": {
             "anyOf": [
               {
@@ -2143,6 +2230,24 @@
           },
           "original": {
             "$ref": "#/components/schemas/OriginalMoney"
+          },
+          "refund_of": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RefundEvidence"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "refunded_by": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/RefundEvidence"
+            },
+            "title": "Refunded By",
+            "type": "array"
           },
           "reporting": {
             "anyOf": [
@@ -4177,6 +4282,43 @@
           }
         },
         "summary": "Delete Transaction V2"
+      },
+      "get": {
+        "operationId": "get_transaction_v2_api_v2_transactions__tx_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "tx_id",
+            "required": true,
+            "schema": {
+              "title": "Tx Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TransactionV2"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Transaction V2"
       },
       "put": {
         "operationId": "update_transaction_v2_api_v2_transactions__tx_id__put",

@@ -555,7 +555,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** Get Transaction V2 */
+        get: operations["get_transaction_v2_api_v2_transactions__tx_id__get"];
         /** Update Transaction V2 */
         put: operations["update_transaction_v2_api_v2_transactions__tx_id__put"];
         post?: never;
@@ -1049,6 +1050,21 @@ export interface components {
             /** Merchant */
             merchant: string;
         };
+        /** RefundEvidence */
+        RefundEvidence: {
+            /** Amount */
+            amount: number;
+            /** Currency */
+            currency: string;
+            /** Merchant */
+            merchant: string | null;
+            /** Transaction Date */
+            transaction_date: string | null;
+            /** Transaction Id */
+            transaction_id: number;
+            /** Warning */
+            warning?: string | null;
+        };
         /** SpendingAlerts */
         SpendingAlerts: {
             /** Anomalies */
@@ -1225,6 +1241,8 @@ export interface components {
             expected_revision?: number | null;
             /** Merchant */
             merchant?: string | null;
+            /** Refund Of Transaction Id */
+            refund_of_transaction_id?: number | null;
             /**
              * Remember Category
              * @default false
@@ -1288,6 +1306,12 @@ export interface components {
             /** Merchant */
             merchant: string | null;
             original: components["schemas"]["OriginalMoney"];
+            refund_of?: components["schemas"]["RefundEvidence"] | null;
+            /**
+             * Refunded By
+             * @default []
+             */
+            refunded_by: components["schemas"]["RefundEvidence"][];
             reporting: components["schemas"]["Money"] | null;
             /** Revision */
             revision: number;
@@ -1337,6 +1361,12 @@ export interface components {
             /** Merchant */
             merchant: string | null;
             original: components["schemas"]["OriginalMoney"];
+            refund_of?: components["schemas"]["RefundEvidence"] | null;
+            /**
+             * Refunded By
+             * @default []
+             */
+            refunded_by: components["schemas"]["RefundEvidence"][];
             reporting: components["schemas"]["Money"] | null;
             /** Revision */
             revision: number;
@@ -2421,6 +2451,37 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransactionV2"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_transaction_v2_api_v2_transactions__tx_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tx_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
