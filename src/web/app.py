@@ -23,7 +23,7 @@ from src import transaction_commands
 from src.money import to_minor_units
 from src.config import local_now
 from src.web.auth import verify_password, create_session, verify_session, destroy_session
-from src.web.contracts import BudgetProgress, CaptureFollowup, CaptureIssue, CaptureResolution, HealthScore, HomeBriefing, MerchantRanking, MerchantSummary, OverviewSummary, QueuedResponse, SpendingAlerts, SpendingComparison, SpendingEvidence, SpendingFacts, SpendingReview, SpendingVelocity, TopMerchantsResult, TransactionCorrection, TransactionCreate, TransactionDeletion, TransactionProvenance, TransactionUndo, TransactionV2, TrendPoint, TripSummary, UpcomingPlan, PlanMutationResponse, RecurringReview, RecurringResolution
+from src.web.contracts import Balance, BudgetProgress, CaptureFollowup, CaptureIssue, CaptureResolution, CategoryTrendPoint, HealthScore, HomeBriefing, MerchantRanking, MerchantSummary, OverviewSummary, QueuedResponse, SpendingAlerts, SpendingComparison, SpendingEvidence, SpendingFacts, SpendingReview, SpendingVelocity, TopMerchantsResult, TransactionCorrection, TransactionCreate, TransactionDeletion, TransactionProvenance, TransactionUndo, TransactionV2, TrendPoint, TripSummary, UpcomingPlan, PlanMutationResponse, RecurringReview, RecurringResolution
 from src.analytics import (
     load_summary,
     get_yoy_comparison,
@@ -880,6 +880,16 @@ def create_dashboard_app(
         end = end_date or today.strftime("%Y-%m-%d")
         return await _db(storage.get_balance, start, end)
 
+    @app.get("/api/v2/overview/balance", response_model=Balance)
+    async def balance_v2(start_date: Optional[str] = None, end_date: Optional[str] = None, storage=Depends(_get_storage)):
+        start, end = _default_month_range(start_date, end_date)
+        result = await _db(storage.get_balance, start, end)
+        return {
+            "income": _sgd_money(result["income"]),
+            "expenses": _sgd_money(result["expenses"]),
+            "net": _sgd_money(result["net"]),
+        }
+
     @app.get("/api/health-score")
     async def health_score(months: int = 1, storage=Depends(_get_storage)):
         if months < 1 or months > 12:
@@ -924,6 +934,22 @@ def create_dashboard_app(
         start = start_date or f"{today.year}-{today.month:02d}-01"
         end = end_date or today.strftime("%Y-%m-%d")
         return await _db(storage.get_trend_by_category, start, end)
+
+    @app.get("/api/v2/overview/trend-by-category", response_model=list[CategoryTrendPoint])
+    async def trend_by_category_v2(start_date: Optional[str] = None, end_date: Optional[str] = None, storage=Depends(_get_storage)):
+        start, end = _default_month_range(start_date, end_date)
+        rows = await _db(storage.get_trend_by_category, start, end)
+        return [
+            {
+                "date": r["date"],
+                "categories": {
+                    k: (_sgd_money(v) if v is not None else None)
+                    for k, v in r.items()
+                    if k != "date"
+                },
+            }
+            for r in rows
+        ]
 
     @app.get("/api/merchants")
     async def merchants(start_date: Optional[str] = None, end_date: Optional[str] = None, storage=Depends(_get_storage)):

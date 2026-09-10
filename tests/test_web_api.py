@@ -594,6 +594,56 @@ class TestOverviewV2:
         assert data[0]["visits"] == 1
 
     @pytest.mark.asyncio
+    async def test_balance_returns_income_expenses_net(self, client):
+        await client.post("/api/v2/transactions", json={
+            "amount": 3000.00, "category": "Salary", "type": "income", "transaction_date": "2026-04-16T12:00:00",
+        })
+        await client.post("/api/v2/transactions", json={
+            "amount": 1200.00, "category": "Rent", "type": "expense", "transaction_date": "2026-04-16T12:00:00",
+        })
+        response = await client.get("/api/v2/overview/balance", params={
+            "start_date": "2026-04-01", "end_date": "2026-04-30",
+        })
+        assert response.status_code == 200
+        data = response.json()
+        assert data["income"] == {"minor_units": 300000, "currency": "SGD"}
+        assert data["expenses"] == {"minor_units": 120000, "currency": "SGD"}
+        assert data["net"] == {"minor_units": 180000, "currency": "SGD"}
+
+    @pytest.mark.asyncio
+    async def test_balance_net_can_be_negative(self, client):
+        await client.post("/api/v2/transactions", json={
+            "amount": 100.00, "category": "Salary", "type": "income", "transaction_date": "2026-04-16T12:00:00",
+        })
+        await client.post("/api/v2/transactions", json={
+            "amount": 400.00, "category": "Rent", "type": "expense", "transaction_date": "2026-04-16T12:00:00",
+        })
+        response = await client.get("/api/v2/overview/balance", params={
+            "start_date": "2026-04-01", "end_date": "2026-04-30",
+        })
+        assert response.json()["net"] == {"minor_units": -30000, "currency": "SGD"}
+
+    @pytest.mark.asyncio
+    async def test_trend_by_category_gap_fills_with_null_money(self, client):
+        await client.post("/api/v2/transactions", json={
+            "amount": 10.00, "category": "Food", "type": "expense", "transaction_date": "2026-04-10T12:00:00",
+        })
+        await client.post("/api/v2/transactions", json={
+            "amount": 20.00, "category": "Transport", "type": "expense", "transaction_date": "2026-04-11T12:00:00",
+        })
+        response = await client.get("/api/v2/overview/trend-by-category", params={
+            "start_date": "2026-04-01", "end_date": "2026-04-30",
+        })
+        assert response.status_code == 200
+        data = response.json()
+        day10 = next(d for d in data if d["date"] == "2026-04-10")
+        day11 = next(d for d in data if d["date"] == "2026-04-11")
+        assert day10["categories"]["Food"] == {"minor_units": 1000, "currency": "SGD"}
+        assert day10["categories"]["Transport"] is None
+        assert day11["categories"]["Transport"] == {"minor_units": 2000, "currency": "SGD"}
+        assert day11["categories"]["Food"] is None
+
+    @pytest.mark.asyncio
     async def test_requires_auth(self, client):
         await client.post("/api/logout")
         response = await client.get("/api/v2/overview/summary")

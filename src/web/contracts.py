@@ -456,3 +456,25 @@ class HealthScore(BaseModel):
     has_income_data: bool
     period: str
     components: dict[str, HealthScoreComponent]
+
+
+# Typed wrapper over Storage.get_balance, which delegates to
+# get_spending_summary/get_income_summary["total"] — both already
+# canonical-money-correct.
+class Balance(BaseModel):
+    income: Money
+    expenses: Money
+    net: Money
+
+
+# Typed wrapper over Storage.get_trend_by_category (already
+# canonical-money-correct). The v1 shape is a flat dict per date with one
+# dynamic key per category (`{"date": ..., "Food": 12.5, "Transport": None}`)
+# — gap-filled with explicit None so every date has every category key, which
+# Recharts needs for line continuity. A Money contract can't have dynamic
+# top-level keys, so v2 nests them under `categories` instead of flattening;
+# the frontend re-flattens when building chart data, same as it already
+# does to unwrap Money elsewhere.
+class CategoryTrendPoint(BaseModel):
+    date: str
+    categories: dict[str, Money | None]
