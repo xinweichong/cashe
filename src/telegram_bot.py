@@ -16,6 +16,7 @@ from src.categorizer import Categorizer
 from src.config import local_now
 from src.exchange import ExchangeRateService
 from src.storage import Storage, TransactionRequestConflict
+from src.spending_facts import resolve_money
 from src import transaction_commands
 
 logger = logging.getLogger(__name__)
@@ -46,6 +47,23 @@ def _fmt_tx_date(transaction_date) -> str:
     if time_part and time_part != "00:00":
         return f"{date_part} {time_part}"
     return date_part
+
+
+def _fmt_sgd_equivalent(tx: dict) -> str:
+    """Display-only SGD equivalent for an already-stored transaction row.
+
+    Reads reporting_minor_units (R02 canonical money) via resolve_money
+    rather than recomputing amount * exchange_rate directly: a legacy
+    exchange_rate of 1.0 is a silent unresolved fallback, not real
+    conversion evidence, so a naive multiplication would show an
+    unresolved foreign-currency transaction at face value as if it were
+    SGD. Returns "unresolved" rather than a fabricated figure when there's
+    no canonical conversion.
+    """
+    minor, _status = resolve_money(tx)
+    if minor is None:
+        return "unresolved"
+    return f"{minor / 100:.2f}"
 
 
 def get_category_keyboard(tx_id: int, categories: list[str]) -> InlineKeyboardMarkup:
@@ -307,11 +325,11 @@ class TelegramBotService:
         if not tx:
             await update.message.reply_text("Transaction not found.")
             return
-        amount_sgd = tx["amount"] * tx.get("exchange_rate", 1.0)
+        amount_sgd = _fmt_sgd_equivalent(tx)
         date_str = _fmt_tx_date(tx.get("transaction_date"))
         msg = (
             f"Delete this transaction?\n\n"
-            f"*{tx.get('merchant', '—')}* — ${amount_sgd:.2f} SGD\n"
+            f"*{tx.get('merchant', '—')}* — ${amount_sgd} SGD\n"
             f"Category: {tx.get('category', '—')}\n"
             f"Date: {date_str}\n"
             f"Source: {tx.get('source', '—')}"
@@ -355,12 +373,12 @@ class TelegramBotService:
             await update.message.reply_text("Transaction not found.")
             return ConversationHandler.END
         context.user_data["edit_tx_id"] = tx_id
-        amount_sgd = tx["amount"] * tx.get("exchange_rate", 1.0)
+        amount_sgd = _fmt_sgd_equivalent(tx)
         date_str = _fmt_tx_date(tx.get("transaction_date"))
         msg = (
             f"*Transaction #{tx_id}*\n"
             f"Merchant: {tx.get('merchant', '—')}\n"
-            f"Amount: {tx.get('currency', 'SGD')} {tx['amount']:.2f} (SGD {amount_sgd:.2f})\n"
+            f"Amount: {tx.get('currency', 'SGD')} {tx['amount']:.2f} (SGD {amount_sgd})\n"
             f"Category: {tx.get('category', '—')}\n"
             f"Date: {date_str}\n"
             f"Description: {tx.get('description', '—')}\n\n"
@@ -1694,8 +1712,13 @@ class TelegramBotService:
         # Budget alert check — income transactions don't trigger budget alerts
         if tx and tx.get("type") != "income":
             try:
-                _sgd = tx["amount"] * (tx.get("exchange_rate") or 1.0)
-                await self._check_and_alert_budgets(category, _sgd, _storage, chat_id=_chat_id)
+                # reporting_minor_units (R02 canonical money), not a raw
+                # amount * exchange_rate recompute — an unresolved foreign-
+                # currency transaction (exchange_rate == 1.0 marker) must
+                # not be counted at face value toward a budget alert.
+                _minor, _ = resolve_money(tx)
+                if _minor is not None:
+                    await self._check_and_alert_budgets(category, _minor / 100, _storage, chat_id=_chat_id)
             except Exception as _e:
                 logger.warning("Budget alert check failed: %s", _e)
 
@@ -1745,8 +1768,15 @@ class TelegramBotService:
                 limit=1000,
             )
             if len(prior) >= 3:
-                amounts = sorted(r["amount"] * (r.get("exchange_rate") or 1.0) for r in prior)
+                # reporting_minor_units (R02 canonical money), not a raw
+                # amount * exchange_rate recompute — same anomaly-median bug
+                # class already fixed in analytics.get_anomalies; unresolved
+                # rows are excluded rather than counted at face value.
+                resolved = [resolve_money(r)[0] for r in prior]
+                amounts = sorted(m / 100 for m in resolved if m is not None)
                 n = len(amounts)
+                if n < 3:
+                    raise ValueError("not enough resolved prior transactions")
                 mid = n // 2
                 median = amounts[mid] if n % 2 == 1 else (amounts[mid - 1] + amounts[mid]) / 2
                 if median > 0 and amount >= 2 * median:

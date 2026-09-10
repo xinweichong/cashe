@@ -584,6 +584,54 @@ class TestDeleteCommand:
         query.edit_message_text.assert_called_once()
 
 
+class TestSgdEquivalentDisplay:
+    """Delete/edit confirmation messages must read canonical money
+    (reporting_minor_units via resolve_money), not recompute
+    amount * exchange_rate — a legacy exchange_rate of 1.0 is a silent
+    unresolved marker, not a real rate."""
+
+    @pytest.mark.asyncio
+    async def test_delete_confirmation_shows_resolved_sgd(self, bot_service):
+        tx_id = bot_service.storage.insert_transaction(
+            source="manual", source_id="jpy1", amount=1000.0, merchant="Tokyo Cafe",
+            category="Dining", transaction_date="2026-04-10", tx_type="expense",
+            currency="JPY", exchange_rate=0.0091,
+        )
+        update = SimpleNamespace(message=SimpleNamespace(reply_text=AsyncMock()))
+        context = SimpleNamespace(args=[str(tx_id)])
+        await bot_service._delete_command(update, context)
+        text = update.message.reply_text.call_args.args[0]
+        assert "9.10 SGD" in text
+
+    @pytest.mark.asyncio
+    async def test_delete_confirmation_shows_unresolved_not_face_value(self, bot_service):
+        tx_id = bot_service.storage.insert_transaction(
+            source="manual", source_id="thb1", amount=500.0, merchant="Bangkok Grill",
+            category="Dining", transaction_date="2026-04-10", tx_type="expense",
+            currency="THB", exchange_rate=1.0,
+        )
+        update = SimpleNamespace(message=SimpleNamespace(reply_text=AsyncMock()))
+        context = SimpleNamespace(args=[str(tx_id)])
+        await bot_service._delete_command(update, context)
+        text = update.message.reply_text.call_args.args[0]
+        assert "unresolved SGD" in text
+        assert "500.00 SGD" not in text
+
+    @pytest.mark.asyncio
+    async def test_edit_start_shows_unresolved_not_face_value(self, bot_service):
+        tx_id = bot_service.storage.insert_transaction(
+            source="manual", source_id="thb2", amount=500.0, merchant="Bangkok Grill",
+            category="Dining", transaction_date="2026-04-10", tx_type="expense",
+            currency="THB", exchange_rate=1.0,
+        )
+        update = SimpleNamespace(message=SimpleNamespace(reply_text=AsyncMock()))
+        context = SimpleNamespace(args=[str(tx_id)], user_data={})
+        await bot_service._edit_start(update, context)
+        text = update.message.reply_text.call_args.args[0]
+        assert "SGD unresolved" in text
+        assert "SGD 500.00" not in text
+
+
 class TestEditValueEnteredDateValidation:
     @pytest.mark.asyncio
     async def test_invalid_date_prompts_retry(self, bot_service, in_memory_db):
@@ -710,6 +758,37 @@ class TestAsyncNotify:
         assert kwargs.get("reply_markup") is None
         assert "Grab" in kwargs["text"]
         assert "12.00" in kwargs["text"]
+
+    @pytest.mark.asyncio
+    async def test_budget_alert_uses_canonical_money_not_face_value(self, in_memory_db):
+        # An unresolved foreign-currency transaction (exchange_rate == 1.0
+        # marker) must not be counted at face value toward a budget alert —
+        # same canonical-money-vs-raw-recompute bug class as the delete/edit
+        # confirmation displays.
+        service = self._make_service(in_memory_db)
+        service.storage.set_setting("budgets_enabled", "true")
+        tx_id = service.storage.insert_transaction(
+            source="manual", source_id="thb1", amount=500.0, merchant="Bangkok Grill",
+            category="Dining", transaction_date="2026-04-10", tx_type="expense",
+            currency="THB", exchange_rate=1.0,
+        )
+        with patch.object(service, "_check_and_alert_budgets", new=AsyncMock()) as alert:
+            await service._async_notify(tx_id, 500.0, "Bangkok Grill", "Dining", "keyword:bangkok", "manual")
+        alert.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_budget_alert_uses_resolved_sgd_for_foreign_currency(self, in_memory_db):
+        service = self._make_service(in_memory_db)
+        service.storage.set_setting("budgets_enabled", "true")
+        tx_id = service.storage.insert_transaction(
+            source="manual", source_id="jpy1", amount=1000.0, merchant="Tokyo Cafe",
+            category="Dining", transaction_date="2026-04-10", tx_type="expense",
+            currency="JPY", exchange_rate=0.0091,
+        )
+        with patch.object(service, "_check_and_alert_budgets", new=AsyncMock()) as alert:
+            await service._async_notify(tx_id, 1000.0, "Tokyo Cafe", "Dining", "keyword:tokyo", "manual")
+        alert.assert_called_once()
+        assert alert.call_args.args[1] == pytest.approx(9.1)
 
 
 class TestParseAddCommandDatetime:
@@ -1011,6 +1090,33 @@ class TestStartCommand:
         # No user should be linked; user prompted to use a code
         call_text = update.message.reply_text.call_args[0][0]
         assert "/start" in call_text
+
+
+class TestBuildContextLineAnomalyMedian:
+    @pytest.mark.asyncio
+    async def test_unresolved_fx_excluded_from_median_not_counted_at_face_value(self, bot_service):
+        # Same anomaly-median bug class already fixed in analytics.get_anomalies:
+        # an unresolved foreign-currency transaction (exchange_rate == 1.0
+        # marker) must not be counted at its raw face value when computing
+        # the category median — that would skew the median upward and mask
+        # genuine anomalies. Three SGD-10 baseline transactions plus one
+        # THB-5000-unresolved transaction should still produce a median of
+        # 10, not something inflated by the unresolved 5000.
+        from datetime import datetime
+        bot_service._local_now = MagicMock(return_value=datetime(2026, 4, 20, 12))
+        for i in range(3):
+            bot_service.storage.insert_transaction(
+                source="manual", source_id=f"base{i}", amount=10.0, merchant="Cafe",
+                category="Dining", transaction_date="2026-04-15", tx_type="expense",
+            )
+        bot_service.storage.insert_transaction(
+            source="manual", source_id="unresolved1", amount=5000.0, merchant="Fancy Place",
+            category="Dining", transaction_date="2026-04-16", tx_type="expense",
+            currency="THB", exchange_rate=1.0,
+        )
+        result = bot_service._build_context_line("Dining", "New Spot", 25.0)
+        assert "Unusual" in result
+        assert "2.5" in result  # 25 / median(10) = 2.5x
 
 
 class TestAddCommandConfirmation:
