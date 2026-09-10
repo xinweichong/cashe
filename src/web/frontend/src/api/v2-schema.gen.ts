@@ -208,6 +208,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/goals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Goals V2 */
+        get: operations["list_goals_v2_api_v2_goals_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v2/home": {
         parameters: {
             query?: never;
@@ -758,6 +775,52 @@ export interface components {
             source: string | null;
             /** Status */
             status: ("native" | "resolved" | "indicative" | "unresolved") | null;
+        };
+        /** GoalContributionV2 */
+        GoalContributionV2: {
+            amount: components["schemas"]["Money"];
+            /** Contributed Date */
+            contributed_date: string | null;
+            /** Created At */
+            created_at: string;
+            /** Goal Id */
+            goal_id: number;
+            /** Id */
+            id: number;
+            /** Month */
+            month: string;
+            /** Note */
+            note: string | null;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "auto" | "manual";
+        };
+        /** GoalProgress */
+        GoalProgress: {
+            /** Contributions */
+            contributions: components["schemas"]["GoalContributionV2"][];
+            /** Id */
+            id: number;
+            monthly_rate: components["schemas"]["Money"];
+            /** Months To Target */
+            months_to_target: number | null;
+            /** Name */
+            name: string;
+            /** On Track */
+            on_track: ("on_track" | "ahead" | "behind") | null;
+            /** Percent */
+            percent: number;
+            saved_amount: components["schemas"]["Money"];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "active" | "completed" | "paused";
+            target_amount: components["schemas"]["Money"];
+            /** Target Date */
+            target_date: string | null;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -1745,6 +1808,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_goals_v2_api_v2_goals_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GoalProgress"][];
                 };
             };
         };

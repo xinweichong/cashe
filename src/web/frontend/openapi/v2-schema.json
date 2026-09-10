@@ -435,6 +435,165 @@
         "title": "ConversionProvenance",
         "type": "object"
       },
+      "GoalContributionV2": {
+        "properties": {
+          "amount": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "contributed_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contributed Date"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "goal_id": {
+            "title": "Goal Id",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "month": {
+            "title": "Month",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "source": {
+            "enum": [
+              "auto",
+              "manual"
+            ],
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "goal_id",
+          "amount",
+          "month",
+          "contributed_date",
+          "source",
+          "note",
+          "created_at"
+        ],
+        "title": "GoalContributionV2",
+        "type": "object"
+      },
+      "GoalProgress": {
+        "properties": {
+          "contributions": {
+            "items": {
+              "$ref": "#/components/schemas/GoalContributionV2"
+            },
+            "title": "Contributions",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "monthly_rate": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "months_to_target": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Months To Target"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "on_track": {
+            "anyOf": [
+              {
+                "enum": [
+                  "on_track",
+                  "ahead",
+                  "behind"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "On Track"
+          },
+          "percent": {
+            "title": "Percent",
+            "type": "number"
+          },
+          "saved_amount": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "status": {
+            "enum": [
+              "active",
+              "completed",
+              "paused"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "target_amount": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "target_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Date"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "target_amount",
+          "saved_amount",
+          "target_date",
+          "status",
+          "percent",
+          "monthly_rate",
+          "months_to_target",
+          "on_track",
+          "contributions"
+        ],
+        "title": "GoalProgress",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -2860,6 +3019,28 @@
           }
         },
         "summary": "Retry Capture Issue"
+      }
+    },
+    "/api/v2/goals": {
+      "get": {
+        "operationId": "list_goals_v2_api_v2_goals_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/GoalProgress"
+                  },
+                  "title": "Response List Goals V2 Api V2 Goals Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Goals V2"
       }
     },
     "/api/v2/home": {
