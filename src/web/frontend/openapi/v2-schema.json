@@ -534,6 +534,57 @@
         "title": "MerchantSummary",
         "type": "object"
       },
+      "MerchantTrendMonth": {
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "month": {
+            "title": "Month",
+            "type": "string"
+          },
+          "total": {
+            "$ref": "#/components/schemas/Money"
+          }
+        },
+        "required": [
+          "month",
+          "total",
+          "count"
+        ],
+        "title": "MerchantTrendMonth",
+        "type": "object"
+      },
+      "MerchantTrendV2": {
+        "properties": {
+          "current_month": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "merchant": {
+            "title": "Merchant",
+            "type": "string"
+          },
+          "months": {
+            "items": {
+              "$ref": "#/components/schemas/MerchantTrendMonth"
+            },
+            "title": "Months",
+            "type": "array"
+          },
+          "previous_month": {
+            "$ref": "#/components/schemas/Money"
+          }
+        },
+        "required": [
+          "merchant",
+          "months",
+          "current_month",
+          "previous_month"
+        ],
+        "title": "MerchantTrendV2",
+        "type": "object"
+      },
       "Money": {
         "properties": {
           "currency": {
@@ -551,6 +602,40 @@
           "minor_units"
         ],
         "title": "Money",
+        "type": "object"
+      },
+      "NewMerchant": {
+        "properties": {
+          "amount": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "first_date": {
+            "title": "First Date",
+            "type": "string"
+          },
+          "merchant": {
+            "title": "Merchant",
+            "type": "string"
+          }
+        },
+        "required": [
+          "merchant",
+          "first_date",
+          "category",
+          "amount"
+        ],
+        "title": "NewMerchant",
         "type": "object"
       },
       "OriginalMoney": {
@@ -826,6 +911,91 @@
           "frequency"
         ],
         "title": "RecurringReviewItem",
+        "type": "object"
+      },
+      "SpendingAlerts": {
+        "properties": {
+          "anomalies": {
+            "items": {
+              "$ref": "#/components/schemas/SpendingAnomaly"
+            },
+            "title": "Anomalies",
+            "type": "array"
+          },
+          "new_merchants": {
+            "items": {
+              "$ref": "#/components/schemas/NewMerchant"
+            },
+            "title": "New Merchants",
+            "type": "array"
+          }
+        },
+        "required": [
+          "anomalies",
+          "new_merchants"
+        ],
+        "title": "SpendingAlerts",
+        "type": "object"
+      },
+      "SpendingAnomaly": {
+        "properties": {
+          "amount": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "avg_amount": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "explanation": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Explanation"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "merchant": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Merchant"
+          },
+          "transaction_date": {
+            "title": "Transaction Date",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "merchant",
+          "amount",
+          "category",
+          "transaction_date",
+          "avg_amount"
+        ],
+        "title": "SpendingAnomaly",
         "type": "object"
       },
       "SpendingComparison": {
@@ -1160,6 +1330,104 @@
           "reasons"
         ],
         "title": "SpendingReviewItem",
+        "type": "object"
+      },
+      "SpendingVelocity": {
+        "properties": {
+          "current_mtd": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "days_elapsed": {
+            "title": "Days Elapsed",
+            "type": "integer"
+          },
+          "last_month_total": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "pace_percent": {
+            "title": "Pace Percent",
+            "type": "number"
+          },
+          "projected_total": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "status": {
+            "enum": [
+              "ahead",
+              "on_track",
+              "behind"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "total_days": {
+            "title": "Total Days",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "current_mtd",
+          "last_month_total",
+          "projected_total",
+          "days_elapsed",
+          "total_days",
+          "pace_percent",
+          "status"
+        ],
+        "title": "SpendingVelocity",
+        "type": "object"
+      },
+      "TopMerchant": {
+        "properties": {
+          "avg_amount": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "merchant": {
+            "title": "Merchant",
+            "type": "string"
+          },
+          "total": {
+            "$ref": "#/components/schemas/Money"
+          }
+        },
+        "required": [
+          "merchant",
+          "count",
+          "total",
+          "avg_amount"
+        ],
+        "title": "TopMerchant",
+        "type": "object"
+      },
+      "TopMerchantsResult": {
+        "properties": {
+          "top": {
+            "items": {
+              "$ref": "#/components/schemas/TopMerchant"
+            },
+            "title": "Top",
+            "type": "array"
+          },
+          "trend": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MerchantTrendV2"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "top",
+          "trend"
+        ],
+        "title": "TopMerchantsResult",
         "type": "object"
       },
       "TransactionCorrection": {
@@ -1962,6 +2230,24 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v2/analytics/alerts": {
+      "get": {
+        "operationId": "analytics_alerts_v2_api_v2_analytics_alerts_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpendingAlerts"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Analytics Alerts V2"
+      }
+    },
     "/api/v2/analytics/comparison": {
       "get": {
         "operationId": "analytics_comparison_v2_api_v2_analytics_comparison_get",
@@ -2016,6 +2302,80 @@
           }
         },
         "summary": "Analytics Comparison V2"
+      }
+    },
+    "/api/v2/analytics/merchants": {
+      "get": {
+        "operationId": "analytics_merchants_v2_api_v2_analytics_merchants_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "merchant",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Merchant"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TopMerchantsResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Analytics Merchants V2"
+      }
+    },
+    "/api/v2/analytics/velocity": {
+      "get": {
+        "operationId": "analytics_velocity_v2_api_v2_analytics_velocity_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpendingVelocity"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Analytics Velocity V2"
       }
     },
     "/api/v2/budgets/progress": {

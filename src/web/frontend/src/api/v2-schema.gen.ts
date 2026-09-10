@@ -4,6 +4,23 @@
  */
 
 export interface paths {
+    "/api/v2/analytics/alerts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Analytics Alerts V2 */
+        get: operations["analytics_alerts_v2_api_v2_analytics_alerts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v2/analytics/comparison": {
         parameters: {
             query?: never;
@@ -13,6 +30,40 @@ export interface paths {
         };
         /** Analytics Comparison V2 */
         get: operations["analytics_comparison_v2_api_v2_analytics_comparison_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/analytics/merchants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Analytics Merchants V2 */
+        get: operations["analytics_merchants_v2_api_v2_analytics_merchants_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/analytics/velocity": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Analytics Velocity V2 */
+        get: operations["analytics_velocity_v2_api_v2_analytics_velocity_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -690,6 +741,23 @@ export interface components {
             /** Transaction Count */
             transaction_count: number;
         };
+        /** MerchantTrendMonth */
+        MerchantTrendMonth: {
+            /** Count */
+            count: number;
+            /** Month */
+            month: string;
+            total: components["schemas"]["Money"];
+        };
+        /** MerchantTrendV2 */
+        MerchantTrendV2: {
+            current_month: components["schemas"]["Money"];
+            /** Merchant */
+            merchant: string;
+            /** Months */
+            months: components["schemas"]["MerchantTrendMonth"][];
+            previous_month: components["schemas"]["Money"];
+        };
         /** Money */
         Money: {
             /**
@@ -700,6 +768,16 @@ export interface components {
             currency: "SGD";
             /** Minor Units */
             minor_units: number;
+        };
+        /** NewMerchant */
+        NewMerchant: {
+            amount: components["schemas"]["Money"];
+            /** Category */
+            category: string | null;
+            /** First Date */
+            first_date: string;
+            /** Merchant */
+            merchant: string;
         };
         /**
          * OriginalMoney
@@ -812,6 +890,28 @@ export interface components {
             /** Merchant */
             merchant: string;
         };
+        /** SpendingAlerts */
+        SpendingAlerts: {
+            /** Anomalies */
+            anomalies: components["schemas"]["SpendingAnomaly"][];
+            /** New Merchants */
+            new_merchants: components["schemas"]["NewMerchant"][];
+        };
+        /** SpendingAnomaly */
+        SpendingAnomaly: {
+            amount: components["schemas"]["Money"];
+            avg_amount: components["schemas"]["Money"];
+            /** Category */
+            category: string | null;
+            /** Explanation */
+            explanation?: string | null;
+            /** Id */
+            id: number;
+            /** Merchant */
+            merchant: string | null;
+            /** Transaction Date */
+            transaction_date: string;
+        };
         /** SpendingComparison */
         SpendingComparison: {
             /** Categories */
@@ -912,6 +1012,38 @@ export interface components {
             merchant: string | null;
             /** Reasons */
             reasons: ("missing_date" | "unresolved_money" | "unknown_type")[];
+        };
+        /** SpendingVelocity */
+        SpendingVelocity: {
+            current_mtd: components["schemas"]["Money"];
+            /** Days Elapsed */
+            days_elapsed: number;
+            last_month_total: components["schemas"]["Money"];
+            /** Pace Percent */
+            pace_percent: number;
+            projected_total: components["schemas"]["Money"];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ahead" | "on_track" | "behind";
+            /** Total Days */
+            total_days: number;
+        };
+        /** TopMerchant */
+        TopMerchant: {
+            avg_amount: components["schemas"]["Money"];
+            /** Count */
+            count: number;
+            /** Merchant */
+            merchant: string;
+            total: components["schemas"]["Money"];
+        };
+        /** TopMerchantsResult */
+        TopMerchantsResult: {
+            /** Top */
+            top: components["schemas"]["TopMerchant"][];
+            trend: components["schemas"]["MerchantTrendV2"] | null;
         };
         /**
          * TransactionCorrection
@@ -1177,6 +1309,26 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    analytics_alerts_v2_api_v2_analytics_alerts_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpendingAlerts"];
+                };
+            };
+        };
+    };
     analytics_comparison_v2_api_v2_analytics_comparison_get: {
         parameters: {
             query?: {
@@ -1205,6 +1357,58 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    analytics_merchants_v2_api_v2_analytics_merchants_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                merchant?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TopMerchantsResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    analytics_velocity_v2_api_v2_analytics_velocity_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpendingVelocity"];
                 };
             };
         };
