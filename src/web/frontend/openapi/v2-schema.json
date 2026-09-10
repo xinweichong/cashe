@@ -288,6 +288,43 @@
         "title": "CategoryChange",
         "type": "object"
       },
+      "CategoryComparison": {
+        "properties": {
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "change": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "change_percent": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Change Percent"
+          },
+          "current": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "previous": {
+            "$ref": "#/components/schemas/Money"
+          }
+        },
+        "required": [
+          "category",
+          "current",
+          "previous",
+          "change",
+          "change_percent"
+        ],
+        "title": "CategoryComparison",
+        "type": "object"
+      },
       "ConversionProvenance": {
         "properties": {
           "quoted_at": {
@@ -572,6 +609,58 @@
         "title": "OverviewSummary",
         "type": "object"
       },
+      "PeriodComparison": {
+        "properties": {
+          "change": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "change_percent": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Change Percent"
+          },
+          "current_end": {
+            "title": "Current End",
+            "type": "string"
+          },
+          "current_start": {
+            "title": "Current Start",
+            "type": "string"
+          },
+          "current_total": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "previous_end": {
+            "title": "Previous End",
+            "type": "string"
+          },
+          "previous_start": {
+            "title": "Previous Start",
+            "type": "string"
+          },
+          "previous_total": {
+            "$ref": "#/components/schemas/Money"
+          }
+        },
+        "required": [
+          "current_start",
+          "current_end",
+          "previous_start",
+          "previous_end",
+          "current_total",
+          "previous_total",
+          "change",
+          "change_percent"
+        ],
+        "title": "PeriodComparison",
+        "type": "object"
+      },
       "PlanMutationResponse": {
         "properties": {
           "status": {
@@ -737,6 +826,26 @@
           "frequency"
         ],
         "title": "RecurringReviewItem",
+        "type": "object"
+      },
+      "SpendingComparison": {
+        "properties": {
+          "categories": {
+            "items": {
+              "$ref": "#/components/schemas/CategoryComparison"
+            },
+            "title": "Categories",
+            "type": "array"
+          },
+          "overall": {
+            "$ref": "#/components/schemas/PeriodComparison"
+          }
+        },
+        "required": [
+          "overall",
+          "categories"
+        ],
+        "title": "SpendingComparison",
         "type": "object"
       },
       "SpendingEvidence": {
@@ -1853,6 +1962,62 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/v2/analytics/comparison": {
+      "get": {
+        "operationId": "analytics_comparison_v2_api_v2_analytics_comparison_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "period",
+            "required": false,
+            "schema": {
+              "default": "month",
+              "title": "Period",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpendingComparison"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Analytics Comparison V2"
+      }
+    },
     "/api/v2/budgets/progress": {
       "get": {
         "operationId": "budget_progress_v2_api_v2_budgets_progress_get",

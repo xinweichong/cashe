@@ -4,6 +4,23 @@
  */
 
 export interface paths {
+    "/api/v2/analytics/comparison": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Analytics Comparison V2 */
+        get: operations["analytics_comparison_v2_api_v2_analytics_comparison_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v2/budgets/progress": {
         parameters: {
             query?: never;
@@ -604,6 +621,16 @@ export interface components {
             category: string;
             change: components["schemas"]["Money"];
         };
+        /** CategoryComparison */
+        CategoryComparison: {
+            /** Category */
+            category: string;
+            change: components["schemas"]["Money"];
+            /** Change Percent */
+            change_percent: number | null;
+            current: components["schemas"]["Money"];
+            previous: components["schemas"]["Money"];
+        };
         /** ConversionProvenance */
         ConversionProvenance: {
             /** Quoted At */
@@ -696,6 +723,22 @@ export interface components {
             start: string;
             total: components["schemas"]["Money"];
         };
+        /** PeriodComparison */
+        PeriodComparison: {
+            change: components["schemas"]["Money"];
+            /** Change Percent */
+            change_percent: number | null;
+            /** Current End */
+            current_end: string;
+            /** Current Start */
+            current_start: string;
+            current_total: components["schemas"]["Money"];
+            /** Previous End */
+            previous_end: string;
+            /** Previous Start */
+            previous_start: string;
+            previous_total: components["schemas"]["Money"];
+        };
         /** PlanMutationResponse */
         PlanMutationResponse: {
             /**
@@ -768,6 +811,12 @@ export interface components {
             id: string;
             /** Merchant */
             merchant: string;
+        };
+        /** SpendingComparison */
+        SpendingComparison: {
+            /** Categories */
+            categories: components["schemas"]["CategoryComparison"][];
+            overall: components["schemas"]["PeriodComparison"];
         };
         /** SpendingEvidence */
         SpendingEvidence: {
@@ -1128,6 +1177,38 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    analytics_comparison_v2_api_v2_analytics_comparison_get: {
+        parameters: {
+            query?: {
+                period?: string;
+                date?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpendingComparison"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     budget_progress_v2_api_v2_budgets_progress_get: {
         parameters: {
             query?: never;
