@@ -47,6 +47,20 @@ it('submits explicit date and classification corrections and resets them on canc
   expect(screen.getByLabelText('Transaction type')).toHaveValue('unknown');
 });
 
+it('can mark a transaction as a refund or a transfer', () => {
+  render(detail());
+  fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+  fireEvent.change(screen.getByLabelText('Transaction type'), { target: { value: 'refund' } });
+  expect(screen.getByText(/Refund reduces spending in this record.s own period/)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+  expect(mutate.mock.calls[0][0].data).toMatchObject({ type: 'refund' });
+
+  fireEvent.change(screen.getByLabelText('Transaction type'), { target: { value: 'transfer' } });
+  expect(screen.getByText(/Transfer excludes this from spending and income entirely/)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+  expect(mutate.mock.calls[1][0].data).toMatchObject({ type: 'transfer' });
+});
+
 it('category-only edits do not rewrite timestamps or legacy classifications', () => {
   render(detail({ ...transaction, transaction_date: '2026-09-06T12:30:45+08:00', type: null } as unknown as Transaction));
   fireEvent.click(screen.getByRole('button', { name: 'Edit' }));

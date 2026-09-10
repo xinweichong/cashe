@@ -295,10 +295,20 @@ export function TransactionDetail({
             <div>
               <label htmlFor={`type-${tx.id}`} className="text-xs text-muted mb-1 block">Transaction type</label>
               <select id={`type-${tx.id}`} className="input-field min-h-11 w-full" value={type} onChange={e => setType(e.target.value)}>
-                {!['expense', 'income'].includes(type) && <option value={type} disabled>{type === 'refund' ? 'Refund' : type === 'transfer' ? 'Transfer' : 'Choose a classification'}</option>}
-                <option value="expense">Spending</option><option value="income">Income</option>
+                {!['expense', 'income', 'refund', 'transfer'].includes(type) && <option value={type} disabled>Choose a classification</option>}
+                <option value="expense">Spending</option>
+                <option value="income">Income</option>
+                <option value="refund">Refund</option>
+                <option value="transfer">Transfer</option>
               </select>
-              <p className="text-xs text-muted mt-1">Changes this record only. The category and future merchant rules are separate choices.</p>
+              <p className="text-xs text-muted mt-1">
+                Changes this record only. The category and future merchant rules are separate choices.
+                {(type === 'refund' || type === 'transfer') && (
+                  <> {type === 'refund'
+                    ? 'Refund reduces spending in this record’s own period — it won’t change the original purchase.'
+                    : 'Transfer excludes this from spending and income entirely — for moving money between your own accounts, like a card repayment.'}</>
+                )}
+              </p>
             </div>
             <div>
               <label className="text-xs text-muted mb-1 block">Merchant</label>
