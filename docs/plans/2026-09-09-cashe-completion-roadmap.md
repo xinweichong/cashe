@@ -261,6 +261,20 @@ Frontend: `TransactionDetail.tsx`'s type dropdown now offers Refund and Transfer
 
 **Follow-up (not done):** sub-projects 2 (refund→purchase linking) and 3 (category splits) are unbuilt — see R05's implementation bullets above. A Telegram/quick-action entry point for marking refund/transfer, and creating a transaction as a refund/transfer directly at capture time, were both explicitly out of scope for this sub-project.
 
+**Sub-project 2 — Refund→purchase linking.** Brainstormed and scoped as follows:
+- Schema: one nullable column, `refund_of_transaction_id INTEGER REFERENCES transactions(id) ON DELETE SET NULL`, added to `transactions` (migration 15) and `deleted_transactions` (so a deleted refund's link survives restore, matching migration 14's precedent for that table). No DB `CHECK` — enforced at the application layer, same as `type` itself.
+- Command: no new endpoint. Linking is pure evidence — it never affects any money total (netting already works from `type='refund'` alone) — so "link"/"unlink" is just a correction to this one field via the existing `PUT /api/v2/transactions/{id}` path. `TransactionCorrection` gains an optional `refund_of_transaction_id: int | None` (explicit `null` unlinks). This reuses R03's revision-conflict/mutation-history/undo machinery for free. Validation (target exists, isn't the row itself, is `type='expense'` or legacy NULL — a refund can't link to another refund/transfer/income) happens in `Storage.update_transaction`, which has DB access unlike the pure `normalize_transaction_fields`.
+- Read shape: `TransactionV2` gains two computed (not stored) fields — `refund_of: {transaction_id, merchant, transaction_date, amount, currency, warning} | null` on a refund, and `refunded_by: [{transaction_id, merchant, transaction_date, amount, currency}]` on a purchase (reverse lookup). `warning` flags a currency mismatch or this-refund-plus-others-linked exceeding the purchase amount — informational only, never blocks the link.
+- Frontend: refund view gets a "Link to purchase" picker (searches `type='expense'` transactions) plus an unlink action and the warning text if present; purchase view gets a read-only "Refunded by" list linking through to each refund's detail.
+- Explicitly out of scope: auto-matching/suggesting which purchase a refund likely belongs to (that's R06's "refund-match proposals with stable reason codes"); this sub-project is manual, explicit linking only.
+
+**Exit checks for sub-project 2:**
+- Linking and unlinking both persist correctly and go through the standard revision-conflict/undo path.
+- A refund can only link to an existing `type='expense'` transaction, never to itself, another refund, a transfer, or income.
+- Deleting a linked purchase clears the link on its refund(s) rather than blocking the deletion or corrupting the refund row; deleting and restoring a linked refund preserves its link.
+- A currency mismatch or amount-exceeded case produces a visible warning without blocking the link or changing any total.
+- The purchase's own detail view shows its linked refund(s) (reverse evidence), verified live.
+
 ## R06 — Complete Review and merchant maintenance
 
 **Implementation**
