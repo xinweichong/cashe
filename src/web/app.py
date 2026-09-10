@@ -23,7 +23,7 @@ from src import transaction_commands
 from src.money import to_minor_units
 from src.config import local_now
 from src.web.auth import verify_password, create_session, verify_session, destroy_session
-from src.web.contracts import BudgetProgress, CaptureFollowup, CaptureIssue, CaptureResolution, HomeBriefing, MerchantRanking, MerchantSummary, OverviewSummary, QueuedResponse, SpendingAlerts, SpendingComparison, SpendingEvidence, SpendingFacts, SpendingReview, SpendingVelocity, TopMerchantsResult, TransactionCorrection, TransactionCreate, TransactionDeletion, TransactionProvenance, TransactionUndo, TransactionV2, TrendPoint, TripSummary, UpcomingPlan, PlanMutationResponse, RecurringReview, RecurringResolution
+from src.web.contracts import BudgetProgress, CaptureFollowup, CaptureIssue, CaptureResolution, HealthScore, HomeBriefing, MerchantRanking, MerchantSummary, OverviewSummary, QueuedResponse, SpendingAlerts, SpendingComparison, SpendingEvidence, SpendingFacts, SpendingReview, SpendingVelocity, TopMerchantsResult, TransactionCorrection, TransactionCreate, TransactionDeletion, TransactionProvenance, TransactionUndo, TransactionV2, TrendPoint, TripSummary, UpcomingPlan, PlanMutationResponse, RecurringReview, RecurringResolution
 from src.analytics import (
     load_summary,
     get_yoy_comparison,
@@ -882,6 +882,12 @@ def create_dashboard_app(
 
     @app.get("/api/health-score")
     async def health_score(months: int = 1, storage=Depends(_get_storage)):
+        if months < 1 or months > 12:
+            raise HTTPException(status_code=400, detail="months must be between 1 and 12")
+        return await _db(storage.get_health_score, months=months)
+
+    @app.get("/api/v2/analytics/health-score", response_model=HealthScore)
+    async def health_score_v2(months: int = 1, storage=Depends(_get_storage)):
         if months < 1 or months > 12:
             raise HTTPException(status_code=400, detail="months must be between 1 and 12")
         return await _db(storage.get_health_score, months=months)

@@ -433,3 +433,26 @@ class NewMerchant(BaseModel):
 class SpendingAlerts(BaseModel):
     anomalies: list[SpendingAnomaly]
     new_merchants: list[NewMerchant]
+
+
+# Typed wrapper over Storage.get_health_score. Every field here is a ratio
+# or a score, never Money — the underlying computation already reads
+# reporting_minor_units (R04-correct), so there's no currency-display
+# concern, just a shape to validate. `components` is a dict (not a fixed
+# five-field model) because it's genuinely `{}` when has_income_data is
+# False — the frontend never dereferences it in that case.
+class HealthScoreComponent(BaseModel):
+    score: float
+    max: float
+    value: float
+    benchmark: float | None = None
+    label: str
+    description: str
+
+
+class HealthScore(BaseModel):
+    score: int | None
+    grade: str | None
+    has_income_data: bool
+    period: str
+    components: dict[str, HealthScoreComponent]
