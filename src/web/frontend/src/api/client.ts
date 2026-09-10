@@ -12,6 +12,7 @@ export type TrendPointV2 = components['schemas']['TrendPoint'];
 export type MerchantRankingV2 = components['schemas']['MerchantRanking'];
 export type BudgetProgressV2 = components['schemas']['BudgetProgress'];
 export type MerchantSummaryV2 = components['schemas']['MerchantSummary'];
+export type SpendingComparisonV2 = components['schemas']['SpendingComparison'];
 
 export async function request<T>(path: string, opts?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
@@ -543,6 +544,12 @@ export const api = {
     const params = new URLSearchParams({ period });
     if (date) params.set('date', date);
     return request<AnalyticsComparison>(`/api/analytics/comparison?${params}`);
+  },
+
+  getAnalyticsComparisonV2: (period: string, date?: string) => {
+    const params = new URLSearchParams({ period });
+    if (date) params.set('date', date);
+    return request<SpendingComparisonV2>(`/api/v2/analytics/comparison?${params}`);
   },
 
   getAnalyticsMerchants: (limit = 10, merchant?: string) => {

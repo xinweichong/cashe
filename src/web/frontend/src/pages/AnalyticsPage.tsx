@@ -258,8 +258,8 @@ function HealthScoreBreakdown() {
 
 export function AnalyticsPage() {
   const { data: comparison } = useQuery({
-    queryKey: ['analytics-comparison'],
-    queryFn: () => api.getAnalyticsComparison('month'),
+    queryKey: ['analytics-comparison-v2'],
+    queryFn: () => api.getAnalyticsComparisonV2('month'),
   });
 
   const { data: merchants } = useQuery({
@@ -350,7 +350,11 @@ export function AnalyticsPage() {
           <ChartCard title="Period Comparison" action={comparisonBadge}>
             <div className="p-4">
               {comparison?.categories && (
-                <ComparisonBarChart data={comparison.categories} />
+                <ComparisonBarChart data={comparison.categories.map(c => ({
+                  category: c.category,
+                  current: c.current.minor_units / 100,
+                  previous: c.previous.minor_units / 100,
+                }))} />
               )}
             </div>
           </ChartCard>
