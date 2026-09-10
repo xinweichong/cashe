@@ -912,10 +912,10 @@ class Storage:
         self, start_date: str, end_date: str
     ) -> dict:
         rows = self._conn.execute(
-            """SELECT category, SUM((CASE WHEN reporting_minor_units IS NOT NULL THEN reporting_minor_units / 100.0 WHEN currency = 'SGD' OR currency IS NULL THEN amount WHEN exchange_rate IS NOT NULL AND exchange_rate > 0 AND exchange_rate != 1 THEN amount * exchange_rate ELSE NULL END)) as total
+            """SELECT category, SUM((CASE WHEN type = 'refund' THEN -1 ELSE 1 END) * (CASE WHEN reporting_minor_units IS NOT NULL THEN reporting_minor_units / 100.0 WHEN currency = 'SGD' OR currency IS NULL THEN amount WHEN exchange_rate IS NOT NULL AND exchange_rate > 0 AND exchange_rate != 1 THEN amount * exchange_rate ELSE NULL END)) as total
                FROM transactions
                WHERE DATE(transaction_date) >= ? AND DATE(transaction_date) <= ?
-               AND (type IS NULL OR type = 'expense')
+               AND (type IS NULL OR type = 'expense' OR type = 'refund')
                GROUP BY category""",
             (start_date, end_date),
         ).fetchall()
@@ -961,10 +961,11 @@ class Storage:
     @_locked
     def get_merchant_ranking(self, start_date: str, end_date: str, limit: int = 10) -> list[dict]:
         rows = self._conn.execute(
-            """SELECT merchant, COUNT(*) as visits, SUM((CASE WHEN reporting_minor_units IS NOT NULL THEN reporting_minor_units / 100.0 WHEN currency = 'SGD' OR currency IS NULL THEN amount WHEN exchange_rate IS NOT NULL AND exchange_rate > 0 AND exchange_rate != 1 THEN amount * exchange_rate ELSE NULL END)) as total
+            """SELECT merchant, COUNT(*) FILTER (WHERE type IS NULL OR type = 'expense') as visits,
+                      SUM((CASE WHEN type = 'refund' THEN -1 ELSE 1 END) * (CASE WHEN reporting_minor_units IS NOT NULL THEN reporting_minor_units / 100.0 WHEN currency = 'SGD' OR currency IS NULL THEN amount WHEN exchange_rate IS NOT NULL AND exchange_rate > 0 AND exchange_rate != 1 THEN amount * exchange_rate ELSE NULL END)) as total
                FROM transactions
                WHERE DATE(transaction_date) >= ? AND DATE(transaction_date) <= ?
-               AND merchant IS NOT NULL AND (type IS NULL OR type = 'expense')
+               AND merchant IS NOT NULL AND (type IS NULL OR type = 'expense' OR type = 'refund')
                GROUP BY merchant ORDER BY total DESC LIMIT ?""",
             (start_date, end_date, limit),
         ).fetchall()
@@ -973,10 +974,10 @@ class Storage:
     @_locked
     def get_average_daily(self, start_date: str, end_date: str) -> float:
         row = self._conn.execute(
-            """SELECT COALESCE(SUM((CASE WHEN reporting_minor_units IS NOT NULL THEN reporting_minor_units / 100.0 WHEN currency = 'SGD' OR currency IS NULL THEN amount WHEN exchange_rate IS NOT NULL AND exchange_rate > 0 AND exchange_rate != 1 THEN amount * exchange_rate ELSE NULL END)), 0) as total
+            """SELECT COALESCE(SUM((CASE WHEN type = 'refund' THEN -1 ELSE 1 END) * (CASE WHEN reporting_minor_units IS NOT NULL THEN reporting_minor_units / 100.0 WHEN currency = 'SGD' OR currency IS NULL THEN amount WHEN exchange_rate IS NOT NULL AND exchange_rate > 0 AND exchange_rate != 1 THEN amount * exchange_rate ELSE NULL END)), 0) as total
                FROM transactions
                WHERE DATE(transaction_date) >= ? AND DATE(transaction_date) <= ?
-               AND (type IS NULL OR type = 'expense')""",
+               AND (type IS NULL OR type = 'expense' OR type = 'refund')""",
             (start_date, end_date),
         ).fetchone()
         total = row["total"]
@@ -988,10 +989,10 @@ class Storage:
     @_locked
     def get_trend(self, start_date: str, end_date: str) -> list[dict]:
         rows = self._conn.execute(
-            """SELECT DATE(transaction_date) as date, SUM((CASE WHEN reporting_minor_units IS NOT NULL THEN reporting_minor_units / 100.0 WHEN currency = 'SGD' OR currency IS NULL THEN amount WHEN exchange_rate IS NOT NULL AND exchange_rate > 0 AND exchange_rate != 1 THEN amount * exchange_rate ELSE NULL END)) as amount
+            """SELECT DATE(transaction_date) as date, SUM((CASE WHEN type = 'refund' THEN -1 ELSE 1 END) * (CASE WHEN reporting_minor_units IS NOT NULL THEN reporting_minor_units / 100.0 WHEN currency = 'SGD' OR currency IS NULL THEN amount WHEN exchange_rate IS NOT NULL AND exchange_rate > 0 AND exchange_rate != 1 THEN amount * exchange_rate ELSE NULL END)) as amount
                FROM transactions
                WHERE DATE(transaction_date) >= ? AND DATE(transaction_date) <= ?
-               AND (type IS NULL OR type = 'expense')
+               AND (type IS NULL OR type = 'expense' OR type = 'refund')
                GROUP BY DATE(transaction_date) ORDER BY date""",
             (start_date, end_date),
         ).fetchall()
@@ -1002,10 +1003,10 @@ class Storage:
         rows = self._conn.execute(
             """SELECT DATE(transaction_date) as date,
                       COALESCE(category, 'Other') as category,
-                      SUM((CASE WHEN reporting_minor_units IS NOT NULL THEN reporting_minor_units / 100.0 WHEN currency = 'SGD' OR currency IS NULL THEN amount WHEN exchange_rate IS NOT NULL AND exchange_rate > 0 AND exchange_rate != 1 THEN amount * exchange_rate ELSE NULL END)) as amount
+                      SUM((CASE WHEN type = 'refund' THEN -1 ELSE 1 END) * (CASE WHEN reporting_minor_units IS NOT NULL THEN reporting_minor_units / 100.0 WHEN currency = 'SGD' OR currency IS NULL THEN amount WHEN exchange_rate IS NOT NULL AND exchange_rate > 0 AND exchange_rate != 1 THEN amount * exchange_rate ELSE NULL END)) as amount
                FROM transactions
                WHERE DATE(transaction_date) >= ? AND DATE(transaction_date) <= ?
-               AND (type IS NULL OR type = 'expense')
+               AND (type IS NULL OR type = 'expense' OR type = 'refund')
                GROUP BY DATE(transaction_date), COALESCE(category, 'Other')
                ORDER BY date""",
             (start_date, end_date),
@@ -1035,15 +1036,15 @@ class Storage:
         # exchange_rate of 1.0 is a silent unresolved fallback, not real
         # conversion evidence.
         curr_rows = self._conn.execute(
-            """SELECT category, COALESCE(SUM(reporting_minor_units), 0) / 100.0 as total FROM transactions
+            """SELECT category, COALESCE(SUM(CASE WHEN type = 'refund' THEN -reporting_minor_units ELSE reporting_minor_units END), 0) / 100.0 as total FROM transactions
                WHERE DATE(transaction_date) >= ? AND DATE(transaction_date) <= ?
-               AND (type IS NULL OR type = 'expense') GROUP BY category""",
+               AND (type IS NULL OR type = 'expense' OR type = 'refund') GROUP BY category""",
             (current_start, current_end),
         ).fetchall()
         prev_rows = self._conn.execute(
-            """SELECT category, COALESCE(SUM(reporting_minor_units), 0) / 100.0 as total FROM transactions
+            """SELECT category, COALESCE(SUM(CASE WHEN type = 'refund' THEN -reporting_minor_units ELSE reporting_minor_units END), 0) / 100.0 as total FROM transactions
                WHERE DATE(transaction_date) >= ? AND DATE(transaction_date) <= ?
-               AND (type IS NULL OR type = 'expense') GROUP BY category""",
+               AND (type IS NULL OR type = 'expense' OR type = 'refund') GROUP BY category""",
             (prev_start, prev_end),
         ).fetchall()
         curr_by_cat = {r["category"] or "Uncategorized": r["total"] for r in curr_rows}
@@ -1263,7 +1264,7 @@ class Storage:
         }
         order = sort_map.get(sort_by, "total_sgd DESC")
 
-        conditions = ["t.merchant IS NOT NULL", "(t.type IS NULL OR t.type = 'expense')"]
+        conditions = ["t.merchant IS NOT NULL", "(t.type IS NULL OR t.type = 'expense' OR t.type = 'refund')"]
         params: list = []
 
         if name_search:
@@ -1280,9 +1281,9 @@ class Storage:
             WITH merchant_stats AS (
                 SELECT
                     t.merchant,
-                    ROUND(SUM((CASE WHEN t.reporting_minor_units IS NOT NULL THEN t.reporting_minor_units / 100.0 WHEN t.currency = 'SGD' OR t.currency IS NULL THEN t.amount WHEN t.exchange_rate IS NOT NULL AND t.exchange_rate > 0 AND t.exchange_rate != 1 THEN t.amount * t.exchange_rate ELSE NULL END)), 2) as total_sgd,
-                    COUNT(*) as transaction_count,
-                    ROUND(AVG((CASE WHEN t.reporting_minor_units IS NOT NULL THEN t.reporting_minor_units / 100.0 WHEN t.currency = 'SGD' OR t.currency IS NULL THEN t.amount WHEN t.exchange_rate IS NOT NULL AND t.exchange_rate > 0 AND t.exchange_rate != 1 THEN t.amount * t.exchange_rate ELSE NULL END)), 2) as avg_amount_sgd,
+                    ROUND(SUM((CASE WHEN t.type = 'refund' THEN -1 ELSE 1 END) * (CASE WHEN t.reporting_minor_units IS NOT NULL THEN t.reporting_minor_units / 100.0 WHEN t.currency = 'SGD' OR t.currency IS NULL THEN t.amount WHEN t.exchange_rate IS NOT NULL AND t.exchange_rate > 0 AND t.exchange_rate != 1 THEN t.amount * t.exchange_rate ELSE NULL END)), 2) as total_sgd,
+                    COUNT(*) FILTER (WHERE t.type IS NULL OR t.type = 'expense') as transaction_count,
+                    ROUND(AVG((CASE WHEN t.reporting_minor_units IS NOT NULL THEN t.reporting_minor_units / 100.0 WHEN t.currency = 'SGD' OR t.currency IS NULL THEN t.amount WHEN t.exchange_rate IS NOT NULL AND t.exchange_rate > 0 AND t.exchange_rate != 1 THEN t.amount * t.exchange_rate ELSE NULL END)) FILTER (WHERE t.type IS NULL OR t.type = 'expense'), 2) as avg_amount_sgd,
                     DATE(MIN(t.transaction_date)) as first_seen,
                     DATE(MAX(t.transaction_date)) as last_seen
                 FROM transactions t
@@ -1325,21 +1326,27 @@ class Storage:
             """
             SELECT
                 t.merchant,
-                ROUND(SUM((CASE WHEN t.reporting_minor_units IS NOT NULL THEN t.reporting_minor_units / 100.0 WHEN t.currency = 'SGD' OR t.currency IS NULL THEN t.amount WHEN t.exchange_rate IS NOT NULL AND t.exchange_rate > 0 AND t.exchange_rate != 1 THEN t.amount * t.exchange_rate ELSE NULL END)), 2) as total_sgd,
-                COUNT(*) as transaction_count,
-                ROUND(AVG((CASE WHEN t.reporting_minor_units IS NOT NULL THEN t.reporting_minor_units / 100.0 WHEN t.currency = 'SGD' OR t.currency IS NULL THEN t.amount WHEN t.exchange_rate IS NOT NULL AND t.exchange_rate > 0 AND t.exchange_rate != 1 THEN t.amount * t.exchange_rate ELSE NULL END)), 2) as avg_amount_sgd,
+                ROUND(SUM((CASE WHEN t.type = 'refund' THEN -1 ELSE 1 END) * (CASE WHEN t.reporting_minor_units IS NOT NULL THEN t.reporting_minor_units / 100.0 WHEN t.currency = 'SGD' OR t.currency IS NULL THEN t.amount WHEN t.exchange_rate IS NOT NULL AND t.exchange_rate > 0 AND t.exchange_rate != 1 THEN t.amount * t.exchange_rate ELSE NULL END)), 2) as total_sgd,
+                COUNT(*) as row_count,
+                COUNT(*) FILTER (WHERE t.type IS NULL OR t.type = 'expense') as transaction_count,
+                ROUND(AVG((CASE WHEN t.reporting_minor_units IS NOT NULL THEN t.reporting_minor_units / 100.0 WHEN t.currency = 'SGD' OR t.currency IS NULL THEN t.amount WHEN t.exchange_rate IS NOT NULL AND t.exchange_rate > 0 AND t.exchange_rate != 1 THEN t.amount * t.exchange_rate ELSE NULL END)) FILTER (WHERE t.type IS NULL OR t.type = 'expense'), 2) as avg_amount_sgd,
                 DATE(MIN(t.transaction_date)) as first_seen,
                 DATE(MAX(t.transaction_date)) as last_seen
             FROM transactions t
-            WHERE t.merchant = ? AND (t.type IS NULL OR t.type = 'expense')
+            WHERE t.merchant = ? AND (t.type IS NULL OR t.type = 'expense' OR t.type = 'refund')
             """,
             (merchant,),
         ).fetchone()
 
-        if not row or row["transaction_count"] == 0:
+        # row_count (unconditional) detects "merchant not found" — a merchant
+        # whose only recorded transaction is a refund must still resolve to a
+        # profile, even though transaction_count (expense-only, for display)
+        # would otherwise read 0 and look indistinguishable from "not found".
+        if not row or row["row_count"] == 0:
             return None
 
         profile = dict(row)
+        del profile["row_count"]
         tags_row = self._conn.execute(
             "SELECT tags, notes FROM merchant_tags WHERE merchant = ?", (merchant,)
         ).fetchone()
@@ -1397,11 +1404,11 @@ class Storage:
         rows = self._conn.execute(
             """
             SELECT strftime('%Y-%m', transaction_date) as month,
-                   ROUND(SUM((CASE WHEN reporting_minor_units IS NOT NULL THEN reporting_minor_units / 100.0 WHEN currency = 'SGD' OR currency IS NULL THEN amount WHEN exchange_rate IS NOT NULL AND exchange_rate > 0 AND exchange_rate != 1 THEN amount * exchange_rate ELSE NULL END)), 2) as total,
-                   COUNT(*) as count
+                   ROUND(SUM((CASE WHEN type = 'refund' THEN -1 ELSE 1 END) * (CASE WHEN reporting_minor_units IS NOT NULL THEN reporting_minor_units / 100.0 WHEN currency = 'SGD' OR currency IS NULL THEN amount WHEN exchange_rate IS NOT NULL AND exchange_rate > 0 AND exchange_rate != 1 THEN amount * exchange_rate ELSE NULL END)), 2) as total,
+                   COUNT(*) FILTER (WHERE type IS NULL OR type = 'expense') as count
             FROM transactions
             WHERE merchant = ?
-              AND (type IS NULL OR type = 'expense')
+              AND (type IS NULL OR type = 'expense' OR type = 'refund')
               AND transaction_date >= date('now', ? || ' months')
             GROUP BY month
             ORDER BY month ASC

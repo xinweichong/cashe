@@ -42,6 +42,35 @@ class TestMerchantList:
         assert grab["tags"] == []
         assert grab["notes"] == ""
 
+    def test_total_nets_refund_count_and_avg_exclude_it(self, in_memory_db):
+        storage = Storage(connection=in_memory_db)
+        today = local_now().strftime("%Y-%m-%d")
+        storage.insert_transaction(
+            source="manual", source_id="ml1", amount=100.0, merchant="Shop",
+            category="Food", transaction_date=today, tx_type="expense",
+        )
+        storage.insert_transaction(
+            source="manual", source_id="ml2", amount=30.0, merchant="Shop",
+            category="Food", transaction_date=today, tx_type="refund",
+        )
+        result = storage.get_merchant_list()
+        shop = next(r for r in result if r["merchant"] == "Shop")
+        assert shop["total_sgd"] == 70.0
+        assert shop["transaction_count"] == 1
+        assert shop["avg_amount_sgd"] == 100.0
+
+    def test_merchant_with_only_a_refund_still_appears(self, in_memory_db):
+        storage = Storage(connection=in_memory_db)
+        today = local_now().strftime("%Y-%m-%d")
+        storage.insert_transaction(
+            source="manual", source_id="ml3", amount=20.0, merchant="Refund Only",
+            category="Food", transaction_date=today, tx_type="refund",
+        )
+        result = storage.get_merchant_list()
+        merchant = next(r for r in result if r["merchant"] == "Refund Only")
+        assert merchant["total_sgd"] == -20.0
+        assert merchant["transaction_count"] == 0
+
     def test_sorted_by_total_spent_by_default(self, in_memory_db):
         storage = Storage(connection=in_memory_db)
         today = local_now().strftime("%Y-%m-%d")
@@ -167,6 +196,51 @@ class TestMerchantProfile:
     def test_profile_returns_none_for_unknown(self, in_memory_db):
         storage = Storage(connection=in_memory_db)
         assert storage.get_merchant_profile("NonExistent") is None
+
+    def test_profile_nets_refund_count_and_avg_exclude_it(self, in_memory_db):
+        storage = Storage(connection=in_memory_db)
+        today = local_now().strftime("%Y-%m-%d")
+        storage.insert_transaction(
+            source="manual", source_id="mp1", amount=100.0, merchant="Shop",
+            category="Food", transaction_date=today, tx_type="expense",
+        )
+        storage.insert_transaction(
+            source="manual", source_id="mp2", amount=30.0, merchant="Shop",
+            category="Food", transaction_date=today, tx_type="refund",
+        )
+        profile = storage.get_merchant_profile("Shop")
+        assert profile["total_sgd"] == 70.0
+        assert profile["transaction_count"] == 1
+        assert profile["avg_amount_sgd"] == 100.0
+
+    def test_profile_resolves_for_merchant_with_only_a_refund(self, in_memory_db):
+        storage = Storage(connection=in_memory_db)
+        today = local_now().strftime("%Y-%m-%d")
+        storage.insert_transaction(
+            source="manual", source_id="mp3", amount=20.0, merchant="Refund Only",
+            category="Food", transaction_date=today, tx_type="refund",
+        )
+        profile = storage.get_merchant_profile("Refund Only")
+        assert profile is not None
+        assert profile["total_sgd"] == -20.0
+        assert profile["transaction_count"] == 0
+        assert "row_count" not in profile
+
+
+class TestMerchantTrendStorage:
+    def test_current_month_nets_refund(self, in_memory_db):
+        storage = Storage(connection=in_memory_db)
+        today = local_now().strftime("%Y-%m-%d")
+        storage.insert_transaction(
+            source="manual", source_id="mt1", amount=100.0, merchant="Shop",
+            category="Food", transaction_date=today, tx_type="expense",
+        )
+        storage.insert_transaction(
+            source="manual", source_id="mt2", amount=30.0, merchant="Shop",
+            category="Food", transaction_date=today, tx_type="refund",
+        )
+        result = storage.get_merchant_trend("Shop")
+        assert result["current_month"] == 70.0
 
 
 @pytest.fixture

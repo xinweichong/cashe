@@ -396,6 +396,21 @@ class TestQueryTransactions:
         assert summary["by_category"]["Food"] == 30.0
         assert summary["by_category"]["Transport"] == 30.0
 
+    def test_get_spending_summary_nets_refund(self, storage):
+        storage.insert_transaction(
+            source="manual", source_id="r1", amount=50.0, category="Food",
+            transaction_date="2026-04-16", tx_type="expense",
+        )
+        storage.insert_transaction(
+            source="manual", source_id="r2", amount=15.0, category="Food",
+            transaction_date="2026-04-16", tx_type="refund",
+        )
+        summary = storage.get_spending_summary(
+            start_date="2026-04-16", end_date="2026-04-16"
+        )
+        assert summary["total"] == 35.0
+        assert summary["by_category"]["Food"] == 35.0
+
 
 class TestCategories:
     def test_load_categories(self, storage, sample_categories):
@@ -713,6 +728,19 @@ class TestInsights:
         assert toast["visits"] == 2
         assert toast["total"] == 18.0
 
+    def test_get_merchant_ranking_nets_refund(self, storage):
+        storage.insert_transaction(
+            source="manual", source_id="m1", amount=25.0, merchant="Grab",
+            transaction_date="2026-04-10T12:00:00", tx_type="expense",
+        )
+        storage.insert_transaction(
+            source="manual", source_id="m2", amount=5.0, merchant="Grab",
+            transaction_date="2026-04-11T12:00:00", tx_type="refund",
+        )
+        ranking = storage.get_merchant_ranking("2026-04-01", "2026-04-30")
+        grab = next(r for r in ranking if r["merchant"] == "Grab")
+        assert grab["total"] == 20.0
+
     def test_get_merchant_ranking_with_limit(self, storage):
         # Insert 5 different merchants
         merchants = [("A", 10.0), ("B", 20.0), ("C", 30.0), ("D", 40.0), ("E", 50.0)]
@@ -741,6 +769,18 @@ class TestInsights:
         avg = storage.get_average_daily("2026-04-01", "2026-04-30")
         assert avg == pytest.approx(100.0 / 30)
 
+    def test_get_average_daily_nets_refund(self, storage):
+        storage.insert_transaction(
+            source="manual", source_id="m1", amount=90.0, merchant="Test",
+            transaction_date="2026-04-01T12:00:00", tx_type="expense",
+        )
+        storage.insert_transaction(
+            source="manual", source_id="m2", amount=30.0, merchant="Test",
+            transaction_date="2026-04-01T13:00:00", tx_type="refund",
+        )
+        avg = storage.get_average_daily("2026-04-01", "2026-04-30")
+        assert avg == pytest.approx(60.0 / 30)
+
     def test_get_trend(self, storage):
         # Insert transactions on different dates
         storage.insert_transaction(
@@ -764,6 +804,19 @@ class TestInsights:
         assert trend[1]["amount"] == 15.0
         assert trend[2]["date"] == "2026-04-12"
         assert trend[2]["amount"] == 20.0
+
+    def test_get_trend_nets_refund_on_its_own_day(self, storage):
+        storage.insert_transaction(
+            source="manual", source_id="m1", amount=10.0, merchant="A",
+            transaction_date="2026-04-10T12:00:00", tx_type="expense",
+        )
+        storage.insert_transaction(
+            source="manual", source_id="m2", amount=4.0, merchant="A",
+            transaction_date="2026-04-10T13:00:00", tx_type="refund",
+        )
+        trend = storage.get_trend("2026-04-01", "2026-04-30")
+        day = next(t for t in trend if t["date"] == "2026-04-10")
+        assert day["amount"] == 6.0
 
     def test_get_period_comparison(self, storage):
         # Insert transactions in April (current)
@@ -799,8 +852,36 @@ class TestInsights:
         assert comparison["previous"]["by_category"]["Food"] == 80.0
         assert comparison["previous"]["by_category"]["Shopping"] == 120.0
 
+    def test_get_period_comparison_nets_refund(self, storage):
+        storage.insert_transaction(
+            source="manual", source_id="m1", amount=100.0, category="Food",
+            transaction_date="2026-04-10T12:00:00", tx_type="expense",
+        )
+        storage.insert_transaction(
+            source="manual", source_id="m2", amount=20.0, category="Food",
+            transaction_date="2026-04-15T12:00:00", tx_type="refund",
+        )
+        comparison = storage.get_period_comparison(
+            "2026-04-01", "2026-04-30", "2026-03-01", "2026-03-31",
+        )
+        assert comparison["current"]["total"] == 80.0
+        assert comparison["current"]["by_category"]["Food"] == 80.0
+
 
 class TestTrendByCategory:
+    def test_trend_by_category_nets_refund_in_its_own_category(self, storage):
+        storage.insert_transaction(
+            source="manual", source_id="m1", amount=20.0, category="Food",
+            transaction_date="2026-04-10T09:00:00", tx_type="expense",
+        )
+        storage.insert_transaction(
+            source="manual", source_id="m2", amount=5.0, category="Food",
+            transaction_date="2026-04-10T12:00:00", tx_type="refund",
+        )
+        result = storage.get_trend_by_category("2026-04-01", "2026-04-30")
+        day = next(r for r in result if r["date"] == "2026-04-10")
+        assert day["Food"] == 15.0
+
     def test_trend_by_category_groups_correctly(self, storage):
         # Two Food transactions and one Transport on the same date
         storage.insert_transaction(
