@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { api, type BudgetProgressV2, type Category, type GoalProgress, type Trip, type RecurringTransaction } from '@/api/client';
+import { api, type BudgetProgressV2, type Category, type GoalProgress, type GoalProgressV2, type Trip, type RecurringTransaction } from '@/api/client';
 import { PageCard, HeroCard, HighlightCard } from '@/components/ui/cards';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -241,6 +241,37 @@ function ProgressRing({ percent, color }: { percent: number; color: string }) {
   );
 }
 
+// GoalCard (below) and its editable forms/sparkline/mutations were built around
+// v1's plain-number GoalProgress shape. Converting the query itself to the typed
+// v2 endpoint without rewriting all of that display logic: unwrap Money to plain
+// dollar numbers here, once, so GoalCard stays untouched. Mutations (create/edit/
+// delete/contribute) stay on their v1 endpoints — no v2 mutation contract exists
+// for goals yet, matching the budget-progress migration's same split.
+function goalV2ToLegacy(g: GoalProgressV2): GoalProgress {
+  return {
+    id: g.id,
+    name: g.name,
+    target_amount: g.target_amount.minor_units / 100,
+    saved_amount: g.saved_amount.minor_units / 100,
+    target_date: g.target_date,
+    status: g.status,
+    percent: g.percent,
+    monthly_rate: g.monthly_rate.minor_units / 100,
+    months_to_target: g.months_to_target,
+    on_track: g.on_track,
+    contributions: g.contributions.map(c => ({
+      id: c.id,
+      goal_id: c.goal_id,
+      amount: c.amount.minor_units / 100,
+      month: c.month,
+      contributed_date: c.contributed_date,
+      source: c.source,
+      note: c.note,
+      created_at: c.created_at,
+    })),
+  };
+}
+
 function GoalCard({ g, onContribute, onEdit, onDelete }: {
   g: GoalProgress;
   onContribute: (id: number, amount: number, note?: string) => void;
@@ -265,7 +296,7 @@ function GoalCard({ g, onContribute, onEdit, onDelete }: {
     mutationFn: ({ id, data }: { id: number; data: { amount?: number; note?: string | null; contributed_date?: string } }) =>
       api.updateContribution(g.id, id, data),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['goals'] });
+      qc.invalidateQueries({ queryKey: ['goals-v2'] });
       qc.invalidateQueries({ queryKey: ['savings-overview'] });
       setEditingContribId(null);
     },
@@ -274,7 +305,7 @@ function GoalCard({ g, onContribute, onEdit, onDelete }: {
   const deleteContribMutation = useMutation({
     mutationFn: (id: number) => api.deleteContribution(g.id, id),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['goals'] });
+      qc.invalidateQueries({ queryKey: ['goals-v2'] });
       qc.invalidateQueries({ queryKey: ['savings-overview'] });
     },
   });
@@ -616,8 +647,8 @@ function GoalsSection() {
   const [newDate, setNewDate] = useState('');
 
   const { data: goals = [], isLoading } = useQuery({
-    queryKey: ['goals'],
-    queryFn: () => api.getGoals(),
+    queryKey: ['goals-v2'],
+    queryFn: async () => (await api.getGoalsV2()).map(goalV2ToLegacy),
     staleTime: 30_000,
   });
 
@@ -629,7 +660,7 @@ function GoalsSection() {
         target_date: newDate || undefined,
       }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['goals'] });
+      qc.invalidateQueries({ queryKey: ['goals-v2'] });
       setShowAddForm(false);
       setNewName('');
       setNewTarget('');
@@ -640,18 +671,18 @@ function GoalsSection() {
   const editMutation = useMutation({
     mutationFn: ({ id, data }: { id: number; data: { name?: string; target_amount?: number; target_date?: string } }) =>
       api.updateGoal(id, data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['goals'] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['goals-v2'] }),
   });
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => api.deleteGoal(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['goals'] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['goals-v2'] }),
   });
 
   const contribMutation = useMutation({
     mutationFn: ({ id, amount, note }: { id: number; amount: number; note?: string }) =>
       api.contributeToGoal(id, { amount, note }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['goals'] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['goals-v2'] }),
   });
 
   return (
