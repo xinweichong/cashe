@@ -19,6 +19,7 @@ export type SpendingAlertsV2 = components['schemas']['SpendingAlerts'];
 export type HealthScoreV2 = components['schemas']['HealthScore'];
 export type BalanceV2 = components['schemas']['Balance'];
 export type CategoryTrendPointV2 = components['schemas']['CategoryTrendPoint'];
+export type GoalProgressV2 = components['schemas']['GoalProgress'];
 
 export async function request<T>(path: string, opts?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
@@ -725,6 +726,8 @@ export const api = {
 
   // Goals
   getGoals: () => request<GoalProgress[]>('/api/goals'),
+
+  getGoalsV2: () => request<GoalProgressV2[]>('/api/v2/goals'),
 
   createGoal: (data: { name: string; target_amount: number; target_date?: string }) =>
     request<GoalProgress>('/api/goals', {

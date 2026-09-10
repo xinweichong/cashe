@@ -8,7 +8,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { usePeriod, type Period } from '@/hooks/usePeriod';
 import { useSummaryV2, useTrendV2, useTrendByCategoryV2, useBalanceV2 } from '@/hooks/useCategories';
 import { useTransactions } from '@/hooks/useTransactions';
-import { api, type Transaction, type BudgetProgressV2, type GoalProgress } from '@/api/client';
+import { api, type Transaction, type BudgetProgressV2, type GoalProgressV2 } from '@/api/client';
 import { formatCurrency, formatCurrencyWhole, formatDate, getCategoryColor, cn } from '@/lib/utils';
 import { CategoryDonut } from '@/components/charts/CategoryDonut';
 import { TrendLine } from '@/components/charts/TrendLine';
@@ -218,8 +218,8 @@ export function OverviewPage() {
   });
 
   const { data: goalProgress = [] } = useQuery({
-    queryKey: ['goals'],
-    queryFn: () => api.getGoals(),
+    queryKey: ['goals-v2'],
+    queryFn: () => api.getGoalsV2(),
     enabled: settings?.goals_enabled === true,
     staleTime: 30_000,
   });
@@ -471,7 +471,7 @@ export function OverviewPage() {
               }
             >
               <div className="space-y-3">
-                {(goalProgress as GoalProgress[]).slice(0, 5).map((g) => (
+                {(goalProgress as GoalProgressV2[]).slice(0, 5).map((g) => (
                   <div key={g.id} className="space-y-1">
                     <div className="flex justify-between text-xs">
                       <span className="text-foreground font-medium">{g.name}</span>
@@ -493,7 +493,7 @@ export function OverviewPage() {
                       />
                     </div>
                     <div className="flex justify-between text-xs text-muted">
-                      <span>{formatCurrencyWhole(g.saved_amount)} of {formatCurrencyWhole(g.target_amount)}</span>
+                      <span>{formatCurrencyWhole(g.saved_amount.minor_units / 100)} of {formatCurrencyWhole(g.target_amount.minor_units / 100)}</span>
                       {g.target_date && <span>by {g.target_date}</span>}
                     </div>
                   </div>
