@@ -460,6 +460,16 @@ class Storage:
         return dict(row) if row else None
 
     @_locked
+    def get_refunds_of(self, tx_id: int) -> list[dict]:
+        """Reverse lookup: every refund currently linked to `tx_id` as its
+        original purchase (evidence only, R05 sub-project 2)."""
+        rows = self._conn.execute(
+            "SELECT * FROM transactions WHERE refund_of_transaction_id = ? ORDER BY transaction_date",
+            (tx_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    @_locked
     def create_web_transaction(self, body: dict, *, source_id: str, request_key=None,
                                timezone="Asia/Singapore") -> dict:
         # Fingerprint submitted fields before generating defaults (especially time).

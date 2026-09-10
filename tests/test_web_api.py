@@ -308,6 +308,75 @@ class TestUpdateTransactionV2:
         assert response.status_code == 400
 
 
+class TestRefundLinkingV2:
+    @staticmethod
+    async def _make_refund(client, amount: float, merchant: str | None = None) -> int:
+        # POST /api/transactions only accepts expense/income at creation
+        # time (R05 sub-project 1's deliberate design) — a refund is always
+        # a reclassification of a captured expense via the v2 correction path.
+        body = {"amount": amount, "type": "expense"}
+        if merchant:
+            body["merchant"] = merchant
+        resp = await client.post("/api/transactions", json=body)
+        tx_id = resp.json()["id"]
+        await client.put(f"/api/v2/transactions/{tx_id}", json={"type": "refund"})
+        return tx_id
+
+    @pytest.mark.asyncio
+    async def test_get_returns_refund_of_and_refunded_by(self, client):
+        purchase_resp = await client.post("/api/transactions", json={
+            "amount": 100.00, "merchant": "Shop", "type": "expense",
+        })
+        purchase_id = purchase_resp.json()["id"]
+        refund_id = await self._make_refund(client, 30.00, "Shop")
+
+        link_resp = await client.put(
+            f"/api/v2/transactions/{refund_id}",
+            json={"refund_of_transaction_id": purchase_id},
+        )
+        assert link_resp.status_code == 200
+        assert link_resp.json()["refund_of"]["transaction_id"] == purchase_id
+        assert link_resp.json()["refund_of"]["warning"] is None
+
+        refund_get = await client.get(f"/api/v2/transactions/{refund_id}")
+        assert refund_get.json()["refund_of"]["transaction_id"] == purchase_id
+
+        purchase_get = await client.get(f"/api/v2/transactions/{purchase_id}")
+        assert len(purchase_get.json()["refunded_by"]) == 1
+        assert purchase_get.json()["refunded_by"][0]["transaction_id"] == refund_id
+
+    @pytest.mark.asyncio
+    async def test_unlink_with_explicit_null(self, client):
+        purchase_resp = await client.post("/api/transactions", json={"amount": 100.00, "type": "expense"})
+        purchase_id = purchase_resp.json()["id"]
+        refund_id = await self._make_refund(client, 30.00)
+        await client.put(f"/api/v2/transactions/{refund_id}", json={"refund_of_transaction_id": purchase_id})
+
+        response = await client.put(
+            f"/api/v2/transactions/{refund_id}",
+            json={"refund_of_transaction_id": None},
+        )
+        assert response.status_code == 200
+        assert response.json()["refund_of"] is None
+
+    @pytest.mark.asyncio
+    async def test_link_to_income_returns_422(self, client):
+        income_resp = await client.post("/api/transactions", json={"amount": 5000.00, "type": "income"})
+        income_id = income_resp.json()["id"]
+        refund_id = await self._make_refund(client, 30.00)
+
+        response = await client.put(
+            f"/api/v2/transactions/{refund_id}",
+            json={"refund_of_transaction_id": income_id},
+        )
+        assert response.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_get_nonexistent_returns_404(self, client):
+        response = await client.get("/api/v2/transactions/99999")
+        assert response.status_code == 404
+
+
 class TestUndoTransactionV2:
     @pytest.mark.asyncio
     async def test_undo_reverts_last_correction(self, client):

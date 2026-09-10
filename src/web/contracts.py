@@ -195,6 +195,18 @@ class ConversionProvenance(BaseModel):
     quoted_at: str | None
 
 
+# R05 sub-project 2: evidence-only summary of a linked transaction — raw
+# original-currency amount/currency (not Money/SGD), since the refund/
+# purchase currency-mismatch check compares them in their own currency.
+class RefundEvidence(BaseModel):
+    transaction_id: int
+    merchant: str | None
+    transaction_date: str | None
+    amount: float
+    currency: str
+    warning: str | None = None
+
+
 class TransactionV2(BaseModel):
     id: int
     revision: int
@@ -207,6 +219,8 @@ class TransactionV2(BaseModel):
     original: OriginalMoney
     reporting: Money | None
     conversion: ConversionProvenance
+    refund_of: RefundEvidence | None = None
+    refunded_by: list[RefundEvidence] = []
 
 
 class TransactionCorrection(BaseModel):
@@ -221,6 +235,10 @@ class TransactionCorrection(BaseModel):
     description: str | None = None
     transaction_date: str | None = None
     type: str | None = None
+    # None is ambiguous with "not supplied" via the usual exclude_none body
+    # parsing — the route checks model_fields_set to tell "explicitly null
+    # (unlink)" apart from "omitted (leave alone)".
+    refund_of_transaction_id: int | None = None
     remember_category: bool = False
     expected_revision: int | None = None
 

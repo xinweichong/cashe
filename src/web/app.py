@@ -576,6 +576,14 @@ def create_dashboard_app(
             headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
 
+    @app.get("/api/v2/transactions/{tx_id}", response_model=TransactionV2)
+    async def get_transaction_v2(tx_id: int, username: str = Depends(require_auth)):
+        storage = user_manager.get(username).storage
+        tx = await _db(storage.get_transaction, tx_id)
+        if not tx:
+            raise HTTPException(status_code=404, detail="Transaction not found")
+        return transaction_commands.to_v2(tx, storage)
+
     @app.get("/api/v2/transactions/{tx_id}/provenance", response_model=TransactionProvenance)
     async def get_transaction_provenance(tx_id: int, username: str = Depends(require_auth)):
         storage = user_manager.get(username).storage
@@ -616,6 +624,11 @@ def create_dashboard_app(
         fields = correction.model_dump(
             exclude={"remember_category", "expected_revision"}, exclude_none=True,
         )
+        # exclude_none drops an explicit null the same as an omitted field —
+        # only refund_of_transaction_id needs "explicit null" to mean unlink,
+        # so restore it from the raw payload when the client actually sent it.
+        if "refund_of_transaction_id" in correction.model_fields_set:
+            fields["refund_of_transaction_id"] = correction.refund_of_transaction_id
         if not fields:
             raise HTTPException(status_code=400, detail="No valid fields to update")
         try:
@@ -626,7 +639,7 @@ def create_dashboard_app(
             )
         except RevisionConflict as exc:
             raise HTTPException(status_code=409, detail={
-                "message": str(exc), "current": transaction_commands.to_v2(exc.current),
+                "message": str(exc), "current": transaction_commands.to_v2(exc.current, storage),
             })
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc))
@@ -639,7 +652,7 @@ def create_dashboard_app(
             return await _db(transaction_commands.undo, storage, tx_id, expected_revision=expected_revision)
         except RevisionConflict as exc:
             raise HTTPException(status_code=409, detail={
-                "message": str(exc), "current": transaction_commands.to_v2(exc.current),
+                "message": str(exc), "current": transaction_commands.to_v2(exc.current, storage),
             })
         except ValueError as exc:
             status_code = 404 if str(exc).endswith("not found") else 400

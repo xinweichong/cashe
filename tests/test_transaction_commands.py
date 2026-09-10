@@ -74,6 +74,75 @@ class TestCorrect:
             commands.correct(storage, tx_id, {"merchant": "Ya Kun"}, expected_revision=99)
 
 
+class TestRefundEvidence:
+    def test_refund_of_shows_linked_purchase(self, storage):
+        purchase_id = storage.insert_transaction(
+            source="manual", source_id="p1", amount=100.0, merchant="Shop",
+            transaction_date="2026-04-16", tx_type="expense",
+        )
+        refund_id = storage.insert_transaction(
+            source="manual", source_id="r1", amount=30.0, merchant="Shop",
+            transaction_date="2026-04-20", tx_type="refund",
+        )
+        result = commands.correct(storage, refund_id, {"refund_of_transaction_id": purchase_id})
+        assert result["refund_of"]["transaction_id"] == purchase_id
+        assert result["refund_of"]["merchant"] == "Shop"
+        assert result["refund_of"]["amount"] == 100.0
+        assert result["refund_of"]["warning"] is None
+        assert result["refunded_by"] == []
+
+    def test_refund_of_none_when_unlinked(self, storage):
+        refund_id = storage.insert_transaction(
+            source="manual", source_id="r2", amount=30.0, transaction_date="2026-04-20", tx_type="refund",
+        )
+        result = commands.to_v2(storage.get_transaction(refund_id), storage)
+        assert result["refund_of"] is None
+
+    def test_refunded_by_shows_linked_refunds_on_the_purchase(self, storage):
+        purchase_id = storage.insert_transaction(
+            source="manual", source_id="p2", amount=100.0, merchant="Shop",
+            transaction_date="2026-04-16", tx_type="expense",
+        )
+        refund_id = storage.insert_transaction(
+            source="manual", source_id="r3", amount=30.0, merchant="Shop",
+            transaction_date="2026-04-20", tx_type="refund",
+        )
+        storage.update_transaction(refund_id, refund_of_transaction_id=purchase_id)
+        result = commands.to_v2(storage.get_transaction(purchase_id), storage)
+        assert len(result["refunded_by"]) == 1
+        assert result["refunded_by"][0]["transaction_id"] == refund_id
+        assert result["refunded_by"][0]["amount"] == 30.0
+
+    def test_currency_mismatch_produces_a_warning(self, storage):
+        purchase_id = storage.insert_transaction(
+            source="manual", source_id="p3", amount=100.0, currency="SGD",
+            transaction_date="2026-04-16", tx_type="expense",
+        )
+        refund_id = storage.insert_transaction(
+            source="manual", source_id="r4", amount=30.0, currency="USD", exchange_rate=1.3,
+            transaction_date="2026-04-20", tx_type="refund",
+        )
+        result = commands.correct(storage, refund_id, {"refund_of_transaction_id": purchase_id})
+        assert "currency" in result["refund_of"]["warning"].lower()
+
+    def test_refunds_exceeding_purchase_amount_produces_a_warning(self, storage):
+        purchase_id = storage.insert_transaction(
+            source="manual", source_id="p4", amount=50.0, currency="SGD",
+            transaction_date="2026-04-16", tx_type="expense",
+        )
+        refund1_id = storage.insert_transaction(
+            source="manual", source_id="r5", amount=30.0, currency="SGD",
+            transaction_date="2026-04-18", tx_type="refund",
+        )
+        refund2_id = storage.insert_transaction(
+            source="manual", source_id="r6", amount=30.0, currency="SGD",
+            transaction_date="2026-04-20", tx_type="refund",
+        )
+        storage.update_transaction(refund1_id, refund_of_transaction_id=purchase_id)
+        result = commands.correct(storage, refund2_id, {"refund_of_transaction_id": purchase_id})
+        assert "exceed" in result["refund_of"]["warning"].lower()
+
+
 class TestDelete:
     def test_returns_deletion_snapshot(self, storage):
         tx_id = storage.insert_transaction(
