@@ -263,18 +263,18 @@ export function AnalyticsPage() {
   });
 
   const { data: merchants } = useQuery({
-    queryKey: ['analytics-merchants'],
-    queryFn: () => api.getAnalyticsMerchants(10),
+    queryKey: ['analytics-merchants-v2'],
+    queryFn: () => api.getAnalyticsMerchantsV2(10),
   });
 
   const { data: velocity } = useQuery({
-    queryKey: ['analytics-velocity'],
-    queryFn: () => api.getAnalyticsVelocity(),
+    queryKey: ['analytics-velocity-v2'],
+    queryFn: () => api.getAnalyticsVelocityV2(),
   });
 
   const { data: alerts } = useQuery({
-    queryKey: ['analytics-alerts'],
-    queryFn: () => api.getAnalyticsAlerts(),
+    queryKey: ['analytics-alerts-v2'],
+    queryFn: () => api.getAnalyticsAlertsV2(),
   });
 
   const hasAlerts = (alerts?.anomalies?.length ?? 0) > 0 || (alerts?.new_merchants?.length ?? 0) > 0;
@@ -325,7 +325,7 @@ export function AnalyticsPage() {
                   <div key={a.id} className="space-y-0.5">
                     <p className="text-sm">
                       Unusual: <span className="font-medium">{a.merchant}</span>{' '}
-                      {formatCurrency(a.amount)} in {a.category}
+                      {formatCurrency(a.amount.minor_units / 100)} in {a.category}
                     </p>
                     {a.explanation && (
                       <p className="text-xs text-muted italic">{a.explanation}</p>
@@ -360,12 +360,25 @@ export function AnalyticsPage() {
           </ChartCard>
 
           <PageCard title="Spending Velocity">
-            {velocity && <VelocityRing data={velocity} />}
+            {velocity && <VelocityRing data={{
+              current_mtd: velocity.current_mtd.minor_units / 100,
+              last_month_total: velocity.last_month_total.minor_units / 100,
+              projected_total: velocity.projected_total.minor_units / 100,
+              pace_percent: velocity.pace_percent,
+              status: velocity.status,
+              days_elapsed: velocity.days_elapsed,
+              total_days: velocity.total_days,
+            }} />}
           </PageCard>
         </div>
 
         <PageCard title="Top Merchants This Month">
-          <MerchantTable data={merchants?.top ?? []} />
+          <MerchantTable data={(merchants?.top ?? []).map(m => ({
+            merchant: m.merchant,
+            count: m.count,
+            total: m.total.minor_units / 100,
+            avg_amount: m.avg_amount.minor_units / 100,
+          }))} />
         </PageCard>
 
         <IncomeExpenseBar />

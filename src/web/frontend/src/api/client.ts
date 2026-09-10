@@ -13,6 +13,9 @@ export type MerchantRankingV2 = components['schemas']['MerchantRanking'];
 export type BudgetProgressV2 = components['schemas']['BudgetProgress'];
 export type MerchantSummaryV2 = components['schemas']['MerchantSummary'];
 export type SpendingComparisonV2 = components['schemas']['SpendingComparison'];
+export type SpendingVelocityV2 = components['schemas']['SpendingVelocity'];
+export type TopMerchantsResultV2 = components['schemas']['TopMerchantsResult'];
+export type SpendingAlertsV2 = components['schemas']['SpendingAlerts'];
 
 export async function request<T>(path: string, opts?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
@@ -558,11 +561,23 @@ export const api = {
     return request<AnalyticsMerchants>(`/api/analytics/merchants?${params}`);
   },
 
+  getAnalyticsMerchantsV2: (limit = 10, merchant?: string) => {
+    const params = new URLSearchParams({ limit: String(limit) });
+    if (merchant) params.set('merchant', merchant);
+    return request<TopMerchantsResultV2>(`/api/v2/analytics/merchants?${params}`);
+  },
+
   getAnalyticsVelocity: () =>
     request<SpendingVelocity>('/api/analytics/velocity'),
 
+  getAnalyticsVelocityV2: () =>
+    request<SpendingVelocityV2>('/api/v2/analytics/velocity'),
+
   getAnalyticsAlerts: () =>
     request<AnalyticsAlerts>('/api/analytics/alerts'),
+
+  getAnalyticsAlertsV2: () =>
+    request<SpendingAlertsV2>('/api/v2/analytics/alerts'),
 
   getAnalyticsSummaries: () =>
     request<AnalyticsSummaries>('/api/analytics/summaries'),
