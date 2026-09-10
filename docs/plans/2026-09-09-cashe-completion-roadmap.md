@@ -236,6 +236,21 @@ It also produced two concrete, reproducible findings about `analytics.py`/`spend
 
 Exact split sums and rounding, split/refund overlap, partial refunds, linked purchase deletion, cross-month refunds, explicit transfer exclusion, legacy NULL expense inclusion, and undo without changing unrelated or original evidence rows.
 
+**Status (2026-09-10): decomposed into three sub-projects; sub-project 1 (classification) in progress.** R05 as scoped is three loosely-coupled pieces — refund/transfer classification, refund→purchase linking, and category splits — brainstormed and split apart rather than designed together, since each has independent schema/UI/testing surface. Starting with classification.
+
+**Sub-project 1 — Refund/transfer classification.** Scope decided during brainstorming:
+- Backend groundwork already existed before this sub-project started: `transaction_validation.py` already accepts `type: expense | income | refund | transfer`, and `PUT /api/v2/transactions/{id}` already persists it — no new command or contract needed for the write path.
+- Transfer exclusion already works almost everywhere: `storage.py`/`analytics.py`'s money queries filter to `type IS NULL OR type = 'expense'`, so a transfer is already excluded from every surface without further work.
+- Refund netting is the real gap and this sub-project's actual scope: only `spending_facts.py` (Home/Telegram/Activity) nets a refund against spending in its own period; every other money computation just excludes it like a transfer (invisible, not netted). Fixing this means widening each `type = 'expense'`-only filter to include `'refund'` and negating the refund's amount in the sum — mapped to **15 unique functions in `storage.py`** (`get_spending_summary`, `get_merchant_ranking`, `get_average_daily`, `get_trend`, `get_trend_by_category`, `get_period_comparison`, `get_merchant_list`, `get_merchant_profile`, `get_merchant_trend`, `get_budget_progress`, `get_savings_overview`, `get_health_score`, `get_trip_summary`, `find_subscription_match`, `get_merchant_history`) and **7 unique functions in `analytics.py`** (`_query_total`, `_query`, `get_top_merchants`, `get_merchant_trend`, `get_anomalies`, `check_new_merchants`, `generate_summary` — the two underscore-prefixed helpers are shared by several of the others, so fixing them first is the highest-leverage order). A refund nets in its own transaction date/category/merchant — never retroactively rewriting the original purchase's period or category, per this section's own implementation bullet.
+- `TransactionDetail.tsx`'s existing type `<select>` (Spending/Income, with a disabled placeholder that already displays "Refund"/"Transfer" if a transaction happens to have that type) gets Refund and Transfer added as real selectable options — no new component.
+- Explicitly out of scope for this sub-project: refund→purchase linking, category splits, a Telegram/quick-action entry point, and creating a transaction as a refund/transfer directly at capture time (always reclassified after the fact via correction).
+
+**Exit checks for sub-project 1** (narrower than R05's full exit-check list above, which spans all three sub-projects):
+- A refund reduces spending by the exact same amount on every one of the 15+7 functions above, for the period/category/merchant the refund itself falls in — not the original purchase's.
+- A transfer is excluded from every surface (already true; regression-test it explicitly rather than just asserting it's unchanged).
+- Legacy NULL-type rows continue to be treated as expenses everywhere (unchanged from R04).
+- The transaction-detail dropdown can actually set and persist `refund`/`transfer`, verified live.
+
 ## R06 — Complete Review and merchant maintenance
 
 **Implementation**
