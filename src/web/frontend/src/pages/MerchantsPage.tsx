@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
-import { api, type MerchantSummary } from '@/api/client';
+import { api, type MerchantSummaryV2 } from '@/api/client';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -47,9 +47,9 @@ export function MerchantsPage() {
   }
 
   const { data: merchants = [], isLoading, isError, refetch } = useQuery({
-    queryKey: ['merchant-intelligence', sortBy, tagFilter, search],
+    queryKey: ['merchant-intelligence-v2', sortBy, tagFilter, search],
     queryFn: () =>
-      api.getMerchantIntelligenceList({
+      api.getMerchantListV2({
         sort_by: sortBy as 'total_spent' | 'transaction_count' | 'last_seen' | 'merchant_name',
         tag: tagFilter || undefined,
         search: search || undefined,
@@ -63,7 +63,7 @@ export function MerchantsPage() {
     navigate(`${merchantsPath}${location.search}`);
   };
 
-  const handleRowClick = (m: MerchantSummary) => {
+  const handleRowClick = (m: MerchantSummaryV2) => {
     if (selectedMerchant === m.merchant) {
       handleCloseProfile();
     } else {
@@ -99,14 +99,14 @@ export function MerchantsPage() {
             />
             <StatCard
               label="Total Spend"
-              value={`$${merchants.reduce((sum, m) => sum + m.total_sgd, 0).toFixed(0)}`}
+              value={`$${merchants.reduce((sum, m) => sum + m.total.minor_units / 100, 0).toFixed(0)}`}
               color="warm"
             />
             {merchants.length > 0 && (
               <StatCard
                 label="Top Merchant"
                 value={merchants[0].merchant}
-                subtext={formatSGD(merchants[0].total_sgd)}
+                subtext={formatSGD(merchants[0].total.minor_units / 100)}
               />
             )}
           </div>
@@ -247,7 +247,7 @@ export function MerchantsPage() {
                         </div>
                       </td>
                       <td className="px-4 py-3 text-right font-display font-bold text-foreground">
-                        {formatSGD(m.total_sgd)}
+                        {formatSGD(m.total.minor_units / 100)}
                       </td>
                       <td className="px-4 py-3 text-right text-muted hidden sm:table-cell">
                         {m.transaction_count}

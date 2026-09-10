@@ -24,8 +24,8 @@ export function MerchantProfile({
   const qc = useQueryClient();
 
   const { data: profile, isLoading } = useQuery({
-    queryKey: ['merchant-profile', merchant],
-    queryFn: () => api.getMerchantProfile(merchant),
+    queryKey: ['merchant-profile-v2', merchant],
+    queryFn: () => api.getMerchantProfileV2(merchant),
     enabled: !!merchant,
   });
 
@@ -45,8 +45,8 @@ export function MerchantProfile({
   const setTagsMutation = useMutation({
     mutationFn: (tags: string[]) => api.setMerchantTags(merchant, tags),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['merchant-profile', merchant] });
-      qc.invalidateQueries({ queryKey: ['merchant-intelligence'] });
+      qc.invalidateQueries({ queryKey: ['merchant-profile-v2', merchant] });
+      qc.invalidateQueries({ queryKey: ['merchant-intelligence-v2'] });
     },
   });
 
@@ -55,7 +55,7 @@ export function MerchantProfile({
   const setNotesMutation = useMutation({
     mutationFn: (n: string) => api.setMerchantNotes(merchant, n),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['merchant-profile', merchant] });
+      qc.invalidateQueries({ queryKey: ['merchant-profile-v2', merchant] });
       setNotesSaved(true);
       setTimeout(() => setNotesSaved(false), 1500);
     },
@@ -121,9 +121,9 @@ export function MerchantProfile({
       {/* Stats row */}
       <div className="grid grid-cols-2 gap-2">
         {[
-          { label: 'Total Spent', value: formatSGD(profile.total_sgd) },
+          { label: 'Total Spent', value: formatSGD(profile.total.minor_units / 100) },
           { label: 'Transactions', value: String(profile.transaction_count) },
-          { label: 'Average', value: formatSGD(profile.avg_amount_sgd) },
+          { label: 'Average', value: formatSGD(profile.avg_amount.minor_units / 100) },
           { label: 'Last Seen', value: profile.last_seen ?? '—' },
         ].map(({ label, value }) => (
           <div key={label} className="bg-background rounded-lg p-3 border border-border">

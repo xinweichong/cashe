@@ -1,13 +1,13 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { api, type MerchantProfile as MerchantProfileData } from '@/api/client';
+import { api, type MerchantSummaryV2 } from '@/api/client';
 import { MerchantProfile } from '../MerchantProfile';
 
 vi.mock('@/api/client', async (orig) => ({
   ...await orig<typeof import('@/api/client')>(),
   api: {
-    getMerchantProfile: vi.fn(),
+    getMerchantProfileV2: vi.fn(),
     getMerchantTrend: vi.fn(),
     getTransactions: vi.fn(),
     setMerchantTags: vi.fn(),
@@ -15,9 +15,12 @@ vi.mock('@/api/client', async (orig) => ({
   },
 }));
 
-function profile(overrides: Partial<MerchantProfileData>): MerchantProfileData {
+function profile(overrides: Partial<MerchantSummaryV2>): MerchantSummaryV2 {
   return {
-    merchant: 'Cafe', total_sgd: 100, transaction_count: 5, avg_amount_sgd: 20,
+    merchant: 'Cafe',
+    total: { minor_units: 10000, currency: 'SGD' },
+    transaction_count: 5,
+    avg_amount: { minor_units: 2000, currency: 'SGD' },
     category: 'Food', first_seen: '2026-01-01', last_seen: '2026-06-01', tags: [], notes: '',
     ...overrides,
   };
@@ -38,7 +41,7 @@ function show(merchant: string) {
 }
 
 test('loads the notes draft once the async profile arrives, not just on merchant change', async () => {
-  vi.mocked(api.getMerchantProfile).mockResolvedValue(profile({ merchant: 'Cafe', notes: 'Loves their oat milk latte' }));
+  vi.mocked(api.getMerchantProfileV2).mockResolvedValue(profile({ merchant: 'Cafe', notes: 'Loves their oat milk latte' }));
   show('Cafe');
   const textarea = await waitFor(() => screen.getByDisplayValue('Loves their oat milk latte'));
   expect(textarea).toBeTruthy();

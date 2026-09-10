@@ -11,6 +11,7 @@ export type OverviewSummaryV2 = components['schemas']['OverviewSummary'];
 export type TrendPointV2 = components['schemas']['TrendPoint'];
 export type MerchantRankingV2 = components['schemas']['MerchantRanking'];
 export type BudgetProgressV2 = components['schemas']['BudgetProgress'];
+export type MerchantSummaryV2 = components['schemas']['MerchantSummary'];
 
 export async function request<T>(path: string, opts?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
@@ -588,8 +589,29 @@ export const api = {
     return request<MerchantSummary[]>(`/api/merchant-intelligence${query}`);
   },
 
+  getMerchantListV2: (params?: {
+    sort_by?: 'total_spent' | 'transaction_count' | 'last_seen' | 'merchant_name';
+    tag?: string;
+    category?: string;
+    search?: string;
+    limit?: number;
+    offset?: number;
+  }) => {
+    const query = params
+      ? '?' + new URLSearchParams(
+          Object.entries(params)
+            .filter(([, v]) => v !== undefined && v !== '')
+            .map(([k, v]) => [k, String(v)])
+        ).toString()
+      : '';
+    return request<MerchantSummaryV2[]>(`/api/v2/merchants${query}`);
+  },
+
   getMerchantProfile: (merchant: string) =>
     request<MerchantProfile>(`/api/merchant-intelligence/${encodeURIComponent(merchant)}`),
+
+  getMerchantProfileV2: (merchant: string) =>
+    request<MerchantSummaryV2>(`/api/v2/merchants/${encodeURIComponent(merchant)}`),
 
   setMerchantTags: (merchant: string, tags: string[]) =>
     request<{ merchant: string; tags: string[]; notes: string }>(
