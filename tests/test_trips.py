@@ -263,6 +263,24 @@ class TestTripSummary:
         assert "Transport" in categories
         assert summary["by_category"][0]["category"] == "Dining"
 
+    def test_summary_nets_refund_count_excludes_it(self, in_memory_db):
+        storage = Storage(connection=in_memory_db)
+        trip_id = storage.create_trip(name="Osaka", start_date="2026-04-10")
+        purchase_id = storage.insert_transaction(
+            source="manual", source_id="trip-purchase", amount=100.0, category="Dining",
+            transaction_date="2026-04-10", tx_type="expense",
+        )
+        refund_id = storage.insert_transaction(
+            source="manual", source_id="trip-refund", amount=30.0, category="Dining",
+            transaction_date="2026-04-11", tx_type="refund",
+        )
+        storage.enlist_transaction(trip_id, purchase_id)
+        storage.enlist_transaction(trip_id, refund_id)
+        summary = storage.get_trip_summary(trip_id)
+        assert summary["total_sgd"] == pytest.approx(70.0)
+        assert summary["transaction_count"] == 1
+        assert summary["by_category"][0]["amount_sgd"] == pytest.approx(70.0)
+
     def test_summary_unknown_trip_returns_none(self, in_memory_db):
         storage = Storage(connection=in_memory_db)
         assert storage.get_trip_summary(999) is None

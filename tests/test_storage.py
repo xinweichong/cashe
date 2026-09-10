@@ -1224,3 +1224,23 @@ def test_remember_rule_is_not_applied_on_a_stale_revision_conflict(storage):
         )
     assert storage.get_transaction(tx_id)['category'] == 'Other'
     assert storage.get_merchant_overrides() == {}
+
+
+class TestSavingsOverview:
+    def test_expenses_nets_refund(self, storage):
+        storage.insert_transaction(
+            source="manual", source_id="so1", amount=5000.0, merchant="Employer",
+            category="Salary", transaction_date="2026-04-01", tx_type="income",
+        )
+        storage.insert_transaction(
+            source="manual", source_id="so2", amount=100.0, category="Food",
+            transaction_date="2026-04-10", tx_type="expense",
+        )
+        storage.insert_transaction(
+            source="manual", source_id="so3", amount=30.0, category="Food",
+            transaction_date="2026-04-15", tx_type="refund",
+        )
+        overview = storage.get_savings_overview("2026-04")
+        assert overview["income"] == 5000.0
+        assert overview["expenses"] == 70.0
+        assert overview["savings"] == 4930.0

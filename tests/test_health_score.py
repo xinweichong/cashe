@@ -79,6 +79,19 @@ class TestHealthScoreSavingsRate:
         assert result["components"]["savings_rate"]["score"] == pytest.approx(0.0, abs=0.1)
 
 
+    def test_refund_nets_against_expense_improving_savings_rate(self, in_memory_db):
+        """Income=1000, expense=900, refund=100 → net expense=800, savings=200,
+        rate=0.20 → score=40 (same as test_benchmark_savings_rate_gives_40_pts,
+        just reaching it via a refund instead of a smaller original purchase)."""
+        storage = Storage(connection=in_memory_db)
+        _seed_categories(in_memory_db)
+        _insert_tx(in_memory_db, "inc1", 1000.0, "Income", tx_type="income")
+        _insert_tx(in_memory_db, "exp1", 900.0, "Dining", tx_type="expense")
+        _insert_tx(in_memory_db, "ref1", 100.0, "Dining", tx_type="refund")
+        result = storage.get_health_score(months=1)
+        assert result["components"]["savings_rate"]["score"] == pytest.approx(40.0, abs=0.1)
+
+
 class TestHealthScoreNeedsWantsRatio:
     def test_needs_below_benchmark_gives_full_20_pts(self, in_memory_db):
         """Income=1000, needs=400 (40% < 50%) → needs_score = 20"""
@@ -124,6 +137,17 @@ class TestHealthScoreNeedsWantsRatio:
         _insert_tx(in_memory_db, "exp1", 600.0, "Dining", tx_type="expense")
         result = storage.get_health_score(months=1)
         assert result["components"]["wants_ratio"]["score"] == pytest.approx(0.0, abs=0.1)
+
+    def test_refund_nets_within_its_own_category_ratio(self, in_memory_db):
+        """Income=1000, needs=750 expense - 250 refund (same 'Transport'
+        needs category) = 500 net → 50% → same as test_needs_at_benchmark."""
+        storage = Storage(connection=in_memory_db)
+        _seed_categories(in_memory_db)
+        _insert_tx(in_memory_db, "inc1", 1000.0, "Income", tx_type="income")
+        _insert_tx(in_memory_db, "exp1", 750.0, "Transport", tx_type="expense")
+        _insert_tx(in_memory_db, "ref1", 250.0, "Transport", tx_type="refund")
+        result = storage.get_health_score(months=1)
+        assert result["components"]["needs_ratio"]["score"] == pytest.approx(20.0, abs=0.1)
 
 
 class TestHealthScoreAnomalyFrequency:

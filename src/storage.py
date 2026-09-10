@@ -1494,17 +1494,17 @@ class Storage:
 
             if b["category"] is None:
                 spent_row = self._conn.execute(
-                    """SELECT COALESCE(SUM((CASE WHEN reporting_minor_units IS NOT NULL THEN reporting_minor_units / 100.0 WHEN currency = 'SGD' OR currency IS NULL THEN amount WHEN exchange_rate IS NOT NULL AND exchange_rate > 0 AND exchange_rate != 1 THEN amount * exchange_rate ELSE NULL END)), 0) as total
+                    """SELECT COALESCE(SUM((CASE WHEN type = 'refund' THEN -1 ELSE 1 END) * (CASE WHEN reporting_minor_units IS NOT NULL THEN reporting_minor_units / 100.0 WHEN currency = 'SGD' OR currency IS NULL THEN amount WHEN exchange_rate IS NOT NULL AND exchange_rate > 0 AND exchange_rate != 1 THEN amount * exchange_rate ELSE NULL END)), 0) as total
                        FROM transactions
-                       WHERE (type IS NULL OR type = 'expense')
+                       WHERE (type IS NULL OR type = 'expense' OR type = 'refund')
                          AND DATE(transaction_date) BETWEEN ? AND ?""",
                     (start, end),
                 ).fetchone()
             else:
                 spent_row = self._conn.execute(
-                    """SELECT COALESCE(SUM((CASE WHEN reporting_minor_units IS NOT NULL THEN reporting_minor_units / 100.0 WHEN currency = 'SGD' OR currency IS NULL THEN amount WHEN exchange_rate IS NOT NULL AND exchange_rate > 0 AND exchange_rate != 1 THEN amount * exchange_rate ELSE NULL END)), 0) as total
+                    """SELECT COALESCE(SUM((CASE WHEN type = 'refund' THEN -1 ELSE 1 END) * (CASE WHEN reporting_minor_units IS NOT NULL THEN reporting_minor_units / 100.0 WHEN currency = 'SGD' OR currency IS NULL THEN amount WHEN exchange_rate IS NOT NULL AND exchange_rate > 0 AND exchange_rate != 1 THEN amount * exchange_rate ELSE NULL END)), 0) as total
                        FROM transactions
-                       WHERE (type IS NULL OR type = 'expense') AND category = ?
+                       WHERE (type IS NULL OR type = 'expense' OR type = 'refund') AND category = ?
                          AND DATE(transaction_date) BETWEEN ? AND ?""",
                     (b["category"], start, end),
                 ).fetchone()
@@ -1759,8 +1759,8 @@ class Storage:
             (start, end),
         ).fetchone()["total"]
         expenses = self._conn.execute(
-            """SELECT COALESCE(SUM((CASE WHEN reporting_minor_units IS NOT NULL THEN reporting_minor_units / 100.0 WHEN currency = 'SGD' OR currency IS NULL THEN amount WHEN exchange_rate IS NOT NULL AND exchange_rate > 0 AND exchange_rate != 1 THEN amount * exchange_rate ELSE NULL END)), 0) as total
-               FROM transactions WHERE (type IS NULL OR type = 'expense')
+            """SELECT COALESCE(SUM((CASE WHEN type = 'refund' THEN -1 ELSE 1 END) * (CASE WHEN reporting_minor_units IS NOT NULL THEN reporting_minor_units / 100.0 WHEN currency = 'SGD' OR currency IS NULL THEN amount WHEN exchange_rate IS NOT NULL AND exchange_rate > 0 AND exchange_rate != 1 THEN amount * exchange_rate ELSE NULL END)), 0) as total
+               FROM transactions WHERE (type IS NULL OR type = 'expense' OR type = 'refund')
                AND DATE(transaction_date) BETWEEN ? AND ?""",
             (start, end),
         ).fetchone()["total"]
@@ -1822,20 +1822,20 @@ class Storage:
                 "period": period,
             }
 
-        # ── Total expenses ───────────────────────────────────────────────────
+        # ── Total expenses (nets refunds in their own period/category) ───────
         total_expense = self._conn.execute(
-            """SELECT COALESCE(SUM((CASE WHEN reporting_minor_units IS NOT NULL THEN reporting_minor_units / 100.0 WHEN currency = 'SGD' OR currency IS NULL THEN amount WHEN exchange_rate IS NOT NULL AND exchange_rate > 0 AND exchange_rate != 1 THEN amount * exchange_rate ELSE NULL END)), 0.0)
-               FROM transactions WHERE (type IS NULL OR type = 'expense')
+            """SELECT COALESCE(SUM((CASE WHEN type = 'refund' THEN -1 ELSE 1 END) * (CASE WHEN reporting_minor_units IS NOT NULL THEN reporting_minor_units / 100.0 WHEN currency = 'SGD' OR currency IS NULL THEN amount WHEN exchange_rate IS NOT NULL AND exchange_rate > 0 AND exchange_rate != 1 THEN amount * exchange_rate ELSE NULL END)), 0.0)
+               FROM transactions WHERE (type IS NULL OR type = 'expense' OR type = 'refund')
                AND DATE(transaction_date) BETWEEN ? AND ?""",
             (start, end),
         ).fetchone()[0]
 
         # ── Needs (expenses in categories with type='needs') ─────────────────
         needs = self._conn.execute(
-            """SELECT COALESCE(SUM((CASE WHEN t.reporting_minor_units IS NOT NULL THEN t.reporting_minor_units / 100.0 WHEN t.currency = 'SGD' OR t.currency IS NULL THEN t.amount WHEN t.exchange_rate IS NOT NULL AND t.exchange_rate > 0 AND t.exchange_rate != 1 THEN t.amount * t.exchange_rate ELSE NULL END)), 0.0)
+            """SELECT COALESCE(SUM((CASE WHEN t.type = 'refund' THEN -1 ELSE 1 END) * (CASE WHEN t.reporting_minor_units IS NOT NULL THEN t.reporting_minor_units / 100.0 WHEN t.currency = 'SGD' OR t.currency IS NULL THEN t.amount WHEN t.exchange_rate IS NOT NULL AND t.exchange_rate > 0 AND t.exchange_rate != 1 THEN t.amount * t.exchange_rate ELSE NULL END)), 0.0)
                FROM transactions t
                LEFT JOIN categories c ON t.category = c.name
-               WHERE (t.type IS NULL OR t.type = 'expense')
+               WHERE (t.type IS NULL OR t.type = 'expense' OR t.type = 'refund')
                AND COALESCE(c.type, 'neutral') = 'needs'
                AND DATE(t.transaction_date) BETWEEN ? AND ?""",
             (start, end),
@@ -1843,10 +1843,10 @@ class Storage:
 
         # ── Wants (expenses in categories with type='wants') ─────────────────
         wants = self._conn.execute(
-            """SELECT COALESCE(SUM((CASE WHEN t.reporting_minor_units IS NOT NULL THEN t.reporting_minor_units / 100.0 WHEN t.currency = 'SGD' OR t.currency IS NULL THEN t.amount WHEN t.exchange_rate IS NOT NULL AND t.exchange_rate > 0 AND t.exchange_rate != 1 THEN t.amount * t.exchange_rate ELSE NULL END)), 0.0)
+            """SELECT COALESCE(SUM((CASE WHEN t.type = 'refund' THEN -1 ELSE 1 END) * (CASE WHEN t.reporting_minor_units IS NOT NULL THEN t.reporting_minor_units / 100.0 WHEN t.currency = 'SGD' OR t.currency IS NULL THEN t.amount WHEN t.exchange_rate IS NOT NULL AND t.exchange_rate > 0 AND t.exchange_rate != 1 THEN t.amount * t.exchange_rate ELSE NULL END)), 0.0)
                FROM transactions t
                LEFT JOIN categories c ON t.category = c.name
-               WHERE (t.type IS NULL OR t.type = 'expense')
+               WHERE (t.type IS NULL OR t.type = 'expense' OR t.type = 'refund')
                AND COALESCE(c.type, 'neutral') = 'wants'
                AND DATE(t.transaction_date) BETWEEN ? AND ?""",
             (start, end),
@@ -2121,19 +2121,28 @@ class Storage:
             """SELECT (CASE WHEN t.reporting_minor_units IS NOT NULL THEN t.reporting_minor_units / 100.0 WHEN t.currency = 'SGD' OR t.currency IS NULL THEN t.amount WHEN t.exchange_rate IS NOT NULL AND t.exchange_rate > 0 AND t.exchange_rate != 1 THEN t.amount * t.exchange_rate ELSE NULL END) as amt_sgd,
                       t.category,
                       DATE(t.transaction_date) as tx_date,
-                      t.currency
+                      t.currency,
+                      t.type
                FROM transactions t
                JOIN trip_transactions tt ON tt.transaction_id = t.id
-               WHERE tt.trip_id = ? AND (t.type IS NULL OR t.type = 'expense')
+               WHERE tt.trip_id = ? AND (t.type IS NULL OR t.type = 'expense' OR t.type = 'refund')
                ORDER BY t.transaction_date ASC""",
             (trip_id,),
         ).fetchall()
 
         # An unresolved conversion (amt_sgd is None) excludes that transaction
         # from the SGD totals below rather than crashing — same "unresolved
-        # is excluded, not fabricated" rule as spending_facts/analytics.
-        total_sgd = sum(r["amt_sgd"] or 0 for r in rows)
-        count = len(rows)
+        # is excluded, not fabricated" rule as spending_facts/analytics. A
+        # refund nets against the total but isn't itself "a transaction" for
+        # count purposes, same reasoning as the merchant/summary functions.
+        def _signed(r):
+            amt = r["amt_sgd"]
+            if amt is None:
+                return 0
+            return -amt if r["type"] == "refund" else amt
+
+        total_sgd = sum(_signed(r) for r in rows)
+        count = sum(1 for r in rows if r["type"] != "refund")
 
         start_dt = datetime.strptime(trip["start_date"], "%Y-%m-%d")
         end_str = trip.get("end_date") or local_now().strftime("%Y-%m-%d")
@@ -2147,14 +2156,15 @@ class Storage:
             cat = r["category"] or "Other"
             if cat not in cat_totals:
                 cat_totals[cat] = {"category": cat, "amount_sgd": 0.0, "count": 0}
-            cat_totals[cat]["amount_sgd"] = round(cat_totals[cat]["amount_sgd"] + (r["amt_sgd"] or 0), 2)
-            cat_totals[cat]["count"] += 1
+            cat_totals[cat]["amount_sgd"] = round(cat_totals[cat]["amount_sgd"] + _signed(r), 2)
+            if r["type"] != "refund":
+                cat_totals[cat]["count"] += 1
         by_category = sorted(cat_totals.values(), key=lambda x: x["amount_sgd"], reverse=True)
 
         day_totals: dict[str, float] = {}
         for r in rows:
             d = r["tx_date"] or "unknown"
-            day_totals[d] = round(day_totals.get(d, 0.0) + (r["amt_sgd"] or 0), 2)
+            day_totals[d] = round(day_totals.get(d, 0.0) + _signed(r), 2)
         by_day = [{"date": d, "amount_sgd": v} for d, v in sorted(day_totals.items())]
 
         currencies = list({r["currency"] for r in rows if r["currency"]})

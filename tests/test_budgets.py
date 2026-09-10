@@ -106,6 +106,36 @@ class TestBudgetProgress:
         progress = storage.get_budget_progress()
         assert progress[0]["spent"] == 150.0
 
+    def test_category_budget_nets_refund(self, in_memory_db):
+        storage = Storage(connection=in_memory_db)
+        storage.create_budget(category="Dining", amount=200.0, period="monthly")
+        today = date.today().isoformat()
+        storage.insert_transaction(
+            source="manual", source_id="rb1", amount=50.0, category="Dining",
+            transaction_date=today, tx_type="expense",
+        )
+        storage.insert_transaction(
+            source="manual", source_id="rb2", amount=15.0, category="Dining",
+            transaction_date=today, tx_type="refund",
+        )
+        progress = storage.get_budget_progress()
+        assert progress[0]["spent"] == 35.0
+
+    def test_overall_budget_nets_refund(self, in_memory_db):
+        storage = Storage(connection=in_memory_db)
+        storage.create_budget(category=None, amount=1000.0, period="monthly")
+        today = date.today().isoformat()
+        storage.insert_transaction(
+            source="manual", source_id="rb3", amount=100.0, category="Dining",
+            transaction_date=today, tx_type="expense",
+        )
+        storage.insert_transaction(
+            source="manual", source_id="rb4", amount=20.0, category="Dining",
+            transaction_date=today, tx_type="refund",
+        )
+        progress = storage.get_budget_progress()
+        assert progress[0]["spent"] == 80.0
+
     def test_income_excluded_from_budget_progress(self, in_memory_db):
         storage = Storage(connection=in_memory_db)
         storage.create_budget(category=None, amount=1000.0, period="monthly")
