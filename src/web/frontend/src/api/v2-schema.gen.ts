@@ -140,6 +140,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/merchants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Merchant List V2 */
+        get: operations["merchant_list_v2_api_v2_merchants_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/merchants/{merchant}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Merchant Profile V2 */
+        get: operations["merchant_profile_v2_api_v2_merchants__merchant__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v2/overview/merchants": {
         parameters: {
             query?: never;
@@ -609,6 +643,25 @@ export interface components {
             total: components["schemas"]["Money"];
             /** Visits */
             visits: number;
+        };
+        /** MerchantSummary */
+        MerchantSummary: {
+            avg_amount: components["schemas"]["Money"];
+            /** Category */
+            category: string | null;
+            /** First Seen */
+            first_seen: string;
+            /** Last Seen */
+            last_seen: string;
+            /** Merchant */
+            merchant: string;
+            /** Notes */
+            notes: string;
+            /** Tags */
+            tags: string[];
+            total: components["schemas"]["Money"];
+            /** Transaction Count */
+            transaction_count: number;
         };
         /** Money */
         Money: {
@@ -1300,6 +1353,73 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HomeBriefing"];
+                };
+            };
+        };
+    };
+    merchant_list_v2_api_v2_merchants_get: {
+        parameters: {
+            query?: {
+                sort_by?: string;
+                tag?: string | null;
+                category?: string | null;
+                search?: string | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MerchantSummary"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    merchant_profile_v2_api_v2_merchants__merchant__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                merchant: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MerchantSummary"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
