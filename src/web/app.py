@@ -23,7 +23,7 @@ from src import transaction_commands
 from src.money import to_minor_units
 from src.config import local_now
 from src.web.auth import verify_password, create_session, verify_session, destroy_session
-from src.web.contracts import BudgetProgress, CaptureFollowup, CaptureIssue, CaptureResolution, HomeBriefing, MerchantRanking, OverviewSummary, QueuedResponse, SpendingEvidence, SpendingFacts, SpendingReview, TransactionCorrection, TransactionCreate, TransactionDeletion, TransactionProvenance, TransactionUndo, TransactionV2, TrendPoint, TripSummary, UpcomingPlan, PlanMutationResponse, RecurringReview, RecurringResolution
+from src.web.contracts import BudgetProgress, CaptureFollowup, CaptureIssue, CaptureResolution, HomeBriefing, MerchantRanking, MerchantSummary, OverviewSummary, QueuedResponse, SpendingEvidence, SpendingFacts, SpendingReview, TransactionCorrection, TransactionCreate, TransactionDeletion, TransactionProvenance, TransactionUndo, TransactionV2, TrendPoint, TripSummary, UpcomingPlan, PlanMutationResponse, RecurringReview, RecurringResolution
 from src.analytics import (
     load_summary,
     get_yoy_comparison,
@@ -824,6 +824,54 @@ def create_dashboard_app(
         if not profile:
             raise HTTPException(status_code=404, detail="Merchant not found")
         return profile
+
+    def _merchant_to_v2(d: dict) -> dict:
+        # total_sgd/avg_amount_sgd can be NULL if every transaction for this
+        # merchant has an unresolved FX conversion (SUM/AVG over an all-NULL
+        # group) — same latent gap the v1 route has always had (silently
+        # returns null); _sgd_money can't represent "unresolved" here (no
+        # per-merchant conversion_status), so it's treated as zero rather
+        # than crashing the route.
+        return {
+            "merchant": d["merchant"],
+            "total": _sgd_money(d["total_sgd"] or 0.0),
+            "transaction_count": d["transaction_count"],
+            "avg_amount": _sgd_money(d["avg_amount_sgd"] or 0.0),
+            # get_merchant_profile (unlike get_merchant_list) doesn't select a
+            # category column at all — same v1 gap, not introduced here.
+            "category": d.get("category"),
+            "first_seen": d["first_seen"],
+            "last_seen": d["last_seen"],
+            "tags": d["tags"],
+            "notes": d["notes"],
+        }
+
+    @app.get("/api/v2/merchants", response_model=list[MerchantSummary])
+    async def merchant_list_v2(
+        sort_by: str = "total_spent",
+        tag: Optional[str] = None,
+        category: Optional[str] = None,
+        search: Optional[str] = None,
+        limit: int = 25,
+        offset: int = 0,
+        storage=Depends(_get_storage),
+    ):
+        rows = await _db(storage.get_merchant_list,
+            sort_by=sort_by,
+            tag_filter=tag,
+            category_filter=category,
+            name_search=search,
+            limit=limit,
+            offset=offset,
+        )
+        return [_merchant_to_v2(r) for r in rows]
+
+    @app.get("/api/v2/merchants/{merchant}", response_model=MerchantSummary)
+    async def merchant_profile_v2(merchant: str, storage=Depends(_get_storage)):
+        profile = await _db(storage.get_merchant_profile, merchant)
+        if not profile:
+            raise HTTPException(status_code=404, detail="Merchant not found")
+        return _merchant_to_v2(profile)
 
     @app.get("/api/balance")
     async def balance(start_date: Optional[str] = None, end_date: Optional[str] = None, storage=Depends(_get_storage)):

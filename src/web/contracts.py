@@ -323,3 +323,19 @@ class BudgetProgress(BaseModel):
     status: Literal["over_budget", "warning", "on_track"]
     period_start: str
     period_end: str
+
+
+# Typed wrapper over the already-canonical-money-correct
+# Storage.get_merchant_list / get_merchant_profile (both use the same
+# reporting_minor_units-first SQL CASE as the rest of R04). Same shape
+# serves both a list row and a single-merchant profile.
+class MerchantSummary(BaseModel):
+    merchant: str
+    total: Money
+    transaction_count: int
+    avg_amount: Money
+    category: str | None
+    first_seen: str
+    last_seen: str
+    tags: list[str]
+    notes: str

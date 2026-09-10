@@ -354,3 +354,66 @@ class TestMerchantAPI:
         data = resp.json()
         assert "merchant" in data
         assert "months" in data
+
+
+class TestMerchantV2API:
+    def test_list_v2_returns_typed_money(self, client):
+        c, db = client
+        today = local_now().strftime("%Y-%m-%d")
+        db.execute(
+            "INSERT INTO transactions (source, source_id, amount, currency, exchange_rate, "
+            "merchant, category, transaction_date, type) VALUES ('manual', 'g1', 25.0, 'SGD', 1.0, "
+            "'Grab', 'Transport', ?, 'expense')",
+            (today,),
+        )
+        db.commit()
+        resp = c.get("/api/v2/merchants")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 1
+        assert data[0]["merchant"] == "Grab"
+        assert data[0]["total"] == {"minor_units": 2500, "currency": "SGD"}
+        assert data[0]["avg_amount"] == {"minor_units": 2500, "currency": "SGD"}
+        assert data[0]["transaction_count"] == 1
+        assert data[0]["tags"] == []
+
+    def test_list_v2_unresolved_fx_does_not_crash(self, client):
+        # A legacy exchange_rate of 1.0 on a non-SGD currency is the silent
+        # unresolved marker (R02) — merchant_list's SUM/AVG CASE excludes it,
+        # so the whole group is NULL. Assert this degrades to zero rather
+        # than 500ing the route.
+        c, db = client
+        today = local_now().strftime("%Y-%m-%d")
+        db.execute(
+            "INSERT INTO transactions (source, source_id, amount, currency, exchange_rate, "
+            "merchant, category, transaction_date, type) VALUES ('manual', 'b1', 200.0, 'THB', 1.0, "
+            "'Bangkok Air', 'Travel', ?, 'expense')",
+            (today,),
+        )
+        db.commit()
+        resp = c.get("/api/v2/merchants")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data[0]["merchant"] == "Bangkok Air"
+        assert data[0]["total"] == {"minor_units": 0, "currency": "SGD"}
+
+    def test_profile_v2(self, client):
+        c, db = client
+        today = local_now().strftime("%Y-%m-%d")
+        db.execute(
+            "INSERT INTO transactions (source, source_id, amount, currency, exchange_rate, "
+            "merchant, transaction_date, type) VALUES ('manual', 'g1', 15.0, 'SGD', 1.0, "
+            "'Grab', ?, 'expense')",
+            (today,),
+        )
+        db.commit()
+        resp = c.get("/api/v2/merchants/Grab")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["merchant"] == "Grab"
+        assert data["total"] == {"minor_units": 1500, "currency": "SGD"}
+
+    def test_profile_v2_404_for_unknown(self, client):
+        c, _ = client
+        resp = c.get("/api/v2/merchants/Unknown")
+        assert resp.status_code == 404
