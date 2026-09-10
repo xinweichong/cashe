@@ -396,6 +396,21 @@ class TestQueryTransactions:
         assert summary["by_category"]["Food"] == 30.0
         assert summary["by_category"]["Transport"] == 30.0
 
+    def test_get_spending_summary_excludes_transfer(self, storage):
+        storage.insert_transaction(
+            source="manual", source_id="t1", amount=50.0, category="Food",
+            transaction_date="2026-04-16", tx_type="expense",
+        )
+        storage.insert_transaction(
+            source="manual", source_id="t2", amount=500.0, category="Card Payment",
+            transaction_date="2026-04-16", tx_type="transfer",
+        )
+        summary = storage.get_spending_summary(
+            start_date="2026-04-16", end_date="2026-04-16"
+        )
+        assert summary["total"] == 50.0
+        assert "Card Payment" not in summary["by_category"]
+
     def test_get_spending_summary_nets_refund(self, storage):
         storage.insert_transaction(
             source="manual", source_id="r1", amount=50.0, category="Food",
