@@ -1,6 +1,26 @@
 {
   "components": {
     "schemas": {
+      "Balance": {
+        "properties": {
+          "expenses": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "income": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "net": {
+            "$ref": "#/components/schemas/Money"
+          }
+        },
+        "required": [
+          "income",
+          "expenses",
+          "net"
+        ],
+        "title": "Balance",
+        "type": "object"
+      },
       "BudgetProgress": {
         "properties": {
           "budget_amount": {
@@ -323,6 +343,34 @@
           "change_percent"
         ],
         "title": "CategoryComparison",
+        "type": "object"
+      },
+      "CategoryTrendPoint": {
+        "properties": {
+          "categories": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/Money"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Categories",
+            "type": "object"
+          },
+          "date": {
+            "title": "Date",
+            "type": "string"
+          }
+        },
+        "required": [
+          "date",
+          "categories"
+        ],
+        "title": "CategoryTrendPoint",
         "type": "object"
       },
       "ConversionProvenance": {
@@ -2983,6 +3031,68 @@
         "summary": "Merchant Profile V2"
       }
     },
+    "/api/v2/overview/balance": {
+      "get": {
+        "operationId": "balance_v2_api_v2_overview_balance_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "start_date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Start Date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "end_date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "End Date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Balance"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Balance V2"
+      }
+    },
     "/api/v2/overview/merchants": {
       "get": {
         "operationId": "overview_merchants_v2_api_v2_overview_merchants_get",
@@ -3185,6 +3295,72 @@
           }
         },
         "summary": "Overview Trend V2"
+      }
+    },
+    "/api/v2/overview/trend-by-category": {
+      "get": {
+        "operationId": "trend_by_category_v2_api_v2_overview_trend_by_category_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "start_date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Start Date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "end_date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "End Date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CategoryTrendPoint"
+                  },
+                  "title": "Response Trend By Category V2 Api V2 Overview Trend By Category Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Trend By Category V2"
       }
     },
     "/api/v2/plan/upcoming": {
