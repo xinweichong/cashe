@@ -389,7 +389,18 @@ def _generate_llm_insight(storage, llm_service) -> None:
         ).fetchone()
         income = balance_row["income"]
         expenses = balance_row["expenses"]
-        savings_rate = ((income - expenses) / income * 100) if income > 0 else 0
+        if income <= 0:
+            # No recorded income this period means savings_rate has no
+            # meaningful denominator — the 0-income fallback used to compute
+            # a fabricated 0% rate and still ask the LLM to narrate it, the
+            # same "misleading advice from absent data" gap get_health_score
+            # already guards against via has_income_data. Skip generation
+            # entirely rather than cache a plausible-sounding but meaningless
+            # narrative; any previously cached (now-stale) insight is left
+            # as-is for the frontend's existing is_stale handling.
+            logger.info("Skipping LLM insight generation: no income recorded this period")
+            return
+        savings_rate = (income - expenses) / income * 100
 
         top_cats = [
             {"name": c["category"], "amount": c["current"], "change_pct": c["change_percent"]}
