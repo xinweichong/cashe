@@ -466,6 +466,9 @@ export const api = {
   getTransactionProvenance: (id: number) =>
     request<TransactionProvenance>(`/api/v2/transactions/${id}/provenance`),
 
+  getTransactionV2: (id: number) =>
+    request<TransactionV2>(`/api/v2/transactions/${id}`),
+
   createTransaction: (data: Partial<TransactionCreateV2> & { amount: number }, requestKey?: string) =>
     request<TransactionV2>('/api/v2/transactions', {
       method: 'POST',

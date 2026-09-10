@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { type Transaction, type Trip, api } from '@/api/client';
 import { formatCurrency, formatDateTime, getCategoryColor } from '@/lib/utils';
-import { useUpdateTransaction, useDeleteTransaction } from '@/hooks/useTransactions';
+import { useUpdateTransaction, useDeleteTransaction, useTransactions } from '@/hooks/useTransactions';
 import { useCategories } from '@/hooks/useCategories';
 import { useIconMap } from '@/hooks/useIconMap';
 import { Button } from '@/components/ui/button';
@@ -267,6 +267,7 @@ export function TransactionDetail({
               </div>
             )}
             <TripMembershipRow txId={tx.id} />
+            <RefundEvidenceSection tx={tx} />
             <TransactionSources txId={tx.id} />
             {/* Meta */}
             <div className="pt-2 border-t border-border space-y-2">
@@ -380,6 +381,110 @@ export function TransactionDetail({
       </div>
     </div>
   );
+}
+
+function RefundEvidenceSection({ tx }: { tx: Transaction }) {
+  const qc = useQueryClient();
+  const updateTx = useUpdateTransaction();
+  const [linking, setLinking] = useState(false);
+  const [query, setQuery] = useState('');
+
+  const { data: v2 } = useQuery({
+    queryKey: ['transaction-v2', tx.id],
+    queryFn: () => api.getTransactionV2(tx.id),
+  });
+
+  const { data: candidates = [] } = useTransactions({ merchant_search: query, limit: 8 });
+  const purchaseCandidates = candidates.filter(
+    (c) => c.id !== tx.id && (c.type === 'expense' || !c.type)
+  );
+
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ['transaction-v2', tx.id] });
+    if (v2?.refund_of) qc.invalidateQueries({ queryKey: ['transaction-v2', v2.refund_of.transaction_id] });
+  };
+
+  const link = (purchaseId: number) => {
+    updateTx.mutate(
+      { id: tx.id, data: { refund_of_transaction_id: purchaseId } },
+      { onSuccess: () => { invalidate(); setLinking(false); setQuery(''); } },
+    );
+  };
+
+  const unlink = () => {
+    updateTx.mutate(
+      { id: tx.id, data: { refund_of_transaction_id: null } },
+      { onSuccess: invalidate },
+    );
+  };
+
+  if (tx.type === 'refund') {
+    return (
+      <div className="space-y-2">
+        <span className="text-xs text-muted block">Refunds</span>
+        {v2?.refund_of ? (
+          <div className="flex items-start justify-between gap-2 text-xs bg-background rounded-md border border-border p-2">
+            <div className="min-w-0">
+              <p className="text-foreground truncate">{v2.refund_of.merchant ?? 'Unknown merchant'} — {formatCurrency(v2.refund_of.amount, v2.refund_of.currency)}</p>
+              <p className="text-muted">{formatDateTime(v2.refund_of.transaction_date ?? '')}</p>
+              {v2.refund_of.warning && <p className="text-warning mt-1">{v2.refund_of.warning}</p>}
+            </div>
+            <button onClick={unlink} disabled={updateTx.isPending} className="text-muted hover:text-destructive shrink-0">Unlink</button>
+          </div>
+        ) : linking ? (
+          <div className="space-y-1.5">
+            <Input
+              autoFocus
+              placeholder="Search purchases by merchant…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              className="h-8 text-xs"
+            />
+            {query && (
+              <div className="space-y-1 max-h-40 overflow-y-auto">
+                {purchaseCandidates.length === 0 ? (
+                  <p className="text-xs text-muted py-1">No matching purchases.</p>
+                ) : purchaseCandidates.map((c) => (
+                  <button
+                    key={c.id}
+                    onClick={() => link(c.id)}
+                    disabled={updateTx.isPending}
+                    className="w-full text-left text-xs bg-background hover:bg-foreground/5 rounded-md border border-border p-2 transition-colors"
+                  >
+                    <span className="text-foreground">{c.merchant ?? 'Unknown merchant'} — {formatCurrency(c.amount, c.currency)}</span>
+                    <span className="text-muted block">{formatDateTime(c.transaction_date)}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            <button onClick={() => { setLinking(false); setQuery(''); }} className="text-xs text-muted hover:text-foreground">Cancel</button>
+          </div>
+        ) : (
+          <button onClick={() => setLinking(true)} className="text-xs text-accent hover:opacity-80 transition-opacity">
+            + Link to purchase
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  if (v2?.refunded_by && v2.refunded_by.length > 0) {
+    return (
+      <div className="space-y-2">
+        <span className="text-xs text-muted block">Refunded by</span>
+        <div className="space-y-1">
+          {v2.refunded_by.map((r) => (
+            <div key={r.transaction_id} className="text-xs bg-background rounded-md border border-border p-2">
+              <p className="text-foreground">{formatCurrency(r.amount, r.currency)}</p>
+              <p className="text-muted">{formatDateTime(r.transaction_date ?? '')}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return null;
 }
 
 function TransactionSources({ txId }: { txId: number }) {
