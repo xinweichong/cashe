@@ -20,7 +20,8 @@ from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 
 from src.storage import RevisionConflict, SubscriptionMatchConflict, TransactionRequestConflict
 from src import transaction_commands
-from src.money import to_minor_units
+from src.money import to_minor_units, from_minor_units
+from src.spending_facts import resolve_money
 from src.config import local_now
 from src.web.auth import verify_password, create_session, verify_session, destroy_session
 from src.web.contracts import Balance, BudgetProgress, CaptureFollowup, CaptureIssue, CaptureResolution, CategoryTrendPoint, GoalProgress, HealthScore, HomeBriefing, MerchantRanking, MerchantSummary, OverviewSummary, QueuedResponse, SpendingAlerts, SpendingComparison, SpendingEvidence, SpendingFacts, SpendingReview, SpendingVelocity, TopMerchantsResult, TransactionCorrection, TransactionCreate, TransactionDeletion, TransactionProvenance, TransactionUndo, TransactionV2, TrendPoint, TripSummary, UpcomingPlan, PlanMutationResponse, RecurringReview, RecurringResolution
@@ -547,13 +548,21 @@ def create_dashboard_app(
         writer = csv.DictWriter(output, fieldnames=fieldnames)
         writer.writeheader()
         for tx in rows:
+            # reporting_minor_units (R02 canonical money) rather than
+            # amount * exchange_rate — a legacy exchange_rate of 1.0 is a
+            # silent unresolved fallback, not real conversion evidence, and
+            # the raw multiplication has no currency validation. Leave
+            # amount_sgd blank rather than fabricate a face-value SGD figure
+            # for an unresolved conversion.
+            minor, _status = resolve_money(tx)
+            amount_sgd = float(from_minor_units(minor, "SGD")) if minor is not None else ""
             writer.writerow({
                 "date": (tx.get("transaction_date") or "")[:10],
                 "merchant": tx.get("merchant") or "",
                 "amount": tx.get("amount") if tx.get("amount") is not None else "",
                 "currency": tx.get("currency") or "SGD",
                 "exchange_rate": tx.get("exchange_rate") if tx.get("exchange_rate") is not None else 1.0,
-                "amount_sgd": round((tx.get("amount") or 0) * (tx.get("exchange_rate") or 1.0), 2),
+                "amount_sgd": amount_sgd,
                 "type": tx.get("type") or "expense",
                 "category": tx.get("category") or "",
                 "source": tx.get("source") or "",

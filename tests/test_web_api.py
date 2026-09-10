@@ -735,6 +735,43 @@ async def test_export_transactions_respects_category_filter(client, in_memory_db
     assert len(lines) == 3  # 1 header + 2 Dining rows
 
 
+@pytest.mark.asyncio
+async def test_export_amount_sgd_uses_canonical_conversion(client, in_memory_db):
+    # Written through Storage.insert_transaction so reporting_minor_units/
+    # conversion_status are actually computed (R02 canonical money) —
+    # the export must read those, not recompute amount * exchange_rate.
+    storage = Storage(in_memory_db)
+    storage.insert_transaction(
+        source="manual", source_id="jpy1", amount=1000.0, merchant="Tokyo Cafe",
+        category="Dining", transaction_date="2026-04-10", tx_type="expense",
+        currency="JPY", exchange_rate=0.0091,
+    )
+    resp = await client.get("/api/transactions/export")
+    lines = resp.text.strip().split("\n")
+    row = next(l for l in lines if "Tokyo Cafe" in l)
+    assert "9.1" in row  # 1000 * 0.0091 = 9.10 SGD
+
+@pytest.mark.asyncio
+async def test_export_amount_sgd_blank_for_unresolved_fx(client, in_memory_db):
+    # A legacy exchange_rate of 1.0 on a non-SGD currency is the silent
+    # unresolved marker (R02) — the export must not fabricate a face-value
+    # SGD amount for it (the exact `amount * exchange_rate` bug R04 fixed
+    # everywhere else it appeared).
+    storage = Storage(in_memory_db)
+    storage.insert_transaction(
+        source="manual", source_id="thb1", amount=500.0, merchant="Bangkok Grill",
+        category="Dining", transaction_date="2026-04-10", tx_type="expense",
+        currency="THB", exchange_rate=1.0,
+    )
+    resp = await client.get("/api/transactions/export")
+    lines = resp.text.strip().split("\n")
+    row = next(l for l in lines if "Bangkok Grill" in l)
+    fields = row.split(",")
+    amount_sgd_col = fields[5]  # date,merchant,amount,currency,exchange_rate,amount_sgd,...
+    assert amount_sgd_col == ""  # never fabricated as face-value SGD
+    assert fields[2] == "500.0"  # the raw original-currency amount is still shown
+
+
 class TestBudgetAPI:
     @pytest.mark.asyncio
     async def test_create_budget_returns_progress(self, client):
