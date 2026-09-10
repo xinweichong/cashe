@@ -210,6 +210,134 @@ class TestUpdateTransaction:
         assert changed == {"merchant": {"old": "Toast Box", "new": "Ya Kun"}}
 
 
+class TestRefundLinking:
+    def test_link_refund_to_purchase(self, storage):
+        purchase_id = storage.insert_transaction(
+            source="manual", source_id="p1", amount=100.0, merchant="Shop",
+            category="Food", transaction_date="2026-04-16", tx_type="expense",
+        )
+        refund_id = storage.insert_transaction(
+            source="manual", source_id="r1", amount=30.0, merchant="Shop",
+            category="Food", transaction_date="2026-04-20", tx_type="refund",
+        )
+        storage.update_transaction(refund_id, refund_of_transaction_id=purchase_id)
+        tx = storage.get_transaction(refund_id)
+        assert tx["refund_of_transaction_id"] == purchase_id
+
+    def test_unlink_refund(self, storage):
+        purchase_id = storage.insert_transaction(
+            source="manual", source_id="p2", amount=100.0, transaction_date="2026-04-16", tx_type="expense",
+        )
+        refund_id = storage.insert_transaction(
+            source="manual", source_id="r2", amount=30.0, transaction_date="2026-04-20", tx_type="refund",
+        )
+        storage.update_transaction(refund_id, refund_of_transaction_id=purchase_id)
+        storage.update_transaction(refund_id, refund_of_transaction_id=None)
+        assert storage.get_transaction(refund_id)["refund_of_transaction_id"] is None
+
+    def test_link_to_nonexistent_transaction_raises(self, storage):
+        refund_id = storage.insert_transaction(
+            source="manual", source_id="r3", amount=30.0, transaction_date="2026-04-20", tx_type="refund",
+        )
+        with pytest.raises(ValueError, match="not found"):
+            storage.update_transaction(refund_id, refund_of_transaction_id=999999)
+
+    def test_link_to_self_raises(self, storage):
+        refund_id = storage.insert_transaction(
+            source="manual", source_id="r4", amount=30.0, transaction_date="2026-04-20", tx_type="refund",
+        )
+        with pytest.raises(ValueError, match="itself"):
+            storage.update_transaction(refund_id, refund_of_transaction_id=refund_id)
+
+    def test_link_to_another_refund_raises(self, storage):
+        other_refund_id = storage.insert_transaction(
+            source="manual", source_id="r5", amount=10.0, transaction_date="2026-04-16", tx_type="refund",
+        )
+        refund_id = storage.insert_transaction(
+            source="manual", source_id="r6", amount=30.0, transaction_date="2026-04-20", tx_type="refund",
+        )
+        with pytest.raises(ValueError, match="expense"):
+            storage.update_transaction(refund_id, refund_of_transaction_id=other_refund_id)
+
+    def test_link_to_transfer_raises(self, storage):
+        transfer_id = storage.insert_transaction(
+            source="manual", source_id="t1", amount=500.0, transaction_date="2026-04-16", tx_type="transfer",
+        )
+        refund_id = storage.insert_transaction(
+            source="manual", source_id="r7", amount=30.0, transaction_date="2026-04-20", tx_type="refund",
+        )
+        with pytest.raises(ValueError, match="expense"):
+            storage.update_transaction(refund_id, refund_of_transaction_id=transfer_id)
+
+    def test_link_to_income_raises(self, storage):
+        income_id = storage.insert_transaction(
+            source="manual", source_id="i1", amount=5000.0, transaction_date="2026-04-16", tx_type="income",
+        )
+        refund_id = storage.insert_transaction(
+            source="manual", source_id="r8", amount=30.0, transaction_date="2026-04-20", tx_type="refund",
+        )
+        with pytest.raises(ValueError, match="expense"):
+            storage.update_transaction(refund_id, refund_of_transaction_id=income_id)
+
+    def test_link_to_legacy_null_type_succeeds(self, storage):
+        purchase_id = storage.insert_transaction(
+            source="manual", source_id="p9", amount=100.0, transaction_date="2026-04-16",
+        )
+        storage._conn.execute("UPDATE transactions SET type = NULL WHERE id = ?", (purchase_id,))
+        storage._conn.commit()
+        refund_id = storage.insert_transaction(
+            source="manual", source_id="r9", amount=30.0, transaction_date="2026-04-20", tx_type="refund",
+        )
+        storage.update_transaction(refund_id, refund_of_transaction_id=purchase_id)
+        assert storage.get_transaction(refund_id)["refund_of_transaction_id"] == purchase_id
+
+    def test_only_a_refund_can_carry_a_link(self, storage):
+        purchase_id = storage.insert_transaction(
+            source="manual", source_id="p11", amount=100.0, transaction_date="2026-04-16", tx_type="expense",
+        )
+        other_expense_id = storage.insert_transaction(
+            source="manual", source_id="e1", amount=20.0, transaction_date="2026-04-20", tx_type="expense",
+        )
+        with pytest.raises(ValueError, match="Only a refund"):
+            storage.update_transaction(other_expense_id, refund_of_transaction_id=purchase_id)
+
+    def test_can_set_type_and_link_together(self, storage):
+        purchase_id = storage.insert_transaction(
+            source="manual", source_id="p12", amount=100.0, transaction_date="2026-04-16", tx_type="expense",
+        )
+        tx_id = storage.insert_transaction(
+            source="manual", source_id="r11", amount=20.0, transaction_date="2026-04-20", tx_type="expense",
+        )
+        storage.update_transaction(tx_id, type="refund", refund_of_transaction_id=purchase_id)
+        tx = storage.get_transaction(tx_id)
+        assert tx["type"] == "refund"
+        assert tx["refund_of_transaction_id"] == purchase_id
+
+    def test_reclassifying_away_from_refund_clears_a_stale_link(self, storage):
+        purchase_id = storage.insert_transaction(
+            source="manual", source_id="p13", amount=100.0, transaction_date="2026-04-16", tx_type="expense",
+        )
+        refund_id = storage.insert_transaction(
+            source="manual", source_id="r12", amount=20.0, transaction_date="2026-04-20", tx_type="refund",
+        )
+        storage.update_transaction(refund_id, refund_of_transaction_id=purchase_id)
+        # Reclassify without touching the link explicitly — the invariant
+        # "only a refund carries a link" must still hold afterward.
+        storage.update_transaction(refund_id, type="expense")
+        assert storage.get_transaction(refund_id)["refund_of_transaction_id"] is None
+
+    def test_deleting_linked_purchase_clears_the_link(self, storage):
+        purchase_id = storage.insert_transaction(
+            source="manual", source_id="p10", amount=100.0, transaction_date="2026-04-16", tx_type="expense",
+        )
+        refund_id = storage.insert_transaction(
+            source="manual", source_id="r10", amount=30.0, transaction_date="2026-04-20", tx_type="refund",
+        )
+        storage.update_transaction(refund_id, refund_of_transaction_id=purchase_id)
+        storage.delete_transaction(purchase_id)
+        assert storage.get_transaction(refund_id)["refund_of_transaction_id"] is None
+
+
 class TestDeleteTransaction:
     def test_delete_existing(self, storage):
         tx_id = storage.insert_transaction(
@@ -287,6 +415,31 @@ class TestRestoreDeletedTransaction:
         assert storage._conn.execute(
             "SELECT 1 FROM deleted_transactions WHERE id = ?", (tx_id,)
         ).fetchone() is None
+
+    def test_delete_and_restore_preserves_refund_link(self, storage):
+        purchase_id = storage.insert_transaction(
+            source="manual", source_id="p14", amount=100.0, transaction_date="2026-04-16", tx_type="expense",
+        )
+        refund_id = storage.insert_transaction(
+            source="manual", source_id="r13", amount=20.0, transaction_date="2026-04-20", tx_type="refund",
+        )
+        storage.update_transaction(refund_id, refund_of_transaction_id=purchase_id)
+        storage.delete_transaction(refund_id)
+        storage.restore_deleted_transaction(refund_id)
+        assert storage.get_transaction(refund_id)["refund_of_transaction_id"] == purchase_id
+
+    def test_restoring_a_refund_whose_linked_purchase_is_gone_nulls_the_link(self, storage):
+        purchase_id = storage.insert_transaction(
+            source="manual", source_id="p15", amount=100.0, transaction_date="2026-04-16", tx_type="expense",
+        )
+        refund_id = storage.insert_transaction(
+            source="manual", source_id="r14", amount=20.0, transaction_date="2026-04-20", tx_type="refund",
+        )
+        storage.update_transaction(refund_id, refund_of_transaction_id=purchase_id)
+        storage.delete_transaction(refund_id)
+        storage.delete_transaction(purchase_id)  # purchase gone for good, refund not yet restored
+        storage.restore_deleted_transaction(refund_id)
+        assert storage.get_transaction(refund_id)["refund_of_transaction_id"] is None
 
     def test_restore_nonexistent_raises(self, storage):
         with pytest.raises(ValueError, match="no deletion record"):

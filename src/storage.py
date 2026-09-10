@@ -698,6 +698,27 @@ class Storage:
         if expected_revision is not None and expected_revision != tx["revision"]:
             raise RevisionConflict(tx)
         fields = normalize_transaction_fields(fields)
+        if "refund_of_transaction_id" in fields and fields["refund_of_transaction_id"] is not None:
+            target_id = fields["refund_of_transaction_id"]
+            if target_id == tx_id:
+                raise ValueError("A refund cannot link to itself")
+            effective_type = fields.get("type", tx["type"])
+            if effective_type != "refund":
+                raise ValueError("Only a refund transaction can link to a purchase")
+            target = self.get_transaction(target_id)
+            if target is None:
+                raise ValueError(f"transaction {target_id} not found")
+            if target["type"] not in (None, "expense"):
+                raise ValueError("A refund can only link to an expense transaction")
+        elif (
+            "type" in fields and fields["type"] != "refund"
+            and tx.get("refund_of_transaction_id") is not None
+            and "refund_of_transaction_id" not in fields
+        ):
+            # Reclassifying away from 'refund' without explicitly touching the
+            # link would otherwise leave a non-refund row carrying one,
+            # violating the "only a refund carries a link" invariant.
+            fields["refund_of_transaction_id"] = None
         if "currency" in fields:
             if fields["currency"] != tx["currency"]:
                 if fields["currency"] == "SGD":
@@ -818,13 +839,13 @@ class Storage:
                (id, source, source_id, amount, currency, exchange_rate, merchant, description,
                 category, transaction_date, type, revision, original_minor_units,
                 reporting_minor_units, conversion_status, conversion_rate, conversion_source,
-                conversion_quoted_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                conversion_quoted_at, refund_of_transaction_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (tx["id"], tx["source"], tx["source_id"], tx["amount"], tx["currency"], tx["exchange_rate"],
              tx["merchant"], tx["description"], tx["category"], tx["transaction_date"], tx["type"],
              tx["revision"], tx.get("original_minor_units"), tx.get("reporting_minor_units"),
              tx.get("conversion_status"), tx.get("conversion_rate"), tx.get("conversion_source"),
-             tx.get("conversion_quoted_at")),
+             tx.get("conversion_quoted_at"), tx.get("refund_of_transaction_id")),
         )
         self._conn.execute("DELETE FROM transactions WHERE id = ?", (tx_id,))
         deleted_at = self._conn.execute(
@@ -853,20 +874,28 @@ class Storage:
                 f"transaction {tx_id} deletion predates full snapshot retention and cannot be restored"
             )
         new_revision = snapshot["revision"] + 1
+        # The live column has a real FK (ON DELETE SET NULL) — restoring with
+        # a link to a purchase that's gone for good (deleted and never
+        # restored) would otherwise violate that constraint at INSERT time.
+        # Degrade gracefully to no link, same as if the purchase had been
+        # deleted after this refund was restored.
+        refund_of = snapshot["refund_of_transaction_id"]
+        if refund_of is not None and self.get_transaction(refund_of) is None:
+            refund_of = None
         with self._conn:
             self._conn.execute(
                 """INSERT INTO transactions
                    (id, source, source_id, amount, currency, exchange_rate, merchant, description,
                     category, transaction_date, type, revision, original_minor_units,
                     reporting_minor_units, conversion_status, conversion_rate, conversion_source,
-                    conversion_quoted_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    conversion_quoted_at, refund_of_transaction_id)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (snapshot["id"], snapshot["source"], snapshot["source_id"], snapshot["amount"],
                  snapshot["currency"], snapshot["exchange_rate"], snapshot["merchant"], snapshot["description"],
                  snapshot["category"], snapshot["transaction_date"], snapshot["type"], new_revision,
                  snapshot["original_minor_units"], snapshot["reporting_minor_units"],
                  snapshot["conversion_status"], snapshot["conversion_rate"], snapshot["conversion_source"],
-                 snapshot["conversion_quoted_at"]),
+                 snapshot["conversion_quoted_at"], refund_of),
             )
             self._conn.execute("DELETE FROM deleted_transactions WHERE id = ?", (tx_id,))
         return new_revision
