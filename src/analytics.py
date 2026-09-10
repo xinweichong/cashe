@@ -52,11 +52,15 @@ def _query_total(conn: sqlite3.Connection, start: str, end: str, category: str |
     is a silent unresolved fallback, not real conversion evidence, and the
     raw multiplication has no currency validation. reporting_minor_units is
     NULL for anything unresolved, which SUM already excludes.
+
+    A refund (R05) nets against spending in its own period/category —
+    never retroactively rewriting the original purchase's — so it's
+    included here with its sign flipped, not excluded like a transfer.
     """
     query = """
-        SELECT COALESCE(SUM(reporting_minor_units), 0) / 100.0 as total
+        SELECT COALESCE(SUM(CASE WHEN type = 'refund' THEN -reporting_minor_units ELSE reporting_minor_units END), 0) / 100.0 as total
         FROM transactions
-        WHERE (type IS NULL OR type = 'expense')
+        WHERE (type IS NULL OR type = 'expense' OR type = 'refund')
           AND DATE(transaction_date) >= ? AND DATE(transaction_date) <= ?
     """
     params: list[Any] = [start, end]
@@ -107,10 +111,12 @@ def get_category_comparison(
 
     prev_start, prev_end = _get_previous_period(start, end)
 
-    # Get all categories with spending in either period
+    # Get all categories with spending in either period — includes 'refund'
+    # so a category with only a refund (no expense) in this window still
+    # surfaces, rather than silently dropping its net-negative total.
     categories = conn.execute(
         """SELECT DISTINCT category FROM transactions
-           WHERE type='expense' AND category IS NOT NULL
+           WHERE type IN ('expense', 'refund') AND category IS NOT NULL
              AND DATE(transaction_date) >= ? AND DATE(transaction_date) <= ?""",
         [prev_start, end],
     ).fetchall()
@@ -145,11 +151,11 @@ def get_top_merchants(
     rows = conn.execute(
         """
         SELECT merchant,
-               COUNT(*) as count,
-               ROUND(COALESCE(SUM(reporting_minor_units), 0) / 100.0, 2) as total,
-               ROUND(COALESCE(AVG(reporting_minor_units), 0) / 100.0, 2) as avg_amount
+               COUNT(*) FILTER (WHERE type IS NULL OR type = 'expense') as count,
+               ROUND(COALESCE(SUM(CASE WHEN type = 'refund' THEN -reporting_minor_units ELSE reporting_minor_units END), 0) / 100.0, 2) as total,
+               ROUND(COALESCE(AVG(reporting_minor_units) FILTER (WHERE type IS NULL OR type = 'expense'), 0) / 100.0, 2) as avg_amount
         FROM transactions
-        WHERE (type IS NULL OR type = 'expense')
+        WHERE (type IS NULL OR type = 'expense' OR type = 'refund')
           AND merchant IS NOT NULL
           AND DATE(transaction_date) >= ? AND DATE(transaction_date) <= ?
         GROUP BY merchant
@@ -169,10 +175,10 @@ def get_merchant_trend(
     rows = conn.execute(
         """
         SELECT strftime('%Y-%m', transaction_date) as month,
-               ROUND(COALESCE(SUM(reporting_minor_units), 0) / 100.0, 2) as total,
-               COUNT(*) as count
+               ROUND(COALESCE(SUM(CASE WHEN type = 'refund' THEN -reporting_minor_units ELSE reporting_minor_units END), 0) / 100.0, 2) as total,
+               COUNT(*) FILTER (WHERE type IS NULL OR type = 'expense') as count
         FROM transactions
-        WHERE (type IS NULL OR type = 'expense') AND merchant = ?
+        WHERE (type IS NULL OR type = 'expense' OR type = 'refund') AND merchant = ?
         GROUP BY strftime('%Y-%m', transaction_date)
         ORDER BY month ASC
         LIMIT 6
@@ -322,9 +328,9 @@ def generate_summary(
 
     top_cat = conn.execute(
         """
-        SELECT category, ROUND(COALESCE(SUM(reporting_minor_units), 0) / 100.0, 2) as total
+        SELECT category, ROUND(COALESCE(SUM(CASE WHEN type = 'refund' THEN -reporting_minor_units ELSE reporting_minor_units END), 0) / 100.0, 2) as total
         FROM transactions
-        WHERE type='expense' AND category IS NOT NULL
+        WHERE type IN ('expense', 'refund') AND category IS NOT NULL
           AND DATE(transaction_date) >= ? AND DATE(transaction_date) <= ?
         GROUP BY category
         ORDER BY total DESC LIMIT 1
@@ -433,8 +439,8 @@ def get_yoy_comparison(conn: sqlite3.Connection, months: int = 12) -> list[dict]
         def _query(start, end):
             row = conn.execute(
                 """SELECT
-                     COALESCE(SUM(CASE WHEN (type IS NULL OR type='expense')
-                                  THEN reporting_minor_units END), 0) / 100.0 AS expenses,
+                     COALESCE(SUM(CASE WHEN (type IS NULL OR type='expense') THEN reporting_minor_units
+                                       WHEN type='refund' THEN -reporting_minor_units END), 0) / 100.0 AS expenses,
                      COALESCE(SUM(CASE WHEN type='income'
                                   THEN reporting_minor_units END), 0) / 100.0 AS income
                    FROM transactions

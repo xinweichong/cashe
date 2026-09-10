@@ -128,6 +128,56 @@ class TestPeriodComparison:
         assert result["current_total"] == 50.0
         conn.close()
 
+    def test_refund_nets_against_spending_in_its_own_period(self):
+        # R05: a refund must reduce spending in the period the refund itself
+        # falls in — not retroactively rewrite the original purchase's
+        # period — and must net (not just be excluded like a transfer).
+        conn = make_db()
+        storage = Storage(conn)
+        now = datetime.now().strftime("%Y-%m-%d")
+        storage.insert_transaction(
+            source="manual", source_id="purchase", amount=100.0, category="Food",
+            transaction_date=now, tx_type="expense",
+        )
+        storage.insert_transaction(
+            source="manual", source_id="refund", amount=30.0, category="Food",
+            transaction_date=now, tx_type="refund",
+        )
+        result = get_period_comparison(conn, period="month")
+        assert result["current_total"] == 70.0
+
+    def test_category_comparison_nets_refund(self):
+        conn = make_db()
+        storage = Storage(conn)
+        now = datetime.now().strftime("%Y-%m-%d")
+        storage.insert_transaction(
+            source="manual", source_id="purchase", amount=100.0, category="Food",
+            transaction_date=now, tx_type="expense",
+        )
+        storage.insert_transaction(
+            source="manual", source_id="refund", amount=30.0, category="Food",
+            transaction_date=now, tx_type="refund",
+        )
+        result = get_category_comparison(conn, period="month")
+        food = next(r for r in result if r["category"] == "Food")
+        assert food["current"] == 70.0
+
+    def test_category_comparison_surfaces_category_with_only_a_refund(self):
+        # A category discovered only via an 'expense' row would silently drop
+        # a category that has a refund but no expense in this window.
+        conn = make_db()
+        storage = Storage(conn)
+        now = datetime.now().strftime("%Y-%m-%d")
+        storage.insert_transaction(
+            source="manual", source_id="only-refund", amount=30.0, category="Returned",
+            transaction_date=now, tx_type="refund",
+        )
+        result = get_category_comparison(conn, period="month")
+        categories = {r["category"] for r in result}
+        assert "Returned" in categories
+        returned = next(r for r in result if r["category"] == "Returned")
+        assert returned["current"] == -30.0
+
 
 class TestMerchantAnalysis:
     def test_top_merchants_by_spend(self, db_with_transactions):
@@ -139,6 +189,27 @@ class TestMerchantAnalysis:
         assert "count" in result[0]
         assert "total" in result[0]
 
+    def test_top_merchants_total_nets_refund_count_and_avg_exclude_it(self):
+        conn = make_db()
+        storage = Storage(conn)
+        now = datetime.now().strftime("%Y-%m-%d")
+        storage.insert_transaction(
+            source="manual", source_id="tm-purchase", amount=100.0, merchant="Shop",
+            category="Food", transaction_date=now, tx_type="expense",
+        )
+        storage.insert_transaction(
+            source="manual", source_id="tm-refund", amount=30.0, merchant="Shop",
+            category="Food", transaction_date=now, tx_type="refund",
+        )
+        result = get_top_merchants(conn)
+        shop = next(r for r in result if r["merchant"] == "Shop")
+        assert shop["total"] == 70.0
+        # count/avg describe actual purchases, not net-of-refund arithmetic —
+        # a refund isn't itself "a purchase" to average in.
+        assert shop["count"] == 1
+        assert shop["avg_amount"] == 100.0
+        conn.close()
+
     def test_merchant_trend(self, db_with_transactions):
         result = get_merchant_trend(db_with_transactions, merchant="Food place 0")
         assert "current_month" in result
@@ -147,6 +218,22 @@ class TestMerchantAnalysis:
         assert result["previous_month"] == 100.0
         assert result["trend"] == "stable"
         assert isinstance(result["months"], list)
+
+    def test_merchant_trend_nets_refund(self):
+        conn = make_db()
+        storage = Storage(conn)
+        now = datetime.now()
+        storage.insert_transaction(
+            source="manual", source_id="mt-purchase", amount=100.0, merchant="Shop",
+            category="Food", transaction_date=now.strftime("%Y-%m-%d"), tx_type="expense",
+        )
+        storage.insert_transaction(
+            source="manual", source_id="mt-refund", amount=30.0, merchant="Shop",
+            category="Food", transaction_date=now.strftime("%Y-%m-%d"), tx_type="refund",
+        )
+        result = get_merchant_trend(conn, merchant="Shop", now=now)
+        assert result["current_month"] == 70.0
+        conn.close()
 
     def test_merchant_trend_unknown_merchant(self):
         conn = make_db()
@@ -192,6 +279,23 @@ class TestSpendingVelocity:
         )
         result = get_spending_velocity(conn)
         assert result["current_mtd"] == 50.0
+        conn.close()
+
+    def test_current_mtd_nets_refund(self):
+        conn = make_db()
+        storage = Storage(conn)
+        today = datetime.now()
+        first_day = today.replace(day=1).strftime("%Y-%m-%d")
+        storage.insert_transaction(
+            source="manual", source_id="vel-purchase", amount=50.0, merchant="Test",
+            category="Food", transaction_date=first_day, tx_type="expense",
+        )
+        storage.insert_transaction(
+            source="manual", source_id="vel-refund", amount=20.0, merchant="Test",
+            category="Food", transaction_date=first_day, tx_type="refund",
+        )
+        result = get_spending_velocity(conn)
+        assert result["current_mtd"] == 30.0
         conn.close()
 
 
@@ -297,6 +401,24 @@ class TestSummaryReport:
             assert key in result, f"Missing key: {key}"
         assert result["type"] == "monthly"
 
+    def test_top_category_nets_refund(self):
+        conn = make_db()
+        storage = Storage(conn)
+        now = datetime.now().strftime("%Y-%m-%d")
+        storage.insert_transaction(
+            source="manual", source_id="sum-purchase", amount=100.0, category="Food",
+            transaction_date=now, tx_type="expense",
+        )
+        storage.insert_transaction(
+            source="manual", source_id="sum-refund", amount=30.0, category="Food",
+            transaction_date=now, tx_type="refund",
+        )
+        result = generate_summary(conn, report_type="monthly")
+        assert result["top_category"]["category"] == "Food"
+        assert result["top_category"]["total"] == 70.0
+        assert result["transaction_count"] == 1  # refund isn't counted as an expense transaction
+        conn.close()
+
     def test_summary_cached_to_file(self, db_with_transactions, tmp_path):
         generate_summary(
             db_with_transactions,
@@ -384,3 +506,15 @@ class TestYoYComparison:
         result = get_yoy_comparison(in_memory_db, months=6)
         months = [r["month"] for r in result]
         assert months == sorted(months)
+
+    def test_this_year_expenses_nets_refund(self, in_memory_db):
+        storage = Storage(in_memory_db)
+        now = datetime.now().strftime("%Y-%m-%d")
+        storage.insert_transaction(
+            source="manual", source_id="yoy-purchase", amount=100.0, transaction_date=now, tx_type="expense",
+        )
+        storage.insert_transaction(
+            source="manual", source_id="yoy-refund", amount=30.0, transaction_date=now, tx_type="refund",
+        )
+        result = get_yoy_comparison(in_memory_db, months=1)
+        assert result[0]["this_year_expenses"] == 70.0
