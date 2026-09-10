@@ -366,3 +366,70 @@ class CategoryComparison(BaseModel):
 class SpendingComparison(BaseModel):
     overall: PeriodComparison
     categories: list[CategoryComparison]
+
+
+# Typed wrapper over analytics.py's get_spending_velocity (already
+# canonical-money-correct — _query_total sums reporting_minor_units).
+class SpendingVelocity(BaseModel):
+    current_mtd: Money
+    last_month_total: Money
+    projected_total: Money
+    days_elapsed: int
+    total_days: int
+    pace_percent: float
+    status: Literal["ahead", "on_track", "behind"]
+
+
+# Typed wrapper over analytics.py's get_top_merchants/get_merchant_trend
+# (already canonical-money-correct — both read reporting_minor_units).
+class TopMerchant(BaseModel):
+    merchant: str
+    count: int
+    total: Money
+    avg_amount: Money
+
+
+class MerchantTrendMonth(BaseModel):
+    month: str
+    total: Money
+    count: int
+
+
+class MerchantTrendV2(BaseModel):
+    merchant: str
+    months: list[MerchantTrendMonth]
+    current_month: Money
+    previous_month: Money
+
+
+class TopMerchantsResult(BaseModel):
+    top: list[TopMerchant]
+    trend: MerchantTrendV2 | None
+
+
+# Typed wrapper over analytics.py's get_anomalies/check_new_merchants.
+# get_anomalies's SQL compares reporting_minor_units (already correct) but
+# returned the raw original-currency `amount` as the displayed value — a
+# THB anomaly would render as "$<amount>" (SGD) in the v1 UI. The v2 route
+# fixes this by building Money from reporting_minor_units instead, the same
+# class of bug R04 fixed everywhere else money crossed a currency boundary.
+class SpendingAnomaly(BaseModel):
+    id: int
+    merchant: str | None
+    amount: Money
+    category: str | None
+    transaction_date: str
+    avg_amount: Money
+    explanation: str | None = None
+
+
+class NewMerchant(BaseModel):
+    merchant: str
+    first_date: str
+    category: str | None
+    amount: Money
+
+
+class SpendingAlerts(BaseModel):
+    anomalies: list[SpendingAnomaly]
+    new_merchants: list[NewMerchant]

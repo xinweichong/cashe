@@ -259,7 +259,8 @@ def get_anomalies(conn: sqlite3.Connection, multiplier: float = 2.0) -> list[dic
             HAVING COUNT(*) >= 3
         )
         SELECT t.id, t.merchant, t.amount, t.currency, t.category,
-               t.transaction_date, ca.avg_reporting_minor / 100.0 as avg_amount
+               t.transaction_date, t.reporting_minor_units,
+               ca.avg_reporting_minor / 100.0 as avg_amount
         FROM transactions t
         JOIN cat_avg ca ON t.category = ca.category
         WHERE (t.type IS NULL OR t.type = 'expense')
@@ -284,13 +285,13 @@ def check_new_merchants(conn: sqlite3.Connection) -> list[dict]:
             GROUP BY merchant
         ),
         first_tx AS (
-            SELECT t.merchant, t.category, t.amount, t.transaction_date as first_date,
+            SELECT t.merchant, t.category, t.amount, t.reporting_minor_units, t.transaction_date as first_date,
                    ROW_NUMBER() OVER (PARTITION BY t.merchant ORDER BY t.id) as rn
             FROM transactions t
             INNER JOIN first_seen fs ON t.merchant = fs.merchant AND t.transaction_date = fs.first_date
             WHERE (t.type IS NULL OR t.type = 'expense')
         )
-        SELECT merchant, first_date, category, amount
+        SELECT merchant, first_date, category, amount, reporting_minor_units
         FROM first_tx
         WHERE rn = 1
           AND first_date >= date('now', 'start of month')

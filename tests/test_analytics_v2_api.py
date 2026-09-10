@@ -4,6 +4,7 @@ from httpx import AsyncClient, ASGITransport
 
 from src.storage import Storage, AdminStorage
 from src.web.app import create_dashboard_app
+from src.config import local_now
 from helpers import FakeUserManager, make_admin_db_with_user, TEST_USERNAME, TEST_PASSWORD
 
 
@@ -71,3 +72,103 @@ class TestAnalyticsComparisonV2:
         assert data["overall"]["current_total"] == {"minor_units": 0, "currency": "SGD"}
         assert data["overall"]["change_percent"] == 0
         assert data["categories"] == []
+
+
+class TestAnalyticsVelocityV2:
+    @pytest.mark.asyncio
+    async def test_velocity_v2_returns_typed_money(self, client, in_memory_db):
+        storage = Storage(in_memory_db)
+        storage.insert_transaction(
+            source="manual", source_id="v1", amount=100.0, merchant="Fairprice",
+            category="Groceries", transaction_date="2026-09-10", tx_type="expense",
+        )
+        resp = await client.get("/api/v2/analytics/velocity")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["current_mtd"] == {"minor_units": 10000, "currency": "SGD"}
+        assert data["status"] in ("ahead", "on_track", "behind")
+        assert isinstance(data["days_elapsed"], int)
+
+    @pytest.mark.asyncio
+    async def test_velocity_v2_empty(self, client):
+        resp = await client.get("/api/v2/analytics/velocity")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["current_mtd"] == {"minor_units": 0, "currency": "SGD"}
+
+
+class TestAnalyticsMerchantsV2:
+    @pytest.mark.asyncio
+    async def test_top_merchants_v2_returns_typed_money(self, client, in_memory_db):
+        storage = Storage(in_memory_db)
+        storage.insert_transaction(
+            source="manual", source_id="m1", amount=25.0, merchant="Grab",
+            category="Transport", transaction_date="2026-09-05", tx_type="expense",
+        )
+        resp = await client.get("/api/v2/analytics/merchants")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["trend"] is None
+        top = next(m for m in data["top"] if m["merchant"] == "Grab")
+        assert top["total"] == {"minor_units": 2500, "currency": "SGD"}
+        assert top["avg_amount"] == {"minor_units": 2500, "currency": "SGD"}
+        assert top["count"] == 1
+
+    @pytest.mark.asyncio
+    async def test_top_merchants_v2_with_trend(self, client, in_memory_db):
+        storage = Storage(in_memory_db)
+        storage.insert_transaction(
+            source="manual", source_id="m1", amount=25.0, merchant="Grab",
+            category="Transport", transaction_date="2026-09-05", tx_type="expense",
+        )
+        resp = await client.get("/api/v2/analytics/merchants?merchant=Grab")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["trend"]["merchant"] == "Grab"
+        assert data["trend"]["current_month"] == {"minor_units": 2500, "currency": "SGD"}
+        month = next(m for m in data["trend"]["months"] if m["month"] == "2026-09")
+        assert month["total"] == {"minor_units": 2500, "currency": "SGD"}
+
+
+class TestAnalyticsAlertsV2:
+    @pytest.mark.asyncio
+    async def test_alerts_v2_anomaly_uses_canonical_money(self, client, in_memory_db):
+        # Three baseline Food transactions establish the category average,
+        # then one far above it (within the last 30 days) is the anomaly.
+        # Give the anomaly a foreign currency to prove the v2 route reads
+        # reporting_minor_units rather than the raw original-currency amount
+        # (a THB 1000 anomaly must not render as "$1000 SGD").
+        storage = Storage(in_memory_db)
+        today = local_now().strftime("%Y-%m-%d")
+        for i in range(3):
+            storage.insert_transaction(
+                source="manual", source_id=f"base{i}", amount=10.0, merchant="Cafe",
+                category="Food", transaction_date=today, tx_type="expense",
+            )
+        storage.insert_transaction(
+            source="manual", source_id="anomaly1", amount=1000.0, currency="THB",
+            exchange_rate=0.038, merchant="Fancy Restaurant", category="Food",
+            transaction_date=today, tx_type="expense",
+        )
+        resp = await client.get("/api/v2/analytics/alerts")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data["anomalies"]) == 1
+        anomaly = data["anomalies"][0]
+        assert anomaly["merchant"] == "Fancy Restaurant"
+        # 1000 THB * 0.038 = 38.00 SGD -> 3800 minor units, not 100000 (raw amount as SGD).
+        assert anomaly["amount"] == {"minor_units": 3800, "currency": "SGD"}
+
+    @pytest.mark.asyncio
+    async def test_alerts_v2_new_merchant_uses_canonical_money(self, client, in_memory_db):
+        storage = Storage(in_memory_db)
+        today = local_now().strftime("%Y-%m-%d")
+        storage.insert_transaction(
+            source="manual", source_id="n1", amount=15.0, merchant="New Spot",
+            category="Food", transaction_date=today, tx_type="expense",
+        )
+        resp = await client.get("/api/v2/analytics/alerts")
+        assert resp.status_code == 200
+        data = resp.json()
+        nm = next(m for m in data["new_merchants"] if m["merchant"] == "New Spot")
+        assert nm["amount"] == {"minor_units": 1500, "currency": "SGD"}

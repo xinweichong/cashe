@@ -23,7 +23,7 @@ from src import transaction_commands
 from src.money import to_minor_units
 from src.config import local_now
 from src.web.auth import verify_password, create_session, verify_session, destroy_session
-from src.web.contracts import BudgetProgress, CaptureFollowup, CaptureIssue, CaptureResolution, HomeBriefing, MerchantRanking, MerchantSummary, OverviewSummary, QueuedResponse, SpendingComparison, SpendingEvidence, SpendingFacts, SpendingReview, TransactionCorrection, TransactionCreate, TransactionDeletion, TransactionProvenance, TransactionUndo, TransactionV2, TrendPoint, TripSummary, UpcomingPlan, PlanMutationResponse, RecurringReview, RecurringResolution
+from src.web.contracts import BudgetProgress, CaptureFollowup, CaptureIssue, CaptureResolution, HomeBriefing, MerchantRanking, MerchantSummary, OverviewSummary, QueuedResponse, SpendingAlerts, SpendingComparison, SpendingEvidence, SpendingFacts, SpendingReview, SpendingVelocity, TopMerchantsResult, TransactionCorrection, TransactionCreate, TransactionDeletion, TransactionProvenance, TransactionUndo, TransactionV2, TrendPoint, TripSummary, UpcomingPlan, PlanMutationResponse, RecurringReview, RecurringResolution
 from src.analytics import (
     load_summary,
     get_yoy_comparison,
@@ -1026,9 +1026,53 @@ def create_dashboard_app(
         return {"top": top, "trend": trend}
 
 
+    @app.get("/api/v2/analytics/merchants", response_model=TopMerchantsResult)
+    async def analytics_merchants_v2(
+        limit: int = 10,
+        merchant: Optional[str] = None,
+        storage=Depends(_get_storage),
+    ):
+        top = await _db(storage.top_merchants_by_period, limit=limit)
+        trend = await _db(storage.merchant_trend_chart, merchant) if merchant else None
+        return {
+            "top": [
+                {
+                    "merchant": m["merchant"],
+                    "count": m["count"],
+                    "total": _sgd_money(m["total"]),
+                    "avg_amount": _sgd_money(m["avg_amount"]),
+                }
+                for m in top
+            ],
+            "trend": None if trend is None else {
+                "merchant": trend["merchant"],
+                "months": [
+                    {"month": mo["month"], "total": _sgd_money(mo["total"]), "count": mo["count"]}
+                    for mo in trend["months"]
+                ],
+                "current_month": _sgd_money(trend["current_month"]),
+                "previous_month": _sgd_money(trend["previous_month"]),
+            },
+        }
+
+
     @app.get("/api/analytics/velocity")
     async def analytics_velocity(storage=Depends(_get_storage)):
         return await _db(storage.spending_velocity)
+
+
+    @app.get("/api/v2/analytics/velocity", response_model=SpendingVelocity)
+    async def analytics_velocity_v2(storage=Depends(_get_storage)):
+        result = await _db(storage.spending_velocity)
+        return {
+            "current_mtd": _sgd_money(result["current_mtd"]),
+            "last_month_total": _sgd_money(result["last_month_total"]),
+            "projected_total": _sgd_money(result["projected_total"]),
+            "days_elapsed": result["days_elapsed"],
+            "total_days": result["total_days"],
+            "pace_percent": result["pace_percent"],
+            "status": result["status"],
+        }
 
 
     @app.get("/api/analytics/alerts")
@@ -1046,6 +1090,46 @@ def create_dashboard_app(
         return {
             "anomalies": anomalies,
             "new_merchants": await _db(storage.new_merchants),
+        }
+
+
+    @app.get("/api/v2/analytics/alerts", response_model=SpendingAlerts)
+    async def analytics_alerts_v2(storage=Depends(_get_storage)):
+        multiplier = float(await _db(storage.get_setting, "anomaly_multiplier", "2.0"))
+        anomalies = await _db(storage.spending_anomalies, multiplier=multiplier)
+        new_merchants = await _db(storage.new_merchants)
+        typed_anomalies = []
+        for a in anomalies:
+            explanation = None
+            if llm_service:
+                try:
+                    explanation = llm_service.explain_anomaly(
+                        a["merchant"], a["amount"], a.get("avg_amount", a["amount"]), a["category"]
+                    )
+                except Exception:
+                    explanation = ""
+            typed_anomalies.append({
+                "id": a["id"],
+                "merchant": a["merchant"],
+                # reporting_minor_units, not the raw original-currency `amount` —
+                # see SpendingAnomaly's docstring in contracts.py.
+                "amount": {"minor_units": a["reporting_minor_units"] or 0, "currency": "SGD"},
+                "category": a["category"],
+                "transaction_date": a["transaction_date"],
+                "avg_amount": _sgd_money(a["avg_amount"]),
+                "explanation": explanation,
+            })
+        return {
+            "anomalies": typed_anomalies,
+            "new_merchants": [
+                {
+                    "merchant": m["merchant"],
+                    "first_date": m["first_date"],
+                    "category": m["category"],
+                    "amount": {"minor_units": m["reporting_minor_units"] or 0, "currency": "SGD"},
+                }
+                for m in new_merchants
+            ],
         }
 
 
