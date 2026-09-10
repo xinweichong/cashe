@@ -16,6 +16,7 @@ export type SpendingComparisonV2 = components['schemas']['SpendingComparison'];
 export type SpendingVelocityV2 = components['schemas']['SpendingVelocity'];
 export type TopMerchantsResultV2 = components['schemas']['TopMerchantsResult'];
 export type SpendingAlertsV2 = components['schemas']['SpendingAlerts'];
+export type HealthScoreV2 = components['schemas']['HealthScore'];
 
 export async function request<T>(path: string, opts?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
@@ -674,6 +675,9 @@ export const api = {
 
   getHealthScore: (months?: number) =>
     request<HealthScore>(`/api/health-score${months ? `?months=${months}` : ''}`),
+
+  getHealthScoreV2: (months?: number) =>
+    request<HealthScoreV2>(`/api/v2/analytics/health-score${months ? `?months=${months}` : ''}`),
 
   // App Settings
   getSettings: () =>

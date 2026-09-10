@@ -69,8 +69,8 @@ function HealthScoreCard() {
   const { COLOR_TRACK, COLOR_FOREGROUND } = useChartTheme();
   const navigate = useNavigate();
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['health-score'],
-    queryFn: () => api.getHealthScore(1),
+    queryKey: ['health-score-v2'],
+    queryFn: () => api.getHealthScoreV2(1),
     staleTime: 60_000,
   });
 

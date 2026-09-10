@@ -126,8 +126,8 @@ function HealthScoreBreakdown() {
   const { COLOR_TRACK, COLOR_FOREGROUND } = useChartTheme();
   const [months, setMonths] = useState(1);
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ['health-score', months],
-    queryFn: () => api.getHealthScore(months),
+    queryKey: ['health-score-v2', months],
+    queryFn: () => api.getHealthScoreV2(months),
     staleTime: 60_000,
   });
 
