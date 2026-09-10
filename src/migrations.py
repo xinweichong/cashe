@@ -205,6 +205,21 @@ MIGRATIONS = (
         _add_column_if_table_exists("deleted_transactions", "conversion_source TEXT"),
         _add_column_if_table_exists("deleted_transactions", "conversion_quoted_at TEXT"),
     )),
+    (15, (
+        # R05 sub-project 2: evidence-only link from a refund to the purchase
+        # it refunds. ON DELETE SET NULL — deleting the linked purchase clears
+        # the link rather than blocking the deletion or corrupting the refund
+        # row. Never affects any money total: netting already works from
+        # type='refund' alone, independent of linkage.
+        _add_column_if_table_exists(
+            "transactions",
+            "refund_of_transaction_id INTEGER REFERENCES transactions(id) ON DELETE SET NULL",
+        ),
+        # Archival only (deleted_transactions.id is a retained snapshot id,
+        # not a live FK target) — no REFERENCES, so a deleted refund's link
+        # survives restore even if the linked purchase was deleted first.
+        _add_column_if_table_exists("deleted_transactions", "refund_of_transaction_id INTEGER"),
+    )),
 )
 
 
