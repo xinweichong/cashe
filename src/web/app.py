@@ -23,7 +23,7 @@ from src import transaction_commands
 from src.money import to_minor_units
 from src.config import local_now
 from src.web.auth import verify_password, create_session, verify_session, destroy_session
-from src.web.contracts import Balance, BudgetProgress, CaptureFollowup, CaptureIssue, CaptureResolution, CategoryTrendPoint, HealthScore, HomeBriefing, MerchantRanking, MerchantSummary, OverviewSummary, QueuedResponse, SpendingAlerts, SpendingComparison, SpendingEvidence, SpendingFacts, SpendingReview, SpendingVelocity, TopMerchantsResult, TransactionCorrection, TransactionCreate, TransactionDeletion, TransactionProvenance, TransactionUndo, TransactionV2, TrendPoint, TripSummary, UpcomingPlan, PlanMutationResponse, RecurringReview, RecurringResolution
+from src.web.contracts import Balance, BudgetProgress, CaptureFollowup, CaptureIssue, CaptureResolution, CategoryTrendPoint, GoalProgress, HealthScore, HomeBriefing, MerchantRanking, MerchantSummary, OverviewSummary, QueuedResponse, SpendingAlerts, SpendingComparison, SpendingEvidence, SpendingFacts, SpendingReview, SpendingVelocity, TopMerchantsResult, TransactionCorrection, TransactionCreate, TransactionDeletion, TransactionProvenance, TransactionUndo, TransactionV2, TrendPoint, TripSummary, UpcomingPlan, PlanMutationResponse, RecurringReview, RecurringResolution
 from src.analytics import (
     load_summary,
     get_yoy_comparison,
@@ -1441,6 +1441,41 @@ def create_dashboard_app(
         for g in goals:
             progress = await _db(storage.get_goal_progress, g["id"])
             results.append(progress if progress else g)
+        return results
+
+    @app.get("/api/v2/goals", response_model=list[GoalProgress])
+    async def list_goals_v2(storage=Depends(_get_storage)):
+        goals = await _db(storage.get_goals)
+        results = []
+        for g in goals:
+            progress = await _db(storage.get_goal_progress, g["id"])
+            if not progress:
+                continue
+            results.append({
+                "id": progress["id"],
+                "name": progress["name"],
+                "target_amount": _sgd_money(progress["target_amount"]),
+                "saved_amount": _sgd_money(progress["saved_amount"]),
+                "target_date": progress["target_date"],
+                "status": progress["status"],
+                "percent": progress["percent"],
+                "monthly_rate": _sgd_money(progress["monthly_rate"]),
+                "months_to_target": progress["months_to_target"],
+                "on_track": progress["on_track"],
+                "contributions": [
+                    {
+                        "id": c["id"],
+                        "goal_id": c["goal_id"],
+                        "amount": _sgd_money(c["amount"]),
+                        "month": c["month"],
+                        "contributed_date": c["contributed_date"],
+                        "source": c["source"],
+                        "note": c["note"],
+                        "created_at": c["created_at"],
+                    }
+                    for c in progress["contributions"]
+                ],
+            })
         return results
 
     @app.post("/api/goals")

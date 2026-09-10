@@ -478,3 +478,34 @@ class Balance(BaseModel):
 class CategoryTrendPoint(BaseModel):
     date: str
     categories: dict[str, Money | None]
+
+
+# Typed wrapper over Storage.get_goal_progress (via get_goals). goal_contributions.amount
+# is SGD-only by design (no currency/exchange_rate columns on that table), so this needs
+# no FX validation, unlike almost every other Money in this file.
+# get_goal_progress's monthly_rate formula (average of the last 3 contributions,
+# not dated/elapsed-window) is explicitly R13 scope — deliberately not touched
+# here; this contract types the existing computation, it doesn't fix it.
+class GoalContributionV2(BaseModel):
+    id: int
+    goal_id: int
+    amount: Money
+    month: str
+    contributed_date: str | None
+    source: Literal["auto", "manual"]
+    note: str | None
+    created_at: str
+
+
+class GoalProgress(BaseModel):
+    id: int
+    name: str
+    target_amount: Money
+    saved_amount: Money
+    target_date: str | None
+    status: Literal["active", "completed", "paused"]
+    percent: float
+    monthly_rate: Money
+    months_to_target: float | None
+    on_track: Literal["on_track", "ahead", "behind"] | None
+    contributions: list[GoalContributionV2]

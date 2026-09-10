@@ -267,6 +267,45 @@ class TestGoalAPI:
         assert len(resp.json()) == 1
         assert resp.json()[0]["source"] == "manual"
 
+
+class TestGoalAPIV2:
+    @pytest.mark.asyncio
+    async def test_list_v2_empty(self, api):
+        ac, _ = api
+        resp = await ac.get("/api/v2/goals")
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+    @pytest.mark.asyncio
+    async def test_list_v2_returns_typed_money(self, api):
+        ac, _ = api
+        create = await ac.post("/api/goals", json={"name": "Emergency Fund", "target_amount": 1000})
+        goal_id = create.json()["id"]
+        await ac.post(f"/api/goals/{goal_id}/contribute", json={"amount": 250, "note": "Bonus"})
+
+        resp = await ac.get("/api/v2/goals")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 1
+        goal = data[0]
+        assert goal["name"] == "Emergency Fund"
+        assert goal["target_amount"] == {"minor_units": 100000, "currency": "SGD"}
+        assert goal["saved_amount"] == {"minor_units": 25000, "currency": "SGD"}
+        assert goal["monthly_rate"] == {"minor_units": 25000, "currency": "SGD"}
+        assert goal["percent"] == 25.0
+        assert len(goal["contributions"]) == 1
+        contribution = goal["contributions"][0]
+        assert contribution["amount"] == {"minor_units": 25000, "currency": "SGD"}
+        assert contribution["source"] == "manual"
+        assert contribution["note"] == "Bonus"
+
+    @pytest.mark.asyncio
+    async def test_list_v2_requires_auth(self, api):
+        ac, _ = api
+        await ac.post("/api/logout")
+        resp = await ac.get("/api/v2/goals")
+        assert resp.status_code == 401
+
     @pytest.mark.asyncio
     async def test_settings_includes_goals_enabled(self, api):
         ac, _ = api
