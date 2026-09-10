@@ -68,10 +68,24 @@ export function useTrendByCategory(start_date: string, end_date: string) {
   });
 }
 
+export function useTrendByCategoryV2(start_date: string, end_date: string) {
+  return useQuery({
+    queryKey: ['trend-by-category-v2', start_date, end_date],
+    queryFn: () => api.getTrendByCategoryV2(start_date, end_date),
+  });
+}
+
 export function useBalance(start_date: string, end_date: string) {
   return useQuery({
     queryKey: ['balance', start_date, end_date],
     queryFn: () => api.getBalance(start_date, end_date),
+  });
+}
+
+export function useBalanceV2(start_date: string, end_date: string) {
+  return useQuery({
+    queryKey: ['balance-v2', start_date, end_date],
+    queryFn: () => api.getBalanceV2(start_date, end_date),
   });
 }
 

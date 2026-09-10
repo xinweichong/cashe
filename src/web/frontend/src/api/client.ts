@@ -17,6 +17,8 @@ export type SpendingVelocityV2 = components['schemas']['SpendingVelocity'];
 export type TopMerchantsResultV2 = components['schemas']['TopMerchantsResult'];
 export type SpendingAlertsV2 = components['schemas']['SpendingAlerts'];
 export type HealthScoreV2 = components['schemas']['HealthScore'];
+export type BalanceV2 = components['schemas']['Balance'];
+export type CategoryTrendPointV2 = components['schemas']['CategoryTrendPoint'];
 
 export async function request<T>(path: string, opts?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
@@ -495,8 +497,14 @@ export const api = {
   getTrendByCategory: (start_date: string, end_date: string) =>
     request<TrendByCategoryPoint[]>(`/api/trend/by-category?start_date=${start_date}&end_date=${end_date}`),
 
+  getTrendByCategoryV2: (start_date: string, end_date: string) =>
+    request<CategoryTrendPointV2[]>(`/api/v2/overview/trend-by-category?start_date=${start_date}&end_date=${end_date}`),
+
   getBalance: (start_date: string, end_date: string) =>
     request<Balance>(`/api/balance?start_date=${start_date}&end_date=${end_date}`),
+
+  getBalanceV2: (start_date: string, end_date: string) =>
+    request<BalanceV2>(`/api/v2/overview/balance?start_date=${start_date}&end_date=${end_date}`),
 
   getInsights: (start_date: string, end_date: string) =>
     request<SpendingInsights>(`/api/insights?start_date=${start_date}&end_date=${end_date}`),

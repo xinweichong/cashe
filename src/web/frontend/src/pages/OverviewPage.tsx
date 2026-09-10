@@ -6,7 +6,7 @@ import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { usePeriod, type Period } from '@/hooks/usePeriod';
-import { useSummaryV2, useTrendV2, useTrendByCategory, useBalance } from '@/hooks/useCategories';
+import { useSummaryV2, useTrendV2, useTrendByCategoryV2, useBalanceV2 } from '@/hooks/useCategories';
 import { useTransactions } from '@/hooks/useTransactions';
 import { api, type Transaction, type BudgetProgressV2, type GoalProgress } from '@/api/client';
 import { formatCurrency, formatCurrencyWhole, formatDate, getCategoryColor, cn } from '@/lib/utils';
@@ -200,8 +200,8 @@ export function OverviewPage() {
 
   const { data: summary } = useSummaryV2(start, end);
   const { data: trend } = useTrendV2(start, end);
-  const { data: trendByCategory } = useTrendByCategory(start, end);
-  const { data: balance } = useBalance(start, end);
+  const { data: trendByCategory } = useTrendByCategoryV2(start, end);
+  const { data: balance } = useBalanceV2(start, end);
   const { data: recentTransactions } = useTransactions({ start_date: start, end_date: end, limit: 200 });
 
   const { data: settings } = useQuery({
@@ -234,9 +234,17 @@ export function OverviewPage() {
     () => (trend ?? []).map(t => ({ date: t.date, amount: t.amount.minor_units / 100 })),
     [trend],
   );
-  const trendByCategoryData = trendByCategory ?? [];
-  const income = balance?.income ?? 0;
-  const expenses = balance?.expenses ?? 0;
+  const trendByCategoryData = useMemo(
+    () => (trendByCategory ?? []).map(point => ({
+      date: point.date,
+      ...Object.fromEntries(
+        Object.entries(point.categories).map(([cat, money]) => [cat, money ? money.minor_units / 100 : null]),
+      ),
+    })),
+    [trendByCategory],
+  );
+  const income = (balance?.income.minor_units ?? 0) / 100;
+  const expenses = (balance?.expenses.minor_units ?? 0) / 100;
 
   // Derive day counts from the selected period's end date, not wall-clock today.
   // If the period end is in the future (current month), clamp dayOfMonth to today.
