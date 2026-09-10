@@ -339,3 +339,30 @@ class MerchantSummary(BaseModel):
     last_seen: str
     tags: list[str]
     notes: str
+
+
+# Typed wrapper over analytics.py's get_period_comparison/get_category_comparison
+# (already canonical-money-correct as of R04's analytics.py sweep). `change` can
+# be negative — spending can decrease period-over-period.
+class PeriodComparison(BaseModel):
+    current_start: str
+    current_end: str
+    previous_start: str
+    previous_end: str
+    current_total: Money
+    previous_total: Money
+    change: Money
+    change_percent: float | None
+
+
+class CategoryComparison(BaseModel):
+    category: str
+    current: Money
+    previous: Money
+    change: Money
+    change_percent: float | None
+
+
+class SpendingComparison(BaseModel):
+    overall: PeriodComparison
+    categories: list[CategoryComparison]

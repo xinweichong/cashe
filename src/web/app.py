@@ -23,7 +23,7 @@ from src import transaction_commands
 from src.money import to_minor_units
 from src.config import local_now
 from src.web.auth import verify_password, create_session, verify_session, destroy_session
-from src.web.contracts import BudgetProgress, CaptureFollowup, CaptureIssue, CaptureResolution, HomeBriefing, MerchantRanking, MerchantSummary, OverviewSummary, QueuedResponse, SpendingEvidence, SpendingFacts, SpendingReview, TransactionCorrection, TransactionCreate, TransactionDeletion, TransactionProvenance, TransactionUndo, TransactionV2, TrendPoint, TripSummary, UpcomingPlan, PlanMutationResponse, RecurringReview, RecurringResolution
+from src.web.contracts import BudgetProgress, CaptureFollowup, CaptureIssue, CaptureResolution, HomeBriefing, MerchantRanking, MerchantSummary, OverviewSummary, QueuedResponse, SpendingComparison, SpendingEvidence, SpendingFacts, SpendingReview, TransactionCorrection, TransactionCreate, TransactionDeletion, TransactionProvenance, TransactionUndo, TransactionV2, TrendPoint, TripSummary, UpcomingPlan, PlanMutationResponse, RecurringReview, RecurringResolution
 from src.analytics import (
     load_summary,
     get_yoy_comparison,
@@ -982,6 +982,37 @@ def create_dashboard_app(
         storage=Depends(_get_storage),
     ):
         return await _db(storage.comparison, period=period, date=date)
+
+    @app.get("/api/v2/analytics/comparison", response_model=SpendingComparison)
+    async def analytics_comparison_v2(
+        period: str = "month",
+        date: Optional[str] = None,
+        storage=Depends(_get_storage),
+    ):
+        result = await _db(storage.comparison, period=period, date=date)
+        overall = result["overall"]
+        return {
+            "overall": {
+                "current_start": overall["current_start"],
+                "current_end": overall["current_end"],
+                "previous_start": overall["previous_start"],
+                "previous_end": overall["previous_end"],
+                "current_total": _sgd_money(overall["current_total"]),
+                "previous_total": _sgd_money(overall["previous_total"]),
+                "change": _sgd_money(overall["change"]),
+                "change_percent": overall["change_percent"],
+            },
+            "categories": [
+                {
+                    "category": c["category"],
+                    "current": _sgd_money(c["current"]),
+                    "previous": _sgd_money(c["previous"]),
+                    "change": _sgd_money(c["change"]),
+                    "change_percent": c["change_percent"],
+                }
+                for c in result["categories"]
+            ],
+        }
 
 
     @app.get("/api/analytics/merchants")
