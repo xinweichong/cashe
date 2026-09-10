@@ -38,6 +38,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/analytics/health-score": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Health Score V2 */
+        get: operations["health_score_v2_api_v2_analytics_health_score_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v2/analytics/merchants": {
         parameters: {
             query?: never;
@@ -698,6 +715,36 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
+        /** HealthScore */
+        HealthScore: {
+            /** Components */
+            components: {
+                [key: string]: components["schemas"]["HealthScoreComponent"];
+            };
+            /** Grade */
+            grade: string | null;
+            /** Has Income Data */
+            has_income_data: boolean;
+            /** Period */
+            period: string;
+            /** Score */
+            score: number | null;
+        };
+        /** HealthScoreComponent */
+        HealthScoreComponent: {
+            /** Benchmark */
+            benchmark?: number | null;
+            /** Description */
+            description: string;
+            /** Label */
+            label: string;
+            /** Max */
+            max: number;
+            /** Score */
+            score: number;
+            /** Value */
+            value: number;
+        };
         /** HomeBriefing */
         HomeBriefing: {
             /** Capture Issue Count */
@@ -1348,6 +1395,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SpendingComparison"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    health_score_v2_api_v2_analytics_health_score_get: {
+        parameters: {
+            query?: {
+                months?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HealthScore"];
                 };
             };
             /** @description Validation Error */

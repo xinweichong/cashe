@@ -400,6 +400,100 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "HealthScore": {
+        "properties": {
+          "components": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/HealthScoreComponent"
+            },
+            "title": "Components",
+            "type": "object"
+          },
+          "grade": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grade"
+          },
+          "has_income_data": {
+            "title": "Has Income Data",
+            "type": "boolean"
+          },
+          "period": {
+            "title": "Period",
+            "type": "string"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
+          }
+        },
+        "required": [
+          "score",
+          "grade",
+          "has_income_data",
+          "period",
+          "components"
+        ],
+        "title": "HealthScore",
+        "type": "object"
+      },
+      "HealthScoreComponent": {
+        "properties": {
+          "benchmark": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Benchmark"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "max": {
+            "title": "Max",
+            "type": "number"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          },
+          "value": {
+            "title": "Value",
+            "type": "number"
+          }
+        },
+        "required": [
+          "score",
+          "max",
+          "value",
+          "label",
+          "description"
+        ],
+        "title": "HealthScoreComponent",
+        "type": "object"
+      },
       "HomeBriefing": {
         "properties": {
           "capture_issue_count": {
@@ -2302,6 +2396,46 @@
           }
         },
         "summary": "Analytics Comparison V2"
+      }
+    },
+    "/api/v2/analytics/health-score": {
+      "get": {
+        "operationId": "health_score_v2_api_v2_analytics_health_score_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "months",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "title": "Months",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthScore"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Health Score V2"
       }
     },
     "/api/v2/analytics/merchants": {
