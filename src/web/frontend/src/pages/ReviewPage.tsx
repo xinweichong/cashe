@@ -54,6 +54,8 @@ function SpendingReviewList() {
     missing_date: 'The date is missing or unreadable; period comparisons remain unavailable.',
     unresolved_money: 'The amount or currency conversion cannot be resolved. Check the original amount and exchange rate.',
     unknown_type: 'The transaction type is not recognized as spending, income, or a refund.',
+    missing_merchant: 'No merchant is recorded for this transaction.',
+    missing_category: 'No category is recorded for this transaction.',
   };
   return <PageCard title="Spending records">
     <p className="text-sm text-muted mb-3">Across all recorded dates. These records can make totals incomplete. Existing indicative conversions are labeled in reports and are not included here.</p>
