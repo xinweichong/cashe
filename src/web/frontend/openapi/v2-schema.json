@@ -1673,7 +1673,9 @@
               "enum": [
                 "missing_date",
                 "unresolved_money",
-                "unknown_type"
+                "unknown_type",
+                "missing_merchant",
+                "missing_category"
               ],
               "type": "string"
             },

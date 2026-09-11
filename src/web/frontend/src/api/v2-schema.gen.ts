@@ -1186,7 +1186,7 @@ export interface components {
             /** Merchant */
             merchant: string | null;
             /** Reasons */
-            reasons: ("missing_date" | "unresolved_money" | "unknown_type")[];
+            reasons: ("missing_date" | "unresolved_money" | "unknown_type" | "missing_merchant" | "missing_category")[];
         };
         /** SpendingVelocity */
         SpendingVelocity: {
