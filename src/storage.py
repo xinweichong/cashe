@@ -147,6 +147,12 @@ class Storage:
             "capture_issue_count": self._conn.execute("""SELECT COUNT(*) FROM source_events e WHERE status != 'processed'
                 AND NOT EXISTS (SELECT 1 FROM capture_issue_resolutions r WHERE r.event_id = e.id)""").fetchone()[0],
             "followup_issue_count": self._conn.execute("SELECT COUNT(*) FROM ingestion_outbox WHERE status != 'done'").fetchone()[0],
+            # R06: all-history counts for Home/Activity's review summary — each is
+            # already a distinct-transaction/suggestion total regardless of the
+            # limit passed, since spending_review/get_recurring_review count before
+            # paginating.
+            "review_count": self.get_spending_review(timezone=timezone, limit=1)["total"],
+            "recurring_suggestion_count": self.get_recurring_review(limit=1)["total"],
         }
 
     @_locked

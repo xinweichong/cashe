@@ -309,6 +309,26 @@ def test_week_timezone_projects_sunday_utc_into_monday(ledger):
     assert report['current']['spending']['minor_units'] == 0
 
 
+def test_home_briefing_exposes_all_history_review_and_recurring_counts(ledger):
+    # R06: Home's "Needs attention" summary must surface counts that go beyond
+    # the current-month unresolved figure already in `facts` — an all-history
+    # spending-review count and a pending-recurring-suggestion count. A
+    # transaction with two reasons (missing merchant AND category) must still
+    # count once, matching spending_review's own distinct-transaction total.
+    storage, add = ledger
+    add(10, merchant=None, category=None)
+    add(10, '2020-01-01', currency='USD', exchange_rate=1)
+    briefing = storage.get_home_briefing()
+    assert briefing['review_count'] == storage.get_spending_review()['total'] == 2
+    assert briefing['recurring_suggestion_count'] == 0
+
+    storage._conn.execute(
+        "INSERT INTO recurring_suggestions(id, chat_id, merchant, frequency, avg_amount) "
+        "VALUES ('sugg-1', 1, 'Netflix', 'monthly', 15.0)")
+    briefing = storage.get_home_briefing()
+    assert briefing['recurring_suggestion_count'] == 1
+
+
 def test_home_briefing_recent_list_uses_canonical_money_not_legacy_recompute(ledger):
     """R04: get_home_briefing's 'recent' list called convert_legacy_sgd
     directly on rows from query_transactions, bypassing the canonical-money

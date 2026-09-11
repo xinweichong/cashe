@@ -159,6 +159,8 @@ class HomeBriefing(BaseModel):
     upcoming_unknown_count: int
     capture_issue_count: int
     followup_issue_count: int
+    review_count: int
+    recurring_suggestion_count: int
     freshness: CaptureFreshness
 
 
