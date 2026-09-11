@@ -285,6 +285,8 @@ Frontend: `TransactionDetail.tsx` gained a `RefundEvidenceSection` — a refund 
 
 **Follow-up (not done):** sub-project 3 (category splits) is unbuilt. R06's "refund-match proposals" (auto-suggesting which purchase a refund likely belongs to) was explicitly out of scope here — this sub-project is manual, explicit linking only.
 
+**Sub-project 3 — Category splits.** Deliberately tabled (2026-09-11), not started. Brainstorming got as far as scoping the blast radius before the user chose to set it aside: a split (one parent transaction, multiple category allocations summing exactly to its total in integer minor units) means every category-grouped money query — 9 separate `GROUP BY category` SQL sites counted across `storage.py`/`analytics.py`/`spending_facts.py` — would need to read allocations instead of the parent's single category to report correctly once a split exists, a comparable-magnitude sweep to sub-project 1's refund netting but structurally harder (exploding one row into N category buckets, not a sign-flip). No schema, no design decisions, and no code were committed toward this — R05 is otherwise complete (sub-projects 1 and 2). Revisit by re-running brainstorming from scratch if/when this becomes a priority.
+
 ## R06 — Complete Review and merchant maintenance
 
 **Implementation**
