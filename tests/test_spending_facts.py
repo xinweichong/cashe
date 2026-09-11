@@ -43,6 +43,30 @@ def test_review_covers_all_history_and_shares_evidence_selection(ledger):
     assert [item['id'] for item in review['items']] == [item['id'] for item in evidence['items']]
 
 
+def test_review_flags_missing_merchant_or_category_without_calling_it_unresolved_money(ledger):
+    # R06: missing merchant/category is a data-completeness issue, not a money
+    # resolution one — it must surface in the review list (so the user notices
+    # and can fill it in) but must NOT appear in the "unresolved money" evidence
+    # measure, since the amount itself is perfectly resolved.
+    storage, add = ledger
+    no_category = add(10, category=None)
+    no_merchant = add(10, merchant=None)
+    both_missing = add(10, merchant=None, category=None)
+    # A transfer with both fields missing must still be exempt, same as every
+    # other review reason.
+    add(10, merchant=None, category=None, tx_type='transfer')
+
+    review = storage.get_spending_review()
+    records = {item['id']: item for item in review['items']}
+    assert set(records) == {no_category, no_merchant, both_missing}
+    assert records[no_category]['reasons'] == ['missing_category']
+    assert records[no_merchant]['reasons'] == ['missing_merchant']
+    assert records[both_missing]['reasons'] == ['missing_merchant', 'missing_category']
+
+    evidence = storage.get_spending_evidence(date.min, date.max, measure='unresolved')
+    assert evidence['items'] == []
+
+
 def test_review_pagination_timezone_and_corrections(ledger):
     storage, add = ledger
     ids = [add(10, '2026-08-31T18:00:00+00:00', currency='USD', exchange_rate=1) for _ in range(3)]

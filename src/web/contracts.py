@@ -103,7 +103,7 @@ class SpendingReviewItem(BaseModel):
     merchant: str | None
     category: str
     date: str | None
-    reasons: list[Literal["missing_date", "unresolved_money", "unknown_type"]]
+    reasons: list[Literal["missing_date", "unresolved_money", "unknown_type", "missing_merchant", "missing_category"]]
 
 
 class SpendingReview(BaseModel):

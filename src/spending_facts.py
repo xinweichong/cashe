@@ -98,6 +98,11 @@ def _rows(conn, start: date, end: date, timezone: str) -> list[dict]:
         if day is None or start <= day <= end:
             row["day"] = day
             row["type"] = row["type"] or "expense"
+            # R06: preserve whether the category was genuinely unset, before
+            # coercing it to "Other" for aggregation purposes below — the
+            # review feature needs to tell "no category yet" apart from
+            # "the user chose 'Other'".
+            row["category_missing"] = row["category"] is None
             row["category"] = row["category"] or "Other"
             row["minor"], row["conversion_status"] = resolve_money(row)
             if day is None:
@@ -187,11 +192,23 @@ def _needs_review(row: dict) -> bool:
     )
 
 
+def _missing_data(row: dict) -> bool:
+    """R06: a missing merchant/category is a data-completeness issue, not a
+    money-resolution one — kept separate from _needs_review so it never
+    leaks into the "unresolved money" evidence measure (spending_evidence's
+    measure='unresolved'), which is specifically about amounts that can't be
+    computed, not ones that merely aren't categorized yet."""
+    return (
+        row["type"] != "transfer" and row["type"] in ("expense", "refund", "income")
+        and (row["merchant"] is None or row["category_missing"])
+    )
+
+
 def spending_review(conn, *, timezone: str = DEFAULT_TIMEZONE,
                     limit: int = 50, offset: int = 0) -> dict:
     if not 1 <= limit <= 100 or offset < 0:
         raise ValueError("Invalid review query")
-    rows = [row for row in _rows(conn, date.min, date.max, timezone) if _needs_review(row)]
+    rows = [row for row in _rows(conn, date.min, date.max, timezone) if _needs_review(row) or _missing_data(row)]
     items = []
     for row in rows[offset:offset + limit]:
         reasons = []
@@ -204,6 +221,10 @@ def spending_review(conn, *, timezone: str = DEFAULT_TIMEZONE,
             reasons.append("unresolved_money")
         if row["type"] not in ("expense", "refund", "income"):
             reasons.append("unknown_type")
+        if row["merchant"] is None:
+            reasons.append("missing_merchant")
+        if row["category_missing"]:
+            reasons.append("missing_category")
         items.append({"id": row["id"], "merchant": row["merchant"], "category": row["category"],
                       "date": row["day"].isoformat() if row["day"] else None, "reasons": reasons})
     return {"items": items, "total": len(rows), "limit": limit, "offset": offset}

@@ -120,9 +120,10 @@ async def test_spending_review_api_privacy_validation_and_isolation(in_memory_db
     other = Storage(other_conn)
     try:
         tx_id = storage.insert_transaction(source="manual", source_id="private-id", raw_data="private payload",
-                                           amount=10, currency="USD", exchange_rate=1,
+                                           amount=10, currency="USD", exchange_rate=1, category="Shopping",
                                            transaction_date="2020-01-01", merchant="Old purchase")
-        other.insert_transaction(source="manual", source_id="other", amount=10, transaction_date="2020-01-01")
+        other.insert_transaction(source="manual", source_id="other", amount=10, transaction_date="2020-01-01",
+                                 merchant="Other's purchase", category="Shopping")
         app = create_dashboard_app(FakeMultiUserManager({TEST_USERNAME: storage, "other": other}), admin)
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             path = '/api/v2/spending/review'
@@ -131,7 +132,7 @@ async def test_spending_review_api_privacy_validation_and_isolation(in_memory_db
             response = await client.get(path)
             assert response.status_code == 200
             assert response.json() == {
-                "items": [{"id": tx_id, "merchant": "Old purchase", "category": "Other",
+                "items": [{"id": tx_id, "merchant": "Old purchase", "category": "Shopping",
                            "date": "2020-01-01", "reasons": ["unresolved_money"]}],
                 "total": 1, "limit": 50, "offset": 0,
             }

@@ -1092,7 +1092,8 @@ async def test_correcting_review_date_and_type_updates_facts_without_changing_ev
     from datetime import date
     storage = Storage(in_memory_db)
     tx_id = storage.insert_transaction(source='manual', source_id='review-correction', amount=12,
-                                       tx_type='unknown', transaction_date=None, raw_data='original payload')
+                                       tx_type='unknown', transaction_date=None, raw_data='original payload',
+                                       merchant='Employer', category='Salary')
     event = storage.record_source_event('manual', 'original-id', 'original evidence')
     storage.finish_source_event(event['id'], 'processed', tx_id)
     original_event = storage.get_source_event('manual', 'original-id')
@@ -1140,7 +1141,7 @@ async def test_invalid_monetary_correction_is_atomic(client, in_memory_db, field
 async def test_currency_correction_clears_old_rate_and_refreshes_facts(client, in_memory_db):
     from datetime import date
     storage = Storage(in_memory_db)
-    tx_id = storage.insert_transaction(source='manual', source_id='currency-change', amount=12, currency='USD', exchange_rate=1.3, transaction_date='2026-09-01')
+    tx_id = storage.insert_transaction(source='manual', source_id='currency-change', amount=12, currency='USD', exchange_rate=1.3, transaction_date='2026-09-01', merchant='Shop', category='Shopping')
     response = await client.put(f'/api/transactions/{tx_id}', json={'currency': 'eur', 'amount': '20.25'})
     assert response.status_code == 200
     assert response.json()['currency'] == 'EUR'
