@@ -8,7 +8,7 @@ import { ReviewPage } from '../ReviewPage';
 
 vi.mock('@/api/briefing', async (original) => ({ ...await original<typeof import('@/api/briefing')>(), briefingApi: { recurringReview: vi.fn(), resolveRecurring: vi.fn(), home: vi.fn(), spendingReview: vi.fn(), captureIssues: vi.fn(), followups: vi.fn(), retryCapture: vi.fn(), retryFollowup: vi.fn() } }));
 const period: SpendingPeriod = { start: '2026-09-01', end: '2026-09-06', spending: { minor_units: 1250, currency: 'SGD' }, income: null, recorded_net_flow: null, transaction_count: 1, unresolved_count: 0, indicative_count: 0, status: 'complete' };
-const home: HomeBriefing = { facts: { as_of: '2026-09-06', timezone: 'Asia/Singapore', undated_count: 0, current: period, comparison_current: period, previous: { ...period, start: '2026-08-01', end: '2026-08-06' }, change: { minor_units: 500, currency: 'SGD' }, category_changes: [{ category: 'Food & Drink', change: { minor_units: 500, currency: 'SGD' } }] }, recent: [], upcoming: [], upcoming_total: { minor_units: 0, currency: 'SGD' }, upcoming_unknown_count: 0, capture_issue_count: 2, followup_issue_count: 1, freshness: { gmail_connected: false, gmail_last_checked: null, gmail_needs_reconnection: false } };
+const home: HomeBriefing = { facts: { as_of: '2026-09-06', timezone: 'Asia/Singapore', undated_count: 0, current: period, comparison_current: period, previous: { ...period, start: '2026-08-01', end: '2026-08-06' }, change: { minor_units: 500, currency: 'SGD' }, category_changes: [{ category: 'Food & Drink', change: { minor_units: 500, currency: 'SGD' } }] }, recent: [], upcoming: [], upcoming_total: { minor_units: 0, currency: 'SGD' }, upcoming_unknown_count: 0, capture_issue_count: 2, followup_issue_count: 1, review_count: 0, recurring_suggestion_count: 0, freshness: { gmail_connected: false, gmail_last_checked: null, gmail_needs_reconnection: false } };
 function show(component: React.ReactNode) { return render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter>{component}</MemoryRouter></QueryClientProvider>); }
 beforeEach(() => { vi.resetAllMocks(); vi.mocked(briefingApi.recurringReview).mockResolvedValue({ items: [], total: 0, limit: 50, offset: 0 }); vi.mocked(briefingApi.spendingReview).mockResolvedValue({ items: [], total: 0, limit: 50, offset: 0 }); });
 afterEach(cleanup);
@@ -24,6 +24,15 @@ test('Home keeps evidence periods and categories in links and omits missing inco
   expect(params.get('category')).toBe('Food & Drink');
   expect(screen.queryByText(/Recorded income/)).toBeNull();
   expect(screen.getByText('3 capture or follow-up items')).toBeTruthy();
+  expect(screen.queryByText(/spending records need review/)).toBeNull();
+  expect(screen.queryByText(/recurring suggestions/)).toBeNull();
+});
+
+test('Home surfaces all-history review and recurring suggestion counts', async () => {
+  vi.mocked(briefingApi.home).mockResolvedValue({ ...home, review_count: 4, recurring_suggestion_count: 2 });
+  show(<HomePage />);
+  expect(await screen.findByText('4 spending records need review')).toBeTruthy();
+  expect(screen.getByText('2 recurring suggestions')).toBeTruthy();
 });
 
 test('a failed briefing does not render a genuine zero', async () => {

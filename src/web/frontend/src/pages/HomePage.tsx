@@ -9,7 +9,7 @@ export function HomePage() {
   const query = useQuery({ queryKey: ['home-briefing'], queryFn: briefingApi.home });
   if (!query.data && query.isError) return <div role="alert"><LoadFailed onRetry={() => void query.refetch()} /></div>;
   if (!query.data) return <p role="status" className="p-6 text-muted">Preparing your briefing…</p>;
-  const { facts, freshness, recent, upcoming, upcoming_total, upcoming_unknown_count, capture_issue_count, followup_issue_count } = query.data;
+  const { facts, freshness, recent, upcoming, upcoming_total, upcoming_unknown_count, capture_issue_count, followup_issue_count, review_count, recurring_suggestion_count } = query.data;
   const unresolved = facts.current.unresolved_count + facts.undated_count;
   return (
     <div className="max-w-5xl mx-auto p-4 md:p-8 space-y-6 text-base">
@@ -42,6 +42,8 @@ export function HomePage() {
         <PageCard title="Needs attention">
           <Link to="/review" className="block text-teal py-3 min-h-11">{capture_issue_count + followup_issue_count} capture or follow-up items</Link>
           {!!unresolved && <Link to={evidenceLink(facts.current, undefined, 'unresolved')} className="block text-warning py-3 min-h-11">Review {unresolved} spending records with unresolved amounts or dates</Link>}
+          {!!review_count && <Link to="/review" className="block text-teal py-3 min-h-11">{review_count} spending records need review</Link>}
+          {!!recurring_suggestion_count && <Link to="/review" className="block text-teal py-3 min-h-11">{recurring_suggestion_count} recurring suggestions</Link>}
           <p className="mt-4 text-muted">{freshness.gmail_needs_reconnection ? 'Gmail needs reconnection.' : freshness.gmail_connected ? `Gmail last checked: ${freshness.gmail_last_checked ?? 'not checked in this session'}.` : 'Gmail is not connected in this session.'}</p>
           <p className="text-sm text-muted mt-2">Recent checks do not prove every purchase was captured.</p>
           <Link to="/settings" className="inline-flex text-teal min-h-11 items-center">Manage connections</Link>

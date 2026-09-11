@@ -22,6 +22,7 @@ export interface HomeBriefing {
   upcoming: { id: number; subscription_id: number; label: string; date: string; amount: Money | null }[];
   upcoming_total: Money; upcoming_unknown_count: number;
   capture_issue_count: number; followup_issue_count: number;
+  review_count: number; recurring_suggestion_count: number;
   freshness: { gmail_connected: boolean; gmail_last_checked: string | null; gmail_needs_reconnection: boolean };
 }
 export interface CaptureIssue {
@@ -36,7 +37,7 @@ export interface UpcomingPlan {
 }
 export interface SpendingReview {
   items: { id: number; merchant: string | null; category: string; date: string | null;
-    reasons: ('missing_date' | 'unresolved_money' | 'unknown_type')[] }[];
+    reasons: ('missing_date' | 'unresolved_money' | 'unknown_type' | 'missing_merchant' | 'missing_category')[] }[];
   total: number; limit: number; offset: number;
 }
 export interface FollowupIssue {

@@ -11,6 +11,7 @@ import { TransactionForm } from '@/components/transactions/TransactionForm';
 import { useCategories } from '@/hooks/useCategories';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { api, type Transaction } from '@/api/client';
+import { briefingApi } from '@/api/briefing';
 import { slideInRightVariants, fadeUpVariants } from '@/lib/motionPresets';
 import { Plus } from 'lucide-react';
 import { LoadFailed } from '@/components/ui/LoadFailed';
@@ -32,6 +33,7 @@ export function TransactionsPage() {
   const [endDate, setEndDate] = useState('');
   const [showForm, setShowForm] = useState(false);
   const { data: categories } = useCategories();
+  const briefing = useQuery({ queryKey: ['home-briefing'], queryFn: briefingApi.home });
 
   const [searchParams, setSearchParams] = useSearchParams();
   const returnTo = searchParams.get('returnTo');
@@ -121,7 +123,7 @@ export function TransactionsPage() {
             </h1>
           </div>
           <div className="flex items-center gap-2">
-          <Link to="/review" className="min-h-11 inline-flex items-center px-2 text-sm text-teal">Review</Link>
+          <Link to="/review" className="min-h-11 inline-flex items-center px-2 text-sm text-teal">Review{!!briefing.data?.review_count && ` (${briefing.data.review_count})`}</Link>
           <Button className="min-h-11" size="sm" onClick={() => setShowForm(!showForm)}>
             <Plus className="w-4 h-4 mr-1" />
             Add
