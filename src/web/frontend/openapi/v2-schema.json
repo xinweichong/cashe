@@ -724,6 +724,14 @@
             "title": "Recent",
             "type": "array"
           },
+          "recurring_suggestion_count": {
+            "title": "Recurring Suggestion Count",
+            "type": "integer"
+          },
+          "review_count": {
+            "title": "Review Count",
+            "type": "integer"
+          },
           "upcoming": {
             "items": {
               "$ref": "#/components/schemas/UpcomingCharge"
@@ -747,6 +755,8 @@
           "upcoming_unknown_count",
           "capture_issue_count",
           "followup_issue_count",
+          "review_count",
+          "recurring_suggestion_count",
           "freshness"
         ],
         "title": "HomeBriefing",

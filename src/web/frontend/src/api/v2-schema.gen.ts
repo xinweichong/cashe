@@ -868,6 +868,10 @@ export interface components {
             freshness: components["schemas"]["CaptureFreshness"];
             /** Recent */
             recent: components["schemas"]["SpendingEvidenceItem"][];
+            /** Recurring Suggestion Count */
+            recurring_suggestion_count: number;
+            /** Review Count */
+            review_count: number;
             /** Upcoming */
             upcoming: components["schemas"]["UpcomingCharge"][];
             upcoming_total: components["schemas"]["Money"];
