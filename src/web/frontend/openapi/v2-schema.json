@@ -1282,6 +1282,153 @@
         "title": "RefundEvidence",
         "type": "object"
       },
+      "RefundMatchCandidate": {
+        "properties": {
+          "amount": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date"
+          },
+          "merchant": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Merchant"
+          },
+          "transaction_id": {
+            "title": "Transaction Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "transaction_id",
+          "merchant",
+          "date",
+          "amount"
+        ],
+        "title": "RefundMatchCandidate",
+        "type": "object"
+      },
+      "RefundMatchProposal": {
+        "properties": {
+          "candidate_purchase": {
+            "$ref": "#/components/schemas/RefundMatchCandidate"
+          },
+          "reason": {
+            "const": "same_merchant_amount_window",
+            "title": "Reason",
+            "type": "string"
+          },
+          "refund": {
+            "$ref": "#/components/schemas/RefundMatchSide"
+          },
+          "refund_transaction_id": {
+            "title": "Refund Transaction Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "refund_transaction_id",
+          "refund",
+          "candidate_purchase",
+          "reason"
+        ],
+        "title": "RefundMatchProposal",
+        "type": "object"
+      },
+      "RefundMatchResolution": {
+        "properties": {
+          "status": {
+            "const": "ok",
+            "default": "ok",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "title": "RefundMatchResolution",
+        "type": "object"
+      },
+      "RefundMatchReview": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/RefundMatchProposal"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "RefundMatchReview",
+        "type": "object"
+      },
+      "RefundMatchSide": {
+        "properties": {
+          "amount": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date"
+          },
+          "merchant": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Merchant"
+          }
+        },
+        "required": [
+          "merchant",
+          "date",
+          "amount"
+        ],
+        "title": "RefundMatchSide",
+        "type": "object"
+      },
       "SpendingAlerts": {
         "properties": {
           "anomalies": {
@@ -3919,6 +4066,111 @@
           }
         },
         "summary": "Resolve Recurring Review"
+      }
+    },
+    "/api/v2/refund-matches/review": {
+      "get": {
+        "operationId": "refund_match_review_api_v2_refund_matches_review_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefundMatchReview"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Refund Match Review"
+      }
+    },
+    "/api/v2/refund-matches/{refund_transaction_id}/{action}": {
+      "post": {
+        "operationId": "resolve_refund_match_api_v2_refund_matches__refund_transaction_id___action__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "refund_transaction_id",
+            "required": true,
+            "schema": {
+              "title": "Refund Transaction Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "action",
+            "required": true,
+            "schema": {
+              "enum": [
+                "accept",
+                "dismiss"
+              ],
+              "title": "Action",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RefundMatchResolution"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Resolve Refund Match"
       }
     },
     "/api/v2/spending/day": {

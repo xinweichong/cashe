@@ -446,6 +446,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/refund-matches/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Refund Match Review */
+        get: operations["refund_match_review_api_v2_refund_matches_review_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/refund-matches/{refund_transaction_id}/{action}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resolve Refund Match */
+        post: operations["resolve_refund_match_api_v2_refund_matches__refund_transaction_id___action__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v2/spending/day": {
         parameters: {
             query?: never;
@@ -1068,6 +1102,56 @@ export interface components {
             transaction_id: number;
             /** Warning */
             warning?: string | null;
+        };
+        /** RefundMatchCandidate */
+        RefundMatchCandidate: {
+            amount: components["schemas"]["Money"];
+            /** Date */
+            date: string | null;
+            /** Merchant */
+            merchant: string | null;
+            /** Transaction Id */
+            transaction_id: number;
+        };
+        /** RefundMatchProposal */
+        RefundMatchProposal: {
+            candidate_purchase: components["schemas"]["RefundMatchCandidate"];
+            /**
+             * Reason
+             * @constant
+             */
+            reason: "same_merchant_amount_window";
+            refund: components["schemas"]["RefundMatchSide"];
+            /** Refund Transaction Id */
+            refund_transaction_id: number;
+        };
+        /** RefundMatchResolution */
+        RefundMatchResolution: {
+            /**
+             * Status
+             * @default ok
+             * @constant
+             */
+            status: "ok";
+        };
+        /** RefundMatchReview */
+        RefundMatchReview: {
+            /** Items */
+            items: components["schemas"]["RefundMatchProposal"][];
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Total */
+            total: number;
+        };
+        /** RefundMatchSide */
+        RefundMatchSide: {
+            amount: components["schemas"]["Money"];
+            /** Date */
+            date: string | null;
+            /** Merchant */
+            merchant: string | null;
         };
         /** SpendingAlerts */
         SpendingAlerts: {
@@ -2266,6 +2350,70 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RecurringResolution"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    refund_match_review_api_v2_refund_matches_review_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RefundMatchReview"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resolve_refund_match_api_v2_refund_matches__refund_transaction_id___action__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                refund_transaction_id: number;
+                action: "accept" | "dismiss";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RefundMatchResolution"];
                 };
             };
             /** @description Validation Error */
