@@ -47,10 +47,22 @@ export interface RecurringReview {
   items: { id: string; merchant: string; frequency: string }[];
   total: number; limit: number; offset: number;
 }
+export interface RefundMatchReview {
+  items: {
+    refund_transaction_id: number;
+    refund: { merchant: string | null; date: string | null; amount: Money };
+    candidate_purchase: { transaction_id: number; merchant: string | null; date: string | null; amount: Money };
+    reason: 'same_merchant_amount_window';
+  }[];
+  total: number; limit: number; offset: number;
+}
 export const briefingApi = {
   recurringReview: (offset = 0) => request<RecurringReview>(`/api/v2/recurring/review?limit=50&offset=${offset}`),
   resolveRecurring: (id: string, action: 'accept' | 'dismiss') =>
     request<{ status: 'ok'; subscription_id: number | null }>(`/api/v2/recurring/suggestions/${encodeURIComponent(id)}/${action}`, { method: 'POST' }),
+  refundMatchReview: (offset = 0) => request<RefundMatchReview>(`/api/v2/refund-matches/review?limit=50&offset=${offset}`),
+  resolveRefundMatch: (refundTransactionId: number, action: 'accept' | 'dismiss') =>
+    request<{ status: 'ok' }>(`/api/v2/refund-matches/${refundTransactionId}/${action}`, { method: 'POST' }),
   updatePlannedCharge: (id: number, data: { expected_date?: string; expected_amount?: string | null }) =>
     request(`/api/v2/plan/upcoming/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   dismissPlannedCharge: (id: number) => request(`/api/v2/plan/upcoming/${id}/dismiss`, { method: 'POST' }),

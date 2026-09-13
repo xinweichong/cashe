@@ -5,12 +5,13 @@ import { MemoryRouter } from 'react-router-dom';
 import { briefingApi } from '@/api/briefing';
 import { ReviewPage } from '../ReviewPage';
 
-vi.mock('@/api/briefing', () => ({ briefingApi: { recurringReview: vi.fn(), resolveRecurring: vi.fn(), spendingReview: vi.fn(), captureIssues: vi.fn(), followups: vi.fn(), resolveCapture: vi.fn() } }));
+vi.mock('@/api/briefing', async (original) => ({ ...await original<typeof import('@/api/briefing')>(), briefingApi: { recurringReview: vi.fn(), resolveRecurring: vi.fn(), spendingReview: vi.fn(), captureIssues: vi.fn(), followups: vi.fn(), resolveCapture: vi.fn(), refundMatchReview: vi.fn(), resolveRefundMatch: vi.fn() } }));
 beforeEach(() => {
   vi.resetAllMocks(); vi.mocked(briefingApi.recurringReview).mockResolvedValue({ items: [], total: 0, limit: 50, offset: 0 });
   vi.mocked(briefingApi.spendingReview).mockResolvedValue({ items: [], total: 0, limit: 50, offset: 0 });
   vi.mocked(briefingApi.captureIssues).mockResolvedValue([]);
   vi.mocked(briefingApi.followups).mockResolvedValue([]);
+  vi.mocked(briefingApi.refundMatchReview).mockResolvedValue({ items: [], total: 0, limit: 50, offset: 0 });
 });
 afterEach(cleanup);
 function show(path = '/review') {
@@ -84,6 +85,32 @@ test('resolution failures retain the entry and show an error', async () => {
   expect(screen.getByRole('button', { name: 'Mark handled' })).toBeTruthy();
 });
 
+
+const refundMatch = { items: [{
+  refund_transaction_id: 5,
+  refund: { merchant: 'Cafe', date: '2026-06-10', amount: { minor_units: 2000, currency: 'SGD' as const } },
+  candidate_purchase: { transaction_id: 3, merchant: 'Cafe', date: '2026-06-01', amount: { minor_units: 2000, currency: 'SGD' as const } },
+  reason: 'same_merchant_amount_window' as const,
+}], total: 1, limit: 50, offset: 0 };
+
+test('confirms a proposed refund match and refreshes the pending list', async () => {
+  vi.mocked(briefingApi.refundMatchReview).mockResolvedValueOnce(refundMatch).mockResolvedValue({ ...refundMatch, items: [], total: 0 });
+  vi.mocked(briefingApi.resolveRefundMatch).mockResolvedValue({ status: 'ok' });
+  show();
+  expect(await screen.findByText('Likely refunds')).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: 'Confirm match' }));
+  expect(await screen.findByText('No refund matches to review.')).toBeTruthy();
+  expect(briefingApi.resolveRefundMatch).toHaveBeenCalledWith(5, 'accept');
+});
+
+test('dismisses a proposed refund match without linking it', async () => {
+  vi.mocked(briefingApi.refundMatchReview).mockResolvedValueOnce(refundMatch).mockResolvedValue({ ...refundMatch, items: [], total: 0 });
+  vi.mocked(briefingApi.resolveRefundMatch).mockResolvedValue({ status: 'ok' });
+  show();
+  fireEvent.click(await screen.findByRole('button', { name: 'Dismiss' }));
+  expect(await screen.findByText('No refund matches to review.')).toBeTruthy();
+  expect(briefingApi.resolveRefundMatch).toHaveBeenCalledWith(5, 'dismiss');
+});
 
 const recurring = { items: [{ id: 'opaque', merchant: 'Full merchant', frequency: 'monthly' }], total: 1, limit: 50, offset: 0 };
 

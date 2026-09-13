@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { briefingApi } from '@/api/briefing';
+import { briefingApi, formatMoney } from '@/api/briefing';
 import { PageCard } from '@/components/ui/cards';
 import { Button } from '@/components/ui/button';
 import { LoadFailed } from '@/components/ui/LoadFailed';
@@ -22,6 +22,7 @@ export function ReviewPage() {
   return <div className="max-w-4xl mx-auto p-4 md:p-8 space-y-6">
     <header><Link to="/home" className="text-teal min-h-11 inline-flex items-center">Back to briefing</Link><h1 className="text-2xl font-semibold">Review</h1><p className="text-muted">Spending records, recurring suggestions, and capture follow-ups that need attention.</p></header>
     <SpendingReviewList />
+    <RefundMatchReviewList />
     <RecurringReviewList />
     {resolve.isError && <p role="alert" className="text-destructive">Couldn’t update this entry. Please try again.</p>}
     {retry.isError && <p role="alert" className="text-destructive">Couldn’t queue the retry. Please try again.</p>}
@@ -75,6 +76,30 @@ function SpendingReviewList() {
   </PageCard>;
 }
 
+function RefundMatchReviewList() {
+  const client = useQueryClient();
+  const query = useQuery({ queryKey: ['refund-match-review'], queryFn: () => briefingApi.refundMatchReview() });
+  const resolve = useMutation({
+    mutationFn: ({ id, action }: { id: number; action: 'accept' | 'dismiss' }) => briefingApi.resolveRefundMatch(id, action),
+    onSuccess: async () => { await client.invalidateQueries({ queryKey: ['refund-match-review'] }); },
+  });
+  return <PageCard title="Refund matches">
+    <p className="text-sm text-muted mb-3">A likely purchase for an unlinked refund, based on matching merchant, currency, and amount within 180 days. Confirm to link it as evidence, or dismiss if it's wrong.</p>
+    {resolve.isError && <p role="alert" className="text-destructive">Couldn’t update this match. Please try again.</p>}
+    {query.isError ? <div role="alert"><LoadFailed onRetry={() => void query.refetch()} /></div> : !query.data ? <p role="status">Loading refund matches…</p> : <>
+      <p className="text-sm text-muted">{query.data.total} refund matches need review</p>
+      {query.data.items.map(item => <div key={item.refund_transaction_id} className="py-4 border-b border-border last:border-0 space-y-2">
+        <p>{item.refund.merchant || 'Unnamed refund'} <span className="text-muted">· {item.refund.date || 'Date unknown'} · {formatMoney(item.refund.amount)}</span></p>
+        <p className="text-sm text-muted">Likely refunds <Link className="text-teal min-h-11 inline-flex items-center" to={`/transactions/${item.candidate_purchase.transaction_id}?returnTo=${encodeURIComponent('/review')}`}>{item.candidate_purchase.merchant || 'Unnamed transaction'} · {item.candidate_purchase.date || 'Date unknown'} · {formatMoney(item.candidate_purchase.amount)}</Link></p>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" className="min-h-11" disabled={resolve.isPending} onClick={() => resolve.mutate({ id: item.refund_transaction_id, action: 'accept' })}>Confirm match</Button>
+          <Button variant="ghost" className="min-h-11" disabled={resolve.isPending} onClick={() => resolve.mutate({ id: item.refund_transaction_id, action: 'dismiss' })}>Dismiss</Button>
+        </div>
+      </div>)}
+      {!query.data.items.length && <p className="py-4 text-muted">No refund matches to review.</p>}
+    </>}
+  </PageCard>;
+}
 
 function RecurringReviewList() {
   const client = useQueryClient();
