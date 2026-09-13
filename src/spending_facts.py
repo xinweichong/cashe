@@ -230,6 +230,58 @@ def spending_review(conn, *, timezone: str = DEFAULT_TIMEZONE,
     return {"items": items, "total": len(rows), "limit": limit, "offset": offset}
 
 
+def refund_match_candidate(conn, refund: dict) -> dict | None:
+    """R06: the best unlinked purchase this refund likely belongs to, for the
+    refund-match review — same merchant and currency, dated on or before the
+    refund and within 180 days, with enough amount to cover it. Rows sorted
+    closest-date-first; the first that resolves money and covers the refund
+    wins. A row on either side whose money can't be resolved is skipped
+    rather than guessed at."""
+    refund_minor, _ = resolve_money(refund)
+    if refund_minor is None or not refund["merchant"] or not refund["transaction_date"]:
+        return None
+    rows = conn.execute(
+        """SELECT * FROM transactions
+           WHERE (type = 'expense' OR type IS NULL) AND merchant = ? AND currency IS ?
+           AND transaction_date IS NOT NULL
+           AND DATE(transaction_date) <= DATE(?) AND DATE(transaction_date) >= DATE(?, '-180 days')
+           ORDER BY transaction_date DESC, id DESC""",
+        (refund["merchant"], refund["currency"], refund["transaction_date"], refund["transaction_date"]),
+    ).fetchall()
+    for record in rows:
+        candidate = dict(record)
+        candidate_minor, _ = resolve_money(candidate)
+        if candidate_minor is not None and candidate_minor >= refund_minor:
+            return candidate
+    return None
+
+
+def refund_match_review(conn, *, limit: int = 50, offset: int = 0) -> dict:
+    if not 1 <= limit <= 100 or offset < 0:
+        raise ValueError("Invalid refund match review query")
+    refunds = conn.execute(
+        """SELECT * FROM transactions WHERE type = 'refund' AND refund_of_transaction_id IS NULL
+           AND id NOT IN (SELECT refund_transaction_id FROM refund_match_dismissals)
+           ORDER BY transaction_date DESC, id DESC"""
+    ).fetchall()
+    items = []
+    for record in refunds:
+        refund = dict(record)
+        candidate = refund_match_candidate(conn, refund)
+        if candidate is None:
+            continue
+        refund_minor, _ = resolve_money(refund)
+        candidate_minor, _ = resolve_money(candidate)
+        items.append({
+            "refund_transaction_id": refund["id"],
+            "refund": {"merchant": refund["merchant"], "date": refund["transaction_date"], "amount": money(refund_minor)},
+            "candidate_purchase": {"transaction_id": candidate["id"], "merchant": candidate["merchant"],
+                                   "date": candidate["transaction_date"], "amount": money(candidate_minor)},
+            "reason": "same_merchant_amount_window",
+        })
+    return {"items": items[offset:offset + limit], "total": len(items), "limit": limit, "offset": offset}
+
+
 def spending_evidence(conn, start: date, end: date, *, timezone: str = DEFAULT_TIMEZONE,
                       category: str | None = None, measure: str = "spending",
                       limit: int = 50, offset: int = 0) -> dict:

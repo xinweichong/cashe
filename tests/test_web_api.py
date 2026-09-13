@@ -1459,3 +1459,33 @@ async def test_recurring_review_api_privacy_resolution_validation_and_auth(clien
     assert (await client.get('/api/v2/recurring/review')).status_code == 401
     assert (await client.post(path + '/accept')).status_code == 401
     assert (await client.post(path + '/dismiss')).status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_refund_match_review_api_privacy_resolution_validation_and_auth(client, in_memory_db):
+    storage = Storage(in_memory_db)
+    purchase = storage.insert_transaction(source='manual', source_id='p1', amount=20,
+                                          merchant='Cafe', transaction_date='2026-06-01T12:00:00')
+    refund = storage.insert_transaction(source='manual', source_id='r1', amount=20, merchant='Cafe',
+                                        transaction_date='2026-06-10T12:00:00', tx_type='refund')
+    report = (await client.get('/api/v2/refund-matches/review?limit=1')).json()
+    assert report == {'items': [{
+        'refund_transaction_id': refund,
+        'refund': {'merchant': 'Cafe', 'date': '2026-06-10T12:00:00', 'amount': {'minor_units': 2000, 'currency': 'SGD'}},
+        'candidate_purchase': {'transaction_id': purchase, 'merchant': 'Cafe', 'date': '2026-06-01T12:00:00',
+                               'amount': {'minor_units': 2000, 'currency': 'SGD'}},
+        'reason': 'same_merchant_amount_window',
+    }], 'total': 1, 'limit': 1, 'offset': 0}
+    for query in ['limit=0', 'limit=101', 'offset=-1']:
+        assert (await client.get('/api/v2/refund-matches/review?' + query)).status_code == 422
+    path = f"/api/v2/refund-matches/{refund}"
+    assert (await client.post(path + '/invalid')).status_code == 422
+    assert (await client.post('/api/v2/refund-matches/999999/accept')).status_code == 404
+    accept = await client.post(path + '/accept')
+    assert accept.status_code == 200
+    assert accept.json() == {'status': 'ok'}
+    assert storage.get_transaction(refund)['refund_of_transaction_id'] == purchase
+    assert (await client.get('/api/v2/refund-matches/review')).json()['total'] == 0
+    await client.post('/api/logout')
+    assert (await client.get('/api/v2/refund-matches/review')).status_code == 401
+    assert (await client.post(path + '/dismiss')).status_code == 401

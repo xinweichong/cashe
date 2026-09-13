@@ -476,6 +476,31 @@ class Storage:
         return [dict(r) for r in rows]
 
     @_locked
+    def get_refund_match_review(self, limit: int = 50, offset: int = 0) -> dict:
+        from src.spending_facts import refund_match_review
+        return refund_match_review(self._conn, limit=limit, offset=offset)
+
+    @_locked
+    def resolve_refund_match(self, refund_transaction_id: int, action: str) -> None:
+        if action not in ("accept", "dismiss"):
+            raise ValueError("Invalid refund match action")
+        if action == "dismiss":
+            self._conn.execute(
+                "INSERT OR IGNORE INTO refund_match_dismissals(refund_transaction_id) VALUES (?)",
+                (refund_transaction_id,),
+            )
+            self._conn.commit()
+            return
+        from src.spending_facts import refund_match_candidate
+        refund = self.get_transaction(refund_transaction_id)
+        if refund is None:
+            raise ValueError(f"transaction {refund_transaction_id} not found")
+        candidate = refund_match_candidate(self._conn, refund)
+        if candidate is None:
+            raise ValueError("No refund match proposal for this transaction")
+        self.update_transaction(refund_transaction_id, refund_of_transaction_id=candidate["id"])
+
+    @_locked
     def create_web_transaction(self, body: dict, *, source_id: str, request_key=None,
                                timezone="Asia/Singapore") -> dict:
         # Fingerprint submitted fields before generating defaults (especially time).

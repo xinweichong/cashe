@@ -24,7 +24,7 @@ from src.money import to_minor_units, from_minor_units
 from src.spending_facts import resolve_money
 from src.config import local_now
 from src.web.auth import verify_password, create_session, verify_session, destroy_session
-from src.web.contracts import Balance, BudgetProgress, CaptureFollowup, CaptureIssue, CaptureResolution, CategoryTrendPoint, GoalProgress, HealthScore, HomeBriefing, MerchantRanking, MerchantSummary, OverviewSummary, QueuedResponse, SpendingAlerts, SpendingComparison, SpendingEvidence, SpendingFacts, SpendingReview, SpendingVelocity, TopMerchantsResult, TransactionCorrection, TransactionCreate, TransactionDeletion, TransactionProvenance, TransactionUndo, TransactionV2, TrendPoint, TripSummary, UpcomingPlan, PlanMutationResponse, RecurringReview, RecurringResolution
+from src.web.contracts import Balance, BudgetProgress, CaptureFollowup, CaptureIssue, CaptureResolution, CategoryTrendPoint, GoalProgress, HealthScore, HomeBriefing, MerchantRanking, MerchantSummary, OverviewSummary, QueuedResponse, SpendingAlerts, SpendingComparison, SpendingEvidence, SpendingFacts, SpendingReview, SpendingVelocity, TopMerchantsResult, TransactionCorrection, TransactionCreate, TransactionDeletion, TransactionProvenance, TransactionUndo, TransactionV2, TrendPoint, TripSummary, UpcomingPlan, PlanMutationResponse, RecurringReview, RecurringResolution, RefundMatchReview, RefundMatchResolution
 from src.analytics import (
     load_summary,
     get_yoy_comparison,
@@ -301,6 +301,23 @@ def create_dashboard_app(
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from None
         return {"status": "ok", "subscription_id": sub_id}
+
+    @app.get("/api/v2/refund-matches/review", response_model=RefundMatchReview)
+    async def refund_match_review(
+        limit: int = Query(50, ge=1, le=100), offset: int = Query(0, ge=0),
+        storage=Depends(_get_storage),
+    ):
+        return await _db(storage.get_refund_match_review, limit=limit, offset=offset)
+
+    @app.post("/api/v2/refund-matches/{refund_transaction_id}/{action}", response_model=RefundMatchResolution)
+    async def resolve_refund_match(
+        refund_transaction_id: int, action: Literal["accept", "dismiss"], storage=Depends(_get_storage),
+    ):
+        try:
+            await _db(storage.resolve_refund_match, refund_transaction_id, action)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from None
+        return {"status": "ok"}
 
     @app.get("/api/v2/spending/review", response_model=SpendingReview)
     async def spending_review(

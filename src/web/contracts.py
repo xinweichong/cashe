@@ -182,6 +182,37 @@ class RecurringResolution(BaseModel):
     subscription_id: int | None
 
 
+class RefundMatchSide(BaseModel):
+    merchant: str | None
+    date: str | None
+    amount: Money
+
+
+class RefundMatchCandidate(BaseModel):
+    transaction_id: int
+    merchant: str | None
+    date: str | None
+    amount: Money
+
+
+class RefundMatchProposal(BaseModel):
+    refund_transaction_id: int
+    refund: RefundMatchSide
+    candidate_purchase: RefundMatchCandidate
+    reason: Literal["same_merchant_amount_window"]
+
+
+class RefundMatchReview(BaseModel):
+    items: list[RefundMatchProposal]
+    total: int
+    limit: int
+    offset: int
+
+
+class RefundMatchResolution(BaseModel):
+    status: Literal["ok"] = "ok"
+
+
 # ── v2 Transaction (R03) ────────────────────────────────────────────────────
 
 class OriginalMoney(BaseModel):

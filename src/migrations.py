@@ -220,6 +220,18 @@ MIGRATIONS = (
         # survives restore even if the linked purchase was deleted first.
         _add_column_if_table_exists("deleted_transactions", "refund_of_transaction_id INTEGER"),
     )),
+    (16, (
+        # R06: records a rejected auto-suggested refund->purchase match so it
+        # doesn't reappear in the review list. Keyed by the refund alone (one
+        # active dismissal per refund, regardless of which candidate purchase
+        # was proposed) — reclassifying the refund away and back, or deleting
+        # and restoring it as a new row, naturally starts it undismissed again.
+        # ON DELETE CASCADE: a hard-deleted refund's dismissal is meaningless.
+        """CREATE TABLE refund_match_dismissals (
+            refund_transaction_id INTEGER PRIMARY KEY REFERENCES transactions(id) ON DELETE CASCADE,
+            dismissed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )""",
+    )),
 )
 
 
