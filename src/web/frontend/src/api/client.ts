@@ -131,6 +131,7 @@ export interface GoalProgress {
 
 export interface MerchantSummary {
   merchant: string;
+  display_name: string;
   total_sgd: number;
   transaction_count: number;
   avg_amount_sgd: number;
@@ -143,6 +144,7 @@ export interface MerchantSummary {
 
 export interface MerchantProfile {
   merchant: string;
+  display_name: string;
   total_sgd: number;
   transaction_count: number;
   avg_amount_sgd: number;
@@ -662,6 +664,23 @@ export const api = {
 
   getMerchantTrend: (merchant: string) =>
     request<MerchantTrend>(`/api/merchant-intelligence/${encodeURIComponent(merchant)}/trend`),
+
+  setMerchantAlias: (merchant: string, displayName: string) =>
+    request<{ merchant: string; display_name: string }>(
+      `/api/merchant-intelligence/${encodeURIComponent(merchant)}/alias`,
+      { method: 'PUT', body: JSON.stringify({ display_name: displayName }) }
+    ),
+
+  getMerchantRuleImpact: (merchant: string) =>
+    request<{ merchant: string; category: string; differing_count: number }>(
+      `/api/merchant-intelligence/${encodeURIComponent(merchant)}/rule-impact`
+    ),
+
+  applyMerchantRule: (merchant: string) =>
+    request<{ status: 'ok'; updated_count: number }>(
+      `/api/merchant-intelligence/${encodeURIComponent(merchant)}/apply-rule`,
+      { method: 'POST' }
+    ),
 
   // Budgets
   getBudgets: () => request<Budget[]>('/api/budgets'),

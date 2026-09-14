@@ -50,6 +50,33 @@ export function MerchantProfile({
     },
   });
 
+  const { data: ruleImpact } = useQuery({
+    queryKey: ['merchant-rule-impact', merchant],
+    queryFn: () => api.getMerchantRuleImpact(merchant),
+    enabled: !!merchant,
+    retry: false,
+  });
+  const applyRuleMutation = useMutation({
+    mutationFn: () => api.applyMerchantRule(merchant),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['merchant-rule-impact', merchant] });
+      qc.invalidateQueries({ queryKey: ['merchant-profile-v2', merchant] });
+      qc.invalidateQueries({ queryKey: ['merchant-intelligence-v2'] });
+    },
+  });
+
+  const [displayName, setDisplayName] = useState('');
+  const [aliasSaved, setAliasSaved] = useState(false);
+  const setAliasMutation = useMutation({
+    mutationFn: (value: string) => api.setMerchantAlias(merchant, value),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['merchant-profile-v2', merchant] });
+      qc.invalidateQueries({ queryKey: ['merchant-intelligence-v2'] });
+      setAliasSaved(true);
+      setTimeout(() => setAliasSaved(false), 1500);
+    },
+  });
+
   const [notes, setNotes] = useState('');
   const [notesSaved, setNotesSaved] = useState(false);
   const setNotesMutation = useMutation({
@@ -69,6 +96,11 @@ export function MerchantProfile({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setNotes(profile?.notes ?? '');
   }, [merchant, profile?.notes]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setDisplayName(profile?.display_name ?? '');
+  }, [merchant, profile?.display_name]);
 
   const toggleTag = (tag: string) => {
     if (!profile) return;
@@ -106,7 +138,10 @@ export function MerchantProfile({
       {/* Header — pinned above scroll area */}
       <div className="shrink-0 flex items-start justify-between p-4 border-b border-border">
         <div>
-          <h2 className="text-lg font-bold font-display tracking-tight text-foreground">{profile.merchant}</h2>
+          <h2 className="text-lg font-bold font-display tracking-tight text-foreground">{profile.display_name}</h2>
+          {profile.display_name !== profile.merchant && (
+            <p className="text-xs text-muted mt-0.5">Recorded as “{profile.merchant}”</p>
+          )}
           {profile.category && (
             <Badge variant="outline" className="mt-1 text-xs">{profile.category}</Badge>
           )}
@@ -178,6 +213,49 @@ export function MerchantProfile({
           })}
         </div>
       </div>
+
+      {/* Display name — cosmetic only; never rewrites the recorded merchant string above */}
+      <div>
+        <p className="text-[10px] font-mono font-semibold uppercase tracking-[0.22em] text-muted mb-2">Display name</p>
+        <input
+          type="text"
+          value={displayName}
+          onChange={(e) => setDisplayName(e.target.value)}
+          onBlur={() => setAliasMutation.mutate(displayName)}
+          placeholder={profile.merchant}
+          className="w-full px-3 py-2 text-sm bg-background border border-border rounded-md text-foreground placeholder:text-muted focus:outline-none focus:ring-1 focus:ring-border"
+        />
+        {aliasSaved && (
+          <p className="text-xs text-success mt-1">Saved</p>
+        )}
+      </div>
+
+      {/* Category rule impact — the rule itself (merchant_overrides) is only ever
+          created via "remember this category" on a transaction correction; this
+          only previews/backfills it, never creates or edits the rule. */}
+      {ruleImpact && (
+        <div>
+          <p className="text-[10px] font-mono font-semibold uppercase tracking-[0.22em] text-muted mb-2">Category rule</p>
+          <div className="bg-background rounded-lg p-3 border border-border space-y-2">
+            <p className="text-sm text-foreground">New transactions from this merchant are categorized <strong>{ruleImpact.category}</strong>.</p>
+            {ruleImpact.differing_count > 0 ? (
+              <>
+                <p className="text-sm text-muted">{ruleImpact.differing_count} past transaction{ruleImpact.differing_count === 1 ? '' : 's'} still {ruleImpact.differing_count === 1 ? 'has' : 'have'} a different category.</p>
+                <button
+                  onClick={() => applyRuleMutation.mutate()}
+                  disabled={applyRuleMutation.isPending}
+                  className="text-xs font-medium text-teal hover:underline disabled:opacity-50"
+                >
+                  Apply to {ruleImpact.differing_count} existing transaction{ruleImpact.differing_count === 1 ? '' : 's'}
+                </button>
+                {applyRuleMutation.isError && <p className="text-xs text-destructive">Couldn’t apply the rule. Try again.</p>}
+              </>
+            ) : (
+              <p className="text-sm text-muted">All existing transactions already match this rule.</p>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Notes */}
       <div>

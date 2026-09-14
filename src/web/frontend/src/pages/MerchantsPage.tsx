@@ -105,7 +105,7 @@ export function MerchantsPage() {
             {merchants.length > 0 && (
               <StatCard
                 label="Top Merchant"
-                value={merchants[0].merchant}
+                value={merchants[0].display_name}
                 subtext={formatSGD(merchants[0].total.minor_units / 100)}
               />
             )}
@@ -204,11 +204,11 @@ export function MerchantsPage() {
                             color: merchantInitialColor(m.merchant),
                           }}
                         >
-                          {m.merchant.charAt(0).toUpperCase()}
+                          {m.display_name.charAt(0).toUpperCase()}
                         </div>
                       </td>
                       <td className="px-4 py-3">
-                        <div className="font-medium text-foreground truncate max-w-[180px]">{m.merchant}</div>
+                        <div className="font-medium text-foreground truncate max-w-[180px]">{m.display_name}</div>
                         <div className="font-mono text-[10px] text-muted uppercase tracking-[0.06em] mt-0.5 sm:hidden">
                           {m.transaction_count} txns · {m.last_seen ?? '—'}
                         </div>
