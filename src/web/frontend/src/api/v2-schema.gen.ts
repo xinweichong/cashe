@@ -925,6 +925,8 @@ export interface components {
             avg_amount: components["schemas"]["Money"];
             /** Category */
             category: string | null;
+            /** Display Name */
+            display_name: string;
             /** First Seen */
             first_seen: string;
             /** Last Seen */

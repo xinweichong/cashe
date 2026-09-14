@@ -800,6 +800,10 @@
             ],
             "title": "Category"
           },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
           "first_seen": {
             "title": "First Seen",
             "type": "string"
@@ -833,6 +837,7 @@
         },
         "required": [
           "merchant",
+          "display_name",
           "total",
           "transaction_count",
           "avg_amount",
