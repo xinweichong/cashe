@@ -282,6 +282,11 @@ def client():
             source TEXT DEFAULT 'manual',
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
+        CREATE TABLE IF NOT EXISTS merchant_aliases (
+            merchant TEXT PRIMARY KEY,
+            display_name TEXT NOT NULL,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
         CREATE TABLE IF NOT EXISTS app_settings (
             key   TEXT PRIMARY KEY,
             value TEXT NOT NULL,
@@ -415,6 +420,37 @@ class TestMerchantAPI:
         assert resp.status_code == 200
         resp2 = c.get("/api/merchant-intelligence/Grab")
         assert resp2.json()["notes"] == "Ride-hailing app"
+
+    def test_put_merchant_alias(self, client):
+        c, db = client
+        today = local_now().strftime("%Y-%m-%d")
+        db.execute(
+            "INSERT INTO transactions (source, source_id, amount, merchant, transaction_date, type) "
+            "VALUES ('manual', 'g1', 10.0, 'Grab', ?, 'expense')",
+            (today,),
+        )
+        db.commit()
+        resp = c.put("/api/merchant-intelligence/Grab/alias", json={"display_name": "Grab Rides"})
+        assert resp.status_code == 200
+        assert resp.json() == {"merchant": "Grab", "display_name": "Grab Rides"}
+        assert c.get("/api/merchant-intelligence/Grab").json()["display_name"] == "Grab Rides"
+        assert c.get("/api/v2/merchants/Grab").json()["display_name"] == "Grab Rides"
+        assert c.get("/api/v2/merchants").json()[0]["display_name"] == "Grab Rides"
+        # Blanking the alias reverts display_name to the raw merchant.
+        c.put("/api/merchant-intelligence/Grab/alias", json={"display_name": ""})
+        assert c.get("/api/merchant-intelligence/Grab").json()["display_name"] == "Grab"
+
+    def test_merchant_rule_impact_404_without_a_rule(self, client):
+        c, db = client
+        today = local_now().strftime("%Y-%m-%d")
+        db.execute(
+            "INSERT INTO transactions (source, source_id, amount, merchant, transaction_date, type) "
+            "VALUES ('manual', 'g1', 10.0, 'Grab', ?, 'expense')",
+            (today,),
+        )
+        db.commit()
+        assert c.get("/api/merchant-intelligence/Grab/rule-impact").status_code == 404
+        assert c.post("/api/merchant-intelligence/Grab/apply-rule").status_code == 404
 
     def test_get_merchant_trend(self, client):
         c, db = client

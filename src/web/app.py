@@ -857,6 +857,31 @@ def create_dashboard_app(
         await _db(storage.set_merchant_notes, merchant, notes)
         return await _db(storage.get_merchant_tags, merchant)
 
+    @app.put("/api/merchant-intelligence/{merchant}/alias")
+    async def merchant_set_alias(merchant: str, request: Request, storage=Depends(_get_storage)):
+        body = await request.json()
+        await _db(storage.set_merchant_alias, merchant, body.get("display_name", ""))
+        profile = await _db(storage.get_merchant_profile, merchant)
+        return {"merchant": merchant, "display_name": profile["display_name"] if profile else merchant}
+
+    @app.get("/api/merchant-intelligence/{merchant}/rule-impact")
+    async def merchant_rule_impact(merchant: str, storage=Depends(_get_storage)):
+        overrides = await _db(storage.get_merchant_overrides)
+        category = overrides.get(merchant)
+        if category is None:
+            raise HTTPException(status_code=404, detail="No category rule for this merchant")
+        count = await _db(storage.get_category_rule_impact, merchant, category)
+        return {"merchant": merchant, "category": category, "differing_count": count}
+
+    @app.post("/api/merchant-intelligence/{merchant}/apply-rule")
+    async def merchant_apply_rule(merchant: str, storage=Depends(_get_storage)):
+        overrides = await _db(storage.get_merchant_overrides)
+        category = overrides.get(merchant)
+        if category is None:
+            raise HTTPException(status_code=404, detail="No category rule for this merchant")
+        updated = await _db(storage.apply_category_rule_to_existing, merchant, category)
+        return {"status": "ok", "updated_count": updated}
+
     @app.get("/api/merchant-intelligence/{merchant}")
     async def merchant_intelligence_profile(merchant: str, storage=Depends(_get_storage)):
         profile = await _db(storage.get_merchant_profile, merchant)
@@ -873,6 +898,7 @@ def create_dashboard_app(
         # than crashing the route.
         return {
             "merchant": d["merchant"],
+            "display_name": d.get("display_name") or d["merchant"],
             "total": _sgd_money(d["total_sgd"] or 0.0),
             "transaction_count": d["transaction_count"],
             "avg_amount": _sgd_money(d["avg_amount_sgd"] or 0.0),

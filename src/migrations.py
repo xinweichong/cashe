@@ -232,6 +232,19 @@ MIGRATIONS = (
             dismissed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )""",
     )),
+    (17, (
+        # R06: a purely cosmetic display name for a merchant, keyed by the raw
+        # merchant string — overlaid at read time onto merchant list/profile
+        # responses. The raw `transactions.merchant` column, source evidence,
+        # and every aggregation keyed by merchant are never rewritten; this is
+        # presentation only, same boundary merchant_tags/merchant_overrides
+        # already draw around the raw merchant string.
+        """CREATE TABLE merchant_aliases (
+            merchant TEXT PRIMARY KEY,
+            display_name TEXT NOT NULL,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )""",
+    )),
 )
 
 

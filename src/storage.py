@@ -1371,10 +1371,12 @@ class Storage:
                 ms.*,
                 mc.category,
                 COALESCE(mt.tags, '') as tags,
-                COALESCE(mt.notes, '') as notes
+                COALESCE(mt.notes, '') as notes,
+                COALESCE(ma.display_name, ms.merchant) as display_name
             FROM merchant_stats ms
             LEFT JOIN merchant_category mc ON ms.merchant = mc.merchant AND mc.rn = 1
             LEFT JOIN merchant_tags mt ON ms.merchant = mt.merchant
+            LEFT JOIN merchant_aliases ma ON ms.merchant = ma.merchant
             WHERE (? IS NULL OR ',' || COALESCE(mt.tags, '') || ',' LIKE '%,' || ? || ',%')
             ORDER BY {order}
             LIMIT ? OFFSET ?
@@ -1425,6 +1427,10 @@ class Storage:
         if tags_row:
             profile["tags"] = [t.strip() for t in (tags_row["tags"] or "").split(",") if t.strip()]
             profile["notes"] = tags_row["notes"] or ""
+        alias_row = self._conn.execute(
+            "SELECT display_name FROM merchant_aliases WHERE merchant = ?", (merchant,)
+        ).fetchone()
+        profile["display_name"] = alias_row["display_name"] if alias_row else merchant
         return profile
 
     @_locked
@@ -1467,6 +1473,64 @@ class Storage:
             (merchant, notes),
         )
         self._conn.commit()
+
+    @_locked
+    def set_merchant_alias(self, merchant: str, display_name: str) -> None:
+        """Upsert a purely cosmetic display name for `merchant`. A blank
+        display_name deletes the alias — display_name then falls back to the
+        raw merchant string everywhere it's read, same as never having set
+        one. The raw transactions.merchant column is never touched."""
+        display_name = display_name.strip()
+        if not display_name:
+            self._conn.execute("DELETE FROM merchant_aliases WHERE merchant = ?", (merchant,))
+        else:
+            self._conn.execute(
+                """INSERT INTO merchant_aliases (merchant, display_name, updated_at)
+                   VALUES (?, ?, CURRENT_TIMESTAMP)
+                   ON CONFLICT(merchant) DO UPDATE SET
+                       display_name = excluded.display_name,
+                       updated_at = excluded.updated_at""",
+                (merchant, display_name),
+            )
+        self._conn.commit()
+
+    @_locked
+    def get_merchant_aliases(self) -> dict[str, str]:
+        rows = self._conn.execute("SELECT merchant, display_name FROM merchant_aliases").fetchall()
+        return {r["merchant"]: r["display_name"] for r in rows}
+
+    @_locked
+    def get_category_rule_impact(self, merchant: str, category: str) -> int:
+        """How many existing expense/refund transactions for `merchant`
+        currently have a category other than `category` (including no
+        category at all) — the count a "apply this rule to existing
+        transactions" prompt would actually change. Legacy NULL type counts
+        as expense, same scope update_transaction/categorizer already treat
+        a merchant rule as applying to; transfers/income never qualify."""
+        return self._conn.execute(
+            """SELECT COUNT(*) FROM transactions
+               WHERE merchant = ? AND (type IS NULL OR type IN ('expense', 'refund'))
+               AND (category IS NULL OR category != ?)""",
+            (merchant, category),
+        ).fetchone()[0]
+
+    @_locked
+    def apply_category_rule_to_existing(self, merchant: str, category: str) -> int:
+        """Explicit, one-time bulk backfill: sets `category` on every existing
+        expense/refund transaction for `merchant` that doesn't already have
+        it. Reuses update_transaction per row rather than a bespoke bulk
+        write, so each change gets its own mutation-history entry and
+        ordinary per-transaction undo keeps working exactly as before —
+        undoing one row here never touches the rule or any other row."""
+        ids = [r["id"] for r in self._conn.execute(
+            """SELECT id FROM transactions
+               WHERE merchant = ? AND (type IS NULL OR type IN ('expense', 'refund'))
+               AND (category IS NULL OR category != ?)""",
+            (merchant, category),
+        ).fetchall()]
+        for tx_id in ids:
+            self.update_transaction(tx_id, category=category)
+        return len(ids)
 
     @_locked
     def get_merchant_trend(self, merchant: str, months: int = 6) -> dict:

@@ -382,6 +382,7 @@ class BudgetProgress(BaseModel):
 # serves both a list row and a single-merchant profile.
 class MerchantSummary(BaseModel):
     merchant: str
+    display_name: str
     total: Money
     transaction_count: int
     avg_amount: Money

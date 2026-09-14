@@ -1489,3 +1489,37 @@ async def test_refund_match_review_api_privacy_resolution_validation_and_auth(cl
     await client.post('/api/logout')
     assert (await client.get('/api/v2/refund-matches/review')).status_code == 401
     assert (await client.post(path + '/dismiss')).status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_merchant_alias_and_rule_impact_preview_and_apply(client, in_memory_db):
+    storage = Storage(in_memory_db)
+    matches_already = storage.insert_transaction(source='manual', source_id='g1', amount=10,
+                                                  merchant='Grab', category='Transport', transaction_date='2026-06-01')
+    differs = storage.insert_transaction(source='manual', source_id='g2', amount=10,
+                                         merchant='Grab', category='Rideshare', transaction_date='2026-06-02')
+    storage.set_merchant_override('Grab', 'Transport')
+
+    alias = await client.put('/api/merchant-intelligence/Grab/alias', json={'display_name': 'Grab Rides'})
+    assert alias.status_code == 200
+    assert alias.json() == {'merchant': 'Grab', 'display_name': 'Grab Rides'}
+    assert (await client.get('/api/v2/merchants/Grab')).json()['display_name'] == 'Grab Rides'
+    assert (await client.get('/api/v2/merchants')).json()[0]['display_name'] == 'Grab Rides'
+
+    impact = await client.get('/api/merchant-intelligence/Grab/rule-impact')
+    assert impact.status_code == 200
+    assert impact.json() == {'merchant': 'Grab', 'category': 'Transport', 'differing_count': 1}
+
+    apply_resp = await client.post('/api/merchant-intelligence/Grab/apply-rule')
+    assert apply_resp.status_code == 200
+    assert apply_resp.json() == {'status': 'ok', 'updated_count': 1}
+    assert storage.get_transaction(differs)['category'] == 'Transport'
+    assert storage.get_transaction(matches_already)['revision'] == 1
+    assert (await client.get('/api/merchant-intelligence/Grab/rule-impact')).json()['differing_count'] == 0
+
+    assert (await client.get('/api/merchant-intelligence/NoRule/rule-impact')).status_code == 404
+    assert (await client.post('/api/merchant-intelligence/NoRule/apply-rule')).status_code == 404
+    await client.post('/api/logout')
+    assert (await client.put('/api/merchant-intelligence/Grab/alias', json={'display_name': 'x'})).status_code == 401
+    assert (await client.get('/api/merchant-intelligence/Grab/rule-impact')).status_code == 401
+    assert (await client.post('/api/merchant-intelligence/Grab/apply-rule')).status_code == 401
