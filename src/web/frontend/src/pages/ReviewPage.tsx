@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { briefingApi, formatMoney } from '@/api/briefing';
+import { briefingApi, formatMoney, type DuplicateSide } from '@/api/briefing';
 import { PageCard } from '@/components/ui/cards';
 import { Button } from '@/components/ui/button';
 import { LoadFailed } from '@/components/ui/LoadFailed';
@@ -22,6 +22,7 @@ export function ReviewPage() {
   return <div className="max-w-4xl mx-auto p-4 md:p-8 space-y-6">
     <header><Link to="/home" className="text-teal min-h-11 inline-flex items-center">Back to briefing</Link><h1 className="text-2xl font-semibold">Review</h1><p className="text-muted">Spending records, recurring suggestions, and capture follow-ups that need attention.</p></header>
     <SpendingReviewList />
+    <DuplicateReviewList />
     <RefundMatchReviewList />
     <RecurringReviewList />
     {resolve.isError && <p role="alert" className="text-destructive">Couldn’t update this entry. Please try again.</p>}
@@ -73,6 +74,52 @@ function SpendingReviewList() {
       <Button variant="outline" className="min-h-11" disabled={!offset} onClick={() => move(Math.max(0, offset - 50))}>Previous spending records</Button>
       <Button variant="outline" className="min-h-11" disabled={!query.data || query.isError || offset + 50 >= query.data.total} onClick={() => move(offset + 50)}>Next spending records</Button>
     </nav>
+  </PageCard>;
+}
+
+function duplicateSideLabel(side: DuplicateSide): string {
+  return `${side.merchant || 'Unnamed transaction'} · ${side.date || 'Date unknown'} · ${side.amount ? formatMoney(side.amount) : 'Amount unresolved'}`;
+}
+
+function DuplicateReviewList() {
+  const client = useQueryClient();
+  const query = useQuery({ queryKey: ['duplicate-review'], queryFn: () => briefingApi.duplicateReview() });
+  const dismiss = useMutation({
+    mutationFn: ({ aId, bId }: { aId: number; bId: number }) => briefingApi.dismissDuplicate(aId, bId),
+    onSuccess: async () => { await client.invalidateQueries({ queryKey: ['duplicate-review'] }); },
+  });
+  const merge = useMutation({
+    mutationFn: ({ survivorId, loserId }: { survivorId: number; loserId: number }) => briefingApi.mergeDuplicates(survivorId, loserId),
+    onSuccess: async () => { await client.invalidateQueries({ queryKey: ['duplicate-review'] }); },
+  });
+  const undo = useMutation({
+    mutationFn: (mergeId: number) => briefingApi.undoDuplicateMerge(mergeId),
+    onSuccess: async () => { await client.invalidateQueries({ queryKey: ['duplicate-review'] }); },
+  });
+  return <PageCard title="Possible duplicates">
+    <p className="text-sm text-muted mb-3">Two records from different sources that look like the same purchase. Keep whichever one you want as the record — its evidence, trip, and any billing match carry over. Keep separate if they're actually different.</p>
+    {merge.isSuccess && !undo.isSuccess && <p role="status" className="py-2">Merged. <button className="text-teal underline min-h-11" disabled={undo.isPending} onClick={() => undo.mutate(merge.data.merge_id)}>Undo</button></p>}
+    {undo.isSuccess && <p role="status" className="py-2">Merge undone.</p>}
+    {(dismiss.isError || merge.isError || undo.isError) && <p role="alert" className="text-destructive">Couldn’t update this pair. Please try again.</p>}
+    {query.isError ? <div role="alert"><LoadFailed onRetry={() => void query.refetch()} /></div> : !query.data ? <p role="status">Loading possible duplicates…</p> : <>
+      <p className="text-sm text-muted">{query.data.total} possible duplicates need review</p>
+      {query.data.items.map(item => <div key={`${item.transaction_a.id}-${item.transaction_b.id}`} className="py-4 border-b border-border last:border-0 space-y-2">
+        <div className="grid sm:grid-cols-2 gap-3">
+          {[item.transaction_a, item.transaction_b].map((side, idx) => {
+            const other = idx === 0 ? item.transaction_b : item.transaction_a;
+            return <div key={side.id} className="border border-border rounded-md p-3 space-y-2">
+              <p className="text-sm">{duplicateSideLabel(side)}</p>
+              <p className="text-xs text-muted">Source: {side.source}</p>
+              <Button variant="outline" className="min-h-11" disabled={merge.isPending}
+                onClick={() => merge.mutate({ survivorId: side.id, loserId: other.id })}>Keep this one</Button>
+            </div>;
+          })}
+        </div>
+        <Button variant="ghost" className="min-h-11" disabled={dismiss.isPending}
+          onClick={() => dismiss.mutate({ aId: item.transaction_a.id, bId: item.transaction_b.id })}>Keep separate</Button>
+      </div>)}
+      {!query.data.items.length && <p className="py-4 text-muted">No possible duplicates to review.</p>}
+    </>}
   </PageCard>;
 }
 

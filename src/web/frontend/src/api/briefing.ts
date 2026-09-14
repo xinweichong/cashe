@@ -56,6 +56,15 @@ export interface RefundMatchReview {
   }[];
   total: number; limit: number; offset: number;
 }
+export interface DuplicateSide {
+  id: number; merchant: string | null; date: string; source: string;
+  amount: Money | null; conversion_status: 'native' | 'indicative' | 'unresolved';
+}
+export interface DuplicateReview {
+  items: { transaction_a: DuplicateSide; transaction_b: DuplicateSide;
+    reason: 'same_merchant_amount_time_cross_source' }[];
+  total: number; limit: number; offset: number;
+}
 export const briefingApi = {
   recurringReview: (offset = 0) => request<RecurringReview>(`/api/v2/recurring/review?limit=50&offset=${offset}`),
   resolveRecurring: (id: string, action: 'accept' | 'dismiss') =>
@@ -63,6 +72,15 @@ export const briefingApi = {
   refundMatchReview: (offset = 0) => request<RefundMatchReview>(`/api/v2/refund-matches/review?limit=50&offset=${offset}`),
   resolveRefundMatch: (refundTransactionId: number, action: 'accept' | 'dismiss') =>
     request<{ status: 'ok' }>(`/api/v2/refund-matches/${refundTransactionId}/${action}`, { method: 'POST' }),
+  duplicateReview: (offset = 0) => request<DuplicateReview>(`/api/v2/duplicates/review?limit=50&offset=${offset}`),
+  dismissDuplicate: (aId: number, bId: number) =>
+    request<{ status: 'ok' }>(`/api/v2/duplicates/${aId}/${bId}/dismiss`, { method: 'POST' }),
+  mergeDuplicates: (survivorId: number, loserId: number) =>
+    request<{ status: 'ok'; merge_id: number }>('/api/v2/duplicates/merge', {
+      method: 'POST', body: JSON.stringify({ survivor_id: survivorId, loser_id: loserId }),
+    }),
+  undoDuplicateMerge: (mergeId: number) =>
+    request<{ status: 'ok' }>(`/api/v2/duplicates/merges/${mergeId}/undo`, { method: 'POST' }),
   updatePlannedCharge: (id: number, data: { expected_date?: string; expected_amount?: string | null }) =>
     request(`/api/v2/plan/upcoming/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   dismissPlannedCharge: (id: number) => request(`/api/v2/plan/upcoming/${id}/dismiss`, { method: 'POST' }),

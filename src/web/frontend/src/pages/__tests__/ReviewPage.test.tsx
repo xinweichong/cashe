@@ -5,13 +5,14 @@ import { MemoryRouter } from 'react-router-dom';
 import { briefingApi } from '@/api/briefing';
 import { ReviewPage } from '../ReviewPage';
 
-vi.mock('@/api/briefing', async (original) => ({ ...await original<typeof import('@/api/briefing')>(), briefingApi: { recurringReview: vi.fn(), resolveRecurring: vi.fn(), spendingReview: vi.fn(), captureIssues: vi.fn(), followups: vi.fn(), resolveCapture: vi.fn(), refundMatchReview: vi.fn(), resolveRefundMatch: vi.fn() } }));
+vi.mock('@/api/briefing', async (original) => ({ ...await original<typeof import('@/api/briefing')>(), briefingApi: { recurringReview: vi.fn(), resolveRecurring: vi.fn(), spendingReview: vi.fn(), captureIssues: vi.fn(), followups: vi.fn(), resolveCapture: vi.fn(), refundMatchReview: vi.fn(), resolveRefundMatch: vi.fn(), duplicateReview: vi.fn(), dismissDuplicate: vi.fn(), mergeDuplicates: vi.fn(), undoDuplicateMerge: vi.fn() } }));
 beforeEach(() => {
   vi.resetAllMocks(); vi.mocked(briefingApi.recurringReview).mockResolvedValue({ items: [], total: 0, limit: 50, offset: 0 });
   vi.mocked(briefingApi.spendingReview).mockResolvedValue({ items: [], total: 0, limit: 50, offset: 0 });
   vi.mocked(briefingApi.captureIssues).mockResolvedValue([]);
   vi.mocked(briefingApi.followups).mockResolvedValue([]);
   vi.mocked(briefingApi.refundMatchReview).mockResolvedValue({ items: [], total: 0, limit: 50, offset: 0 });
+  vi.mocked(briefingApi.duplicateReview).mockResolvedValue({ items: [], total: 0, limit: 50, offset: 0 });
 });
 afterEach(cleanup);
 function show(path = '/review') {
@@ -85,6 +86,36 @@ test('resolution failures retain the entry and show an error', async () => {
   expect(screen.getByRole('button', { name: 'Mark handled' })).toBeTruthy();
 });
 
+
+const duplicatePair = { items: [{
+  transaction_a: { id: 3, merchant: 'Cafe', date: '2026-06-01T12:00:00', source: 'manual', amount: { minor_units: 1000, currency: 'SGD' as const }, conversion_status: 'native' as const },
+  transaction_b: { id: 5, merchant: 'Cafe', date: '2026-06-01T12:00:30', source: 'gmail', amount: { minor_units: 1000, currency: 'SGD' as const }, conversion_status: 'native' as const },
+  reason: 'same_merchant_amount_time_cross_source' as const,
+}], total: 1, limit: 50, offset: 0 };
+
+test('keeps one side of a duplicate pair and offers to undo the merge', async () => {
+  vi.mocked(briefingApi.duplicateReview).mockResolvedValueOnce(duplicatePair).mockResolvedValue({ ...duplicatePair, items: [], total: 0 });
+  vi.mocked(briefingApi.mergeDuplicates).mockResolvedValue({ status: 'ok', merge_id: 42 });
+  vi.mocked(briefingApi.undoDuplicateMerge).mockResolvedValue({ status: 'ok' });
+  show();
+  expect(await screen.findByText('1 possible duplicates need review')).toBeTruthy();
+  fireEvent.click(screen.getAllByRole('button', { name: 'Keep this one' })[0]);
+  await waitFor(() => expect(briefingApi.mergeDuplicates).toHaveBeenCalledWith(3, 5));
+  expect(await screen.findByText('No possible duplicates to review.')).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
+  await waitFor(() => expect(briefingApi.undoDuplicateMerge).toHaveBeenCalledWith(42));
+  expect(await screen.findByText('Merge undone.')).toBeTruthy();
+});
+
+test('keeps a duplicate pair separate without merging either side', async () => {
+  vi.mocked(briefingApi.duplicateReview).mockResolvedValueOnce(duplicatePair).mockResolvedValue({ ...duplicatePair, items: [], total: 0 });
+  vi.mocked(briefingApi.dismissDuplicate).mockResolvedValue({ status: 'ok' });
+  show();
+  fireEvent.click(await screen.findByRole('button', { name: 'Keep separate' }));
+  await waitFor(() => expect(briefingApi.dismissDuplicate).toHaveBeenCalledWith(3, 5));
+  expect(await screen.findByText('No possible duplicates to review.')).toBeTruthy();
+  expect(briefingApi.mergeDuplicates).not.toHaveBeenCalled();
+});
 
 const refundMatch = { items: [{
   refund_transaction_id: 5,
