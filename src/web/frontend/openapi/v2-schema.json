@@ -435,6 +435,171 @@
         "title": "ConversionProvenance",
         "type": "object"
       },
+      "DuplicateDismissal": {
+        "properties": {
+          "status": {
+            "const": "ok",
+            "default": "ok",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "title": "DuplicateDismissal",
+        "type": "object"
+      },
+      "DuplicateMergeRequest": {
+        "properties": {
+          "loser_id": {
+            "title": "Loser Id",
+            "type": "integer"
+          },
+          "survivor_id": {
+            "title": "Survivor Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "survivor_id",
+          "loser_id"
+        ],
+        "title": "DuplicateMergeRequest",
+        "type": "object"
+      },
+      "DuplicateMergeResult": {
+        "properties": {
+          "merge_id": {
+            "title": "Merge Id",
+            "type": "integer"
+          },
+          "status": {
+            "const": "ok",
+            "default": "ok",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "merge_id"
+        ],
+        "title": "DuplicateMergeResult",
+        "type": "object"
+      },
+      "DuplicateMergeUndoResult": {
+        "properties": {
+          "status": {
+            "const": "ok",
+            "default": "ok",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "title": "DuplicateMergeUndoResult",
+        "type": "object"
+      },
+      "DuplicateProposal": {
+        "properties": {
+          "reason": {
+            "const": "same_merchant_amount_time_cross_source",
+            "title": "Reason",
+            "type": "string"
+          },
+          "transaction_a": {
+            "$ref": "#/components/schemas/DuplicateSide"
+          },
+          "transaction_b": {
+            "$ref": "#/components/schemas/DuplicateSide"
+          }
+        },
+        "required": [
+          "transaction_a",
+          "transaction_b",
+          "reason"
+        ],
+        "title": "DuplicateProposal",
+        "type": "object"
+      },
+      "DuplicateReview": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DuplicateProposal"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "limit",
+          "offset"
+        ],
+        "title": "DuplicateReview",
+        "type": "object"
+      },
+      "DuplicateSide": {
+        "properties": {
+          "amount": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Money"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "conversion_status": {
+            "title": "Conversion Status",
+            "type": "string"
+          },
+          "date": {
+            "title": "Date",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "merchant": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Merchant"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "merchant",
+          "date",
+          "source",
+          "amount",
+          "conversion_status"
+        ],
+        "title": "DuplicateSide",
+        "type": "object"
+      },
       "GoalContributionV2": {
         "properties": {
           "amount": {
@@ -3288,6 +3453,184 @@
           }
         },
         "summary": "Retry Capture Issue"
+      }
+    },
+    "/api/v2/duplicates/merge": {
+      "post": {
+        "operationId": "merge_duplicates_api_v2_duplicates_merge_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DuplicateMergeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DuplicateMergeResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Merge Duplicates"
+      }
+    },
+    "/api/v2/duplicates/merges/{merge_id}/undo": {
+      "post": {
+        "operationId": "undo_duplicate_merge_api_v2_duplicates_merges__merge_id__undo_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "merge_id",
+            "required": true,
+            "schema": {
+              "title": "Merge Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DuplicateMergeUndoResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Undo Duplicate Merge"
+      }
+    },
+    "/api/v2/duplicates/review": {
+      "get": {
+        "operationId": "duplicate_review_api_v2_duplicates_review_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DuplicateReview"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Duplicate Review"
+      }
+    },
+    "/api/v2/duplicates/{transaction_a_id}/{transaction_b_id}/dismiss": {
+      "post": {
+        "operationId": "dismiss_duplicate_api_v2_duplicates__transaction_a_id___transaction_b_id__dismiss_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "transaction_a_id",
+            "required": true,
+            "schema": {
+              "title": "Transaction A Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "transaction_b_id",
+            "required": true,
+            "schema": {
+              "title": "Transaction B Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DuplicateDismissal"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Dismiss Duplicate"
       }
     },
     "/api/v2/goals": {

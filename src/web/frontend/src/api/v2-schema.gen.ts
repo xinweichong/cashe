@@ -208,6 +208,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/duplicates/merge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Merge Duplicates */
+        post: operations["merge_duplicates_api_v2_duplicates_merge_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/duplicates/merges/{merge_id}/undo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Undo Duplicate Merge */
+        post: operations["undo_duplicate_merge_api_v2_duplicates_merges__merge_id__undo_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/duplicates/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Duplicate Review */
+        get: operations["duplicate_review_api_v2_duplicates_review_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/duplicates/{transaction_a_id}/{transaction_b_id}/dismiss": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Dismiss Duplicate */
+        post: operations["dismiss_duplicate_api_v2_duplicates__transaction_a_id___transaction_b_id__dismiss_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v2/goals": {
         parameters: {
             query?: never;
@@ -810,6 +878,77 @@ export interface components {
             source: string | null;
             /** Status */
             status: ("native" | "resolved" | "indicative" | "unresolved") | null;
+        };
+        /** DuplicateDismissal */
+        DuplicateDismissal: {
+            /**
+             * Status
+             * @default ok
+             * @constant
+             */
+            status: "ok";
+        };
+        /** DuplicateMergeRequest */
+        DuplicateMergeRequest: {
+            /** Loser Id */
+            loser_id: number;
+            /** Survivor Id */
+            survivor_id: number;
+        };
+        /** DuplicateMergeResult */
+        DuplicateMergeResult: {
+            /** Merge Id */
+            merge_id: number;
+            /**
+             * Status
+             * @default ok
+             * @constant
+             */
+            status: "ok";
+        };
+        /** DuplicateMergeUndoResult */
+        DuplicateMergeUndoResult: {
+            /**
+             * Status
+             * @default ok
+             * @constant
+             */
+            status: "ok";
+        };
+        /** DuplicateProposal */
+        DuplicateProposal: {
+            /**
+             * Reason
+             * @constant
+             */
+            reason: "same_merchant_amount_time_cross_source";
+            transaction_a: components["schemas"]["DuplicateSide"];
+            transaction_b: components["schemas"]["DuplicateSide"];
+        };
+        /** DuplicateReview */
+        DuplicateReview: {
+            /** Items */
+            items: components["schemas"]["DuplicateProposal"][];
+            /** Limit */
+            limit: number;
+            /** Offset */
+            offset: number;
+            /** Total */
+            total: number;
+        };
+        /** DuplicateSide */
+        DuplicateSide: {
+            amount: components["schemas"]["Money"] | null;
+            /** Conversion Status */
+            conversion_status: string;
+            /** Date */
+            date: string;
+            /** Id */
+            id: number;
+            /** Merchant */
+            merchant: string | null;
+            /** Source */
+            source: string;
         };
         /** GoalContributionV2 */
         GoalContributionV2: {
@@ -1919,6 +2058,134 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["QueuedResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    merge_duplicates_api_v2_duplicates_merge_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DuplicateMergeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DuplicateMergeResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    undo_duplicate_merge_api_v2_duplicates_merges__merge_id__undo_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                merge_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DuplicateMergeUndoResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    duplicate_review_api_v2_duplicates_review_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DuplicateReview"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dismiss_duplicate_api_v2_duplicates__transaction_a_id___transaction_b_id__dismiss_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                transaction_a_id: number;
+                transaction_b_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DuplicateDismissal"];
                 };
             };
             /** @description Validation Error */
