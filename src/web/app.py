@@ -24,7 +24,7 @@ from src.money import to_minor_units, from_minor_units
 from src.spending_facts import resolve_money
 from src.config import local_now
 from src.web.auth import verify_password, create_session, verify_session, destroy_session
-from src.web.contracts import Balance, BudgetProgress, CaptureFollowup, CaptureIssue, CaptureResolution, CategoryTrendPoint, GoalProgress, HealthScore, HomeBriefing, MerchantRanking, MerchantSummary, OverviewSummary, QueuedResponse, SpendingAlerts, SpendingComparison, SpendingEvidence, SpendingFacts, SpendingReview, SpendingVelocity, TopMerchantsResult, TransactionCorrection, TransactionCreate, TransactionDeletion, TransactionProvenance, TransactionUndo, TransactionV2, TrendPoint, TripSummary, UpcomingPlan, PlanMutationResponse, RecurringReview, RecurringResolution, RefundMatchReview, RefundMatchResolution
+from src.web.contracts import Balance, BudgetProgress, CaptureFollowup, CaptureIssue, CaptureResolution, CategoryTrendPoint, GoalProgress, HealthScore, HomeBriefing, MerchantRanking, MerchantSummary, OverviewSummary, QueuedResponse, SpendingAlerts, SpendingComparison, SpendingEvidence, SpendingFacts, SpendingReview, SpendingVelocity, TopMerchantsResult, TransactionCorrection, TransactionCreate, TransactionDeletion, TransactionProvenance, TransactionUndo, TransactionV2, TrendPoint, TripSummary, UpcomingPlan, PlanMutationResponse, RecurringReview, RecurringResolution, RefundMatchReview, RefundMatchResolution, DuplicateReview, DuplicateDismissal, DuplicateMergeRequest, DuplicateMergeResult, DuplicateMergeUndoResult
 from src.analytics import (
     load_summary,
     get_yoy_comparison,
@@ -315,6 +315,37 @@ def create_dashboard_app(
     ):
         try:
             await _db(storage.resolve_refund_match, refund_transaction_id, action)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from None
+        return {"status": "ok"}
+
+    @app.get("/api/v2/duplicates/review", response_model=DuplicateReview)
+    async def duplicate_review(
+        limit: int = Query(50, ge=1, le=100), offset: int = Query(0, ge=0),
+        storage=Depends(_get_storage),
+    ):
+        return await _db(storage.get_duplicate_review, limit=limit, offset=offset)
+
+    @app.post("/api/v2/duplicates/{transaction_a_id}/{transaction_b_id}/dismiss", response_model=DuplicateDismissal)
+    async def dismiss_duplicate(transaction_a_id: int, transaction_b_id: int, storage=Depends(_get_storage)):
+        try:
+            await _db(storage.dismiss_duplicate, transaction_a_id, transaction_b_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from None
+        return {"status": "ok"}
+
+    @app.post("/api/v2/duplicates/merge", response_model=DuplicateMergeResult)
+    async def merge_duplicates(body: DuplicateMergeRequest, storage=Depends(_get_storage)):
+        try:
+            merge_id = await _db(storage.merge_transactions, body.survivor_id, body.loser_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from None
+        return {"status": "ok", "merge_id": merge_id}
+
+    @app.post("/api/v2/duplicates/merges/{merge_id}/undo", response_model=DuplicateMergeUndoResult)
+    async def undo_duplicate_merge(merge_id: int, storage=Depends(_get_storage)):
+        try:
+            await _db(storage.undo_transaction_merge, merge_id)
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from None
         return {"status": "ok"}

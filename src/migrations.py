@@ -245,6 +245,37 @@ MIGRATIONS = (
             updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         )""",
     )),
+    (18, (
+        # R06: duplicate detection/merge. A dismissal records a candidate pair
+        # the user explicitly kept separate, keyed with the smaller id first
+        # so each unordered pair has exactly one row; ON DELETE CASCADE means
+        # a hard-deleted transaction's dismissals are meaningless.
+        """CREATE TABLE duplicate_dismissals (
+            transaction_a_id INTEGER NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+            transaction_b_id INTEGER NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+            dismissed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (transaction_a_id, transaction_b_id)
+        )""",
+        # A merge record: everything moved from the loser (now only in
+        # deleted_transactions) onto the surviving transaction, so an undo
+        # can precisely reverse just what this merge actually touched rather
+        # than guessing. loser_transaction_id has no live FK — the row it
+        # names no longer exists in `transactions` once merged. undone_at
+        # NULL means still in effect; a merge is undone at most once.
+        """CREATE TABLE transaction_merges (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            survivor_transaction_id INTEGER NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
+            loser_transaction_id INTEGER NOT NULL,
+            moved_source_event_ids TEXT NOT NULL,
+            moved_trip_ids TEXT NOT NULL,
+            moved_upcoming_transaction_id INTEGER,
+            moved_refund_ids TEXT NOT NULL,
+            survivor_refund_of_changed INTEGER NOT NULL DEFAULT 0,
+            survivor_refund_of_before INTEGER,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            undone_at TEXT
+        )""",
+    )),
 )
 
 

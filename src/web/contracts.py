@@ -213,6 +213,46 @@ class RefundMatchResolution(BaseModel):
     status: Literal["ok"] = "ok"
 
 
+class DuplicateSide(BaseModel):
+    id: int
+    merchant: str | None
+    date: str
+    source: str
+    amount: Money | None
+    conversion_status: str
+
+
+class DuplicateProposal(BaseModel):
+    transaction_a: DuplicateSide
+    transaction_b: DuplicateSide
+    reason: Literal["same_merchant_amount_time_cross_source"]
+
+
+class DuplicateReview(BaseModel):
+    items: list[DuplicateProposal]
+    total: int
+    limit: int
+    offset: int
+
+
+class DuplicateDismissal(BaseModel):
+    status: Literal["ok"] = "ok"
+
+
+class DuplicateMergeRequest(BaseModel):
+    survivor_id: int
+    loser_id: int
+
+
+class DuplicateMergeResult(BaseModel):
+    status: Literal["ok"] = "ok"
+    merge_id: int
+
+
+class DuplicateMergeUndoResult(BaseModel):
+    status: Literal["ok"] = "ok"
+
+
 # ── v2 Transaction (R03) ────────────────────────────────────────────────────
 
 class OriginalMoney(BaseModel):

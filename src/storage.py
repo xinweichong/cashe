@@ -941,6 +941,206 @@ class Storage:
             self._conn.execute("DELETE FROM deleted_transactions WHERE id = ?", (tx_id,))
         return new_revision
 
+    _DUPLICATE_PAIR_QUERY = """
+        SELECT t1.id AS a_id, t2.id AS b_id FROM transactions t1
+        JOIN transactions t2 ON t1.id < t2.id
+        WHERE t1.amount = t2.amount AND t1.currency = t2.currency
+        AND COALESCE(t1.type, 'expense') = COALESCE(t2.type, 'expense')
+        AND t1.merchant IS NOT NULL AND t2.merchant IS NOT NULL
+        AND LOWER(TRIM(t1.merchant)) = LOWER(TRIM(t2.merchant))
+        AND t1.source != t2.source
+        AND LENGTH(t1.transaction_date) > 10 AND LENGTH(t2.transaction_date) > 10
+        AND EXISTS (SELECT 1 FROM source_events e WHERE e.transaction_id = t1.id
+            AND e.status = 'processed' AND e.timestamp_precision IN ('minute', 'second'))
+        AND EXISTS (SELECT 1 FROM source_events e WHERE e.transaction_id = t2.id
+            AND e.status = 'processed' AND e.timestamp_precision IN ('minute', 'second'))
+        AND ABS(julianday(t1.transaction_date) - julianday(t2.transaction_date)) * 86400 <= ?
+        AND NOT EXISTS (SELECT 1 FROM duplicate_dismissals d
+            WHERE d.transaction_a_id = t1.id AND d.transaction_b_id = t2.id)
+        ORDER BY t1.transaction_date DESC, t1.id, t2.id
+    """
+
+    @_locked
+    def get_duplicate_review(self, limit: int = 50, offset: int = 0, within_seconds: int = 600) -> dict:
+        """Retroactive candidate duplicates among already-recorded transactions,
+        using the same conservative criteria capture-time reconciliation
+        (find_cross_source_duplicate) already applies: same amount/currency/
+        type/merchant, different sources, both backed by minute/second-
+        precision evidence, and close together in time. Ambiguous
+        same-amount pairs and date-only evidence never qualify."""
+        from src.spending_facts import money, resolve_money
+        if not 1 <= limit <= 100 or offset < 0:
+            raise ValueError("Invalid duplicate review query")
+        pairs = self._conn.execute(self._DUPLICATE_PAIR_QUERY, (within_seconds,)).fetchall()
+
+        def side(tx: dict) -> dict:
+            minor, status = resolve_money(tx)
+            return {"id": tx["id"], "merchant": tx["merchant"], "date": tx["transaction_date"],
+                   "source": tx["source"], "amount": money(minor) if minor is not None else None,
+                   "conversion_status": status}
+
+        items = []
+        for row in pairs[offset:offset + limit]:
+            items.append({
+                "transaction_a": side(self.get_transaction(row["a_id"])),
+                "transaction_b": side(self.get_transaction(row["b_id"])),
+                "reason": "same_merchant_amount_time_cross_source",
+            })
+        return {"items": items, "total": len(pairs), "limit": limit, "offset": offset}
+
+    @_locked
+    def dismiss_duplicate(self, transaction_a_id: int, transaction_b_id: int) -> None:
+        a_id, b_id = sorted((transaction_a_id, transaction_b_id))
+        if a_id == b_id:
+            raise ValueError("A transaction cannot be a duplicate of itself")
+        if self.get_transaction(a_id) is None or self.get_transaction(b_id) is None:
+            raise ValueError("Both transactions must exist")
+        self._conn.execute(
+            "INSERT OR IGNORE INTO duplicate_dismissals (transaction_a_id, transaction_b_id) VALUES (?, ?)",
+            (a_id, b_id),
+        )
+        self._conn.commit()
+
+    @_locked
+    def merge_transactions(self, survivor_id: int, loser_id: int) -> int:
+        """Merge loser_id into survivor_id: the loser's evidence, trip link,
+        and any upcoming-charge match move onto the survivor, refunds that
+        pointed at the loser get repointed, and the loser is then removed via
+        the existing delete_transaction/restore_deleted_transaction
+        machinery — preserving its source id/evidence as a retained snapshot
+        and making undo possible without any bespoke restore path. Everything
+        actually moved is recorded so undo_transaction_merge can reverse
+        precisely this merge, not guess at it."""
+        if survivor_id == loser_id:
+            raise ValueError("A transaction cannot be merged with itself")
+        survivor = self.get_transaction(survivor_id)
+        loser = self.get_transaction(loser_id)
+        if survivor is None or loser is None:
+            raise ValueError("Both transactions must exist")
+
+        moved_events = [r["id"] for r in self._conn.execute(
+            "SELECT id FROM source_events WHERE transaction_id = ?", (loser_id,)).fetchall()]
+        if moved_events:
+            self._conn.execute(
+                f"UPDATE source_events SET transaction_id = ? WHERE id IN ({','.join('?' * len(moved_events))})",
+                [survivor_id, *moved_events],
+            )
+
+        loser_trips = [r["trip_id"] for r in self._conn.execute(
+            "SELECT trip_id FROM trip_transactions WHERE transaction_id = ?", (loser_id,)).fetchall()]
+        moved_trips = []
+        for trip_id in loser_trips:
+            cur = self._conn.execute(
+                "INSERT OR IGNORE INTO trip_transactions (trip_id, transaction_id) VALUES (?, ?)",
+                (trip_id, survivor_id),
+            )
+            if cur.rowcount:
+                moved_trips.append(trip_id)
+
+        upcoming_row = self._conn.execute(
+            "SELECT id FROM upcoming_transactions WHERE matched_transaction_id = ?", (loser_id,)).fetchone()
+        moved_upcoming = None
+        if upcoming_row is not None and not self._conn.execute(
+                "SELECT 1 FROM upcoming_transactions WHERE matched_transaction_id = ?", (survivor_id,)).fetchone():
+            self._conn.execute(
+                "UPDATE upcoming_transactions SET matched_transaction_id = ? WHERE id = ?",
+                (survivor_id, upcoming_row["id"]),
+            )
+            moved_upcoming = upcoming_row["id"]
+
+        # Only repoint refunds if the survivor can legally carry a link
+        # (update_transaction's own linking validation) — otherwise leave
+        # them for the FK's ON DELETE SET NULL to clear when the loser row
+        # is deleted below, same degrade-to-no-link precedent
+        # restore_deleted_transaction already uses.
+        moved_refunds = []
+        if survivor["type"] in (None, "expense"):
+            moved_refunds = [r["id"] for r in self._conn.execute(
+                "SELECT id FROM transactions WHERE refund_of_transaction_id = ?", (loser_id,)).fetchall()]
+            if moved_refunds:
+                self._conn.execute(
+                    f"UPDATE transactions SET refund_of_transaction_id = ? "
+                    f"WHERE id IN ({','.join('?' * len(moved_refunds))})",
+                    [survivor_id, *moved_refunds],
+                )
+
+        survivor_refund_of_changed = False
+        survivor_refund_of_before = survivor.get("refund_of_transaction_id")
+        if (survivor["type"] == "refund" and survivor_refund_of_before is None
+                and loser.get("refund_of_transaction_id") is not None):
+            self.update_transaction(survivor_id, refund_of_transaction_id=loser["refund_of_transaction_id"])
+            survivor_refund_of_changed = True
+
+        self.delete_transaction(loser_id)
+
+        cursor = self._conn.execute(
+            """INSERT INTO transaction_merges
+               (survivor_transaction_id, loser_transaction_id, moved_source_event_ids, moved_trip_ids,
+                moved_upcoming_transaction_id, moved_refund_ids, survivor_refund_of_changed,
+                survivor_refund_of_before)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (survivor_id, loser_id, json.dumps(moved_events), json.dumps(moved_trips),
+             moved_upcoming, json.dumps(moved_refunds), int(survivor_refund_of_changed),
+             survivor_refund_of_before),
+        )
+        self._conn.commit()
+        return cursor.lastrowid
+
+    @_locked
+    def undo_transaction_merge(self, merge_id: int) -> None:
+        row = self._conn.execute("SELECT * FROM transaction_merges WHERE id = ?", (merge_id,)).fetchone()
+        if row is None:
+            raise ValueError(f"merge {merge_id} not found")
+        if row["undone_at"] is not None:
+            raise ValueError(f"merge {merge_id} was already undone")
+        survivor_id = row["survivor_transaction_id"]
+        loser_id = row["loser_transaction_id"]
+
+        self.restore_deleted_transaction(loser_id)
+
+        moved_events = json.loads(row["moved_source_event_ids"])
+        if moved_events:
+            self._conn.execute(
+                f"UPDATE source_events SET transaction_id = ? WHERE id IN ({','.join('?' * len(moved_events))})",
+                [loser_id, *moved_events],
+            )
+
+        for trip_id in json.loads(row["moved_trip_ids"]):
+            self._conn.execute(
+                "DELETE FROM trip_transactions WHERE trip_id = ? AND transaction_id = ?", (trip_id, survivor_id))
+            self._conn.execute(
+                "INSERT OR IGNORE INTO trip_transactions (trip_id, transaction_id) VALUES (?, ?)",
+                (trip_id, loser_id),
+            )
+
+        if row["moved_upcoming_transaction_id"] is not None:
+            current = self._conn.execute(
+                "SELECT matched_transaction_id FROM upcoming_transactions WHERE id = ?",
+                (row["moved_upcoming_transaction_id"],),
+            ).fetchone()
+            # Only reclaim it if it's still matched to the survivor — a later,
+            # unrelated re-match must never be clobbered by this undo.
+            if current is not None and current["matched_transaction_id"] == survivor_id:
+                self._conn.execute(
+                    "UPDATE upcoming_transactions SET matched_transaction_id = ? WHERE id = ?",
+                    (loser_id, row["moved_upcoming_transaction_id"]),
+                )
+
+        moved_refunds = json.loads(row["moved_refund_ids"])
+        if moved_refunds:
+            self._conn.execute(
+                f"UPDATE transactions SET refund_of_transaction_id = ? "
+                f"WHERE id IN ({','.join('?' * len(moved_refunds))}) AND refund_of_transaction_id = ?",
+                [loser_id, *moved_refunds, survivor_id],
+            )
+
+        if row["survivor_refund_of_changed"]:
+            self.update_transaction(survivor_id, refund_of_transaction_id=row["survivor_refund_of_before"])
+
+        self._conn.execute(
+            "UPDATE transaction_merges SET undone_at = CURRENT_TIMESTAMP WHERE id = ?", (merge_id,))
+        self._conn.commit()
+
     @_locked
     def query_transactions(
         self,

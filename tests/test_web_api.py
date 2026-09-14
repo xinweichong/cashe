@@ -1523,3 +1523,46 @@ async def test_merchant_alias_and_rule_impact_preview_and_apply(client, in_memor
     assert (await client.put('/api/merchant-intelligence/Grab/alias', json={'display_name': 'x'})).status_code == 401
     assert (await client.get('/api/merchant-intelligence/Grab/rule-impact')).status_code == 401
     assert (await client.post('/api/merchant-intelligence/Grab/apply-rule')).status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_duplicate_review_dismiss_merge_and_undo_privacy_and_auth(client, in_memory_db):
+    storage = Storage(in_memory_db)
+    survivor = storage.insert_transaction(source='manual', source_id='p1', amount=10, merchant='Cafe',
+                                          transaction_date='2026-06-01T12:00:00')
+    loser = storage.insert_transaction(source='gmail', source_id='p2', amount=10, merchant='Cafe',
+                                       transaction_date='2026-06-01T12:00:30')
+    for source, source_id, tx_id in (('manual', 'p1', survivor), ('gmail', 'p2', loser)):
+        event = storage.record_source_event(source, source_id, 'payload', timestamp_precision='second')
+        storage.finish_source_event(event['id'], 'processed', transaction_id=tx_id)
+
+    review = await client.get('/api/v2/duplicates/review?limit=1')
+    assert review.status_code == 200
+    body = review.json()
+    assert body['total'] == 1
+    assert {body['items'][0]['transaction_a']['id'], body['items'][0]['transaction_b']['id']} == {survivor, loser}
+    assert body['items'][0]['reason'] == 'same_merchant_amount_time_cross_source'
+
+    dismiss = await client.post(f'/api/v2/duplicates/{survivor}/{loser}/dismiss')
+    assert dismiss.status_code == 200
+    assert dismiss.json() == {'status': 'ok'}
+    assert (await client.get('/api/v2/duplicates/review')).json()['total'] == 0
+
+    merge = await client.post('/api/v2/duplicates/merge', json={'survivor_id': survivor, 'loser_id': loser})
+    assert merge.status_code == 200
+    merge_id = merge.json()['merge_id']
+    assert (await client.get(f'/api/transactions/{loser}')).status_code == 404
+    assert 'private' not in merge.text
+
+    bad_merge = await client.post('/api/v2/duplicates/merge', json={'survivor_id': survivor, 'loser_id': survivor})
+    assert bad_merge.status_code == 404
+
+    undo = await client.post(f'/api/v2/duplicates/merges/{merge_id}/undo')
+    assert undo.status_code == 200
+    assert (await client.get(f'/api/transactions/{loser}')).status_code == 200
+    assert (await client.post(f'/api/v2/duplicates/merges/{merge_id}/undo')).status_code == 404
+
+    await client.post('/api/logout')
+    assert (await client.get('/api/v2/duplicates/review')).status_code == 401
+    assert (await client.post(f'/api/v2/duplicates/{survivor}/{loser}/dismiss')).status_code == 401
+    assert (await client.post('/api/v2/duplicates/merge', json={'survivor_id': survivor, 'loser_id': loser})).status_code == 401
