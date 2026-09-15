@@ -473,7 +473,13 @@ Migration 20 adds `schedule_period_date` — the stable period identity (the roa
 
 Verified: 4 new dedicated tests (end-of-month billing_day across Jan–Mar with no drift; weekly/quarterly schedules generating the correct multiple-occurrence count in-horizon; a dismissed period staying dismissed and not regenerated; a corrected period's moved date preserved with no duplicate at its original `schedule_period_date`) plus 4 existing tests updated for the new (larger, and now horizon-dependent) generated-charge counts — each patched to a fixed `local_now` for deterministic counts, since real-calendar-date-dependent assertions would otherwise be flaky. Full backend suite green (1406 passed). Confirmed the existing `SubscriptionDetail.tsx` frontend already renders a list of all pending upcomings per subscription (`pendingUpcomings.map(...)`), not just the first — no frontend change was needed for multiple pending charges to display correctly.
 
-**Follow-up (not done):** sub-projects 4 (overdue review/price-change/annual-renewal surfacing) and 5 (duplicate-match audit + uniqueness invariant) are unbuilt.
+**Sub-project 4 — Overdue review, price-change comparisons, annual-renewal surfacing.** Closed (2026-09-16). `Storage.get_subscription_review` computes three deterministic facts from canonical matched-charge amounts (`resolve_money`), explicitly distinct from `LLMService.explain_subscription_change` (an optional free-text layer over these same facts, untouched, per the roadmap's own note): `overdue` (possibly_cancelled subscriptions with last-charge date/days-since/expected-interval evidence), `price_changes` (a subscription whose two most recent matched charges resolve to different canonical SGD amounts, with the change and its annualized impact via the existing `_to_monthly` frequency normalization — skipped entirely, not compared at face value, when either charge's conversion is unresolved), and `annual_renewals` (annual subscriptions with a pending charge due within 60 days, with up to 3 supporting past matched charges as evidence). New `GET /api/v2/subscriptions/review`; cancelled subscriptions excluded from all three lists.
+
+Frontend: `SubscriptionsSection` gained a "Needs attention" card surfacing price changes and upcoming annual renewals; the existing possibly_cancelled "⚠ Check" badge now also shows days-since-last-charge when available, rather than being a bare status flag.
+
+Verified: 10 new backend tests (`test_subscription_review.py`) covering overdue evidence, price-increase/no-change/foreign-currency/unresolved-conversion cases, and annual-renewal in/out-of-window with supporting charges; 2 new web API tests. Full backend suite green (1418 passed). Frontend typecheck/build/lint/tests green (125 passed). Live-verified the new endpoint against a real running server.
+
+**Follow-up (not done):** sub-project 5 (duplicate-match audit + uniqueness invariant) is unbuilt.
 
 ## R12 — Implement the specified forecast
 
