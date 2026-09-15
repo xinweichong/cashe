@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,7 +13,8 @@ import {
 import { Separator } from '@/components/ui/separator';
 import { useCreateTransaction } from '@/hooks/useTransactions';
 import { useToast } from '@/hooks/useToastContext';
-import { type Category } from '@/api/client';
+import { api, type Category } from '@/api/client';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 
 const TX_TYPES = [
   { value: 'expense', label: 'Expense' },
@@ -36,11 +38,35 @@ export function TransactionForm({ categories, onClose }: TransactionFormProps) {
   const [category, setCategory] = useState('');
   const [description, setDescription] = useState('');
   const [currency, setCurrency] = useState('SGD');
+  const [tripId, setTripId] = useState('');
+  const [tripTouched, setTripTouched] = useState(false);
+  // Currency/date/category/notes/trip are secondary — amount and merchant
+  // are the only fields needed to capture something fast; everything else
+  // stays collapsed until the user asks for it (R09).
+  const [showMore, setShowMore] = useState(false);
   const [datetime, setDatetime] = useState(() => {
     const now = new Date();
     const pad = (n: number) => String(n).padStart(2, '0');
     return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
   });
+
+  const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: () => api.getSettings(), staleTime: 30_000 });
+  const tripsEnabled = settings?.trips_enabled === true;
+  const { data: trips = [] } = useQuery({
+    queryKey: ['trips'], queryFn: () => api.getTrips(), enabled: tripsEnabled, staleTime: 30_000,
+  });
+  const { data: activeTrip } = useQuery({
+    queryKey: ['active-trip'], queryFn: () => api.getActiveTrip().catch(() => null),
+    enabled: tripsEnabled, staleTime: 30_000,
+  });
+  // Pre-select the active trip once it loads, but only if the user hasn't
+  // already made an explicit choice (including "no trip").
+  useEffect(() => {
+    if (activeTrip && !tripTouched) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setTripId(String(activeTrip.id));
+    }
+  }, [activeTrip, tripTouched]);
 
   const [requestKey] = useState(() => crypto.randomUUID());
   const createTx = useCreateTransaction();
@@ -65,7 +91,13 @@ export function TransactionForm({ categories, onClose }: TransactionFormProps) {
         },
       },
       {
-        onSuccess: () => {
+        onSuccess: async (result) => {
+          if (tripId) {
+            // Best-effort — a failed enlist shouldn't block or roll back an
+            // already-captured transaction; the user can still add it to
+            // the trip later from the transaction detail panel.
+            await api.enlistTransaction(Number(tripId), result.id).catch(() => {});
+          }
           toast('Captured.');
           onClose();
         },
@@ -95,6 +127,7 @@ export function TransactionForm({ categories, onClose }: TransactionFormProps) {
           ))}
         </div>
 
+        {/* Primary fields — amount and merchant are all it takes to capture something */}
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="text-xs text-muted">Amount</label>
@@ -105,69 +138,114 @@ export function TransactionForm({ categories, onClose }: TransactionFormProps) {
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               placeholder="0.00"
-              className="bg-background border-border"
+              className="bg-background border-border text-lg font-semibold"
               required
               autoFocus
             />
           </div>
           <div>
-            <label className="text-xs text-muted">Currency</label>
-            <Select value={currency} onValueChange={setCurrency}>
-              <SelectTrigger className="bg-background border-border">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {CURRENCIES.map((c) => (
-                  <SelectItem key={c} value={c}>{c}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <label className="text-xs text-muted">Merchant</label>
+            <Input
+              value={merchant}
+              onChange={(e) => setMerchant(e.target.value)}
+              placeholder="e.g. Coffee Shop"
+              className="bg-background border-border"
+            />
           </div>
         </div>
 
-        <div>
-          <label className="text-xs text-muted">Merchant</label>
-          <Input
-            value={merchant}
-            onChange={(e) => setMerchant(e.target.value)}
-            placeholder="e.g. Coffee Shop"
-            className="bg-background border-border"
-          />
-        </div>
+        <button
+          type="button"
+          onClick={() => setShowMore((v) => !v)}
+          className="flex items-center gap-1 text-xs text-muted hover:text-foreground min-h-11"
+        >
+          {showMore ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+          {showMore ? 'Fewer details' : 'Currency, date, category, notes…'}
+        </button>
 
-        <div>
-          <label className="text-xs text-muted">Category</label>
-          <Select value={category} onValueChange={setCategory}>
-            <SelectTrigger className="bg-background border-border">
-              <SelectValue placeholder="Select category" />
-            </SelectTrigger>
-            <SelectContent>
-              {categories.map((cat) => (
-                <SelectItem key={cat.name} value={cat.name}>{cat.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+        {showMore && (
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs text-muted">Currency</label>
+              <Select value={currency} onValueChange={setCurrency}>
+                <SelectTrigger className="bg-background border-border">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {CURRENCIES.map((c) => (
+                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
-        <div>
-          <label className="text-xs text-muted">Date & Time</label>
-          <Input
-            type="datetime-local"
-            value={datetime}
-            onChange={(e) => setDatetime(e.target.value)}
-            className="bg-background border-border"
-          />
-        </div>
+            <div>
+              <label className="text-xs text-muted">Category</label>
+              <Select value={category} onValueChange={setCategory}>
+                <SelectTrigger className="bg-background border-border">
+                  <SelectValue placeholder="Select category" />
+                </SelectTrigger>
+                <SelectContent>
+                  {categories.map((cat) => (
+                    <SelectItem key={cat.name} value={cat.name}>{cat.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
-        <div>
-          <label className="text-xs text-muted">Description (optional)</label>
-          <Input
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="Notes..."
-            className="bg-background border-border"
-          />
-        </div>
+            <div>
+              <label className="text-xs text-muted">Date & Time</label>
+              <Input
+                type="datetime-local"
+                value={datetime}
+                onChange={(e) => setDatetime(e.target.value)}
+                className="bg-background border-border"
+              />
+            </div>
+
+            <div>
+              <label className="text-xs text-muted">Description (optional)</label>
+              <Input
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Notes..."
+                className="bg-background border-border"
+              />
+            </div>
+
+            {tripsEnabled && trips.length > 0 && (
+              <div>
+                <label className="text-xs text-muted">Trip</label>
+                <Select
+                  value={tripId || 'none'}
+                  onValueChange={(v) => {
+                    // Radix's hidden native-select bubble (used for native
+                    // form/autofill compatibility) can self-trigger a
+                    // spurious onValueChange('') when the controlled value
+                    // updates programmatically (the pre-select effect
+                    // above) rather than from a real user pick — '' is
+                    // never a legitimate value here (options are 'none' or
+                    // a trip id), so ignore it rather than let it silently
+                    // clear the selection.
+                    if (!v) return;
+                    setTripId(v === 'none' ? '' : v);
+                    setTripTouched(true);
+                  }}
+                >
+                  <SelectTrigger className="bg-background border-border">
+                    <SelectValue placeholder="No trip" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No trip</SelectItem>
+                    {trips.map((t) => (
+                      <SelectItem key={t.id} value={String(t.id)}>{t.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
+        )}
 
         {createTx.isError && (
           <p role="alert" className="text-sm text-destructive">
