@@ -130,6 +130,9 @@ class UpcomingCharge(BaseModel):
     label: str
     date: str
     amount: Money | None
+    date_basis: Literal["schedule", "user"]
+    amount_basis: Literal["matched_charge", "user", "unknown"]
+    amount_basis_transaction_id: int | None = None
 
 
 class PlanMutationResponse(BaseModel):

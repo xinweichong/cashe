@@ -123,8 +123,10 @@ class SubscriptionMatcher:
         #    the next period and we shouldn't get ahead of it.
         next_date = compute_next_billing_date(frequency, billing_day, last_date=last_date)
         if not has_pending and not self.storage.upcoming_exists_for_period(sub_id, next_date):
-            expected_amount = self._infer_expected_amount(sub_id)
-            self.storage.create_upcoming_transaction(sub_id, next_date, expected_amount)
+            expected_amount, basis_tx_id = self._infer_expected_amount(sub_id)
+            self.storage.create_upcoming_transaction(
+                sub_id, next_date, expected_amount, amount_basis_transaction_id=basis_tx_id,
+            )
             logger.info(
                 "Created upcoming for sub %s (merchant=%s) on %s",
                 sub_id, sub["merchant"], next_date,
@@ -157,7 +159,7 @@ class SubscriptionMatcher:
             elif days_since <= threshold and sub["status"] == "possibly_cancelled":
                 self.storage.update_subscription(sub_id, status="active")
 
-    def _infer_expected_amount(self, sub_id: int) -> Optional[float]:
+    def _infer_expected_amount(self, sub_id: int) -> tuple[Optional[float], Optional[int]]:
         """R11: upcoming_transactions.expected_amount is SGD-only (no
         currency column of its own), so this must produce a real SGD value,
         never a face-value multiply — the old `amount * exchange_rate` had
@@ -166,12 +168,16 @@ class SubscriptionMatcher:
         fixed everywhere else money crosses a currency boundary). An
         unresolved conversion now yields no expected amount rather than a
         wrong one — get_upcoming_plan already treats a missing amount as
-        an "unknown" item, not a zero."""
+        an "unknown" item, not a zero.
+
+        Returns (amount, basis_transaction_id) — the id of the matched
+        charge the amount was inferred from, so the caller can record
+        charge-level amount provenance (R11 sub-project 2)."""
         from src.money import from_minor_units
         from src.spending_facts import resolve_money
         txs = self.storage.get_subscription_matched_transactions(sub_id, limit=1)
         if txs:
             minor, _status = resolve_money(txs[0])
             if minor is not None:
-                return float(from_minor_units(minor, "SGD"))
-        return None
+                return float(from_minor_units(minor, "SGD")), txs[0]["id"]
+        return None, None

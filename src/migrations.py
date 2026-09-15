@@ -20,6 +20,17 @@ def _add_column_if_table_exists(table: str, column_def: str):
     return _apply
 
 
+def _backfill_upcoming_amount_basis(conn: sqlite3.Connection) -> None:
+    if not conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='upcoming_transactions'"
+    ).fetchone():
+        return
+    conn.execute(
+        "UPDATE upcoming_transactions SET amount_basis = 'matched_charge' "
+        "WHERE expected_amount IS NOT NULL AND amount_basis = 'unknown'"
+    )
+
+
 MIGRATIONS = (
     (1, (
         """CREATE TABLE source_events (
@@ -275,6 +286,40 @@ MIGRATIONS = (
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             undone_at TEXT
         )""",
+    )),
+    (19, (
+        # R11 sub-project 2: charge-level provenance. date_basis/amount_basis
+        # record *why* a pending upcoming charge's expected_date/expected_amount
+        # are what they are — 'schedule'/'matched_charge' for the ordinary
+        # computed/inferred path (compute_next_billing_date,
+        # SubscriptionMatcher._infer_expected_amount), 'user' when explicitly
+        # corrected via update_planned_charge, 'unknown' only for an amount
+        # with no matched charge yet to infer from. amount_basis_transaction_id
+        # is the specific matched transaction an inferred amount came from —
+        # ON DELETE SET NULL rather than blocking a deletion, matching every
+        # other evidence-link column's degrade-gracefully precedent
+        # (refund_of_transaction_id, matched_transaction_id itself).
+        _add_column_if_table_exists(
+            "upcoming_transactions",
+            "date_basis TEXT NOT NULL DEFAULT 'schedule'",
+        ),
+        _add_column_if_table_exists(
+            "upcoming_transactions",
+            "amount_basis TEXT NOT NULL DEFAULT 'unknown'",
+        ),
+        _add_column_if_table_exists(
+            "upcoming_transactions",
+            "amount_basis_transaction_id INTEGER REFERENCES transactions(id) ON DELETE SET NULL",
+        ),
+        # Best-effort backfill for pre-migration rows: expected_amount has
+        # only ever been set by the inferred-from-last-match path or an
+        # explicit user correction (update_planned_charge), and the two
+        # can't be told apart retroactively without this migration's own
+        # columns. Defaulting an existing non-null amount to
+        # 'matched_charge' (the common path) is an imprecise label for the
+        # rarer already-user-corrected row, not a wrong value — the stored
+        # expected_amount itself is untouched either way.
+        _backfill_upcoming_amount_basis,
     )),
 )
 

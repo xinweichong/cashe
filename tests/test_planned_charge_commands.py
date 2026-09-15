@@ -79,6 +79,56 @@ def test_dismiss_retains_prediction_and_subscription_but_removes_total(pending):
     assert storage.query_transactions(limit=50) == []
 
 
+def test_provenance_starts_as_schedule_unknown_and_flips_to_user_on_correction(pending):
+    storage, _, charge = pending
+    fresh = storage.get_upcoming_transaction(charge)
+    assert fresh['date_basis'] == 'schedule'
+    assert fresh['amount_basis'] == 'unknown'  # created without a matched-charge basis
+
+    storage.update_planned_charge(charge, {'expected_date': '2026-09-10'})
+    after_date = storage.get_upcoming_transaction(charge)
+    assert after_date['date_basis'] == 'user'
+    assert after_date['amount_basis'] == 'unknown'  # untouched by a date-only correction
+
+    storage.update_planned_charge(charge, {'expected_amount': '20.50'})
+    after_amount = storage.get_upcoming_transaction(charge)
+    assert after_amount['amount_basis'] == 'user'
+    assert after_amount['amount_basis_transaction_id'] is None
+
+    storage.update_planned_charge(charge, {'expected_amount': None})
+    assert storage.get_upcoming_transaction(charge)['amount_basis'] == 'unknown'
+
+
+def test_next_upcoming_records_the_matched_charge_it_was_inferred_from(in_memory_db):
+    from src.subscriptions import SubscriptionMatcher
+    storage = Storage(in_memory_db)
+    sub = storage.create_subscription('Spotify', 'monthly', billing_day=15)
+    charge = storage.create_upcoming_transaction(sub, '2026-05-15', 13.98)
+    tx_id = storage.insert_transaction(
+        source='manual', source_id='matched-1', amount=13.98, currency='SGD',
+        merchant='Spotify', transaction_date='2026-05-15T10:00:00', tx_type='expense',
+    )
+    storage.match_upcoming_transaction(charge, tx_id)
+
+    SubscriptionMatcher(storage).run()
+
+    pending_charges = [u for u in storage.list_upcoming_transactions(sub) if u['status'] == 'pending']
+    assert len(pending_charges) == 1
+    assert pending_charges[0]['amount_basis'] == 'matched_charge'
+    assert pending_charges[0]['amount_basis_transaction_id'] == tx_id
+    assert pending_charges[0]['date_basis'] == 'schedule'
+
+
+def test_get_upcoming_plan_exposes_provenance(pending):
+    storage, _, charge = pending
+    storage.update_planned_charge(charge, {'expected_amount': '20.50'})
+    with patch('src.storage.local_now', return_value=datetime(2026, 9, 8)):
+        item = storage.get_upcoming_plan()['items'][0]
+    assert item['amount_basis'] == 'user'
+    assert item['date_basis'] == 'schedule'
+    assert item['amount_basis_transaction_id'] is None
+
+
 def test_missing_and_cross_user_commands_are_isolated(pending):
     storage, _, charge = pending
     conn = init_db(':memory:')

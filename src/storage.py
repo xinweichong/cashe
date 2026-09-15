@@ -178,7 +178,8 @@ class Storage:
         end = start + timedelta(days=days - 1)
         items = []
         for row in self._conn.execute(
-            """SELECT u.id, u.expected_date, u.expected_amount, s.id AS subscription_id,
+            """SELECT u.id, u.expected_date, u.expected_amount, u.date_basis, u.amount_basis,
+                      u.amount_basis_transaction_id, s.id AS subscription_id,
                       COALESCE(s.label, s.merchant) AS label, s.frequency, s.status, COALESCE(c.source, 'unknown') AS confirmation_source
                FROM upcoming_transactions u JOIN subscriptions s ON s.id = u.subscription_id
                LEFT JOIN subscription_confirmations c ON c.subscription_id = s.id
@@ -192,6 +193,8 @@ class Storage:
                           "label": row["label"], "date": row["expected_date"],
                           "frequency": row["frequency"], "schedule_status": row["status"],
                           "confirmation_source": row["confirmation_source"],
+                          "date_basis": row["date_basis"], "amount_basis": row["amount_basis"],
+                          "amount_basis_transaction_id": row["amount_basis_transaction_id"],
                           "amount": money(minor) if minor is not None else None})
         unknown = sum(item["amount"] is None for item in items)
         return {"start": start.isoformat(), "end": end.isoformat(), "timezone": timezone,
@@ -216,7 +219,8 @@ class Storage:
         upcoming = []
         if self.get_setting("subscriptions_enabled", "false") == "true":
             for row in self._conn.execute(
-                """SELECT u.id, u.expected_date, u.expected_amount, s.id AS subscription_id,
+                """SELECT u.id, u.expected_date, u.expected_amount, u.date_basis, u.amount_basis,
+                          u.amount_basis_transaction_id, s.id AS subscription_id,
                           COALESCE(s.label, s.merchant) AS label
                    FROM upcoming_transactions u JOIN subscriptions s ON s.id = u.subscription_id
                    WHERE u.status = 'pending' AND u.matched_transaction_id IS NULL
@@ -228,6 +232,8 @@ class Storage:
                 minor, _ = convert_legacy_sgd({"amount": row["expected_amount"], "currency": "SGD"})
                 upcoming.append({"id": row["id"], "subscription_id": row["subscription_id"],
                                  "label": row["label"], "date": row["expected_date"],
+                                 "date_basis": row["date_basis"], "amount_basis": row["amount_basis"],
+                                 "amount_basis_transaction_id": row["amount_basis_transaction_id"],
                                  "amount": money(minor) if minor is not None else None})
         return {
             "facts": facts, "recent": recent, "upcoming": upcoming,
@@ -2948,12 +2954,19 @@ class Storage:
 
     @_locked
     def create_upcoming_transaction(
-        self, subscription_id: int, expected_date: str, expected_amount: float | None = None
+        self, subscription_id: int, expected_date: str, expected_amount: float | None = None,
+        *, amount_basis_transaction_id: int | None = None,
     ) -> int:
+        # R11: date_basis is always 'schedule' here — the only other way an
+        # upcoming's date is set is update_planned_charge's explicit user
+        # correction, on an already-existing row. amount_basis follows from
+        # whether a specific matched charge backs the inferred amount.
+        amount_basis = "matched_charge" if amount_basis_transaction_id is not None else "unknown"
         cur = self._conn.execute(
-            """INSERT INTO upcoming_transactions (subscription_id, expected_date, expected_amount)
-               VALUES (?, ?, ?)""",
-            (subscription_id, expected_date, expected_amount),
+            """INSERT INTO upcoming_transactions
+               (subscription_id, expected_date, expected_amount, date_basis, amount_basis, amount_basis_transaction_id)
+               VALUES (?, ?, ?, 'schedule', ?, ?)""",
+            (subscription_id, expected_date, expected_amount, amount_basis, amount_basis_transaction_id),
         )
         self._conn.commit()
         return cur.lastrowid
@@ -3125,6 +3138,15 @@ class Storage:
                 raise ValueError("Expected date must be a valid calendar date") from None
         if "expected_amount" in accepted and accepted["expected_amount"] is not None:
             accepted["expected_amount"] = normalize_transaction_fields({"amount": accepted["expected_amount"]})["amount"]
+        # R11: an explicit user correction is its own provenance, distinct
+        # from the ordinary computed-schedule/inferred-from-last-charge
+        # path — a corrected amount also has no single matched transaction
+        # backing it any more, even if one existed before.
+        if "expected_date" in accepted:
+            accepted["date_basis"] = "user"
+        if "expected_amount" in accepted:
+            accepted["amount_basis"] = "user" if accepted["expected_amount"] is not None else "unknown"
+            accepted["amount_basis_transaction_id"] = None
         with self._conn:
             self._conn.execute(
                 f"UPDATE upcoming_transactions SET {', '.join(key + ' = ?' for key in accepted)} WHERE id = ?",
