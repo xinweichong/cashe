@@ -2907,6 +2907,9 @@ export interface operations {
                 source?: string | null;
                 merchant_search?: string | null;
                 merchant?: string | null;
+                type?: ("expense" | "income" | "refund" | "transfer") | null;
+                trip_id?: number | null;
+                needs_review?: boolean | null;
                 limit?: number;
                 offset?: number;
             };
