@@ -31,7 +31,8 @@ export interface CaptureIssue {
 export interface UpcomingPlan {
   start: string; end: string; timezone: string; enabled: boolean;
   items: { id: number; subscription_id: number; label: string; date: string;
-    confirmation_source: SubscriptionConfirmation; frequency: string; schedule_status: 'active' | 'possibly_cancelled'; amount: Money | null }[];
+    confirmation_source: SubscriptionConfirmation; frequency: string; schedule_status: 'active' | 'possibly_cancelled'; amount: Money | null;
+    date_basis: 'schedule' | 'user'; amount_basis: 'matched_charge' | 'user' | 'unknown'; amount_basis_transaction_id: number | null }[];
   total: number; limit: number; offset: number; known_total: Money;
   unknown_count: number; status: 'partial' | 'estimated';
 }

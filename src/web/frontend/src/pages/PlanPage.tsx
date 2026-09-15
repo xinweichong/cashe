@@ -7,6 +7,12 @@ import { PageCard } from '@/components/ui/cards';
 import { Button } from '@/components/ui/button';
 import { LoadFailed } from '@/components/ui/LoadFailed';
 
+const amountBasisLabels: Record<'matched_charge' | 'user' | 'unknown', string> = {
+  matched_charge: 'Amount based on your last confirmed charge',
+  user: 'Amount you set',
+  unknown: 'Amount unknown — no confirmed charge yet',
+};
+
 export function PlanPage() {
   const location = useLocation();
   const [days, setDays] = useState(30);
@@ -47,7 +53,8 @@ export function PlanPage() {
         <ol className="mt-4">
           {report.items.map(item => <li key={item.id} className="py-4 border-b border-border last:border-0 space-y-1">
             <div className="flex justify-between gap-4"><p className="font-medium">{item.label}</p><p className="tabular-nums">{item.amount ? formatMoney(item.amount) : 'Amount unknown'}</p></div>
-            <p className="text-muted"><time dateTime={item.date}>{item.date}</time> · {frequencies[item.frequency] || item.frequency} · Estimated</p>
+            <p className="text-muted"><time dateTime={item.date}>{item.date}</time> · {frequencies[item.frequency] || item.frequency} · {item.date_basis === 'user' ? 'Date you set' : 'Scheduled estimate'}</p>
+            <p className="text-sm text-muted">{amountBasisLabels[item.amount_basis]}</p>
             <p className="text-sm text-muted">{subscriptionConfirmationLabels[item.confirmation_source]}</p>
             {item.schedule_status === 'possibly_cancelled' && <p className="text-warning">Schedule needs review: a previous charge may be overdue.</p>}
             <ChargeActions item={item} />

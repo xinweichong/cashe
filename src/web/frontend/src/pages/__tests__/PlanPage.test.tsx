@@ -8,7 +8,7 @@ import { PlanPage } from '../PlanPage';
 vi.mock('@/api/briefing', async importOriginal => ({ ...await importOriginal<typeof import('@/api/briefing')>(), briefingApi: { upcoming: vi.fn(), updatePlannedCharge: vi.fn(), dismissPlannedCharge: vi.fn() } }));
 const report: UpcomingPlan = {
   start: '2026-09-08', end: '2026-10-07', timezone: 'Asia/Singapore', enabled: true,
-  items: [{ id: 1, subscription_id: 3, label: 'Internet', date: '2026-09-09', frequency: 'monthly', schedule_status: 'possibly_cancelled', confirmation_source: 'unknown', amount: null }],
+  items: [{ id: 1, subscription_id: 3, label: 'Internet', date: '2026-09-09', frequency: 'monthly', schedule_status: 'possibly_cancelled', confirmation_source: 'unknown', amount: null, date_basis: 'schedule', amount_basis: 'unknown', amount_basis_transaction_id: null }],
   total: 1, limit: 50, offset: 0, known_total: { minor_units: 0, currency: 'SGD' }, unknown_count: 1, status: 'partial',
 };
 beforeEach(() => { vi.resetAllMocks(); vi.mocked(briefingApi.upcoming).mockResolvedValue(report); });
