@@ -55,7 +55,10 @@ def to_v2(tx: dict, storage) -> dict:
         "id": tx["id"],
         "revision": tx["revision"],
         "source": tx["source"],
-        "type": tx["type"],
+        # A legacy NULL type is always treated as an expense — same
+        # convention every money aggregate/filter in this codebase already
+        # follows (spending_facts._rows, storage.py's type filters).
+        "type": tx["type"] or "expense",
         "merchant": tx.get("merchant"),
         "category": tx.get("category"),
         "description": tx.get("description"),

@@ -251,6 +251,59 @@ class TestListTransactionsV2:
         assert [tx["merchant"] for tx in by_category] == ["Cafe Aroma"]
         assert [tx["merchant"] for tx in by_search] == ["Cafe Aroma"]
 
+    @pytest.mark.asyncio
+    async def test_search_matches_alias_description_category_and_amount(self, client):
+        cafe = (await client.post("/api/transactions", json={"amount": 12.34, "merchant": "Kopi King", "category": "Food", "description": "Morning brew", "type": "expense"})).json()
+        await client.post("/api/transactions", json={"amount": 9.0, "merchant": "Other Shop", "category": "Shopping", "type": "expense"})
+        await client.put(f"/api/merchant-intelligence/{cafe['merchant']}/alias", json={"display_name": "The Coffee Place"})
+
+        by_alias = (await client.get("/api/v2/transactions?merchant_search=Coffee Place")).json()
+        by_description = (await client.get("/api/v2/transactions?merchant_search=brew")).json()
+        by_category_term = (await client.get("/api/v2/transactions?merchant_search=Food")).json()
+        by_amount = (await client.get("/api/v2/transactions?merchant_search=12.34")).json()
+
+        for results in (by_alias, by_description, by_category_term, by_amount):
+            assert [tx["merchant"] for tx in results] == ["Kopi King"]
+
+    @pytest.mark.asyncio
+    async def test_type_filter_treats_legacy_null_as_expense(self, client, in_memory_db):
+        expense_id = (await client.post("/api/transactions", json={"amount": 5.0, "merchant": "A", "type": "expense"})).json()["id"]
+        refund_id = (await client.post("/api/transactions", json={"amount": 2.0, "merchant": "A", "type": "expense"})).json()["id"]
+        await client.put(f"/api/v2/transactions/{refund_id}", json={"type": "refund"})
+        Storage(in_memory_db)._conn.execute("UPDATE transactions SET type = NULL WHERE id = ?", (expense_id,))
+        Storage(in_memory_db)._conn.commit()
+
+        by_expense = (await client.get("/api/v2/transactions?type=expense")).json()
+        by_refund = (await client.get("/api/v2/transactions?type=refund")).json()
+
+        assert {tx["id"] for tx in by_expense} == {expense_id}
+        assert {tx["id"] for tx in by_refund} == {refund_id}
+
+    @pytest.mark.asyncio
+    async def test_trip_filter_only_returns_enlisted_transactions(self, client):
+        in_trip = (await client.post("/api/transactions", json={"amount": 5.0, "merchant": "A", "type": "expense"})).json()["id"]
+        not_in_trip = (await client.post("/api/transactions", json={"amount": 5.0, "merchant": "B", "type": "expense"})).json()["id"]
+        trip = (await client.post("/api/trips", json={"name": "Bali", "start_date": "2026-01-01"})).json()
+        await client.post(f"/api/trips/{trip['id']}/transactions", json={"transaction_id": in_trip})
+
+        results = (await client.get(f"/api/v2/transactions?trip_id={trip['id']}")).json()
+
+        assert {tx["id"] for tx in results} == {in_trip}
+        assert not_in_trip not in {tx["id"] for tx in results}
+
+    @pytest.mark.asyncio
+    async def test_needs_review_filter_matches_the_review_page(self, client):
+        clean = (await client.post("/api/transactions", json={"amount": 5.0, "merchant": "A", "category": "Food", "type": "expense"})).json()["id"]
+        no_merchant = (await client.post("/api/transactions", json={"amount": 5.0, "merchant": None, "category": "Food", "type": "expense"})).json()["id"]
+
+        results = (await client.get("/api/v2/transactions?needs_review=true")).json()
+        review = (await client.get("/api/v2/spending/review")).json()
+
+        result_ids = {tx["id"] for tx in results}
+        assert clean not in result_ids
+        assert no_merchant in result_ids
+        assert result_ids == {item["id"] for item in review["items"]}
+
 
 class TestDailyTotalsV2:
     @pytest.mark.asyncio

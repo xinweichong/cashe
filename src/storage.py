@@ -93,36 +93,78 @@ class Storage:
         category: Optional[str] = None,
         source: Optional[str] = None,
         merchant_search: Optional[str] = None,
+        type: Optional[str] = None,
+        trip_id: Optional[int] = None,
+        needs_review: Optional[bool] = None,
         limit: int = 100,
         offset: int = 0,
     ) -> list[dict]:
-        """Same filters as query_transactions, with a stable `id DESC`
-        tiebreak so same-timestamp rows keep a fixed order across requests
-        — infinite-scroll pagination over query_transactions' bare
-        `transaction_date DESC` order can otherwise reshuffle ties between
-        pages, duplicating or dropping a row at the boundary. query_transactions
-        itself (v1) is left as-is rather than changed underneath existing callers."""
+        """Same date/category/source filters as query_transactions, with a
+        stable `id DESC` tiebreak so same-timestamp rows keep a fixed order
+        across requests — infinite-scroll pagination over query_transactions'
+        bare `transaction_date DESC` order can otherwise reshuffle ties
+        between pages, duplicating or dropping a row at the boundary.
+        query_transactions itself (v1) is left as-is rather than changed
+        underneath existing callers.
+
+        R09 sub-project 2 additions: merchant_search widened to also match a
+        merchant's display alias (R06), description, category, and amount;
+        `type` (a legacy NULL type is always an expense, matching every
+        other type filter in this codebase); `trip_id` (via trip_transactions,
+        R05's trip linkage); `needs_review` (a SQL approximation of
+        spending_facts._needs_review/_missing_data for filtering purposes —
+        same narrower, currency-code-unvalidated CASE fallback storage.py's
+        money aggregates already use for rows without canonical columns;
+        the Review page itself remains the source of truth for the full
+        reason-coded list)."""
         conditions = []
-        params = []
+        params: list = []
+        joins = ""
         if start_date:
-            conditions.append("DATE(transaction_date) >= ?")
+            conditions.append("DATE(transactions.transaction_date) >= ?")
             params.append(start_date)
         if end_date:
-            conditions.append("DATE(transaction_date) <= ?")
+            conditions.append("DATE(transactions.transaction_date) <= ?")
             params.append(end_date)
         if category:
-            conditions.append("category = ?")
+            conditions.append("transactions.category = ?")
             params.append(category)
         if source:
-            conditions.append("source = ?")
+            conditions.append("transactions.source = ?")
             params.append(source)
+        if type:
+            if type == "expense":
+                conditions.append("(transactions.type = 'expense' OR transactions.type IS NULL)")
+            else:
+                conditions.append("transactions.type = ?")
+                params.append(type)
+        if trip_id is not None:
+            joins += " JOIN trip_transactions tt ON tt.transaction_id = transactions.id"
+            conditions.append("tt.trip_id = ?")
+            params.append(trip_id)
+        if needs_review:
+            conditions.append(
+                """(DATE(transactions.transaction_date) IS NULL
+                    OR (CASE WHEN transactions.reporting_minor_units IS NOT NULL THEN transactions.reporting_minor_units
+                             WHEN transactions.currency = 'SGD' OR transactions.currency IS NULL THEN CAST(ROUND(transactions.amount * 100) AS INTEGER)
+                             WHEN transactions.exchange_rate IS NOT NULL AND transactions.exchange_rate > 0 AND transactions.exchange_rate != 1
+                                  THEN CAST(ROUND(transactions.amount * transactions.exchange_rate * 100) AS INTEGER)
+                             ELSE NULL END) IS NULL
+                    OR COALESCE(transactions.type, 'expense') NOT IN ('expense', 'refund', 'income')
+                    OR transactions.merchant IS NULL OR transactions.category IS NULL)"""
+            )
         if merchant_search:
-            conditions.append("merchant LIKE ?")
-            params.append(f"%{merchant_search}%")
+            joins += " LEFT JOIN merchant_aliases ma ON ma.merchant = transactions.merchant"
+            term = f"%{merchant_search}%"
+            conditions.append(
+                "(transactions.merchant LIKE ? OR ma.display_name LIKE ? OR transactions.description LIKE ? "
+                "OR transactions.category LIKE ? OR CAST(transactions.amount AS TEXT) LIKE ?)"
+            )
+            params.extend([term, term, term, term, term])
         where = " AND ".join(conditions) if conditions else "1=1"
         rows = self._conn.execute(
-            f"SELECT * FROM transactions WHERE {where} "
-            f"ORDER BY transaction_date DESC, id DESC LIMIT ? OFFSET ?",
+            f"SELECT transactions.* FROM transactions{joins} WHERE {where} "
+            f"ORDER BY transactions.transaction_date DESC, transactions.id DESC LIMIT ? OFFSET ?",
             params + [limit, offset],
         ).fetchall()
         return [dict(r) for r in rows]

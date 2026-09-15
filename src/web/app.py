@@ -632,6 +632,9 @@ def create_dashboard_app(
         source: Optional[str] = None,
         merchant_search: Optional[str] = None,
         merchant: Optional[str] = None,
+        type: Optional[Literal["expense", "income", "refund", "transfer"]] = None,
+        trip_id: Optional[int] = None,
+        needs_review: Optional[bool] = None,
         limit: int = Query(20, ge=1, le=100),
         offset: int = Query(0, ge=0),
         username: str = Depends(require_auth),
@@ -640,7 +643,8 @@ def create_dashboard_app(
         rows = await _db(
             storage.get_transactions_v2,
             start_date=start_date, end_date=end_date, category=category, source=source,
-            merchant_search=merchant_search or merchant, limit=limit, offset=offset,
+            merchant_search=merchant_search or merchant, type=type, trip_id=trip_id,
+            needs_review=needs_review, limit=limit, offset=offset,
         )
         return [transaction_commands.to_v2(tx, storage) for tx in rows]
 
