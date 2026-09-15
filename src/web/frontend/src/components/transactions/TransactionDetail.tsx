@@ -236,6 +236,7 @@ export function TransactionDetail({
         {/* View mode: all fields */}
         {!editing && (
           <div className="space-y-3">
+            <QuickCategoryPicker tx={tx} categories={categories ?? []} />
             <DetailRow label="Date" value={formatDateTime(tx.transaction_date)} />
             <DetailRow label="Type" value={({ expense: 'Spending', income: 'Income', refund: 'Refund', transfer: 'Transfer' } as Record<string, string>)[tx.type ?? 'expense'] ?? 'Needs classification'} />
             <DetailRow label="Source" value={sourceLabel} />
@@ -378,6 +379,42 @@ export function TransactionDetail({
             )}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+// R09: a direct category picker in view mode, so recategorizing an already-
+// open transaction takes one tap (select a pill; it saves immediately) —
+// the full Edit flow (with the "remember for future matching transactions"
+// choice) stays available separately for that less common case. Applies
+// to this transaction only, matching the pill's own tap-and-go semantics.
+function QuickCategoryPicker({ tx, categories }: { tx: Transaction; categories: { name: string }[] }) {
+  const updateTx = useUpdateTransaction();
+  if (categories.length === 0) return null;
+  return (
+    <div className="overflow-x-auto -mx-1 px-1">
+      <div className="flex flex-wrap gap-1.5">
+        {categories.map((cat) => {
+          const catColor = getCategoryColor(cat.name);
+          const isActive = tx.category === cat.name;
+          return (
+            <button
+              key={cat.name}
+              type="button"
+              disabled={updateTx.isPending}
+              onClick={() => { if (!isActive) updateTx.mutate({ id: tx.id, data: { category: cat.name } }); }}
+              className="px-3 py-1.5 min-h-11 rounded-full text-xs font-semibold font-mono uppercase tracking-[0.08em] transition-all duration-[150ms] whitespace-nowrap disabled:opacity-50"
+              style={{
+                color: catColor,
+                background: isActive ? `${catColor}33` : `${catColor}12`,
+                border: `1px solid ${catColor}${isActive ? '60' : '25'}`,
+              }}
+            >
+              {cat.name}
+            </button>
+          );
+        })}
       </div>
     </div>
   );

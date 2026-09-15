@@ -14,7 +14,7 @@ vi.mock('@/hooks/useTransactions', () => ({
   useDeleteTransaction: () => ({ mutate: vi.fn(), isPending: false }),
   useTransactions: () => ({ data: transactionCandidates() }),
 }));
-vi.mock('@/hooks/useCategories', () => ({ useCategories: () => ({ data: [{ name: 'Food' }] }) }));
+vi.mock('@/hooks/useCategories', () => ({ useCategories: () => ({ data: [{ name: 'Food' }, { name: 'Transport' }] }) }));
 vi.mock('@/hooks/useIconMap', () => ({ useIconMap: () => ({}) }));
 vi.mock('@/api/client', () => ({ api: { getTransactionProvenance: provenance, getTransactionV2: transactionV2, getAppleWalletCards: async () => [], getSettings: async () => ({ trips_enabled: false }) } }));
 beforeEach(() => {
@@ -208,4 +208,21 @@ it('does not show the previous transaction’s evidence when selection changes',
   expect(await screen.findByText('Recorded source only; no capture evidence retained')).toBeInTheDocument();
   expect(screen.queryByText('Gmail')).not.toBeInTheDocument();
   expect(provenance).toHaveBeenLastCalledWith(2);
+});
+
+it('recategorizes in one tap from the view-mode picker, without entering Edit', () => {
+  render(detail());
+  // Not in edit mode — the quick picker is available directly.
+  expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole('button', { name: 'Transport' }));
+
+  expect(mutate).toHaveBeenCalledOnce();
+  expect(mutate.mock.calls[0][0]).toEqual({ id: 1, data: { category: 'Transport' } });
+});
+
+it('tapping the already-active category in the quick picker is a no-op', () => {
+  render(detail());
+  fireEvent.click(screen.getByRole('button', { name: 'Food' }));
+  expect(mutate).not.toHaveBeenCalled();
 });
