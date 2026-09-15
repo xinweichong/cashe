@@ -354,6 +354,8 @@ Implementation: `src/migrations.py` (migration 18: `duplicate_dismissals`, `tran
 
 Repeated upload, overlapping statements, repeated identical purchases, interrupted batches, mapping revisions, foreign settlements, concurrent user corrections, and safe undo. Measure event-loop responsiveness and query behavior during a large synthetic import.
 
+**Status (2026-09-15): tabled, not started.** No `imports.py`, schema, or endpoints exist yet. Blocked on two inputs the user deferred rather than answered: (1) sanitized DBS/UOB statement samples to build real parsers/fixtures against — the roadmap requires actual-statement-derived fixtures, not invented ones; (2) a sub-project decomposition/sequencing decision (proposed: upload→mapping→side-effect-free preview first, commit/resume/undo after). Revisit by supplying samples and re-running the sequencing decision when this becomes a priority.
+
 ## R08 — Local receipt drafts
 
 **Implementation**
