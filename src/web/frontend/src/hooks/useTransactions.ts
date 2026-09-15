@@ -36,6 +36,8 @@ export function useCreateTransaction() {
       api.createTransaction(data, requestKey),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['transactions'] });
+      qc.invalidateQueries({ queryKey: ['transactions-v2'] });
+      qc.invalidateQueries({ queryKey: ['transactions-daily-totals'] });
       qc.invalidateQueries({ queryKey: ['summary'] });
       qc.invalidateQueries({ queryKey: ['home-briefing'] });
       qc.invalidateQueries({ queryKey: ['spending-evidence'] });
@@ -76,6 +78,9 @@ export function useUpdateTransaction() {
     onSettled: (_data, _err, { id }) => {
       qc.invalidateQueries({ queryKey: ['transactions'] });
       qc.invalidateQueries({ queryKey: ['transaction', id] });
+      qc.invalidateQueries({ queryKey: ['transactions-v2'] });
+      qc.invalidateQueries({ queryKey: ['transaction-v2', id] });
+      qc.invalidateQueries({ queryKey: ['transactions-daily-totals'] });
       qc.invalidateQueries({ queryKey: ['summary'] });
       qc.invalidateQueries({ queryKey: ['home-briefing'] });
       qc.invalidateQueries({ queryKey: ['spending-evidence'] });
@@ -104,6 +109,8 @@ export function useDeleteTransaction() {
     },
     onSettled: () => {
       qc.invalidateQueries({ queryKey: ['transactions'] });
+      qc.invalidateQueries({ queryKey: ['transactions-v2'] });
+      qc.invalidateQueries({ queryKey: ['transactions-daily-totals'] });
       qc.invalidateQueries({ queryKey: ['summary'] });
       qc.invalidateQueries({ queryKey: ['home-briefing'] });
       qc.invalidateQueries({ queryKey: ['spending-evidence'] });

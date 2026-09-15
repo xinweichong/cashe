@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useInfiniteQuery, useQuery, keepPreviousData } from '@tanstack/react-query';
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -10,13 +10,35 @@ import { TransactionDetail } from '@/components/transactions/TransactionDetail';
 import { TransactionForm } from '@/components/transactions/TransactionForm';
 import { useCategories } from '@/hooks/useCategories';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
-import { api, type Transaction } from '@/api/client';
+import { api, type Transaction, type TransactionV2, type DailyTotalV2 } from '@/api/client';
 import { briefingApi } from '@/api/briefing';
 import { slideInRightVariants, fadeUpVariants } from '@/lib/motionPresets';
+import { localDayKey } from '@/lib/utils';
 import { Plus } from 'lucide-react';
 import { LoadFailed } from '@/components/ui/LoadFailed';
 
 const PAGE_SIZE = 20;
+
+// v2 transactions carry canonical Money instead of flat amount/currency
+// fields — convert at this page boundary so TransactionList/TransactionRow/
+// TransactionDetail keep working against the existing v1-shaped Transaction,
+// the same adapter pattern FinancePage's goalV2ToLegacy established for R04.
+function transactionV2ToLegacy(tx: TransactionV2): Transaction {
+  return {
+    id: tx.id,
+    source: tx.source,
+    source_id: '',
+    amount: (tx.original.minor_units ?? 0) / 100,
+    currency: tx.original.currency,
+    exchange_rate: tx.conversion.rate !== null ? Number(tx.conversion.rate) : null,
+    merchant: tx.merchant,
+    description: tx.description,
+    category: tx.category,
+    transaction_date: tx.transaction_date ?? '',
+    ingested_at: tx.ingested_at ?? '',
+    type: tx.type,
+  };
+}
 
 export function TransactionsPage() {
   const navigate = useNavigate();
@@ -52,27 +74,27 @@ export function TransactionsPage() {
 
   const { data, fetchNextPage, hasNextPage, isFetchingNextPage, isLoading, isError, refetch } =
     useInfiniteQuery({
-      queryKey: ['transactions', debouncedSearch, category, startDate, endDate],
+      queryKey: ['transactions-v2', debouncedSearch, category, startDate, endDate],
       queryFn: ({ pageParam = 0 }) => {
         const params: Record<string, string | number> = {
           limit: PAGE_SIZE,
           offset: pageParam as number,
         };
-        if (debouncedSearch) params.merchant = debouncedSearch;
+        if (debouncedSearch) params.merchant_search = debouncedSearch;
         if (category && category !== 'all') params.category = category;
         if (startDate) params.start_date = startDate;
         if (endDate) params.end_date = endDate;
-        return api.getTransactions(params);
+        return api.getTransactionsV2(params);
       },
       initialPageParam: 0,
-      getNextPageParam: (lastPage: Transaction[], allPages: Transaction[][]) => {
+      getNextPageParam: (lastPage: TransactionV2[], allPages: TransactionV2[][]) => {
         if (lastPage.length < PAGE_SIZE) return undefined;
         return allPages.length * PAGE_SIZE;
       },
       placeholderData: keepPreviousData,
     });
 
-  const txs = data?.pages.flat() ?? [];
+  const txs = useMemo(() => (data?.pages.flat() ?? []).map(transactionV2ToLegacy), [data]);
 
   // Use list data if available — only hit the single-tx endpoint for deep-links
   // where the transaction isn't in the loaded pages (e.g. direct URL navigation)
@@ -81,13 +103,39 @@ export function TransactionsPage() {
     : undefined;
 
   const { data: txFromQuery } = useQuery({
-    queryKey: ['transaction', selectedId],
-    queryFn: () => api.getTransaction(selectedId!),
+    queryKey: ['transaction-v2', selectedId],
+    queryFn: async () => transactionV2ToLegacy(await api.getTransactionV2(selectedId!)),
     enabled: selectedId !== undefined && txFromList === undefined,
     staleTime: 30_000,
   });
 
   const selectedTransaction = txFromList ?? txFromQuery ?? null;
+
+  // Daily totals are a separate shared-fact query over whatever date range
+  // is currently on screen — never a client-side sum of loaded rows — so a
+  // day split across an infinite-scroll page boundary always shows one
+  // complete total (R09). Withheld while a search/category filter narrows
+  // which rows are visible, since the shared fact has no such filter and
+  // showing the full unfiltered day total next to a filtered row subset
+  // would be misleading.
+  const isFilterNarrowed = !!debouncedSearch || (category !== 'all' && !!category);
+  const dayKeys = useMemo(
+    () => Array.from(new Set(txs.map((tx) => localDayKey(tx.transaction_date)).filter((d) => d !== 'undated'))),
+    [txs],
+  );
+  const rangeStart = dayKeys.length ? dayKeys.reduce((a, b) => (a < b ? a : b)) : undefined;
+  const rangeEnd = dayKeys.length ? dayKeys.reduce((a, b) => (a > b ? a : b)) : undefined;
+  const { data: dailyTotalsData } = useQuery({
+    queryKey: ['transactions-daily-totals', rangeStart, rangeEnd],
+    queryFn: () => api.getDailyTotalsV2(rangeStart!, rangeEnd!),
+    enabled: !isFilterNarrowed && !!rangeStart && !!rangeEnd,
+    placeholderData: keepPreviousData,
+  });
+  const dailyTotals = useMemo(() => {
+    const map = new Map<string, DailyTotalV2>();
+    if (!isFilterNarrowed) for (const t of dailyTotalsData ?? []) map.set(t.date, t);
+    return map;
+  }, [dailyTotalsData, isFilterNarrowed]);
 
   const handleCategoryChange = useCallback((v: string) => setCategory(v), []);
   const handleSearchChange = useCallback((v: string) => setSearch(v), []);
@@ -170,6 +218,7 @@ export function TransactionsPage() {
               isLoading={isLoading || isFetchingNextPage}
               onTransactionClick={handleTransactionClick}
               selectedTransactionId={selectedId}
+              dailyTotals={dailyTotals}
             />
           )}
         </Card>

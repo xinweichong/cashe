@@ -72,6 +72,21 @@ export function formatDateTime(date: string | null | undefined): string {
   return dateStr;
 }
 
+/**
+ * The calendar-day bucket a transaction_date belongs to for grouping
+ * purposes — the same bare-date-substring convention formatDate/
+ * formatDateTime already use (no timezone conversion), so a transaction's
+ * group header always matches its own displayed date.
+ */
+export function localDayKey(date: string | null | undefined): string {
+  if (!date) return 'undated';
+  return date.slice(0, 10);
+}
+
+export function formatDayHeading(dayKey: string): string {
+  return dayKey === 'undated' ? 'No date' : formatDate(dayKey);
+}
+
 const DEFAULT_CATEGORY_COLORS: Record<string, string> = {
   'Food':          '#FB923C', // tangerine
   'Transport':     '#34D399', // mint

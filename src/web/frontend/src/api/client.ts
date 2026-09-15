@@ -20,6 +20,7 @@ export type HealthScoreV2 = components['schemas']['HealthScore'];
 export type BalanceV2 = components['schemas']['Balance'];
 export type CategoryTrendPointV2 = components['schemas']['CategoryTrendPoint'];
 export type GoalProgressV2 = components['schemas']['GoalProgress'];
+export type DailyTotalV2 = components['schemas']['DailyTotal'];
 
 export async function request<T>(path: string, opts?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
@@ -470,6 +471,18 @@ export const api = {
 
   getTransactionV2: (id: number) =>
     request<TransactionV2>(`/api/v2/transactions/${id}`),
+
+  getTransactionsV2: (params?: Record<string, string | number>) => {
+    const query = params
+      ? '?' + new URLSearchParams(
+          Object.entries(params).map(([k, v]) => [k, String(v)])
+        ).toString()
+      : '';
+    return request<TransactionV2[]>(`/api/v2/transactions${query}`);
+  },
+
+  getDailyTotalsV2: (start: string, end: string) =>
+    request<DailyTotalV2[]>(`/api/v2/transactions/daily-totals?start=${start}&end=${end}`),
 
   createTransaction: (data: Partial<TransactionCreateV2> & { amount: number }, requestKey?: string) =>
     request<TransactionV2>('/api/v2/transactions', {
