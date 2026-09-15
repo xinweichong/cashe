@@ -24,7 +24,7 @@ from src.money import to_minor_units, from_minor_units
 from src.spending_facts import resolve_money
 from src.config import local_now
 from src.web.auth import verify_password, create_session, verify_session, destroy_session
-from src.web.contracts import Balance, BudgetProgress, BulkTransactionRequest, BulkTransactionResultItem, BulkUndoRequest, CaptureFollowup, CaptureIssue, CaptureResolution, CategoryTrendPoint, DailyTotal, GoalProgress, HealthScore, HomeBriefing, MerchantRanking, MerchantSummary, OverviewSummary, QueuedResponse, SpendingAlerts, SpendingComparison, SpendingEvidence, SpendingFacts, SpendingReview, SpendingVelocity, TopMerchantsResult, TransactionCorrection, TransactionCreate, TransactionDeletion, TransactionProvenance, TransactionUndo, TransactionV2, TrendPoint, TripSummary, UpcomingPlan, PlanMutationResponse, RecurringReview, RecurringResolution, RefundMatchReview, RefundMatchResolution, DuplicateReview, DuplicateDismissal, DuplicateMergeRequest, DuplicateMergeResult, DuplicateMergeUndoResult
+from src.web.contracts import Balance, BudgetProgress, BulkTransactionRequest, BulkTransactionResultItem, BulkUndoRequest, CaptureFollowup, CaptureIssue, CaptureResolution, CategoryTrendPoint, DailyTotal, GoalProgress, HealthScore, HomeBriefing, MerchantRanking, MerchantSummary, OverviewSummary, QueuedResponse, SpendingAlerts, SpendingComparison, SpendingEvidence, SpendingFacts, SpendingReview, SpendingVelocity, TopMerchantsResult, TransactionCorrection, TransactionCreate, TransactionDeletion, TransactionProvenance, TransactionUndo, TransactionV2, TrendPoint, TripSummary, UpcomingPlan, PlanMutationResponse, RecurringReview, RecurringResolution, RefundMatchReview, RefundMatchResolution, DuplicateReview, DuplicateDismissal, DuplicateMergeRequest, DuplicateMergeResult, DuplicateMergeUndoResult, SubscriptionReview
 from src.analytics import (
     load_summary,
     get_yoy_comparison,
@@ -289,6 +289,10 @@ def create_dashboard_app(
         storage=Depends(_get_storage),
     ):
         return await _db(storage.get_recurring_review, limit=limit, offset=offset)
+
+    @app.get("/api/v2/subscriptions/review", response_model=SubscriptionReview)
+    async def subscription_review(storage=Depends(_get_storage)):
+        return await _db(storage.get_subscription_review)
 
     @app.post("/api/v2/recurring/suggestions/{suggestion_id}/{action}", response_model=RecurringResolution)
     async def resolve_recurring_review(

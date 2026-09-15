@@ -191,6 +191,49 @@ class RecurringReview(BaseModel):
     offset: int
 
 
+class SubscriptionOverdueItem(BaseModel):
+    subscription_id: int
+    label: str
+    last_charge_date: str
+    days_since_last_charge: int
+    expected_interval_days: int
+
+
+class SubscriptionPriceChange(BaseModel):
+    subscription_id: int
+    label: str
+    old_amount: Money
+    new_amount: Money
+    change: Money
+    annualized_impact: Money
+    old_date: str
+    new_date: str
+
+
+class SupportingCharge(BaseModel):
+    transaction_id: int
+    date: str
+    amount: Money | None
+
+
+class AnnualRenewal(BaseModel):
+    subscription_id: int
+    label: str
+    renewal_date: str
+    days_until_renewal: int
+    supporting_charges: list[SupportingCharge]
+
+
+class SubscriptionReview(BaseModel):
+    """R11 sub-project 4: overdue subscriptions, deterministic price-change
+    comparisons with annualized impact, and annual-renewal surfacing —
+    distinct from LLMService.explain_subscription_change's optional
+    free-text layer over these same facts."""
+    overdue: list[SubscriptionOverdueItem]
+    price_changes: list[SubscriptionPriceChange]
+    annual_renewals: list[AnnualRenewal]
+
+
 class RecurringResolution(BaseModel):
     status: Literal["ok"] = "ok"
     subscription_id: int | None

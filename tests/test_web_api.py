@@ -491,6 +491,39 @@ class TestRefundLinkingV2:
         assert response.status_code == 404
 
 
+class TestSubscriptionReviewV2:
+    @pytest.mark.asyncio
+    async def test_returns_empty_review_with_no_subscriptions(self, client):
+        response = await client.get("/api/v2/subscriptions/review")
+        assert response.status_code == 200
+        assert response.json() == {"overdue": [], "price_changes": [], "annual_renewals": []}
+
+    @pytest.mark.asyncio
+    async def test_returns_typed_price_change_for_a_repriced_subscription(self, client, in_memory_db):
+        storage = Storage(in_memory_db)
+        sub = storage.create_subscription("Netflix", "monthly", billing_day=15)
+        for date, amount in [("2026-03-15", 17.98), ("2026-04-15", 22.98)]:
+            upcoming_id = storage.create_upcoming_transaction(sub, date, amount)
+            tx_id = storage.insert_transaction(
+                source="manual", source_id=f"tx-{date}", amount=amount, currency="SGD",
+                merchant="Netflix", transaction_date=f"{date}T10:00:00", tx_type="expense",
+            )
+            storage.match_upcoming_transaction(upcoming_id, tx_id)
+
+        response = await client.get("/api/v2/subscriptions/review")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["price_changes"] == [{
+            "subscription_id": sub, "label": "Netflix",
+            "old_amount": {"minor_units": 1798, "currency": "SGD"},
+            "new_amount": {"minor_units": 2298, "currency": "SGD"},
+            "change": {"minor_units": 500, "currency": "SGD"},
+            "annualized_impact": {"minor_units": 6000, "currency": "SGD"},
+            "old_date": "2026-03-15", "new_date": "2026-04-15",
+        }]
+
+
 class TestBulkTransactionsV2:
     @pytest.mark.asyncio
     async def test_bulk_categorize_applies_to_every_row(self, client):

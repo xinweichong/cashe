@@ -2932,6 +2932,84 @@ class Storage:
             "possibly_cancelled_count": possibly_cancelled,
         }
 
+    @_locked
+    def get_subscription_review(self) -> dict:
+        """R11: overdue subscriptions, deterministic price-change
+        comparisons with annualized impact, and annual-renewal surfacing
+        with supporting charges — all computed from canonical matched-
+        charge amounts. Distinct from LLMService.explain_subscription_change,
+        an optional free-text layer over these same deterministic facts,
+        never their source."""
+        from src.spending_facts import money, resolve_money
+        from src.subscriptions import FREQUENCY_DAYS
+        today = local_now().date()
+        subs = [dict(r) for r in self._conn.execute(
+            "SELECT * FROM subscriptions WHERE status != 'cancelled'"
+        ).fetchall()]
+
+        overdue: list[dict] = []
+        price_changes: list[dict] = []
+        annual_renewals: list[dict] = []
+
+        for sub in subs:
+            sub_id = sub["id"]
+            interval_days = FREQUENCY_DAYS.get(sub["frequency"], 30)
+            matched = self.get_subscription_matched_transactions(sub_id, limit=3)
+
+            if sub["status"] == "possibly_cancelled" and matched:
+                last_dt = datetime.strptime(matched[0]["transaction_date"][:10], "%Y-%m-%d").date()
+                overdue.append({
+                    "subscription_id": sub_id,
+                    "label": sub["label"] or sub["merchant"],
+                    "last_charge_date": matched[0]["transaction_date"][:10],
+                    "days_since_last_charge": (today - last_dt).days,
+                    "expected_interval_days": interval_days,
+                })
+
+            if len(matched) >= 2:
+                newer_minor, _ = resolve_money(matched[0])
+                older_minor, _ = resolve_money(matched[1])
+                if newer_minor is not None and older_minor is not None and newer_minor != older_minor:
+                    diff_minor = newer_minor - older_minor
+                    annualized_minor = round(_to_monthly(diff_minor / 100.0, sub["frequency"]) * 12 * 100)
+                    price_changes.append({
+                        "subscription_id": sub_id,
+                        "label": sub["label"] or sub["merchant"],
+                        "old_amount": money(older_minor),
+                        "new_amount": money(newer_minor),
+                        "change": money(diff_minor),
+                        "annualized_impact": money(annualized_minor),
+                        "old_date": matched[1]["transaction_date"][:10],
+                        "new_date": matched[0]["transaction_date"][:10],
+                    })
+
+            if sub["frequency"] == "annual" and sub["status"] in ("active", "possibly_cancelled"):
+                upcoming_row = self._conn.execute(
+                    """SELECT expected_date FROM upcoming_transactions
+                       WHERE subscription_id = ? AND status = 'pending'
+                       ORDER BY expected_date ASC LIMIT 1""",
+                    (sub_id,),
+                ).fetchone()
+                if upcoming_row:
+                    next_date = datetime.strptime(upcoming_row["expected_date"], "%Y-%m-%d").date()
+                    days_until = (next_date - today).days
+                    if 0 <= days_until <= 60:
+                        annual_renewals.append({
+                            "subscription_id": sub_id,
+                            "label": sub["label"] or sub["merchant"],
+                            "renewal_date": upcoming_row["expected_date"],
+                            "days_until_renewal": days_until,
+                            "supporting_charges": [
+                                {
+                                    "transaction_id": tx["id"], "date": tx["transaction_date"][:10],
+                                    "amount": money(resolve_money(tx)[0]) if resolve_money(tx)[0] is not None else None,
+                                }
+                                for tx in matched
+                            ],
+                        })
+
+        return {"overdue": overdue, "price_changes": price_changes, "annual_renewals": annual_renewals}
+
     def _get_subscription_last_amount(self, sub_id: int) -> float | None:
         """Not locked — only called from within locked methods."""
         row = self._conn.execute(
