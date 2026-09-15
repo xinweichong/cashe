@@ -1454,6 +1454,26 @@
               }
             ]
           },
+          "amount_basis": {
+            "enum": [
+              "matched_charge",
+              "user",
+              "unknown"
+            ],
+            "title": "Amount Basis",
+            "type": "string"
+          },
+          "amount_basis_transaction_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount Basis Transaction Id"
+          },
           "confirmation_source": {
             "enum": [
               "unknown",
@@ -1465,6 +1485,14 @@
           },
           "date": {
             "title": "Date",
+            "type": "string"
+          },
+          "date_basis": {
+            "enum": [
+              "schedule",
+              "user"
+            ],
+            "title": "Date Basis",
             "type": "string"
           },
           "frequency": {
@@ -1498,6 +1526,8 @@
           "label",
           "date",
           "amount",
+          "date_basis",
+          "amount_basis",
           "confirmation_source",
           "frequency",
           "schedule_status"
@@ -3046,8 +3076,36 @@
               }
             ]
           },
+          "amount_basis": {
+            "enum": [
+              "matched_charge",
+              "user",
+              "unknown"
+            ],
+            "title": "Amount Basis",
+            "type": "string"
+          },
+          "amount_basis_transaction_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Amount Basis Transaction Id"
+          },
           "date": {
             "title": "Date",
+            "type": "string"
+          },
+          "date_basis": {
+            "enum": [
+              "schedule",
+              "user"
+            ],
+            "title": "Date Basis",
             "type": "string"
           },
           "id": {
@@ -3068,7 +3126,9 @@
           "subscription_id",
           "label",
           "date",
-          "amount"
+          "amount",
+          "date_basis",
+          "amount_basis"
         ],
         "title": "UpcomingCharge",
         "type": "object"

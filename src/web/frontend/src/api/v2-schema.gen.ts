@@ -1300,12 +1300,24 @@ export interface components {
         PlannedCharge: {
             amount: components["schemas"]["Money"] | null;
             /**
+             * Amount Basis
+             * @enum {string}
+             */
+            amount_basis: "matched_charge" | "user" | "unknown";
+            /** Amount Basis Transaction Id */
+            amount_basis_transaction_id?: number | null;
+            /**
              * Confirmation Source
              * @enum {string}
              */
             confirmation_source: "unknown" | "user" | "recurring_suggestion";
             /** Date */
             date: string;
+            /**
+             * Date Basis
+             * @enum {string}
+             */
+            date_basis: "schedule" | "user";
             /** Frequency */
             frequency: string;
             /** Id */
@@ -1804,8 +1816,20 @@ export interface components {
         /** UpcomingCharge */
         UpcomingCharge: {
             amount: components["schemas"]["Money"] | null;
+            /**
+             * Amount Basis
+             * @enum {string}
+             */
+            amount_basis: "matched_charge" | "user" | "unknown";
+            /** Amount Basis Transaction Id */
+            amount_basis_transaction_id?: number | null;
             /** Date */
             date: string;
+            /**
+             * Date Basis
+             * @enum {string}
+             */
+            date_basis: "schedule" | "user";
             /** Id */
             id: number;
             /** Label */
