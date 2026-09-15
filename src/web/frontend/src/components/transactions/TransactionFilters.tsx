@@ -3,6 +3,15 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Search, X } from 'lucide-react';
 import { getCategoryColor } from '@/lib/utils';
+import type { Trip } from '@/api/client';
+
+const TYPE_OPTIONS: { value: string; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'expense', label: 'Expense' },
+  { value: 'income', label: 'Income' },
+  { value: 'refund', label: 'Refund' },
+  { value: 'transfer', label: 'Transfer' },
+];
 
 interface TransactionFiltersProps {
   search: string;
@@ -14,6 +23,13 @@ interface TransactionFiltersProps {
   setStartDate: (v: string) => void;
   endDate: string;
   setEndDate: (v: string) => void;
+  type: string;
+  onTypeChange: (v: string) => void;
+  trips: Trip[];
+  tripId: string;
+  onTripChange: (v: string) => void;
+  needsReview: boolean;
+  onNeedsReviewChange: (v: boolean) => void;
 }
 
 export function TransactionFilters({
@@ -26,8 +42,16 @@ export function TransactionFilters({
   setStartDate,
   endDate,
   setEndDate,
+  type,
+  onTypeChange,
+  trips,
+  tripId,
+  onTripChange,
+  needsReview,
+  onNeedsReviewChange,
 }: TransactionFiltersProps) {
-  const hasFilters = search || category !== 'all' || startDate || endDate;
+  const hasFilters = search || category !== 'all' || startDate || endDate
+    || type !== 'all' || !!tripId || needsReview;
 
   const handleExport = () => {
     const params = new URLSearchParams();
@@ -78,13 +102,25 @@ export function TransactionFilters({
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted" />
           <Input
-            placeholder="Search merchant or description..."
+            placeholder="Search merchant, alias, description, category, or amount..."
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
             className="pl-9 bg-background border-border"
           />
         </div>
-        {/* Category filter pills moved below */}
+        {trips.length > 0 && (
+          <select
+            aria-label="Trip"
+            value={tripId}
+            onChange={(e) => onTripChange(e.target.value)}
+            className="input-field"
+          >
+            <option value="">All trips</option>
+            {trips.map((t) => (
+              <option key={t.id} value={t.id}>{t.name}</option>
+            ))}
+          </select>
+        )}
         {hasFilters && (
           <Button
             variant="ghost"
@@ -94,11 +130,46 @@ export function TransactionFilters({
               onCategoryChange('all');
               setStartDate('');
               setEndDate('');
+              onTypeChange('all');
+              onTripChange('');
+              onNeedsReviewChange(false);
             }}
           >
             <X className="w-4 h-4" />
           </Button>
         )}
+      </div>
+
+      <div className="overflow-x-auto">
+        <div className="flex flex-wrap gap-1.5">
+          {TYPE_OPTIONS.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => onTypeChange(opt.value)}
+              className="px-3 py-1 rounded-full text-xs font-semibold font-mono uppercase tracking-[0.08em] transition-all duration-[150ms] whitespace-nowrap"
+              style={
+                type === opt.value
+                  ? { color: 'var(--color-foreground)', background: 'var(--color-card-hover)', border: '1px solid var(--color-muted)' }
+                  : { color: 'var(--color-muted)', background: 'transparent', border: '1px solid var(--color-border)' }
+              }
+            >
+              {opt.label}
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => onNeedsReviewChange(!needsReview)}
+            className="px-3 py-1 rounded-full text-xs font-semibold font-mono uppercase tracking-[0.08em] transition-all duration-[150ms] whitespace-nowrap"
+            style={
+              needsReview
+                ? { color: 'var(--color-warning, #FBBF24)', background: 'var(--color-warning, #FBBF24)22', border: '1px solid var(--color-warning, #FBBF24)60' }
+                : { color: 'var(--color-muted)', background: 'transparent', border: '1px solid var(--color-border)' }
+            }
+          >
+            Needs review
+          </button>
+        </div>
       </div>
 
       <div className="overflow-x-auto">
