@@ -946,6 +946,70 @@ class Storage:
             )
 
     @_locked
+    def bulk_correct(
+        self, transaction_ids: list[int], *,
+        category: Optional[str] = None, type: Optional[str] = None,
+        remember_category: bool = False,
+        expected_revisions: Optional[dict[int, int]] = None,
+    ) -> list[dict]:
+        """R09: apply the same category and/or type correction to several
+        transactions in one call. Each row goes through the ordinary
+        update_transaction path — same mutation-history/undo/revision-
+        conflict machinery as any other correction, per row, not a bespoke
+        bulk write — matching apply_category_rule_to_existing's (R06)
+        precedent for exactly this reason: an ordinary per-transaction undo
+        keeps working for free, and a row's failure never blocks the rest
+        of the batch. Only category/type are ever touched, so every other
+        field (description, source evidence, and everything R05's relation
+        machinery already validates on a type change, e.g. clearing a stale
+        refund_of_transaction_id) is preserved exactly as update_transaction
+        already handles it for a single correction."""
+        fields: dict = {}
+        if category is not None:
+            fields["category"] = category
+        if type is not None:
+            fields["type"] = type
+        results = []
+        for tx_id in transaction_ids:
+            expected = (expected_revisions or {}).get(tx_id)
+            try:
+                self.update_transaction(
+                    tx_id, remember_category=remember_category,
+                    expected_revision=expected, **fields,
+                )
+                tx = self.get_transaction(tx_id)
+                results.append({"id": tx_id, "status": "ok", "revision": tx["revision"]})
+            except RevisionConflict as exc:
+                results.append({"id": tx_id, "status": "conflict", "current_revision": exc.current["revision"]})
+            except ValueError as exc:
+                results.append({"id": tx_id, "status": "error", "detail": str(exc)})
+        return results
+
+    @_locked
+    def bulk_undo(
+        self, transaction_ids: list[int],
+        expected_revisions: Optional[dict[int, int]] = None,
+    ) -> list[dict]:
+        """R09: undo_last_mutation over several transactions, one call per
+        row — same reasoning as bulk_correct. Each row targets whichever
+        correction is currently its own most recent one, so this is exactly
+        equivalent to a user hitting undo on each row individually; it does
+        not track "the set of rows this particular bulk_correct touched"
+        as a first-class batch."""
+        results = []
+        for tx_id in transaction_ids:
+            expected = (expected_revisions or {}).get(tx_id)
+            try:
+                self.undo_last_mutation(tx_id, expected_revision=expected)
+                tx = self.get_transaction(tx_id)
+                results.append({"id": tx_id, "status": "ok", "revision": tx["revision"]})
+            except RevisionConflict as exc:
+                results.append({"id": tx_id, "status": "conflict", "current_revision": exc.current["revision"]})
+            except ValueError as exc:
+                results.append({"id": tx_id, "status": "error", "detail": str(exc)})
+        return results
+
+    @_locked
     def delete_transaction(self, tx_id: int) -> str:
         tx = self.get_transaction(tx_id)
         if tx is None:

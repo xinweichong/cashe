@@ -491,6 +491,87 @@ class TestRefundLinkingV2:
         assert response.status_code == 404
 
 
+class TestBulkTransactionsV2:
+    @pytest.mark.asyncio
+    async def test_bulk_categorize_applies_to_every_row(self, client):
+        ids = []
+        for i in range(3):
+            resp = await client.post("/api/transactions", json={"amount": 5.0 + i, "merchant": f"M{i}", "category": "Food", "type": "expense"})
+            ids.append(resp.json()["id"])
+
+        response = await client.post("/api/v2/transactions/bulk", json={"transaction_ids": ids, "category": "Transport"})
+
+        assert response.status_code == 200
+        results = response.json()
+        assert {r["status"] for r in results} == {"ok"}
+        assert {r["revision"] for r in results} == {2}
+        for tx_id in ids:
+            assert (await client.get(f"/api/v2/transactions/{tx_id}")).json()["category"] == "Transport"
+
+    @pytest.mark.asyncio
+    async def test_bulk_type_reclassification_inherits_refund_link_clearing(self, client):
+        purchase = (await client.post("/api/transactions", json={"amount": 20.0, "merchant": "Shop", "type": "expense"})).json()["id"]
+        refund = (await client.post("/api/transactions", json={"amount": 5.0, "merchant": "Shop", "type": "expense"})).json()["id"]
+        await client.put(f"/api/v2/transactions/{refund}", json={"type": "refund", "refund_of_transaction_id": purchase})
+
+        response = await client.post("/api/v2/transactions/bulk", json={"transaction_ids": [refund], "type": "transfer"})
+
+        assert response.status_code == 200
+        assert response.json()[0]["status"] == "ok"
+        reclassified = (await client.get(f"/api/v2/transactions/{refund}")).json()
+        assert reclassified["type"] == "transfer"
+        assert reclassified["refund_of"] is None  # inherited from update_transaction's own invariant
+
+    @pytest.mark.asyncio
+    async def test_bulk_reports_a_conflict_without_blocking_the_rest_of_the_batch(self, client):
+        stale = (await client.post("/api/transactions", json={"amount": 5.0, "type": "expense"})).json()
+        fresh = (await client.post("/api/transactions", json={"amount": 5.0, "type": "expense"})).json()
+        await client.put(f"/api/v2/transactions/{stale['id']}", json={"merchant": "Edited elsewhere"})  # bumps stale's revision to 2
+
+        response = await client.post("/api/v2/transactions/bulk", json={
+            "transaction_ids": [stale["id"], fresh["id"]],
+            "category": "Food",
+            "expected_revisions": {str(stale["id"]): 1, str(fresh["id"]): 1},
+        })
+
+        assert response.status_code == 200
+        by_id = {r["id"]: r for r in response.json()}
+        assert by_id[stale["id"]]["status"] == "conflict"
+        assert by_id[stale["id"]]["current_revision"] == 2
+        assert by_id[fresh["id"]]["status"] == "ok"
+        assert (await client.get(f"/api/v2/transactions/{fresh['id']}")).json()["category"] == "Food"
+        # The conflicted row is untouched, not silently overwritten.
+        assert (await client.get(f"/api/v2/transactions/{stale['id']}")).json()["category"] is None
+
+    @pytest.mark.asyncio
+    async def test_bulk_undo_reverts_a_prior_bulk_categorize(self, client):
+        ids = []
+        for i in range(2):
+            resp = await client.post("/api/transactions", json={"amount": 5.0 + i, "category": "Food", "type": "expense"})
+            ids.append(resp.json()["id"])
+        bulk = (await client.post("/api/v2/transactions/bulk", json={"transaction_ids": ids, "category": "Transport"})).json()
+        revisions = {str(r["id"]): r["revision"] for r in bulk}
+
+        response = await client.post("/api/v2/transactions/bulk/undo", json={
+            "transaction_ids": ids, "expected_revisions": revisions,
+        })
+
+        assert response.status_code == 200
+        assert {r["status"] for r in response.json()} == {"ok"}
+        for tx_id in ids:
+            assert (await client.get(f"/api/v2/transactions/{tx_id}")).json()["category"] == "Food"
+
+    @pytest.mark.asyncio
+    async def test_bulk_rejects_empty_or_oversized_batches_and_no_op_requests(self, client):
+        tx_id = (await client.post("/api/transactions", json={"amount": 5.0, "type": "expense"})).json()["id"]
+
+        assert (await client.post("/api/v2/transactions/bulk", json={"transaction_ids": []})).status_code == 422
+        assert (await client.post("/api/v2/transactions/bulk", json={"transaction_ids": [tx_id]})).status_code == 422  # nothing to change
+        assert (await client.post("/api/v2/transactions/bulk", json={
+            "transaction_ids": list(range(1, 202)), "category": "Food",
+        })).status_code == 422
+
+
 class TestUndoTransactionV2:
     @pytest.mark.asyncio
     async def test_undo_reverts_last_correction(self, client):

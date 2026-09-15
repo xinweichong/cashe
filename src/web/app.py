@@ -24,7 +24,7 @@ from src.money import to_minor_units, from_minor_units
 from src.spending_facts import resolve_money
 from src.config import local_now
 from src.web.auth import verify_password, create_session, verify_session, destroy_session
-from src.web.contracts import Balance, BudgetProgress, CaptureFollowup, CaptureIssue, CaptureResolution, CategoryTrendPoint, DailyTotal, GoalProgress, HealthScore, HomeBriefing, MerchantRanking, MerchantSummary, OverviewSummary, QueuedResponse, SpendingAlerts, SpendingComparison, SpendingEvidence, SpendingFacts, SpendingReview, SpendingVelocity, TopMerchantsResult, TransactionCorrection, TransactionCreate, TransactionDeletion, TransactionProvenance, TransactionUndo, TransactionV2, TrendPoint, TripSummary, UpcomingPlan, PlanMutationResponse, RecurringReview, RecurringResolution, RefundMatchReview, RefundMatchResolution, DuplicateReview, DuplicateDismissal, DuplicateMergeRequest, DuplicateMergeResult, DuplicateMergeUndoResult
+from src.web.contracts import Balance, BudgetProgress, BulkTransactionRequest, BulkTransactionResultItem, BulkUndoRequest, CaptureFollowup, CaptureIssue, CaptureResolution, CategoryTrendPoint, DailyTotal, GoalProgress, HealthScore, HomeBriefing, MerchantRanking, MerchantSummary, OverviewSummary, QueuedResponse, SpendingAlerts, SpendingComparison, SpendingEvidence, SpendingFacts, SpendingReview, SpendingVelocity, TopMerchantsResult, TransactionCorrection, TransactionCreate, TransactionDeletion, TransactionProvenance, TransactionUndo, TransactionV2, TrendPoint, TripSummary, UpcomingPlan, PlanMutationResponse, RecurringReview, RecurringResolution, RefundMatchReview, RefundMatchResolution, DuplicateReview, DuplicateDismissal, DuplicateMergeRequest, DuplicateMergeResult, DuplicateMergeUndoResult
 from src.analytics import (
     load_summary,
     get_yoy_comparison,
@@ -685,6 +685,31 @@ def create_dashboard_app(
             raise HTTPException(status_code=409, detail=str(e))
         except ValueError as e:
             raise HTTPException(status_code=409 if str(e).startswith("duplicate source_id:") else 400, detail=str(e))
+
+    @app.post("/api/v2/transactions/bulk", response_model=list[BulkTransactionResultItem])
+    async def bulk_correct_transactions(payload: BulkTransactionRequest, username: str = Depends(require_auth)):
+        if not payload.transaction_ids:
+            raise HTTPException(status_code=422, detail="No transactions selected")
+        if len(payload.transaction_ids) > 200:
+            raise HTTPException(status_code=422, detail="At most 200 transactions per batch")
+        if payload.category is None and payload.type is None:
+            raise HTTPException(status_code=422, detail="Nothing to change")
+        storage = user_manager.get(username).storage
+        return await _db(
+            storage.bulk_correct, payload.transaction_ids,
+            category=payload.category, type=payload.type,
+            remember_category=payload.remember_category,
+            expected_revisions=payload.expected_revisions,
+        )
+
+    @app.post("/api/v2/transactions/bulk/undo", response_model=list[BulkTransactionResultItem])
+    async def bulk_undo_transactions(payload: BulkUndoRequest, username: str = Depends(require_auth)):
+        if not payload.transaction_ids:
+            raise HTTPException(status_code=422, detail="No transactions selected")
+        if len(payload.transaction_ids) > 200:
+            raise HTTPException(status_code=422, detail="At most 200 transactions per batch")
+        storage = user_manager.get(username).storage
+        return await _db(storage.bulk_undo, payload.transaction_ids, expected_revisions=payload.expected_revisions)
 
     @app.delete("/api/v2/transactions/{tx_id}", response_model=TransactionDeletion)
     async def delete_transaction_v2(tx_id: int, username: str = Depends(require_auth)):

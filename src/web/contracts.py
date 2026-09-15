@@ -348,6 +348,34 @@ class TransactionUndo(BaseModel):
     expected_revision: int | None = None
 
 
+class BulkTransactionRequest(BaseModel):
+    """POST /api/v2/transactions/bulk body (R09). At least one of category/
+    type must be set. expected_revisions is keyed by transaction id (as a
+    string over the wire, coerced back to int) — normally the revision each
+    row had when the client last loaded it, so a row someone else edited in
+    the meantime surfaces as a visible per-row conflict instead of being
+    silently overwritten."""
+    transaction_ids: list[int]
+    category: str | None = None
+    type: Literal["expense", "income", "refund", "transfer"] | None = None
+    remember_category: bool = False
+    expected_revisions: dict[int, int] = {}
+
+
+class BulkUndoRequest(BaseModel):
+    """POST /api/v2/transactions/bulk/undo body (R09)."""
+    transaction_ids: list[int]
+    expected_revisions: dict[int, int] = {}
+
+
+class BulkTransactionResultItem(BaseModel):
+    id: int
+    status: Literal["ok", "conflict", "error"]
+    revision: int | None = None
+    current_revision: int | None = None
+    detail: str | None = None
+
+
 class TransactionDeletion(TransactionV2):
     """DELETE /api/v2/transactions/{id} response — the retained snapshot,
     as it stood immediately before deletion."""
