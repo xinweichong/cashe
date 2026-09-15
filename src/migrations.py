@@ -321,6 +321,26 @@ MIGRATIONS = (
         # expected_amount itself is untouched either way.
         _backfill_upcoming_amount_basis,
     )),
+    (20, (
+        # R11 sub-project 3: horizon expansion. schedule_period_date is the
+        # stable period identity a batch horizon-generation pass checks
+        # against — set once at row creation and never touched by a later
+        # expected_date correction, so a user moving a charge's date (an
+        # "explicit exception") doesn't cause that period to be regenerated
+        # at its original schedule position, or leave a gap the generator
+        # thinks is still open. Backfilled to each existing row's current
+        # expected_date: exact for every never-corrected row (the vast
+        # majority), an imprecise-but-harmless label for the rarer
+        # already-corrected row (same accepted trade-off as migration 19's
+        # amount_basis backfill).
+        _add_column_if_table_exists("upcoming_transactions", "schedule_period_date TEXT"),
+        lambda conn: conn.execute(
+            "UPDATE upcoming_transactions SET schedule_period_date = expected_date "
+            "WHERE schedule_period_date IS NULL"
+        ) if conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='upcoming_transactions'"
+        ).fetchone() else None,
+    )),
 )
 
 

@@ -20,6 +20,8 @@ from src.storage import Storage
 logger = logging.getLogger(__name__)
 
 STALE_FACTOR = 1.5  # charge overdue by > 1.5× interval → possibly_cancelled
+GENERATION_HORIZON_DAYS = 90  # matches get_upcoming_plan's max `days`
+_MAX_GENERATION_STEPS = 200  # defensive bound — even weekly over the horizon is ~13
 
 FREQUENCY_DAYS = {
     "weekly": 7,
@@ -106,31 +108,11 @@ class SubscriptionMatcher:
     def _process(self, sub: dict) -> None:
         sub_id = sub["id"]
         frequency = sub["frequency"]
-        billing_day = sub["billing_day"]
         interval_days = FREQUENCY_DAYS.get(frequency, 30)
 
-        # Anchor next-period math on the latest known upcoming.expected_date
-        # (matched or pending — both are pinned to billing_day). Using the actual
-        # tx.transaction_date would mis-anchor when a charge lands a day or two
-        # before billing_day and stall the subscription.
-        upcomings = self.storage.list_upcoming_transactions(sub_id)
-        latest_upcoming = upcomings[-1] if upcomings else None
-        last_date = latest_upcoming["expected_date"] if latest_upcoming else None
-        has_pending = any(u["status"] == "pending" for u in upcomings)
-
-        # 1. Generate upcoming if none exists for next billing period.
-        #    Skip when a pending upcoming is already in flight — it represents
-        #    the next period and we shouldn't get ahead of it.
-        next_date = compute_next_billing_date(frequency, billing_day, last_date=last_date)
-        if not has_pending and not self.storage.upcoming_exists_for_period(sub_id, next_date):
-            expected_amount, basis_tx_id = self._infer_expected_amount(sub_id)
-            self.storage.create_upcoming_transaction(
-                sub_id, next_date, expected_amount, amount_basis_transaction_id=basis_tx_id,
-            )
-            logger.info(
-                "Created upcoming for sub %s (merchant=%s) on %s",
-                sub_id, sub["merchant"], next_date,
-            )
+        # 1. Generate every eligible pending cycle through the horizon (R11),
+        #    not just the next one.
+        self._generate_horizon(sub)
 
         # 2. Auto-match pending upcoming transactions
         for upcoming in self.storage.list_upcoming_transactions(sub_id):
@@ -158,6 +140,57 @@ class SubscriptionMatcher:
                 )
             elif days_since <= threshold and sub["status"] == "possibly_cancelled":
                 self.storage.update_subscription(sub_id, status="active")
+
+    def _generate_horizon(self, sub: dict) -> None:
+        """R11: materialize every eligible pending occurrence through
+        GENERATION_HORIZON_DAYS, not just the next one.
+
+        Walks the schedule forward from the latest known period (by
+        schedule_period_date, the stable identity fixed at creation and
+        never touched by a later expected_date correction — so a
+        corrected or dismissed period is neither regenerated nor
+        duplicated). A period the schedule would place before today (e.g.
+        caught up after the subscription was paused or newly reactivated)
+        is walked past but never materialized — it was never actually
+        billed, so it isn't a real upcoming charge.
+
+        Chains each step from the previous occurrence rather than always
+        recomputing from a fixed original anchor — safe because
+        compute_next_billing_date's billing_day math (_safe_date) only
+        reads the base date's year/month to pick the next candidate, so
+        clamping a short month (e.g. billing_day=31 in February) never
+        permanently shifts later months down; each step reclamps
+        independently. The frequency-without-billing_day fallback
+        (fixed +N days) is stable by construction — each step is a fixed
+        offset from the previous, nothing to drift relative to.
+        """
+        sub_id = sub["id"]
+        frequency = sub["frequency"]
+        billing_day = sub["billing_day"]
+        today = local_now().date()
+        horizon_end = today + timedelta(days=GENERATION_HORIZON_DAYS)
+
+        upcomings = self.storage.list_upcoming_transactions(sub_id)
+        existing_periods = {u["schedule_period_date"] for u in upcomings}
+        cursor = max((u["schedule_period_date"] for u in upcomings), default=None)
+
+        for _ in range(_MAX_GENERATION_STEPS):
+            next_date_str = compute_next_billing_date(frequency, billing_day, last_date=cursor)
+            next_date = datetime.strptime(next_date_str, "%Y-%m-%d").date()
+            cursor = next_date_str
+            if next_date > horizon_end:
+                break
+            if next_date < today or next_date_str in existing_periods:
+                continue
+            expected_amount, basis_tx_id = self._infer_expected_amount(sub_id)
+            self.storage.create_upcoming_transaction(
+                sub_id, next_date_str, expected_amount, amount_basis_transaction_id=basis_tx_id,
+            )
+            existing_periods.add(next_date_str)
+            logger.info(
+                "Created upcoming for sub %s (merchant=%s) on %s",
+                sub_id, sub["merchant"], next_date_str,
+            )
 
     def _infer_expected_amount(self, sub_id: int) -> tuple[Optional[float], Optional[int]]:
         """R11: upcoming_transactions.expected_amount is SGD-only (no

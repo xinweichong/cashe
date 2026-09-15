@@ -2962,11 +2962,16 @@ class Storage:
         # correction, on an already-existing row. amount_basis follows from
         # whether a specific matched charge backs the inferred amount.
         amount_basis = "matched_charge" if amount_basis_transaction_id is not None else "unknown"
+        # schedule_period_date is the stable period identity (R11): fixed
+        # at creation to whatever the schedule originally placed this
+        # occurrence at, and never touched by a later expected_date
+        # correction — see update_planned_charge and the horizon generator.
         cur = self._conn.execute(
             """INSERT INTO upcoming_transactions
-               (subscription_id, expected_date, expected_amount, date_basis, amount_basis, amount_basis_transaction_id)
-               VALUES (?, ?, ?, 'schedule', ?, ?)""",
-            (subscription_id, expected_date, expected_amount, amount_basis, amount_basis_transaction_id),
+               (subscription_id, expected_date, expected_amount, date_basis, amount_basis,
+                amount_basis_transaction_id, schedule_period_date)
+               VALUES (?, ?, ?, 'schedule', ?, ?, ?)""",
+            (subscription_id, expected_date, expected_amount, amount_basis, amount_basis_transaction_id, expected_date),
         )
         self._conn.commit()
         return cur.lastrowid
@@ -2980,21 +2985,6 @@ class Storage:
             (subscription_id,),
         ).fetchall()
         return [dict(r) for r in rows]
-
-    @_locked
-    def upcoming_exists_for_period(self, subscription_id: int, expected_date: str, window_days: int = 5) -> bool:
-        """Return True if an upcoming transaction already exists near expected_date."""
-        from datetime import datetime, timedelta
-        d = datetime.strptime(expected_date, "%Y-%m-%d")
-        lo = (d - timedelta(days=window_days)).strftime("%Y-%m-%d")
-        hi = (d + timedelta(days=window_days)).strftime("%Y-%m-%d")
-        row = self._conn.execute(
-            """SELECT 1 FROM upcoming_transactions
-               WHERE subscription_id = ? AND expected_date BETWEEN ? AND ?
-               AND status IN ('pending', 'matched')""",
-            (subscription_id, lo, hi),
-        ).fetchone()
-        return row is not None
 
     @_locked
     def find_subscription_match(

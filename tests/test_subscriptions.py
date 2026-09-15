@@ -2,6 +2,7 @@
 
 import pytest
 from datetime import datetime, timedelta
+from unittest.mock import patch
 from src.storage import Storage
 from src.subscriptions import SubscriptionMatcher, compute_next_billing_date
 
@@ -51,13 +52,18 @@ class TestUpcomingGeneration:
         assert len(upcoming) >= 1
         assert upcoming[0]["status"] == "pending"
 
-    def test_does_not_duplicate_upcoming(self, storage, sub_id):
-        matcher = SubscriptionMatcher(storage)
-        matcher.run()
-        matcher.run()
+    def test_generates_every_eligible_cycle_through_the_horizon_without_duplicating(self, storage, sub_id):
+        # R11: billing_day=15 monthly from 2026-05-01 generates 05-15,
+        # 06-15, and 07-15 within the 90-day horizon (through 2026-07-30);
+        # 08-15 falls outside it. Running twice must not duplicate any of
+        # them — schedule_period_date is checked, not just count.
+        with patch('src.subscriptions.local_now', return_value=datetime(2026, 5, 1)):
+            matcher = SubscriptionMatcher(storage)
+            matcher.run()
+            matcher.run()
         upcoming = storage.list_upcoming_transactions(sub_id)
         pending = [u for u in upcoming if u["status"] == "pending"]
-        assert len(pending) == 1
+        assert sorted(u["expected_date"] for u in pending) == ["2026-05-15", "2026-06-15", "2026-07-15"]
 
     def test_does_not_generate_for_cancelled_subscription(self, storage, sub_id):
         storage.update_subscription(sub_id, status="cancelled")
@@ -82,12 +88,13 @@ class TestUpcomingGeneration:
         upcoming_id = storage.create_upcoming_transaction(sub_id, "2026-05-15", 13.98)
         storage.match_upcoming_transaction(upcoming_id, tx["id"])
 
-        SubscriptionMatcher(storage).run()
+        with patch('src.subscriptions.local_now', return_value=datetime(2026, 5, 12)):
+            SubscriptionMatcher(storage).run()
         upcomings = storage.list_upcoming_transactions(sub_id)
-        # Should have the matched May upcoming AND a new pending June upcoming
+        # Should have the matched May upcoming AND new pending June/July
+        # upcomings (within the 90-day horizon from 2026-05-12).
         pending = [u for u in upcomings if u["status"] == "pending"]
-        assert len(pending) == 1
-        assert pending[0]["expected_date"] == "2026-06-15"
+        assert sorted(u["expected_date"] for u in pending) == ["2026-06-15", "2026-07-15"]
 
 
 class TestInferExpectedAmount:
@@ -106,11 +113,17 @@ class TestInferExpectedAmount:
         upcoming_id = storage.create_upcoming_transaction(sub_id, "2026-05-15", 15.99)
         storage.match_upcoming_transaction(upcoming_id, tx_id)
 
-        SubscriptionMatcher(storage).run()
+        with patch('src.subscriptions.local_now', return_value=datetime(2026, 5, 15)):
+            SubscriptionMatcher(storage).run()
 
-        pending = [u for u in storage.list_upcoming_transactions(sub_id) if u["status"] == "pending"]
-        assert len(pending) == 1
+        pending = sorted(
+            (u for u in storage.list_upcoming_transactions(sub_id) if u["status"] == "pending"),
+            key=lambda u: u["expected_date"],
+        )
+        assert pending[0]["expected_date"] == "2026-06-15"
         assert pending[0]["expected_amount"] == pytest.approx(11.99, abs=0.01)
+        assert pending[0]["amount_basis"] == "matched_charge"
+        assert pending[0]["amount_basis_transaction_id"] == tx_id
 
     def test_next_upcoming_has_no_expected_amount_when_conversion_is_unresolved(self, storage, sub_id):
         # A legacy exchange_rate of 1.0 on a foreign currency is a silent
@@ -126,11 +139,70 @@ class TestInferExpectedAmount:
         upcoming_id = storage.create_upcoming_transaction(sub_id, "2026-05-15", 15.99)
         storage.match_upcoming_transaction(upcoming_id, tx_id)
 
-        SubscriptionMatcher(storage).run()
+        with patch('src.subscriptions.local_now', return_value=datetime(2026, 5, 15)):
+            SubscriptionMatcher(storage).run()
 
-        pending = [u for u in storage.list_upcoming_transactions(sub_id) if u["status"] == "pending"]
-        assert len(pending) == 1
+        pending = sorted(
+            (u for u in storage.list_upcoming_transactions(sub_id) if u["status"] == "pending"),
+            key=lambda u: u["expected_date"],
+        )
+        assert pending[0]["expected_date"] == "2026-06-15"
         assert pending[0]["expected_amount"] is None
+        assert pending[0]["amount_basis"] == "unknown"
+
+
+class TestHorizonExpansion:
+    def test_end_of_month_billing_day_does_not_drift_across_months(self, storage):
+        # R11: billing_day=31 clamped through Feb (28-day, non-leap 2027)
+        # must not permanently pin later months to 28 — each step
+        # reclamps independently from that month's own length.
+        sub = storage.create_subscription('Rent', 'monthly', billing_day=31)
+        with patch('src.subscriptions.local_now', return_value=datetime(2027, 1, 1)):
+            SubscriptionMatcher(storage).run()
+        dates = sorted(u["expected_date"] for u in storage.list_upcoming_transactions(sub))
+        assert dates == ["2027-01-31", "2027-02-28", "2027-03-31"]
+
+    def test_quarterly_and_weekly_schedules_generate_multiple_occurrences(self, storage):
+        weekly = storage.create_subscription('Kopi', 'weekly', billing_day=0)  # Monday
+        quarterly = storage.create_subscription('Insurance', 'quarterly')
+        with patch('src.subscriptions.local_now', return_value=datetime(2026, 1, 5)):  # a Monday
+            SubscriptionMatcher(storage).run()
+        weekly_dates = sorted(u["expected_date"] for u in storage.list_upcoming_transactions(weekly))
+        quarterly_dates = sorted(u["expected_date"] for u in storage.list_upcoming_transactions(quarterly))
+        assert len(weekly_dates) >= 10  # ~90 days / 7
+        assert all(datetime.strptime(d, "%Y-%m-%d").weekday() == 0 for d in weekly_dates)
+        assert quarterly_dates == ["2026-04-05"]  # +90 days once, none within the horizon a second time
+
+    def test_dismissed_period_is_not_regenerated(self, storage, sub_id):
+        with patch('src.subscriptions.local_now', return_value=datetime(2026, 5, 1)):
+            SubscriptionMatcher(storage).run()
+        upcomings = storage.list_upcoming_transactions(sub_id)
+        june = next(u for u in upcomings if u["expected_date"] == "2026-06-15")
+        storage.dismiss_planned_charge(june["id"])
+
+        with patch('src.subscriptions.local_now', return_value=datetime(2026, 5, 1)):
+            SubscriptionMatcher(storage).run()
+
+        upcomings = storage.list_upcoming_transactions(sub_id)
+        june_rows = [u for u in upcomings if u["expected_date"] == "2026-06-15"]
+        assert len(june_rows) == 1
+        assert june_rows[0]["status"] == "dismissed"
+
+    def test_corrected_period_is_not_regenerated_at_its_original_date(self, storage, sub_id):
+        with patch('src.subscriptions.local_now', return_value=datetime(2026, 5, 1)):
+            SubscriptionMatcher(storage).run()
+        upcomings = storage.list_upcoming_transactions(sub_id)
+        june = next(u for u in upcomings if u["expected_date"] == "2026-06-15")
+        storage.update_planned_charge(june["id"], {"expected_date": "2026-06-20"})
+
+        with patch('src.subscriptions.local_now', return_value=datetime(2026, 5, 1)):
+            SubscriptionMatcher(storage).run()
+
+        upcomings = storage.list_upcoming_transactions(sub_id)
+        assert sorted(u["expected_date"] for u in upcomings) == ["2026-05-15", "2026-06-20", "2026-07-15"]
+        moved = next(u for u in upcomings if u["expected_date"] == "2026-06-20")
+        assert moved["date_basis"] == "user"
+        assert moved["schedule_period_date"] == "2026-06-15"
 
 
 class TestAutoMatch:

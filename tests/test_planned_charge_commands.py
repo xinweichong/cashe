@@ -110,10 +110,14 @@ def test_next_upcoming_records_the_matched_charge_it_was_inferred_from(in_memory
     )
     storage.match_upcoming_transaction(charge, tx_id)
 
-    SubscriptionMatcher(storage).run()
+    with patch('src.subscriptions.local_now', return_value=datetime(2026, 5, 15)):
+        SubscriptionMatcher(storage).run()
 
-    pending_charges = [u for u in storage.list_upcoming_transactions(sub) if u['status'] == 'pending']
-    assert len(pending_charges) == 1
+    pending_charges = sorted(
+        (u for u in storage.list_upcoming_transactions(sub) if u['status'] == 'pending'),
+        key=lambda u: u['expected_date'],
+    )
+    assert pending_charges[0]['expected_date'] == '2026-06-15'
     assert pending_charges[0]['amount_basis'] == 'matched_charge'
     assert pending_charges[0]['amount_basis_transaction_id'] == tx_id
     assert pending_charges[0]['date_basis'] == 'schedule'

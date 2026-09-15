@@ -38,11 +38,15 @@ def test_paused_schedule_does_not_generate_and_resume_generates(schedule):
     storage, _, _ = schedule
     sub = storage.create_subscription('Other', 'monthly')
     storage.update_subscription(sub, status='paused')
-    SubscriptionMatcher(storage).run()
-    assert storage.list_upcoming_transactions(sub) == []
-    storage.update_subscription(sub, status='active')
-    SubscriptionMatcher(storage).run()
-    assert len(storage.list_upcoming_transactions(sub)) == 1
+    with patch('src.subscriptions.local_now', return_value=datetime(2026, 9, 8)):
+        SubscriptionMatcher(storage).run()
+        assert storage.list_upcoming_transactions(sub) == []
+        storage.update_subscription(sub, status='active')
+        SubscriptionMatcher(storage).run()
+        # R11: horizon generation fills every eligible cycle, not just one —
+        # a no-billing_day monthly schedule steps in fixed 30-day
+        # increments, landing on all three within the 90-day horizon.
+        assert len(storage.list_upcoming_transactions(sub)) == 3
 
 
 def test_worker_rechecks_stale_snapshot_after_pause(schedule):
