@@ -155,6 +155,35 @@ def test_pending_and_unknown_migrations_are_reported_without_applying_them(tmp_p
     conn.close()
 
 
+def test_duplicate_matched_transactions_are_detected(tmp_path):
+    """R11 sub-project 5: a transaction linked to more than one
+    upcoming_transactions row (double-counting one real charge against
+    two forecast commitments) is a genuine data issue the audit must
+    surface before migration 21's unique index can safely apply to a
+    real database. Simulated by dropping that index, the same as a
+    database that predates migration 21 — the audit itself doesn't care
+    when the row was written, only that the duplicate exists now."""
+    from src.storage import Storage
+    path = tmp_path / 'user.db'
+    conn = init_db(str(path))
+    conn.execute('DROP INDEX idx_upcoming_matched_transaction_unique')
+    storage = Storage(conn)
+    subs = [storage.create_subscription('Cafe', 'monthly') for _ in range(2)]
+    predictions = [storage.create_upcoming_transaction(sub, '2026-09-09', 12) for sub in subs]
+    tx_id = storage.insert_transaction(source='manual', source_id='dup', amount=12, transaction_date='2026-09-09')
+    conn.execute(
+        f"UPDATE upcoming_transactions SET status='matched', matched_transaction_id=? WHERE id IN ({predictions[0]}, {predictions[1]})",
+        (tx_id,),
+    )
+    conn.commit()
+    conn.close()
+
+    report = audit_database(path)
+
+    assert report['status'] == 'issues'
+    assert report['duplicate_matched_transactions'] == [{'transaction_id': tx_id, 'count': 2}]
+
+
 def test_partial_legacy_schema_is_not_a_clean_bill_of_health(tmp_path):
     path = tmp_path / 'legacy.db'
     conn = sqlite3.connect(path)
@@ -163,7 +192,7 @@ def test_partial_legacy_schema_is_not_a_clean_bill_of_health(tmp_path):
     report = audit_database(path)
     assert report['status'] == 'issues'
     assert report['absent_feature_tables'] == ['goal_contributions', 'trip_transactions', 'upcoming_transactions']
-    assert report['pending_migrations'] == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+    assert report['pending_migrations'] == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]
 
 
 def test_missing_file_is_not_created_and_corrupt_input_is_safe(tmp_path, capsys):

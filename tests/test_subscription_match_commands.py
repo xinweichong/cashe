@@ -1,4 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor
+import sqlite3
 
 import pytest
 
@@ -123,17 +124,26 @@ def test_concurrent_match_and_link_have_one_winner(charges):
     assert sum(r['matched_transaction_id'] == tx for sub in subs for r in storage.list_upcoming_transactions(sub)) == 1
 
 
-def test_legacy_duplicate_links_are_preserved(charges, in_memory_db):
-    storage, subs, predictions, tx = charges
-    in_memory_db.execute("UPDATE upcoming_transactions SET status='matched', matched_transaction_id=?", (tx,))
-    in_memory_db.commit()
-    before = [storage.get_upcoming_transaction(p) for p in predictions]
+def test_duplicate_matched_transaction_is_rejected_at_the_db_level(charges, in_memory_db):
+    """R11 sub-project 5: migration 21's unique index (on
+    upcoming_transactions.matched_transaction_id where not null) makes a
+    duplicate match — the same actual charge linked to two different
+    upcoming/forecast commitments — impossible to construct at all, not
+    just rejected by Storage's own application-level
+    _require_unlinked_charge check. This closes the gap that check alone
+    couldn't guarantee against a write that bypasses Storage entirely
+    (e.g. a raw SQL script or a future code path that forgets the check).
+    Previously (before this migration) such a raw SQL write succeeded and
+    the system merely tolerated the resulting legacy duplicate afterward
+    — this test used to assert that tolerance; now the duplicate can't be
+    created in the first place."""
+    storage, _, predictions, tx = charges
     storage.match_upcoming_transaction(predictions[0], tx)
-    storage.link_transaction_to_subscription(subs[1], tx)
-    third = storage.create_upcoming_transaction(subs[0], '2026-10-09', 12)
-    with pytest.raises(SubscriptionMatchConflict):
-        storage.match_upcoming_transaction(third, tx)
-    assert [storage.get_upcoming_transaction(p) for p in predictions] == before
+    with pytest.raises(sqlite3.IntegrityError):
+        in_memory_db.execute(
+            "UPDATE upcoming_transactions SET status='matched', matched_transaction_id=? WHERE id=?",
+            (tx, predictions[1]),
+        )
 
 
 def test_existing_match_cannot_be_replaced(charges, in_memory_db):

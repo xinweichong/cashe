@@ -13,7 +13,7 @@ def test_migrations_preserve_old_transactions_and_are_idempotent():
     assert conn.execute("SELECT * FROM transactions").fetchall() == [
         (42, "original-id", 1.25, None, None, None, None, None, None, None, None, 1, None)
     ]
-    assert conn.execute("SELECT version FROM schema_migrations").fetchall() == [(1,), (2,), (3,), (4,), (5,), (6,), (7,), (8,), (9,), (10,), (11,), (12,), (13,), (14,), (15,), (16,), (17,), (18,), (19,), (20,)]
+    assert conn.execute("SELECT version FROM schema_migrations").fetchall() == [(1,), (2,), (3,), (4,), (5,), (6,), (7,), (8,), (9,), (10,), (11,), (12,), (13,), (14,), (15,), (16,), (17,), (18,), (19,), (20,), (21,)]
     assert conn.execute("SELECT COUNT(*) FROM source_events").fetchone()[0] == 0
     conn.close()
 
@@ -163,4 +163,39 @@ def test_revision_migration_tolerates_a_missing_transactions_table(monkeypatch):
     monkeypatch.setattr(migrations, 'MIGRATIONS', released)
     migrate(conn)  # no transactions table at all — must not raise
     assert conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='transactions'").fetchone() is None
+    conn.close()
+
+
+def test_matched_transaction_unique_index_rejects_duplicates_but_allows_distinct_matches(tmp_path):
+    import pytest
+    conn = init_db(str(tmp_path / 'user.db'))
+    conn.execute(
+        "INSERT INTO subscriptions(merchant, frequency) VALUES ('A', 'monthly'), ('B', 'monthly')"
+    )
+    conn.execute(
+        "INSERT INTO transactions(source, source_id, amount, transaction_date) "
+        "VALUES ('manual', 't1', 10, '2026-09-09'), ('manual', 't2', 10, '2026-09-09')"
+    )
+    conn.execute(
+        "INSERT INTO upcoming_transactions(subscription_id, expected_date, status, matched_transaction_id) "
+        "VALUES (1, '2026-09-09', 'matched', 1)"
+    )
+    conn.commit()
+    # A second row matched to a *different* transaction is fine.
+    conn.execute(
+        "INSERT INTO upcoming_transactions(subscription_id, expected_date, status, matched_transaction_id) "
+        "VALUES (2, '2026-09-09', 'matched', 2)"
+    )
+    conn.commit()
+    # The same transaction matched to a second row is rejected at the DB level.
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute(
+            "INSERT INTO upcoming_transactions(subscription_id, expected_date, status, matched_transaction_id) "
+            "VALUES (2, '2026-10-09', 'matched', 1)"
+        )
+    # Multiple *pending* (NULL matched_transaction_id) rows are unaffected — the
+    # index only applies where matched_transaction_id IS NOT NULL.
+    conn.execute("INSERT INTO upcoming_transactions(subscription_id, expected_date) VALUES (1, '2026-10-09')")
+    conn.execute("INSERT INTO upcoming_transactions(subscription_id, expected_date) VALUES (1, '2026-11-09')")
+    conn.commit()
     conn.close()

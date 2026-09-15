@@ -20,6 +20,17 @@ def _add_column_if_table_exists(table: str, column_def: str):
     return _apply
 
 
+def _create_index_if_table_exists(table: str, index_sql: str):
+    """Statement factory for MIGRATIONS: run index_sql only if `table` exists
+    (same reasoning as _add_column_if_table_exists — some connections
+    migrate() runs against, including admin.db, never have every
+    user-database table)."""
+    def _apply(conn: sqlite3.Connection) -> None:
+        if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone():
+            conn.execute(index_sql)
+    return _apply
+
+
 def _backfill_upcoming_amount_basis(conn: sqlite3.Connection) -> None:
     if not conn.execute(
         "SELECT 1 FROM sqlite_master WHERE type='table' AND name='upcoming_transactions'"
@@ -340,6 +351,28 @@ MIGRATIONS = (
         ) if conn.execute(
             "SELECT 1 FROM sqlite_master WHERE type='table' AND name='upcoming_transactions'"
         ).fetchone() else None,
+    )),
+    (21, (
+        # R11 sub-project 5: one matched actual charge replaces at most one
+        # forecast commitment — a transaction linked to more than one
+        # upcoming_transactions row would double-count a single real
+        # charge against two different subscriptions' predictions.
+        # Storage.match_upcoming_transaction/link_transaction_to_subscription
+        # already enforce this at the application level
+        # (_require_unlinked_charge) under the same lock that serializes
+        # every write, so this is defense-in-depth, not a fix for an
+        # active bug. scripts/db_audit.py gained a
+        # duplicate_matched_transactions check specifically so an operator
+        # can verify none exist before this applies to a real database; if
+        # any do, CREATE UNIQUE INDEX below fails loudly (rolling back
+        # this migration's transaction) rather than silently repairing
+        # them — per the roadmap's own instruction not to repair
+        # duplicates silently during a migration.
+        _create_index_if_table_exists(
+            "upcoming_transactions",
+            "CREATE UNIQUE INDEX idx_upcoming_matched_transaction_unique "
+            "ON upcoming_transactions(matched_transaction_id) WHERE matched_transaction_id IS NOT NULL",
+        ),
     )),
 )
 

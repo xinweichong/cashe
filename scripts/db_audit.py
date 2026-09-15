@@ -91,6 +91,24 @@ def audit_database(path: Path) -> dict:
             for table in ("recurring_suggestions", "subscription_suggestion_acceptances"):
                 if table in tables:
                     retained_subscription_links[table] = _orphan_count(conn, table, "subscription_id", "subscriptions", "id")
+        # R11 sub-project 5: one matched actual charge must replace at most
+        # one forecast commitment. The application already enforces this
+        # (Storage._require_unlinked_charge) under the lock that
+        # serializes every write, so this should never fire in practice —
+        # it exists so an operator can verify that before the migration 21
+        # unique index applies to a real database, per the roadmap's own
+        # "audit before constrain" instruction.
+        duplicate_matches = []
+        if kind == "user" and "upcoming_transactions" in tables:
+            duplicate_matches = [
+                {"transaction_id": row[0], "count": row[1]}
+                for row in conn.execute(
+                    """SELECT matched_transaction_id, COUNT(*) FROM upcoming_transactions
+                       WHERE matched_transaction_id IS NOT NULL
+                       GROUP BY matched_transaction_id HAVING COUNT(*) > 1"""
+                ).fetchall()
+            ]
+
         applied = []
         pending = []
         unknown = []
@@ -102,7 +120,7 @@ def audit_database(path: Path) -> dict:
             unknown = sorted(set(applied) - supported)
 
         return {
-            "status": "issues" if not integrity_ok or foreign_keys or missing_constraints or missing_tables or unknown else "ok",
+            "status": "issues" if not integrity_ok or foreign_keys or missing_constraints or missing_tables or unknown or duplicate_matches else "ok",
             "database_kind": kind,
             "integrity_ok": integrity_ok,
             "foreign_key_violations": foreign_keys,
@@ -110,6 +128,7 @@ def audit_database(path: Path) -> dict:
             "absent_feature_tables": sorted(missing_tables),
             "retained_links_to_deleted_transactions": retained,
             "retained_links_to_deleted_subscriptions": retained_subscription_links,
+            "duplicate_matched_transactions": duplicate_matches,
             "applied_migrations": applied,
             "pending_migrations": pending,
             "unknown_migrations": unknown,
