@@ -1,6 +1,6 @@
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { TransactionList } from '../TransactionList';
 import type { Transaction, DailyTotalV2 } from '@/api/client';
 
@@ -80,4 +80,31 @@ it('marks a day total with a note when the underlying status is not complete', (
     />
   );
   expect(screen.getByTestId('tx-day-total')).toHaveTextContent('*');
+});
+
+it('in selection mode, renders a checkbox per row and clicking toggles selection instead of opening detail', () => {
+  const transactions = [tx({ id: 1, merchant: 'Cafe' }), tx({ id: 2, merchant: 'Shop' })];
+  const onTransactionClick = vi.fn();
+  const onToggleSelect = vi.fn();
+  render(
+    <TransactionList
+      transactions={transactions}
+      onLoadMore={() => {}}
+      hasMore={false}
+      isLoading={false}
+      onTransactionClick={onTransactionClick}
+      selectionMode
+      selectedIds={new Set([1])}
+      onToggleSelect={onToggleSelect}
+    />
+  );
+  const checkboxes = screen.getAllByRole('checkbox');
+  expect(checkboxes).toHaveLength(2);
+  expect(checkboxes[0]).toBeChecked();
+  expect(checkboxes[1]).not.toBeChecked();
+
+  fireEvent.click(screen.getByText('Shop'));
+
+  expect(onToggleSelect).toHaveBeenCalledWith(2);
+  expect(onTransactionClick).not.toHaveBeenCalled();
 });

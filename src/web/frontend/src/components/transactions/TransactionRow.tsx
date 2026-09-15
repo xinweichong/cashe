@@ -11,6 +11,7 @@ export function TransactionRow({
   selected = false,
   onRemove,
   removeDisabled = false,
+  selectable = false,
 }: {
   tx: Transaction;
   readOnly?: boolean;
@@ -18,6 +19,10 @@ export function TransactionRow({
   selected?: boolean;
   onRemove?: () => void;
   removeDisabled?: boolean;
+  /** R09: bulk-selection mode — replaces the category-icon avatar with a
+   * checkbox reflecting `selected`, and clicking anywhere on the row toggles
+   * selection (still via the same `onClick`, which the caller repurposes). */
+  selectable?: boolean;
 }) {
   const isIncome = tx.type === 'income';
   const categoryColor = getCategoryColor(tx.category ?? 'Other');
@@ -43,12 +48,23 @@ export function TransactionRow({
         e.currentTarget.style.transform = '';
       } : undefined}
     >
-      <div
-        className="w-8 h-8 rounded-md flex items-center justify-center text-sm font-bold shrink-0"
-        style={{ background: `${categoryColor}33`, color: categoryColor }}
-      >
-        {isIncome ? '+' : tx.category?.charAt(0) ?? '·'}
-      </div>
+      {selectable ? (
+        <input
+          type="checkbox"
+          aria-label={`Select ${tx.merchant || tx.description || 'transaction'}`}
+          checked={selected}
+          readOnly
+          className="w-5 h-5 shrink-0 justify-self-center accent-current"
+          style={{ color: categoryColor }}
+        />
+      ) : (
+        <div
+          className="w-8 h-8 rounded-md flex items-center justify-center text-sm font-bold shrink-0"
+          style={{ background: `${categoryColor}33`, color: categoryColor }}
+        >
+          {isIncome ? '+' : tx.category?.charAt(0) ?? '·'}
+        </div>
+      )}
 
       <div className="min-w-0">
         <div className="text-sm font-medium tracking-[-0.005em] truncate">

@@ -21,11 +21,14 @@ function LocationProbe() {
   return <div data-testid="location-search">{location.search}</div>;
 }
 
-const { getTransactionsV2, getDailyTotalsV2, getCategories, getSettings, getTrips, home } = vi.hoisted(() => ({
+const { getTransactionsV2, getDailyTotalsV2, getCategories, getSettings, getTrips, home, bulkCorrectTransactions, bulkUndoTransactions } = vi.hoisted(() => ({
   getTransactionsV2: vi.fn(), getDailyTotalsV2: vi.fn(), getCategories: vi.fn(),
   getSettings: vi.fn(), getTrips: vi.fn(), home: vi.fn(),
+  bulkCorrectTransactions: vi.fn(), bulkUndoTransactions: vi.fn(),
 }));
-vi.mock('@/api/client', () => ({ api: { getTransactionsV2, getDailyTotalsV2, getCategories, getSettings, getTrips } }));
+vi.mock('@/api/client', () => ({
+  api: { getTransactionsV2, getDailyTotalsV2, getCategories, getSettings, getTrips, bulkCorrectTransactions, bulkUndoTransactions },
+}));
 vi.mock('@/api/briefing', () => ({ briefingApi: { home } }));
 
 afterEach(() => { cleanup(); vi.clearAllMocks(); sessionStorage.clear(); });
@@ -174,4 +177,76 @@ it('auto-loads pages until a remembered scroll anchor is visible, without user s
   expect(await screen.findByText('Anchor Merchant')).toBeInTheDocument();
   expect(getTransactionsV2).toHaveBeenCalledWith(expect.objectContaining({ offset: 20 }));
   sessionStorage.removeItem('activity-scroll-anchor');
+});
+
+function txV2(id: number, merchant: string, revision: number) {
+  return {
+    id, revision, source: 'manual', type: 'expense', merchant, category: 'Food',
+    description: null, transaction_date: '2026-09-06T09:00:00', ingested_at: '2026-09-06T09:00:00',
+    original: { minor_units: 1000, currency: 'SGD' }, reporting: { minor_units: 1000, currency: 'SGD' },
+    conversion: { status: 'native', rate: null, source: null, quoted_at: null }, refund_of: null, refunded_by: [],
+  };
+}
+
+it('bulk-categorizes selected rows using their loaded revisions, then offers undo', async () => {
+  getCategories.mockResolvedValue([{ name: 'Transport' }]);
+  home.mockResolvedValue({ review_count: 0 });
+  getDailyTotalsV2.mockResolvedValue([]);
+  getTransactionsV2.mockImplementation(async (params?: Record<string, unknown>) =>
+    (params?.offset ?? 0) === 0 ? [txV2(1, 'Cafe', 3), txV2(2, 'Shop', 5)] : [],
+  );
+  bulkCorrectTransactions.mockResolvedValue([
+    { id: 1, status: 'ok', revision: 4 },
+    { id: 2, status: 'ok', revision: 6 },
+  ]);
+
+  renderPage();
+  await screen.findByText('Cafe');
+
+  fireEvent.click(screen.getByRole('button', { name: 'Select' }));
+  fireEvent.click(screen.getByText('Cafe'));
+  fireEvent.click(screen.getByText('Shop'));
+  fireEvent.change(screen.getByLabelText('Set category for selected'), { target: { value: 'Transport' } });
+
+  await waitFor(() => expect(bulkCorrectTransactions).toHaveBeenCalled());
+  expect(bulkCorrectTransactions.mock.calls[0][0]).toEqual({
+    transaction_ids: [1, 2], category: 'Transport', expected_revisions: { 1: 3, 2: 5 },
+  });
+  const undoBanner = await screen.findByText(/Updated 2\./);
+  expect(undoBanner).toBeInTheDocument();
+  // Selection mode ends and the picker resets after a bulk action.
+  expect(screen.getByRole('button', { name: 'Select' })).toBeInTheDocument();
+
+  bulkUndoTransactions.mockResolvedValue([{ id: 1, status: 'ok', revision: 5 }, { id: 2, status: 'ok', revision: 7 }]);
+  fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
+
+  await waitFor(() => expect(bulkUndoTransactions).toHaveBeenCalled());
+  expect(bulkUndoTransactions.mock.calls[0][0]).toEqual({
+    transaction_ids: [1, 2], expected_revisions: { 1: 4, 2: 6 },
+  });
+  await waitFor(() => expect(screen.queryByText(/Updated 2\./)).not.toBeInTheDocument());
+});
+
+it('reports a per-row conflict from a bulk action without losing the rows that succeeded', async () => {
+  getCategories.mockResolvedValue([{ name: 'Transport' }]);
+  home.mockResolvedValue({ review_count: 0 });
+  getDailyTotalsV2.mockResolvedValue([]);
+  getTransactionsV2.mockImplementation(async (params?: Record<string, unknown>) =>
+    (params?.offset ?? 0) === 0 ? [txV2(1, 'Cafe', 3), txV2(2, 'Shop', 5)] : [],
+  );
+  bulkCorrectTransactions.mockResolvedValue([
+    { id: 1, status: 'ok', revision: 4 },
+    { id: 2, status: 'conflict', current_revision: 6 },
+  ]);
+
+  renderPage();
+  await screen.findByText('Cafe');
+  fireEvent.click(screen.getByRole('button', { name: 'Select' }));
+  fireEvent.click(screen.getByText('Cafe'));
+  fireEvent.click(screen.getByText('Shop'));
+  fireEvent.change(screen.getByLabelText('Set category for selected'), { target: { value: 'Transport' } });
+
+  await waitFor(() => expect(bulkCorrectTransactions).toHaveBeenCalled());
+  // Only the row that actually succeeded is offered for undo.
+  expect(await screen.findByText(/Updated 1\./)).toBeInTheDocument();
 });

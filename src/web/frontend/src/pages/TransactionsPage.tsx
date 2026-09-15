@@ -8,13 +8,16 @@ import { TransactionList } from '@/components/transactions/TransactionList';
 import { TransactionFilters } from '@/components/transactions/TransactionFilters';
 import { TransactionDetail } from '@/components/transactions/TransactionDetail';
 import { TransactionForm } from '@/components/transactions/TransactionForm';
+import { BulkActionBar } from '@/components/transactions/BulkActionBar';
 import { useCategories } from '@/hooks/useCategories';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
-import { api, type Transaction, type TransactionV2, type DailyTotalV2 } from '@/api/client';
+import { useBulkCorrectTransactions, useBulkUndoTransactions } from '@/hooks/useTransactions';
+import { useToast } from '@/hooks/useToastContext';
+import { api, type Transaction, type TransactionV2, type DailyTotalV2, type BulkTransactionResultItemV2 } from '@/api/client';
 import { briefingApi } from '@/api/briefing';
 import { slideInRightVariants, fadeUpVariants } from '@/lib/motionPresets';
 import { localDayKey } from '@/lib/utils';
-import { Plus } from 'lucide-react';
+import { CheckSquare, Plus } from 'lucide-react';
 import { LoadFailed } from '@/components/ui/LoadFailed';
 
 const PAGE_SIZE = 20;
@@ -134,7 +137,11 @@ export function TransactionsPage() {
       placeholderData: keepPreviousData,
     });
 
-  const txs = useMemo(() => (data?.pages.flat() ?? []).map(transactionV2ToLegacy), [data]);
+  // Kept alongside the legacy-adapted txs — bulk actions (below) need each
+  // row's revision, which the legacy Transaction shape doesn't carry.
+  const txsV2 = useMemo(() => data?.pages.flat() ?? [], [data]);
+  const txs = useMemo(() => txsV2.map(transactionV2ToLegacy), [txsV2]);
+  const revisionById = useMemo(() => new Map(txsV2.map((tx) => [tx.id, tx.revision])), [txsV2]);
 
   // Use list data if available — only hit the single-tx endpoint for deep-links
   // where the transaction isn't in the loaded pages (e.g. direct URL navigation)
@@ -237,6 +244,86 @@ export function TransactionsPage() {
     }
   }, [txs, hasNextPage, isFetchingNextPage, isLoading, fetchNextPage]);
 
+  // R09 sub-project 3: bulk selection/categorization + R05 relation
+  // (type) controls. Each row's correction goes through the ordinary
+  // per-transaction update path server-side (Storage.bulk_correct loops
+  // update_transaction), so undo/revision-conflict semantics are exactly
+  // the single-row ones, just applied per selected id.
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [lastBulkUndo, setLastBulkUndo] = useState<{ ids: number[]; revisions: Record<number, number> } | null>(null);
+  const toast = useToast();
+  const bulkCorrect = useBulkCorrectTransactions();
+  const bulkUndo = useBulkUndoTransactions();
+
+  const toggleSelectionMode = useCallback(() => {
+    setSelectionMode((prev) => !prev);
+    setSelectedIds(new Set());
+    setShowForm(false);
+  }, []);
+
+  const toggleSelect = useCallback((id: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const handleBulkResult = useCallback((results: BulkTransactionResultItemV2[]) => {
+    const ok = results.filter((r) => r.status === 'ok');
+    const conflicts = results.filter((r) => r.status === 'conflict');
+    const errors = results.filter((r) => r.status === 'error');
+    let message = `Updated ${ok.length}.`;
+    if (conflicts.length) message += ` ${conflicts.length} skipped — edited elsewhere.`;
+    if (errors.length) message += ` ${errors.length} failed.`;
+    toast(message);
+    setLastBulkUndo(
+      ok.length ? { ids: ok.map((r) => r.id), revisions: Object.fromEntries(ok.map((r) => [r.id, r.revision!])) } : null,
+    );
+    setSelectionMode(false);
+    setSelectedIds(new Set());
+  }, [toast]);
+
+  const expectedRevisionsFor = useCallback((ids: number[]) => {
+    const entries: [number, number][] = [];
+    for (const id of ids) {
+      const revision = revisionById.get(id);
+      if (revision !== undefined) entries.push([id, revision]);
+    }
+    return Object.fromEntries(entries);
+  }, [revisionById]);
+
+  const handleBulkCategorize = useCallback((selectedCategory: string) => {
+    const ids = Array.from(selectedIds);
+    bulkCorrect.mutate(
+      { transaction_ids: ids, category: selectedCategory, expected_revisions: expectedRevisionsFor(ids) },
+      { onSuccess: handleBulkResult },
+    );
+  }, [selectedIds, bulkCorrect, expectedRevisionsFor, handleBulkResult]);
+
+  const handleBulkSetType = useCallback((newType: 'expense' | 'income' | 'refund' | 'transfer') => {
+    const ids = Array.from(selectedIds);
+    bulkCorrect.mutate(
+      { transaction_ids: ids, type: newType, expected_revisions: expectedRevisionsFor(ids) },
+      { onSuccess: handleBulkResult },
+    );
+  }, [selectedIds, bulkCorrect, expectedRevisionsFor, handleBulkResult]);
+
+  const handleBulkUndo = useCallback(() => {
+    if (!lastBulkUndo) return;
+    bulkUndo.mutate(
+      { transaction_ids: lastBulkUndo.ids, expected_revisions: lastBulkUndo.revisions },
+      {
+        onSuccess: (results) => {
+          const reverted = results.filter((r) => r.status === 'ok').length;
+          toast(reverted === results.length ? 'Reverted.' : `Reverted ${reverted} of ${results.length}.`);
+          setLastBulkUndo(null);
+        },
+      },
+    );
+  }, [lastBulkUndo, bulkUndo, toast]);
+
   // Toggle: clicking the active row navigates back to /transactions (closes panel)
   const handleTransactionClick = useCallback(
     (tx: Transaction) => {
@@ -267,12 +354,46 @@ export function TransactionsPage() {
           </div>
           <div className="flex items-center gap-2">
           <Link to="/review" className="min-h-11 inline-flex items-center px-2 text-sm text-teal">Review{!!briefing.data?.review_count && ` (${briefing.data.review_count})`}</Link>
-          <Button className="min-h-11" size="sm" onClick={() => setShowForm(!showForm)}>
+          <Button
+            className="min-h-11"
+            size="sm"
+            variant={selectionMode ? 'default' : 'outline'}
+            onClick={toggleSelectionMode}
+          >
+            <CheckSquare className="w-4 h-4 mr-1" />
+            {selectionMode ? 'Done' : 'Select'}
+          </Button>
+          <Button className="min-h-11" size="sm" onClick={() => setShowForm(!showForm)} disabled={selectionMode}>
             <Plus className="w-4 h-4 mr-1" />
             Add
           </Button>
           </div>
         </div>
+
+        {selectionMode && (
+          <BulkActionBar
+            count={selectedIds.size}
+            categories={categories ?? []}
+            onCategorize={handleBulkCategorize}
+            onSetType={handleBulkSetType}
+            onCancel={toggleSelectionMode}
+            pending={bulkCorrect.isPending}
+          />
+        )}
+
+        {lastBulkUndo && (
+          <p role="status" className="text-sm text-muted">
+            Updated {lastBulkUndo.ids.length}.{' '}
+            <button
+              type="button"
+              className="text-teal underline min-h-11"
+              disabled={bulkUndo.isPending}
+              onClick={handleBulkUndo}
+            >
+              {bulkUndo.isPending ? 'Undoing…' : 'Undo'}
+            </button>
+          </p>
+        )}
 
         <TransactionFilters
           search={search}
@@ -321,6 +442,9 @@ export function TransactionsPage() {
               onTransactionClick={handleTransactionClick}
               selectedTransactionId={selectedId}
               dailyTotals={dailyTotals}
+              selectionMode={selectionMode}
+              selectedIds={selectedIds}
+              onToggleSelect={toggleSelect}
             />
           )}
         </Card>

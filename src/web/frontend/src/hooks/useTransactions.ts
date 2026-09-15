@@ -89,6 +89,38 @@ export function useUpdateTransaction() {
   });
 }
 
+function invalidateAfterBulkChange(qc: ReturnType<typeof useQueryClient>) {
+  qc.invalidateQueries({ queryKey: ['transactions'] });
+  qc.invalidateQueries({ queryKey: ['transactions-v2'] });
+  qc.invalidateQueries({ queryKey: ['transaction'] });
+  qc.invalidateQueries({ queryKey: ['transaction-v2'] });
+  qc.invalidateQueries({ queryKey: ['transactions-daily-totals'] });
+  qc.invalidateQueries({ queryKey: ['summary'] });
+  qc.invalidateQueries({ queryKey: ['home-briefing'] });
+  qc.invalidateQueries({ queryKey: ['spending-evidence'] });
+  qc.invalidateQueries({ queryKey: ['spending-review'] });
+  qc.invalidateQueries({ queryKey: ['balance'] });
+}
+
+// R09: no optimistic patch — a bulk action can partially conflict per row,
+// so the UI reads each row's real status/revision back from the response
+// (rather than assuming success) and just refetches once settled.
+export function useBulkCorrectTransactions() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: api.bulkCorrectTransactions,
+    onSettled: () => invalidateAfterBulkChange(qc),
+  });
+}
+
+export function useBulkUndoTransactions() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: api.bulkUndoTransactions,
+    onSettled: () => invalidateAfterBulkChange(qc),
+  });
+}
+
 export function useDeleteTransaction() {
   const qc = useQueryClient();
   const toast = useToast();

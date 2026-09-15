@@ -25,6 +25,11 @@ interface TransactionListProps {
    * category filter is active) shows a neutral placeholder rather than 0.
    */
   dailyTotals?: Map<string, DailyTotalV2>;
+  /** R09: bulk-selection mode — when set, rows render a checkbox and
+   * clicking a row toggles selection instead of opening its detail. */
+  selectionMode?: boolean;
+  selectedIds?: Set<number>;
+  onToggleSelect?: (id: number) => void;
 }
 
 function TransactionRowSkeleton() {
@@ -85,6 +90,9 @@ export function TransactionList({
   onTransactionClick,
   selectedTransactionId,
   dailyTotals,
+  selectionMode = false,
+  selectedIds,
+  onToggleSelect,
 }: TransactionListProps) {
   const observerRef = useRef<HTMLDivElement>(null);
 
@@ -141,8 +149,9 @@ export function TransactionList({
             >
               <TransactionRow
                 tx={row.tx}
-                onClick={() => onTransactionClick(row.tx)}
-                selected={row.tx.id === selectedTransactionId}
+                onClick={() => (selectionMode ? onToggleSelect?.(row.tx.id) : onTransactionClick(row.tx))}
+                selected={selectionMode ? !!selectedIds?.has(row.tx.id) : row.tx.id === selectedTransactionId}
+                selectable={selectionMode}
               />
             </motion.div>
           )

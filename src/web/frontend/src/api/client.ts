@@ -21,6 +21,7 @@ export type BalanceV2 = components['schemas']['Balance'];
 export type CategoryTrendPointV2 = components['schemas']['CategoryTrendPoint'];
 export type GoalProgressV2 = components['schemas']['GoalProgress'];
 export type DailyTotalV2 = components['schemas']['DailyTotal'];
+export type BulkTransactionResultItemV2 = components['schemas']['BulkTransactionResultItem'];
 
 export async function request<T>(path: string, opts?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
@@ -483,6 +484,24 @@ export const api = {
 
   getDailyTotalsV2: (start: string, end: string) =>
     request<DailyTotalV2[]>(`/api/v2/transactions/daily-totals?start=${start}&end=${end}`),
+
+  bulkCorrectTransactions: (data: {
+    transaction_ids: number[];
+    category?: string;
+    type?: string;
+    remember_category?: boolean;
+    expected_revisions?: Record<number, number>;
+  }) =>
+    request<BulkTransactionResultItemV2[]>('/api/v2/transactions/bulk', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  bulkUndoTransactions: (data: { transaction_ids: number[]; expected_revisions?: Record<number, number> }) =>
+    request<BulkTransactionResultItemV2[]>('/api/v2/transactions/bulk/undo', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
 
   createTransaction: (data: Partial<TransactionCreateV2> & { amount: number }, requestKey?: string) =>
     request<TransactionV2>('/api/v2/transactions', {
