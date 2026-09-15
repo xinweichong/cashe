@@ -479,7 +479,13 @@ Frontend: `SubscriptionsSection` gained a "Needs attention" card surfacing price
 
 Verified: 10 new backend tests (`test_subscription_review.py`) covering overdue evidence, price-increase/no-change/foreign-currency/unresolved-conversion cases, and annual-renewal in/out-of-window with supporting charges; 2 new web API tests. Full backend suite green (1418 passed). Frontend typecheck/build/lint/tests green (125 passed). Live-verified the new endpoint against a real running server.
 
-**Follow-up (not done):** sub-project 5 (duplicate-match audit + uniqueness invariant) is unbuilt.
+**Sub-project 5 — Duplicate-match audit + uniqueness invariant.** Closed (2026-09-16). `scripts/db_audit.py` gained a `duplicate_matched_transactions` check (the same `transaction_id` linked to more than one `upcoming_transactions` row) so an operator can verify a real database is clean before deploying migration 21's partial unique index on `upcoming_transactions(matched_transaction_id) WHERE NOT NULL` — matching R01's established audit-before-constrain precedent for `PRAGMA foreign_keys`. If duplicates already exist, index creation fails loudly and rolls back the migration transaction rather than silently repairing them, per the roadmap's own instruction. `Storage.match_upcoming_transaction`/`link_transaction_to_subscription` already enforced this at the application level under the write-serializing lock; the DB-level constraint closes the gap against a write that bypasses `Storage` entirely.
+
+An existing test (`test_legacy_duplicate_links_are_preserved`) simulated and asserted tolerance of a duplicate created via a raw-SQL bypass of the app-level check — the new index makes that scenario impossible to construct at all in a migrated database, a strictly stronger guarantee, so it was updated (`test_duplicate_matched_transaction_is_rejected_at_the_db_level`) to assert the raw SQL write itself now fails, rather than asserting the old tolerated-duplicate behavior.
+
+Verified: new migration test confirming the index rejects a genuine duplicate while allowing distinct matches and multiple pending (NULL) rows; new `db_audit` test confirming the check detects a duplicate simulated by dropping the index (representing a database that predates migration 21). Full backend suite green (1420 passed) — no production database access from this session to run the audit against real data directly; the operator should run `python -m scripts.db_audit` against the live database before this migration deploys, per the same evidence-gate R01 already established.
+
+**R11 is complete.** All five sub-projects closed: canonical money for recurring detection/subscriptions, charge-level provenance, horizon expansion, overdue/price-change/annual-renewal review, and duplicate-match audit + uniqueness invariant.
 
 ## R12 — Implement the specified forecast
 
