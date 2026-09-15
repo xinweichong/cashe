@@ -3,6 +3,7 @@ import { Plus } from 'lucide-react';
 import { api, type Subscription } from '@/api/client';
 import { PageCard } from '@/components/ui/cards';
 import { Button } from '@/components/ui/button';
+import { formatCurrency } from '@/lib/utils';
 import { useState } from 'react';
 import { SubscriptionForm } from './SubscriptionForm';
 
@@ -27,12 +28,52 @@ export function SubscriptionsSection({ selectedSubId, onSelectSub }: Subscriptio
     queryFn: () => api.getSubscriptions(),
     staleTime: 30_000,
   });
+  const { data: review } = useQuery({
+    queryKey: ['subscription-review'],
+    queryFn: () => api.getSubscriptionReviewV2(),
+    staleTime: 30_000,
+  });
 
   const subs = data?.subscriptions ?? [];
   const summary = data?.summary;
+  const hasReviewItems = !!review && (review.price_changes.length > 0 || review.annual_renewals.length > 0);
 
   return (
     <>
+      {hasReviewItems && (
+        <PageCard title="Needs attention">
+          <div className="space-y-3">
+            {review!.price_changes.map((change) => (
+              <button
+                key={`price-${change.subscription_id}`}
+                onClick={() => onSelectSub(change.subscription_id)}
+                className="w-full text-left text-sm"
+              >
+                <p className="font-medium text-foreground">{change.label} price changed</p>
+                <p className="text-xs text-muted">
+                  {formatCurrency(change.old_amount.minor_units / 100, change.old_amount.currency)} →{' '}
+                  {formatCurrency(change.new_amount.minor_units / 100, change.new_amount.currency)}
+                  {' · '}
+                  {change.annualized_impact.minor_units >= 0 ? '+' : '−'}
+                  {formatCurrency(Math.abs(change.annualized_impact.minor_units) / 100, change.annualized_impact.currency)}/year
+                </p>
+              </button>
+            ))}
+            {review!.annual_renewals.map((renewal) => (
+              <button
+                key={`renewal-${renewal.subscription_id}`}
+                onClick={() => onSelectSub(renewal.subscription_id)}
+                className="w-full text-left text-sm"
+              >
+                <p className="font-medium text-foreground">{renewal.label} renews soon</p>
+                <p className="text-xs text-muted">
+                  {renewal.renewal_date} · in {renewal.days_until_renewal} day{renewal.days_until_renewal === 1 ? '' : 's'}
+                </p>
+              </button>
+            ))}
+          </div>
+        </PageCard>
+      )}
       <PageCard
         title="Subscriptions"
         action={
@@ -78,7 +119,13 @@ export function SubscriptionsSection({ selectedSubId, onSelectSub }: Subscriptio
                     {FREQUENCY_LABELS[sub.frequency]}
                   </span>
                   {sub.status === 'possibly_cancelled' && (
-                    <span className="text-xs text-warning">⚠ Check</span>
+                    <span className="text-xs text-warning">
+                      ⚠ Check
+                      {(() => {
+                        const overdue = review?.overdue.find((o) => o.subscription_id === sub.id);
+                        return overdue ? ` · ${overdue.days_since_last_charge}d since last charge` : '';
+                      })()}
+                    </span>
                   )}
                   {sub.status === 'paused' && <span className="text-xs text-muted">Paused in Cashe</span>}
                   {sub.status === 'cancelled' && (

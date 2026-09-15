@@ -22,6 +22,7 @@ export type CategoryTrendPointV2 = components['schemas']['CategoryTrendPoint'];
 export type GoalProgressV2 = components['schemas']['GoalProgress'];
 export type DailyTotalV2 = components['schemas']['DailyTotal'];
 export type BulkTransactionResultItemV2 = components['schemas']['BulkTransactionResultItem'];
+export type SubscriptionReviewV2 = components['schemas']['SubscriptionReview'];
 
 export async function request<T>(path: string, opts?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
@@ -874,6 +875,9 @@ export const api = {
 
   getSubscriptionSummary: () =>
     request<SubscriptionSummary>('/api/subscriptions/summary'),
+
+  getSubscriptionReviewV2: () =>
+    request<SubscriptionReviewV2>('/api/v2/subscriptions/review'),
 
   createSubscription: (data: {
     merchant: string;
