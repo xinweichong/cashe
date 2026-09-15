@@ -435,6 +435,70 @@
         "title": "ConversionProvenance",
         "type": "object"
       },
+      "DailyTotal": {
+        "properties": {
+          "date": {
+            "title": "Date",
+            "type": "string"
+          },
+          "income": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Money"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "indicative_count": {
+            "title": "Indicative Count",
+            "type": "integer"
+          },
+          "recorded_net_flow": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Money"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "spending": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "status": {
+            "enum": [
+              "complete",
+              "indicative",
+              "partial"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "transaction_count": {
+            "title": "Transaction Count",
+            "type": "integer"
+          },
+          "unresolved_count": {
+            "title": "Unresolved Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "date",
+          "spending",
+          "income",
+          "recorded_net_flow",
+          "transaction_count",
+          "unresolved_count",
+          "indicative_count",
+          "status"
+        ],
+        "title": "DailyTotal",
+        "type": "object"
+      },
       "DuplicateDismissal": {
         "properties": {
           "status": {
@@ -2368,6 +2432,17 @@
             "title": "Id",
             "type": "integer"
           },
+          "ingested_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ingested At"
+          },
           "merchant": {
             "anyOf": [
               {
@@ -2545,6 +2620,17 @@
           "id": {
             "title": "Id",
             "type": "integer"
+          },
+          "ingested_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ingested At"
           },
           "merchant": {
             "anyOf": [
@@ -4820,6 +4906,157 @@
       }
     },
     "/api/v2/transactions": {
+      "get": {
+        "operationId": "list_transactions_v2_api_v2_transactions_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "start_date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Start Date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "end_date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "End Date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "category",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Category"
+            }
+          },
+          {
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source"
+            }
+          },
+          {
+            "in": "query",
+            "name": "merchant_search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Merchant Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "merchant",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Merchant"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TransactionV2"
+                  },
+                  "title": "Response List Transactions V2 Api V2 Transactions Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Transactions V2"
+      },
       "post": {
         "operationId": "create_transaction_v2_api_v2_transactions_post",
         "requestBody": {
@@ -4855,6 +5092,60 @@
           }
         },
         "summary": "Create Transaction V2"
+      }
+    },
+    "/api/v2/transactions/daily-totals": {
+      "get": {
+        "operationId": "transactions_daily_totals_api_v2_transactions_daily_totals_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "start",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "title": "Start",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "end",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "title": "End",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DailyTotal"
+                  },
+                  "title": "Response Transactions Daily Totals Api V2 Transactions Daily Totals Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Transactions Daily Totals"
       }
     },
     "/api/v2/transactions/{tx_id}": {

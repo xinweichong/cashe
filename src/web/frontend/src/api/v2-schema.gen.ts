@@ -640,10 +640,28 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** List Transactions V2 */
+        get: operations["list_transactions_v2_api_v2_transactions_get"];
         put?: never;
         /** Create Transaction V2 */
         post: operations["create_transaction_v2_api_v2_transactions_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/transactions/daily-totals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Transactions Daily Totals */
+        get: operations["transactions_daily_totals_api_v2_transactions_daily_totals_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -878,6 +896,25 @@ export interface components {
             source: string | null;
             /** Status */
             status: ("native" | "resolved" | "indicative" | "unresolved") | null;
+        };
+        /** DailyTotal */
+        DailyTotal: {
+            /** Date */
+            date: string;
+            income: components["schemas"]["Money"] | null;
+            /** Indicative Count */
+            indicative_count: number;
+            recorded_net_flow: components["schemas"]["Money"] | null;
+            spending: components["schemas"]["Money"];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "complete" | "indicative" | "partial";
+            /** Transaction Count */
+            transaction_count: number;
+            /** Unresolved Count */
+            unresolved_count: number;
         };
         /** DuplicateDismissal */
         DuplicateDismissal: {
@@ -1532,6 +1569,8 @@ export interface components {
             description: string | null;
             /** Id */
             id: number;
+            /** Ingested At */
+            ingested_at?: string | null;
             /** Merchant */
             merchant: string | null;
             original: components["schemas"]["OriginalMoney"];
@@ -1587,6 +1626,8 @@ export interface components {
             description: string | null;
             /** Id */
             id: number;
+            /** Ingested At */
+            ingested_at?: string | null;
             /** Merchant */
             merchant: string | null;
             original: components["schemas"]["OriginalMoney"];
@@ -2857,6 +2898,44 @@ export interface operations {
             };
         };
     };
+    list_transactions_v2_api_v2_transactions_get: {
+        parameters: {
+            query?: {
+                start_date?: string | null;
+                end_date?: string | null;
+                category?: string | null;
+                source?: string | null;
+                merchant_search?: string | null;
+                merchant?: string | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TransactionV2"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     create_transaction_v2_api_v2_transactions_post: {
         parameters: {
             query?: never;
@@ -2877,6 +2956,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TransactionV2"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    transactions_daily_totals_api_v2_transactions_daily_totals_get: {
+        parameters: {
+            query: {
+                start: string;
+                end: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DailyTotal"][];
                 };
             };
             /** @description Validation Error */
