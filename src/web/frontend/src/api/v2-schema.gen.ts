@@ -633,6 +633,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/subscriptions/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Subscription Review */
+        get: operations["subscription_review_api_v2_subscriptions_review_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v2/transactions": {
         parameters: {
             query?: never;
@@ -793,6 +810,19 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AnnualRenewal */
+        AnnualRenewal: {
+            /** Days Until Renewal */
+            days_until_renewal: number;
+            /** Label */
+            label: string;
+            /** Renewal Date */
+            renewal_date: string;
+            /** Subscription Id */
+            subscription_id: number;
+            /** Supporting Charges */
+            supporting_charges: components["schemas"]["SupportingCharge"][];
+        };
         /** Balance */
         Balance: {
             expenses: components["schemas"]["Money"];
@@ -1576,6 +1606,57 @@ export interface components {
             status: "ahead" | "on_track" | "behind";
             /** Total Days */
             total_days: number;
+        };
+        /** SubscriptionOverdueItem */
+        SubscriptionOverdueItem: {
+            /** Days Since Last Charge */
+            days_since_last_charge: number;
+            /** Expected Interval Days */
+            expected_interval_days: number;
+            /** Label */
+            label: string;
+            /** Last Charge Date */
+            last_charge_date: string;
+            /** Subscription Id */
+            subscription_id: number;
+        };
+        /** SubscriptionPriceChange */
+        SubscriptionPriceChange: {
+            annualized_impact: components["schemas"]["Money"];
+            change: components["schemas"]["Money"];
+            /** Label */
+            label: string;
+            new_amount: components["schemas"]["Money"];
+            /** New Date */
+            new_date: string;
+            old_amount: components["schemas"]["Money"];
+            /** Old Date */
+            old_date: string;
+            /** Subscription Id */
+            subscription_id: number;
+        };
+        /**
+         * SubscriptionReview
+         * @description R11 sub-project 4: overdue subscriptions, deterministic price-change
+         *     comparisons with annualized impact, and annual-renewal surfacing —
+         *     distinct from LLMService.explain_subscription_change's optional
+         *     free-text layer over these same facts.
+         */
+        SubscriptionReview: {
+            /** Annual Renewals */
+            annual_renewals: components["schemas"]["AnnualRenewal"][];
+            /** Overdue */
+            overdue: components["schemas"]["SubscriptionOverdueItem"][];
+            /** Price Changes */
+            price_changes: components["schemas"]["SubscriptionPriceChange"][];
+        };
+        /** SupportingCharge */
+        SupportingCharge: {
+            amount: components["schemas"]["Money"] | null;
+            /** Date */
+            date: string;
+            /** Transaction Id */
+            transaction_id: number;
         };
         /** TopMerchant */
         TopMerchant: {
@@ -3012,6 +3093,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    subscription_review_api_v2_subscriptions_review_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubscriptionReview"];
                 };
             };
         };

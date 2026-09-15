@@ -1,6 +1,42 @@
 {
   "components": {
     "schemas": {
+      "AnnualRenewal": {
+        "properties": {
+          "days_until_renewal": {
+            "title": "Days Until Renewal",
+            "type": "integer"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "renewal_date": {
+            "title": "Renewal Date",
+            "type": "string"
+          },
+          "subscription_id": {
+            "title": "Subscription Id",
+            "type": "integer"
+          },
+          "supporting_charges": {
+            "items": {
+              "$ref": "#/components/schemas/SupportingCharge"
+            },
+            "title": "Supporting Charges",
+            "type": "array"
+          }
+        },
+        "required": [
+          "subscription_id",
+          "label",
+          "renewal_date",
+          "days_until_renewal",
+          "supporting_charges"
+        ],
+        "title": "AnnualRenewal",
+        "type": "object"
+      },
       "Balance": {
         "properties": {
           "expenses": {
@@ -2296,6 +2332,145 @@
           "status"
         ],
         "title": "SpendingVelocity",
+        "type": "object"
+      },
+      "SubscriptionOverdueItem": {
+        "properties": {
+          "days_since_last_charge": {
+            "title": "Days Since Last Charge",
+            "type": "integer"
+          },
+          "expected_interval_days": {
+            "title": "Expected Interval Days",
+            "type": "integer"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "last_charge_date": {
+            "title": "Last Charge Date",
+            "type": "string"
+          },
+          "subscription_id": {
+            "title": "Subscription Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "subscription_id",
+          "label",
+          "last_charge_date",
+          "days_since_last_charge",
+          "expected_interval_days"
+        ],
+        "title": "SubscriptionOverdueItem",
+        "type": "object"
+      },
+      "SubscriptionPriceChange": {
+        "properties": {
+          "annualized_impact": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "change": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "new_amount": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "new_date": {
+            "title": "New Date",
+            "type": "string"
+          },
+          "old_amount": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "old_date": {
+            "title": "Old Date",
+            "type": "string"
+          },
+          "subscription_id": {
+            "title": "Subscription Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "subscription_id",
+          "label",
+          "old_amount",
+          "new_amount",
+          "change",
+          "annualized_impact",
+          "old_date",
+          "new_date"
+        ],
+        "title": "SubscriptionPriceChange",
+        "type": "object"
+      },
+      "SubscriptionReview": {
+        "description": "R11 sub-project 4: overdue subscriptions, deterministic price-change\ncomparisons with annualized impact, and annual-renewal surfacing \u2014\ndistinct from LLMService.explain_subscription_change's optional\nfree-text layer over these same facts.",
+        "properties": {
+          "annual_renewals": {
+            "items": {
+              "$ref": "#/components/schemas/AnnualRenewal"
+            },
+            "title": "Annual Renewals",
+            "type": "array"
+          },
+          "overdue": {
+            "items": {
+              "$ref": "#/components/schemas/SubscriptionOverdueItem"
+            },
+            "title": "Overdue",
+            "type": "array"
+          },
+          "price_changes": {
+            "items": {
+              "$ref": "#/components/schemas/SubscriptionPriceChange"
+            },
+            "title": "Price Changes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "overdue",
+          "price_changes",
+          "annual_renewals"
+        ],
+        "title": "SubscriptionReview",
+        "type": "object"
+      },
+      "SupportingCharge": {
+        "properties": {
+          "amount": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Money"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "date": {
+            "title": "Date",
+            "type": "string"
+          },
+          "transaction_id": {
+            "title": "Transaction Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "transaction_id",
+          "date",
+          "amount"
+        ],
+        "title": "SupportingCharge",
         "type": "object"
       },
       "TopMerchant": {
@@ -5102,6 +5277,24 @@
           }
         },
         "summary": "Week Spending"
+      }
+    },
+    "/api/v2/subscriptions/review": {
+      "get": {
+        "operationId": "subscription_review_api_v2_subscriptions_review_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SubscriptionReview"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Subscription Review"
       }
     },
     "/api/v2/transactions": {
