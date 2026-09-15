@@ -111,8 +111,7 @@ def _rows(conn, start: date, end: date, timezone: str) -> list[dict]:
     return result
 
 
-def _period(rows: list[dict], start: date, end: date) -> dict:
-    selected = [row for row in rows if row["day"] is not None and start <= row["day"] <= end and row["type"] != "transfer"]
+def _aggregate(selected: list[dict]) -> dict:
     spending, income, income_count, unresolved, indicative = 0, 0, 0, 0, 0
     categories = {}
     for row in selected:
@@ -129,7 +128,6 @@ def _period(rows: list[dict], start: date, end: date) -> dict:
             spending += amount
             categories[row["category"]] = categories.get(row["category"], 0) + amount
     return {
-        "start": start.isoformat(), "end": end.isoformat(),
         "spending": money(spending), "income": money(income) if income_count else None,
         "recorded_net_flow": money(income - spending) if income_count and not unresolved else None,
         "transaction_count": len(selected), "unresolved_count": unresolved,
@@ -137,6 +135,33 @@ def _period(rows: list[dict], start: date, end: date) -> dict:
         "status": "partial" if unresolved else "indicative" if indicative else "complete",
         "categories": categories,
     }
+
+
+def _period(rows: list[dict], start: date, end: date) -> dict:
+    selected = [row for row in rows if row["day"] is not None and start <= row["day"] <= end and row["type"] != "transfer"]
+    return {"start": start.isoformat(), "end": end.isoformat(), **_aggregate(selected)}
+
+
+def daily_totals(conn, start: date, end: date, timezone: str = DEFAULT_TIMEZONE) -> list[dict]:
+    """Per-local-day totals over [start, end], built on the same _rows/
+    _aggregate primitives every other shared-fact surface uses (R04 parity).
+    Callers that page through transactions independently (R09's Activity
+    list) can fetch this for whatever date range is currently on screen —
+    a day's total is always computed from every transaction on that day,
+    never from however many of that day's rows a row-pagination cursor has
+    happened to load, so a day split across a page boundary never shows a
+    duplicate or partial total."""
+    rows = _rows(conn, start, end, timezone)
+    by_day: dict[date, list[dict]] = {}
+    for row in rows:
+        if row["day"] is not None and start <= row["day"] <= end and row["type"] != "transfer":
+            by_day.setdefault(row["day"], []).append(row)
+    result = []
+    for day, day_rows in sorted(by_day.items(), reverse=True):
+        aggregate = _aggregate(day_rows)
+        del aggregate["categories"]
+        result.append({"date": day.isoformat(), **aggregate})
+    return result
 
 
 def day_facts(conn, as_of: date | None = None, timezone: str = DEFAULT_TIMEZONE) -> dict:

@@ -81,6 +81,53 @@ class Storage:
         return spending_evidence(self._conn, start, end, **filters)
 
     @_locked
+    def get_daily_totals(self, start, end, timezone="Asia/Singapore") -> list[dict]:
+        from src.spending_facts import daily_totals
+        return daily_totals(self._conn, start, end, timezone)
+
+    @_locked
+    def get_transactions_v2(
+        self,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        category: Optional[str] = None,
+        source: Optional[str] = None,
+        merchant_search: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[dict]:
+        """Same filters as query_transactions, with a stable `id DESC`
+        tiebreak so same-timestamp rows keep a fixed order across requests
+        — infinite-scroll pagination over query_transactions' bare
+        `transaction_date DESC` order can otherwise reshuffle ties between
+        pages, duplicating or dropping a row at the boundary. query_transactions
+        itself (v1) is left as-is rather than changed underneath existing callers."""
+        conditions = []
+        params = []
+        if start_date:
+            conditions.append("DATE(transaction_date) >= ?")
+            params.append(start_date)
+        if end_date:
+            conditions.append("DATE(transaction_date) <= ?")
+            params.append(end_date)
+        if category:
+            conditions.append("category = ?")
+            params.append(category)
+        if source:
+            conditions.append("source = ?")
+            params.append(source)
+        if merchant_search:
+            conditions.append("merchant LIKE ?")
+            params.append(f"%{merchant_search}%")
+        where = " AND ".join(conditions) if conditions else "1=1"
+        rows = self._conn.execute(
+            f"SELECT * FROM transactions WHERE {where} "
+            f"ORDER BY transaction_date DESC, id DESC LIMIT ? OFFSET ?",
+            params + [limit, offset],
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    @_locked
     def get_upcoming_plan(self, days=30, timezone="Asia/Singapore", limit=50, offset=0) -> dict:
         from src.spending_facts import convert_legacy_sgd, money
         if not 1 <= days <= 90 or not 1 <= limit <= 100 or offset < 0:

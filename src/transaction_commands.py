@@ -60,6 +60,7 @@ def to_v2(tx: dict, storage) -> dict:
         "category": tx.get("category"),
         "description": tx.get("description"),
         "transaction_date": tx.get("transaction_date"),
+        "ingested_at": tx.get("ingested_at"),
         "original": {
             "minor_units": tx.get("original_minor_units"),
             "currency": tx.get("currency") or "SGD",

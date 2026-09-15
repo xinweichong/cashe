@@ -343,3 +343,51 @@ def test_home_briefing_recent_list_uses_canonical_money_not_legacy_recompute(led
     recent = briefing['recent'][0]
     assert recent['amount'] is None
     assert recent['conversion_status'] == 'unresolved'
+
+
+def test_daily_totals_nets_refunds_excludes_transfers_per_day(ledger):
+    # R09: Activity's day-grouped headers reuse this shared-fact primitive
+    # rather than summing whatever subset of a day's rows a pagination
+    # cursor happens to have loaded.
+    storage, add = ledger
+    add(20, '2026-09-01T09:00:00')
+    add(5, '2026-09-01T18:00:00', tx_type='refund')
+    add(100, '2026-09-01T20:00:00', tx_type='transfer')
+    add(30, '2026-09-02T09:00:00')
+    totals = storage.get_daily_totals(date(2026, 9, 1), date(2026, 9, 2))
+    by_date = {t['date']: t for t in totals}
+    assert by_date['2026-09-01']['spending']['minor_units'] == 1500
+    assert by_date['2026-09-01']['transaction_count'] == 2  # transfer excluded
+    assert by_date['2026-09-02']['spending']['minor_units'] == 3000
+
+
+def test_daily_totals_is_independent_of_how_rows_would_be_paginated(ledger):
+    # Whether a day's transactions are loaded across one page or split
+    # across several does not change the day's total — it never comes
+    # from summing loaded rows in the first place.
+    storage, add = ledger
+    for i in range(25):
+        add(10, f'2026-09-01T{9 + i % 12:02d}:{i:02d}:00')
+    totals = storage.get_daily_totals(date(2026, 9, 1), date(2026, 9, 1))
+    assert len(totals) == 1
+    assert totals[0]['transaction_count'] == 25
+    assert totals[0]['spending']['minor_units'] == 25 * 1000
+
+
+def test_daily_totals_bounds_to_requested_range(ledger):
+    storage, add = ledger
+    add(10, '2026-08-31T23:59:00')
+    add(10, '2026-09-01T00:01:00')
+    add(10, '2026-09-02T00:01:00')
+    totals = storage.get_daily_totals(date(2026, 9, 1), date(2026, 9, 1))
+    assert [t['date'] for t in totals] == ['2026-09-01']
+
+
+def test_transactions_v2_pagination_has_a_stable_tiebreak_for_same_timestamp_rows(ledger):
+    storage, add = ledger
+    ids = [add(10, '2026-09-01T09:00:00') for _ in range(5)]
+    page1 = storage.get_transactions_v2(limit=3, offset=0)
+    page2 = storage.get_transactions_v2(limit=3, offset=3)
+    seen = [r['id'] for r in page1] + [r['id'] for r in page2]
+    assert seen == sorted(ids, reverse=True)  # id DESC tiebreak, no dup/skip
+    assert len(set(seen)) == 5

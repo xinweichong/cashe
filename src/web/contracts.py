@@ -64,6 +64,17 @@ class SpendingPeriod(BaseModel):
     status: Literal["complete", "indicative", "partial"]
 
 
+class DailyTotal(BaseModel):
+    date: str
+    spending: Money
+    income: Money | None
+    recorded_net_flow: Money | None
+    transaction_count: int
+    unresolved_count: int
+    indicative_count: int
+    status: Literal["complete", "indicative", "partial"]
+
+
 class CategoryChange(BaseModel):
     category: str
     change: Money
@@ -289,6 +300,7 @@ class TransactionV2(BaseModel):
     category: str | None
     description: str | None
     transaction_date: str | None
+    ingested_at: str | None = None
     original: OriginalMoney
     reporting: Money | None
     conversion: ConversionProvenance

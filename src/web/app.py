@@ -24,7 +24,7 @@ from src.money import to_minor_units, from_minor_units
 from src.spending_facts import resolve_money
 from src.config import local_now
 from src.web.auth import verify_password, create_session, verify_session, destroy_session
-from src.web.contracts import Balance, BudgetProgress, CaptureFollowup, CaptureIssue, CaptureResolution, CategoryTrendPoint, GoalProgress, HealthScore, HomeBriefing, MerchantRanking, MerchantSummary, OverviewSummary, QueuedResponse, SpendingAlerts, SpendingComparison, SpendingEvidence, SpendingFacts, SpendingReview, SpendingVelocity, TopMerchantsResult, TransactionCorrection, TransactionCreate, TransactionDeletion, TransactionProvenance, TransactionUndo, TransactionV2, TrendPoint, TripSummary, UpcomingPlan, PlanMutationResponse, RecurringReview, RecurringResolution, RefundMatchReview, RefundMatchResolution, DuplicateReview, DuplicateDismissal, DuplicateMergeRequest, DuplicateMergeResult, DuplicateMergeUndoResult
+from src.web.contracts import Balance, BudgetProgress, CaptureFollowup, CaptureIssue, CaptureResolution, CategoryTrendPoint, DailyTotal, GoalProgress, HealthScore, HomeBriefing, MerchantRanking, MerchantSummary, OverviewSummary, QueuedResponse, SpendingAlerts, SpendingComparison, SpendingEvidence, SpendingFacts, SpendingReview, SpendingVelocity, TopMerchantsResult, TransactionCorrection, TransactionCreate, TransactionDeletion, TransactionProvenance, TransactionUndo, TransactionV2, TrendPoint, TripSummary, UpcomingPlan, PlanMutationResponse, RecurringReview, RecurringResolution, RefundMatchReview, RefundMatchResolution, DuplicateReview, DuplicateDismissal, DuplicateMergeRequest, DuplicateMergeResult, DuplicateMergeUndoResult
 from src.analytics import (
     load_summary,
     get_yoy_comparison,
@@ -623,6 +623,33 @@ def create_dashboard_app(
             media_type="text/csv",
             headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
+
+    @app.get("/api/v2/transactions", response_model=list[TransactionV2])
+    async def list_transactions_v2(
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        category: Optional[str] = None,
+        source: Optional[str] = None,
+        merchant_search: Optional[str] = None,
+        merchant: Optional[str] = None,
+        limit: int = Query(20, ge=1, le=100),
+        offset: int = Query(0, ge=0),
+        username: str = Depends(require_auth),
+    ):
+        storage = user_manager.get(username).storage
+        rows = await _db(
+            storage.get_transactions_v2,
+            start_date=start_date, end_date=end_date, category=category, source=source,
+            merchant_search=merchant_search or merchant, limit=limit, offset=offset,
+        )
+        return [transaction_commands.to_v2(tx, storage) for tx in rows]
+
+    @app.get("/api/v2/transactions/daily-totals", response_model=list[DailyTotal])
+    async def transactions_daily_totals(start: date, end: date, username: str = Depends(require_auth)):
+        if end < start:
+            raise HTTPException(status_code=422, detail="End must not precede start")
+        storage = user_manager.get(username).storage
+        return await _db(storage.get_daily_totals, start, end, timezone)
 
     @app.get("/api/v2/transactions/{tx_id}", response_model=TransactionV2)
     async def get_transaction_v2(tx_id: int, username: str = Depends(require_auth)):

@@ -214,6 +214,67 @@ class TestCreateTransactionV2:
         assert Storage(in_memory_db).query_transactions(limit=50) == []
 
 
+class TestListTransactionsV2:
+    @pytest.mark.asyncio
+    async def test_list_returns_canonical_money_shape_newest_first(self, client):
+        await client.post("/api/transactions", json={"amount": 10.0, "merchant": "A", "type": "expense"})
+        await client.post("/api/transactions", json={"amount": 20.0, "merchant": "B", "type": "expense"})
+
+        response = await client.get("/api/v2/transactions?limit=10")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert [tx["merchant"] for tx in data] == ["B", "A"]
+        assert data[0]["reporting"]["minor_units"] == 2000
+        assert "revision" in data[0] and "original" in data[0]
+
+    @pytest.mark.asyncio
+    async def test_list_respects_limit_and_offset(self, client):
+        for i in range(3):
+            await client.post("/api/transactions", json={"amount": 10.0 + i, "merchant": f"Shop {i}", "type": "expense"})
+
+        page1 = (await client.get("/api/v2/transactions?limit=2&offset=0")).json()
+        page2 = (await client.get("/api/v2/transactions?limit=2&offset=2")).json()
+
+        assert len(page1) == 2
+        assert len(page2) == 1
+        assert {tx["id"] for tx in page1} & {tx["id"] for tx in page2} == set()
+
+    @pytest.mark.asyncio
+    async def test_list_filters_by_category_and_merchant_search(self, client):
+        await client.post("/api/transactions", json={"amount": 5.0, "merchant": "Cafe Aroma", "category": "Food", "type": "expense"})
+        await client.post("/api/transactions", json={"amount": 5.0, "merchant": "Gas Station", "category": "Transport", "type": "expense"})
+
+        by_category = (await client.get("/api/v2/transactions?category=Food")).json()
+        by_search = (await client.get("/api/v2/transactions?merchant_search=Aroma")).json()
+
+        assert [tx["merchant"] for tx in by_category] == ["Cafe Aroma"]
+        assert [tx["merchant"] for tx in by_search] == ["Cafe Aroma"]
+
+
+class TestDailyTotalsV2:
+    @pytest.mark.asyncio
+    async def test_daily_totals_over_range(self, client):
+        await client.post("/api/transactions", json={
+            "amount": 12.0, "merchant": "A", "type": "expense", "transaction_date": "2026-09-01T09:00:00",
+        })
+        await client.post("/api/transactions", json={
+            "amount": 8.0, "merchant": "B", "type": "expense", "transaction_date": "2026-09-02T09:00:00",
+        })
+
+        response = await client.get("/api/v2/transactions/daily-totals?start=2026-09-01&end=2026-09-02")
+
+        assert response.status_code == 200
+        by_date = {row["date"]: row for row in response.json()}
+        assert by_date["2026-09-01"]["spending"]["minor_units"] == 1200
+        assert by_date["2026-09-02"]["spending"]["minor_units"] == 800
+
+    @pytest.mark.asyncio
+    async def test_end_before_start_is_rejected(self, client):
+        response = await client.get("/api/v2/transactions/daily-totals?start=2026-09-02&end=2026-09-01")
+        assert response.status_code == 422
+
+
 class TestUpdateTransaction:
     @pytest.mark.asyncio
     async def test_update_transaction(self, client):
