@@ -3152,9 +3152,14 @@ class Storage:
 
     @_locked
     def get_merchant_history(self, merchant: str, days: int = 90) -> list[dict]:
-        """Return expense transactions for a merchant within the past *days* days."""
+        """Return expense transactions for a merchant within the past *days*
+        days. Selects the canonical-money columns (not just amount) so
+        callers can resolve real SGD value via resolve_money rather than
+        averaging raw face-value amounts across possibly different
+        currencies (R11)."""
         rows = self._conn.execute(
-            """SELECT amount, transaction_date FROM transactions
+            """SELECT amount, currency, exchange_rate, reporting_minor_units,
+                      conversion_status, transaction_date FROM transactions
                WHERE merchant = ? AND transaction_date >= date('now', ? || ' days')
                AND (type IS NULL OR type = 'expense')
                ORDER BY transaction_date DESC""",

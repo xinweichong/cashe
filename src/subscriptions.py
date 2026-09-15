@@ -158,7 +158,20 @@ class SubscriptionMatcher:
                 self.storage.update_subscription(sub_id, status="active")
 
     def _infer_expected_amount(self, sub_id: int) -> Optional[float]:
+        """R11: upcoming_transactions.expected_amount is SGD-only (no
+        currency column of its own), so this must produce a real SGD value,
+        never a face-value multiply — the old `amount * exchange_rate` had
+        no currency validation and, worse, silently trusted a legacy
+        exchange_rate of 1.0 as a real conversion (the same bug class R04
+        fixed everywhere else money crosses a currency boundary). An
+        unresolved conversion now yields no expected amount rather than a
+        wrong one — get_upcoming_plan already treats a missing amount as
+        an "unknown" item, not a zero."""
+        from src.money import from_minor_units
+        from src.spending_facts import resolve_money
         txs = self.storage.get_subscription_matched_transactions(sub_id, limit=1)
         if txs:
-            return txs[0]["amount"] * txs[0]["exchange_rate"]
+            minor, _status = resolve_money(txs[0])
+            if minor is not None:
+                return float(from_minor_units(minor, "SGD"))
         return None

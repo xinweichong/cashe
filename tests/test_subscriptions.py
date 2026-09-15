@@ -90,6 +90,49 @@ class TestUpcomingGeneration:
         assert pending[0]["expected_date"] == "2026-06-15"
 
 
+class TestInferExpectedAmount:
+    def test_next_upcoming_gets_canonical_sgd_amount_for_foreign_charge(self, storage, sub_id):
+        # R11: a USD 15.99 charge at a real (indicative) rate of 0.75 is
+        # SGD ~11.99 — the old `amount * exchange_rate` face-value multiply
+        # gave the same number here (0.75 was a real rate), but the fix
+        # must be exercised against a foreign currency to prove it's
+        # actually resolving through canonical money, not coincidentally
+        # matching a same-result legacy path.
+        tx_id = storage.insert_transaction(
+            source="apple_wallet", source_id="fx-spotify", amount=15.99, currency="USD",
+            exchange_rate=0.75, merchant="Spotify", category="Entertainment",
+            transaction_date="2026-05-15T10:00:00", tx_type="expense",
+        )
+        upcoming_id = storage.create_upcoming_transaction(sub_id, "2026-05-15", 15.99)
+        storage.match_upcoming_transaction(upcoming_id, tx_id)
+
+        SubscriptionMatcher(storage).run()
+
+        pending = [u for u in storage.list_upcoming_transactions(sub_id) if u["status"] == "pending"]
+        assert len(pending) == 1
+        assert pending[0]["expected_amount"] == pytest.approx(11.99, abs=0.01)
+
+    def test_next_upcoming_has_no_expected_amount_when_conversion_is_unresolved(self, storage, sub_id):
+        # A legacy exchange_rate of 1.0 on a foreign currency is a silent
+        # unresolved fallback (R04's own rule), never real conversion
+        # evidence — the old code would have returned a wrong SGD-labeled
+        # number (raw USD face value); the fix must leave the next
+        # upcoming's amount unknown instead.
+        tx_id = storage.insert_transaction(
+            source="apple_wallet", source_id="unresolved-spotify", amount=15.99, currency="USD",
+            exchange_rate=1.0, merchant="Spotify", category="Entertainment",
+            transaction_date="2026-05-15T10:00:00", tx_type="expense",
+        )
+        upcoming_id = storage.create_upcoming_transaction(sub_id, "2026-05-15", 15.99)
+        storage.match_upcoming_transaction(upcoming_id, tx_id)
+
+        SubscriptionMatcher(storage).run()
+
+        pending = [u for u in storage.list_upcoming_transactions(sub_id) if u["status"] == "pending"]
+        assert len(pending) == 1
+        assert pending[0]["expected_amount"] is None
+
+
 class TestAutoMatch:
     def test_auto_matches_transaction_in_window(self, storage, sub_id, in_memory_db):
         expected_date = "2026-05-15"
