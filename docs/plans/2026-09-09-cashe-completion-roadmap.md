@@ -455,6 +455,18 @@ Every displayed driver/amount opens exactly supporting transactions; top-three o
 
 Leap/end-of-month horizon expansion, multiple annual/monthly occurrences, retained overrides/dismissals, pause/resume, price changes in different currencies, actual match/rematch conflicts, and one-purchase-one-commitment accounting.
 
+**Status (2026-09-16): decomposed into five sub-projects (canonical money; charge-level provenance; horizon expansion; overdue review/price-change/annual-renewal surfacing; duplicate-match audit + uniqueness invariant), brainstormed and approved in chat. Sub-project 1 closed.**
+
+**Sub-project 1 — Canonical money for recurring detection/subscriptions.** Closed. Two real bugs found and fixed, both the same legacy-float-math class R04 fixed everywhere else money crosses a currency boundary:
+
+`SubscriptionMatcher._infer_expected_amount` computed the next upcoming charge's SGD-only `expected_amount` as `tx["amount"] * tx["exchange_rate"]` — no currency validation, and a legacy `exchange_rate` of `1.0` silently trusted as a real conversion rather than treated as unresolved. Now resolves through `spending_facts.resolve_money` and converts via `money.from_minor_units`; an unresolved conversion now yields no expected amount (already handled downstream — `get_upcoming_plan` treats a missing amount as "unknown", not zero) instead of a wrong one.
+
+`RecurringDetector.detect` averaged and compared raw face-value `amount` across a merchant's history — meaningless across mixed currencies, and silently trusting an unresolved legacy rate the same way. `Storage.get_merchant_history` now selects the canonical-money columns; `detect` resolves each row via `resolve_money`, drops rows that don't resolve, and averages/compares the 10% consistency threshold in canonical SGD minor units, converting back to a float SGD `avg_amount` for the return value — every existing consumer (the `recurring_suggestions` table, Telegram's "~$X.XX (frequency). Add as subscription?" prompt) is untouched, since only the correctness of the number changed, not its shape.
+
+Verified: 5 new backend tests (`test_recurring.py`: foreign-currency averaging converts correctly rather than reporting face value, unresolved rows are dropped, mismatched currencies that look consistent at face value are correctly rejected once resolved; `test_subscriptions.py`: the next upcoming's `expected_amount` after a foreign-currency match is the real SGD conversion, and is `None` — not a wrong number — when the conversion is unresolved). Full backend suite green (1399 passed). No new API surface or frontend touchpoints, so no live-server verification pass was needed for this sub-project — the tests exercise the real `Storage.insert_transaction` canonical-money write path end-to-end, the same code path production capture uses.
+
+**Follow-up (not done):** sub-projects 2 (charge-level provenance), 3 (horizon expansion), 4 (overdue review/price-change/annual-renewal surfacing), and 5 (duplicate-match audit + uniqueness invariant) are unbuilt.
+
 ## R12 — Implement the specified forecast
 
 **Implementation**
