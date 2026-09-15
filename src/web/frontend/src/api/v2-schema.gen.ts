@@ -651,6 +651,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/transactions/bulk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Bulk Correct Transactions */
+        post: operations["bulk_correct_transactions_api_v2_transactions_bulk_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/transactions/bulk/undo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Bulk Undo Transactions */
+        post: operations["bulk_undo_transactions_api_v2_transactions_bulk_undo_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v2/transactions/daily-totals": {
         parameters: {
             query?: never;
@@ -793,6 +827,66 @@ export interface components {
              * @enum {string}
              */
             status: "over_budget" | "warning" | "on_track";
+        };
+        /**
+         * BulkTransactionRequest
+         * @description POST /api/v2/transactions/bulk body (R09). At least one of category/
+         *     type must be set. expected_revisions is keyed by transaction id (as a
+         *     string over the wire, coerced back to int) — normally the revision each
+         *     row had when the client last loaded it, so a row someone else edited in
+         *     the meantime surfaces as a visible per-row conflict instead of being
+         *     silently overwritten.
+         */
+        BulkTransactionRequest: {
+            /** Category */
+            category?: string | null;
+            /**
+             * Expected Revisions
+             * @default {}
+             */
+            expected_revisions: {
+                [key: string]: number;
+            };
+            /**
+             * Remember Category
+             * @default false
+             */
+            remember_category: boolean;
+            /** Transaction Ids */
+            transaction_ids: number[];
+            /** Type */
+            type?: ("expense" | "income" | "refund" | "transfer") | null;
+        };
+        /** BulkTransactionResultItem */
+        BulkTransactionResultItem: {
+            /** Current Revision */
+            current_revision?: number | null;
+            /** Detail */
+            detail?: string | null;
+            /** Id */
+            id: number;
+            /** Revision */
+            revision?: number | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "conflict" | "error";
+        };
+        /**
+         * BulkUndoRequest
+         * @description POST /api/v2/transactions/bulk/undo body (R09).
+         */
+        BulkUndoRequest: {
+            /**
+             * Expected Revisions
+             * @default {}
+             */
+            expected_revisions: {
+                [key: string]: number;
+            };
+            /** Transaction Ids */
+            transaction_ids: number[];
         };
         /** CaptureFollowup */
         CaptureFollowup: {
@@ -2959,6 +3053,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TransactionV2"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    bulk_correct_transactions_api_v2_transactions_bulk_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BulkTransactionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BulkTransactionResultItem"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    bulk_undo_transactions_api_v2_transactions_bulk_undo_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BulkUndoRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BulkTransactionResultItem"][];
                 };
             };
             /** @description Validation Error */

@@ -101,6 +101,145 @@
         "title": "BudgetProgress",
         "type": "object"
       },
+      "BulkTransactionRequest": {
+        "description": "POST /api/v2/transactions/bulk body (R09). At least one of category/\ntype must be set. expected_revisions is keyed by transaction id (as a\nstring over the wire, coerced back to int) \u2014 normally the revision each\nrow had when the client last loaded it, so a row someone else edited in\nthe meantime surfaces as a visible per-row conflict instead of being\nsilently overwritten.",
+        "properties": {
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "expected_revisions": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "default": {},
+            "title": "Expected Revisions",
+            "type": "object"
+          },
+          "remember_category": {
+            "default": false,
+            "title": "Remember Category",
+            "type": "boolean"
+          },
+          "transaction_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Transaction Ids",
+            "type": "array"
+          },
+          "type": {
+            "anyOf": [
+              {
+                "enum": [
+                  "expense",
+                  "income",
+                  "refund",
+                  "transfer"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Type"
+          }
+        },
+        "required": [
+          "transaction_ids"
+        ],
+        "title": "BulkTransactionRequest",
+        "type": "object"
+      },
+      "BulkTransactionResultItem": {
+        "properties": {
+          "current_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Revision"
+          },
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "conflict",
+              "error"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "status"
+        ],
+        "title": "BulkTransactionResultItem",
+        "type": "object"
+      },
+      "BulkUndoRequest": {
+        "description": "POST /api/v2/transactions/bulk/undo body (R09).",
+        "properties": {
+          "expected_revisions": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "default": {},
+            "title": "Expected Revisions",
+            "type": "object"
+          },
+          "transaction_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Transaction Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "transaction_ids"
+        ],
+        "title": "BulkUndoRequest",
+        "type": "object"
+      },
       "CaptureFollowup": {
         "properties": {
           "attempts": {
@@ -5146,6 +5285,90 @@
           }
         },
         "summary": "Create Transaction V2"
+      }
+    },
+    "/api/v2/transactions/bulk": {
+      "post": {
+        "operationId": "bulk_correct_transactions_api_v2_transactions_bulk_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkTransactionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/BulkTransactionResultItem"
+                  },
+                  "title": "Response Bulk Correct Transactions Api V2 Transactions Bulk Post",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Bulk Correct Transactions"
+      }
+    },
+    "/api/v2/transactions/bulk/undo": {
+      "post": {
+        "operationId": "bulk_undo_transactions_api_v2_transactions_bulk_undo_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkUndoRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/BulkTransactionResultItem"
+                  },
+                  "title": "Response Bulk Undo Transactions Api V2 Transactions Bulk Undo Post",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Bulk Undo Transactions"
       }
     },
     "/api/v2/transactions/daily-totals": {
