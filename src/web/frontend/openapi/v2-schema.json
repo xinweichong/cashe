@@ -6291,6 +6291,77 @@
         "summary": "Spending Review"
       }
     },
+    "/api/v2/spending/trend-by-category": {
+      "get": {
+        "description": "Same shared-facts rules as /api/v2/spending/breakdown and\n/transactions/daily-totals \u2014 not storage.get_trend_by_category's\nlegacy SQL, which has no timezone conversion on transaction_date.\n`categories` is a comma-separated allowlist (the frontend's \"at most\nthree selectable categories\" default).",
+        "operationId": "spending_trend_by_category_api_v2_spending_trend_by_category_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "start",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "title": "Start",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "end",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "title": "End",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "categories",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Categories"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CategoryTrendPoint"
+                  },
+                  "title": "Response Spending Trend By Category Api V2 Spending Trend By Category Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Spending Trend By Category"
+      }
+    },
     "/api/v2/spending/week": {
       "get": {
         "operationId": "week_spending_api_v2_spending_week_get",

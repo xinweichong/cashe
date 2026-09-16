@@ -712,6 +712,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/spending/trend-by-category": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Spending Trend By Category
+         * @description Same shared-facts rules as /api/v2/spending/breakdown and
+         *     /transactions/daily-totals — not storage.get_trend_by_category's
+         *     legacy SQL, which has no timezone conversion on transaction_date.
+         *     `categories` is a comma-separated allowlist (the frontend's "at most
+         *     three selectable categories" default).
+         */
+        get: operations["spending_trend_by_category_api_v2_spending_trend_by_category_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v2/spending/week": {
         parameters: {
             query?: never;
@@ -3570,6 +3594,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SpendingReview"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    spending_trend_by_category_api_v2_spending_trend_by_category_get: {
+        parameters: {
+            query: {
+                start: string;
+                end: string;
+                categories?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CategoryTrendPoint"][];
                 };
             };
             /** @description Validation Error */

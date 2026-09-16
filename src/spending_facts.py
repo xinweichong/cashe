@@ -269,6 +269,28 @@ def category_breakdown(conn, start: date, end: date, timezone: str = DEFAULT_TIM
     }
 
 
+def category_daily_trend(conn, start: date, end: date, timezone: str = DEFAULT_TIMEZONE,
+                          categories: list[str] | None = None) -> list[dict]:
+    """Per-local-day category totals for [start, end], built on the same
+    _rows/_spending_rows primitives as category_breakdown/daily_totals, so a
+    category trend chart reconciles with both for the identical period and
+    range — unlike storage.get_trend_by_category's legacy SQL (no timezone
+    conversion on transaction_date). `categories`, when given, limits which
+    categories are aggregated (the frontend's "at most three selectable
+    categories" rule) rather than filtering after the fact."""
+    rows = _rows(conn, start, end, timezone)
+    by_day: dict[date, dict[str, int]] = {}
+    for row in _spending_rows(rows, start, end):
+        if categories is not None and row["category"] not in categories:
+            continue
+        bucket = by_day.setdefault(row["day"], {})
+        bucket[row["category"]] = bucket.get(row["category"], 0) + _signed(row)
+    return [
+        {"date": day.isoformat(), "categories": {cat: money(amt) for cat, amt in by_day[day].items()}}
+        for day in sorted(by_day)
+    ]
+
+
 def merchant_ranking(conn, start: date, end: date, timezone: str = DEFAULT_TIMEZONE,
                       category: str | None = None, limit: int = 10) -> list[dict]:
     """Merchant totals for [start, end], optionally scoped to one category —

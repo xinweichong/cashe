@@ -422,6 +422,63 @@ class TestMerchantRankingFactsV2:
         assert response.status_code == 422
 
 
+class TestCategoryDailyTrendV2:
+    @pytest.mark.asyncio
+    async def test_buckets_by_local_day_and_category(self, client):
+        await client.post("/api/transactions", json={
+            "amount": 12.0, "merchant": "A", "category": "Food", "type": "expense", "transaction_date": "2026-09-01T09:00:00",
+        })
+        await client.post("/api/transactions", json={
+            "amount": 8.0, "merchant": "B", "category": "Transport", "type": "expense", "transaction_date": "2026-09-01T09:00:00",
+        })
+        await client.post("/api/transactions", json={
+            "amount": 5.0, "merchant": "C", "category": "Food", "type": "expense", "transaction_date": "2026-09-02T09:00:00",
+        })
+
+        response = await client.get("/api/v2/spending/trend-by-category?start=2026-09-01&end=2026-09-30")
+
+        assert response.status_code == 200
+        by_date = {row["date"]: row["categories"] for row in response.json()}
+        assert by_date["2026-09-01"]["Food"]["minor_units"] == 1200
+        assert by_date["2026-09-01"]["Transport"]["minor_units"] == 800
+        assert by_date["2026-09-02"]["Food"]["minor_units"] == 500
+        assert "Transport" not in by_date["2026-09-02"]
+
+    @pytest.mark.asyncio
+    async def test_categories_filter_limits_included_categories(self, client):
+        await client.post("/api/transactions", json={
+            "amount": 12.0, "merchant": "A", "category": "Food", "type": "expense", "transaction_date": "2026-09-01T09:00:00",
+        })
+        await client.post("/api/transactions", json={
+            "amount": 8.0, "merchant": "B", "category": "Transport", "type": "expense", "transaction_date": "2026-09-01T09:00:00",
+        })
+
+        response = await client.get("/api/v2/spending/trend-by-category?start=2026-09-01&end=2026-09-30&categories=Food")
+
+        by_date = {row["date"]: row["categories"] for row in response.json()}
+        assert by_date["2026-09-01"] == {"Food": {"minor_units": 1200, "currency": "SGD"}}
+
+    @pytest.mark.asyncio
+    async def test_reconciles_with_daily_totals_for_the_same_day(self, client):
+        await client.post("/api/transactions", json={
+            "amount": 12.0, "merchant": "A", "category": "Food", "type": "expense", "transaction_date": "2026-09-01T09:00:00",
+        })
+        await client.post("/api/transactions", json={
+            "amount": 8.0, "merchant": "B", "category": "Transport", "type": "expense", "transaction_date": "2026-09-01T09:00:00",
+        })
+
+        daily = (await client.get("/api/v2/transactions/daily-totals?start=2026-09-01&end=2026-09-01")).json()
+        trend = (await client.get("/api/v2/spending/trend-by-category?start=2026-09-01&end=2026-09-30")).json()
+
+        day_categories = next(row["categories"] for row in trend if row["date"] == "2026-09-01")
+        assert sum(v["minor_units"] for v in day_categories.values()) == daily[0]["spending"]["minor_units"]
+
+    @pytest.mark.asyncio
+    async def test_end_before_start_is_rejected(self, client):
+        response = await client.get("/api/v2/spending/trend-by-category?start=2026-09-02&end=2026-09-01")
+        assert response.status_code == 422
+
+
 class TestUpdateTransaction:
     @pytest.mark.asyncio
     async def test_update_transaction(self, client):

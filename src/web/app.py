@@ -708,6 +708,20 @@ def create_dashboard_app(
         storage = user_manager.get(username).storage
         return await _db(storage.get_merchant_ranking_facts, start, end, timezone, category, limit)
 
+    @app.get("/api/v2/spending/trend-by-category", response_model=list[CategoryTrendPoint])
+    async def spending_trend_by_category(start: date, end: date, categories: Optional[str] = None,
+                                          username: str = Depends(require_auth)):
+        """Same shared-facts rules as /api/v2/spending/breakdown and
+        /transactions/daily-totals — not storage.get_trend_by_category's
+        legacy SQL, which has no timezone conversion on transaction_date.
+        `categories` is a comma-separated allowlist (the frontend's "at most
+        three selectable categories" default)."""
+        if end < start:
+            raise HTTPException(status_code=422, detail="End must not precede start")
+        category_list = [c for c in categories.split(",") if c] if categories else None
+        storage = user_manager.get(username).storage
+        return await _db(storage.get_category_daily_trend, start, end, timezone, category_list)
+
     @app.get("/api/v2/transactions/{tx_id}", response_model=TransactionV2)
     async def get_transaction_v2(tx_id: int, username: str = Depends(require_auth)):
         storage = user_manager.get(username).storage
