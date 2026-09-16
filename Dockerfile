@@ -7,7 +7,10 @@ WORKDIR /app/src/web/frontend
 
 # Copy manifests first — npm ci layer is cached until package-lock.json changes
 COPY src/web/frontend/package.json src/web/frontend/package-lock.json ./
-RUN npm ci
+# --force: openapi-typescript@7's typescript peer range (^5.x) lags this
+# repo's typescript ~6.0.2; matches the --force install used to generate
+# package-lock.json (see commit 0d49c86)
+RUN npm ci --force
 
 # Copy remaining frontend source and build
 COPY src/web/frontend/ ./
