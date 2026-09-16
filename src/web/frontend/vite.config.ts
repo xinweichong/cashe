@@ -37,5 +37,7 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
+    // e2e/ holds Playwright specs (npm run test:visual), a separate runner/config.
+    exclude: ['**/node_modules/**', 'e2e/**'],
   },
 })

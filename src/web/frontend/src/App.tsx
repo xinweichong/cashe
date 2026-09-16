@@ -30,6 +30,9 @@ const FinancePage = lazy(() => import('@/pages/FinancePage').then(m => ({ defaul
 const OnboardingPage = lazy(() => import('@/pages/OnboardingPage').then(m => ({ default: m.OnboardingPage })));
 const AdminPage = lazy(() => import('@/pages/AdminPage').then(m => ({ default: m.AdminPage })));
 const SetPasswordPage = lazy(() => import('@/pages/SetPasswordPage').then(m => ({ default: m.SetPasswordPage })));
+const DevPreviewPage = import.meta.env.DEV
+  ? lazy(() => import('@/dev/DevPreviewPage').then(m => ({ default: m.DevPreviewPage })))
+  : null;
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -169,6 +172,8 @@ export default function App() {
               {/* Admin routes bypass the regular user auth flow entirely */}
               <Route path="/admin" element={<AdminPage />} />
               <Route path="/admin/*" element={<AdminPage />} />
+              {/* Dev-only, auth-free visual harness for shared primitives — never registered in a production build */}
+              {DevPreviewPage && <Route path="/dev/preview" element={<DevPreviewPage />} />}
               <Route
                 path="*"
                 element={
