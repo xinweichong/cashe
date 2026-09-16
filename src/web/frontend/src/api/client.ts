@@ -21,6 +21,7 @@ export type BalanceV2 = components['schemas']['Balance'];
 export type CategoryTrendPointV2 = components['schemas']['CategoryTrendPoint'];
 export type GoalProgressV2 = components['schemas']['GoalProgress'];
 export type DailyTotalV2 = components['schemas']['DailyTotal'];
+export type CategoryBreakdownV2 = components['schemas']['CategoryBreakdown'];
 export type BulkTransactionResultItemV2 = components['schemas']['BulkTransactionResultItem'];
 export type SubscriptionReviewV2 = components['schemas']['SubscriptionReview'];
 
@@ -486,6 +487,9 @@ export const api = {
 
   getDailyTotalsV2: (start: string, end: string) =>
     request<DailyTotalV2[]>(`/api/v2/transactions/daily-totals?start=${start}&end=${end}`),
+
+  getCategoryBreakdownV2: (start: string, end: string) =>
+    request<CategoryBreakdownV2>(`/api/v2/spending/breakdown?start=${start}&end=${end}`),
 
   bulkCorrectTransactions: (data: {
     transaction_ids: number[];

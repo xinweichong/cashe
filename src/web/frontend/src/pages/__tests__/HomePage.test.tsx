@@ -1,16 +1,26 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { briefingApi, type HomeBriefing, type SpendingPeriod } from '@/api/briefing';
+import { api } from '@/api/client';
 import { HomePage } from '../HomePage';
 import { ReviewPage } from '../ReviewPage';
 
 vi.mock('@/api/briefing', async (original) => ({ ...await original<typeof import('@/api/briefing')>(), briefingApi: { recurringReview: vi.fn(), resolveRecurring: vi.fn(), home: vi.fn(), spendingReview: vi.fn(), captureIssues: vi.fn(), followups: vi.fn(), retryCapture: vi.fn(), retryFollowup: vi.fn(), refundMatchReview: vi.fn(), resolveRefundMatch: vi.fn(), duplicateReview: vi.fn(), dismissDuplicate: vi.fn(), mergeDuplicates: vi.fn(), undoDuplicateMerge: vi.fn() } }));
+vi.mock('@/api/client', async (original) => ({ ...await original<typeof import('@/api/client')>(), api: { getCategoryBreakdownV2: vi.fn(), getDailyTotalsV2: vi.fn() } }));
 const period: SpendingPeriod = { start: '2026-09-01', end: '2026-09-06', spending: { minor_units: 1250, currency: 'SGD' }, income: null, recorded_net_flow: null, transaction_count: 1, unresolved_count: 0, indicative_count: 0, status: 'complete' };
 const home: HomeBriefing = { facts: { as_of: '2026-09-06', timezone: 'Asia/Singapore', undated_count: 0, current: period, comparison_current: period, previous: { ...period, start: '2026-08-01', end: '2026-08-06' }, change: { minor_units: 500, currency: 'SGD' }, category_changes: [{ category: 'Food & Drink', change: { minor_units: 500, currency: 'SGD' } }], top_category_driver: null, trip_drivers: [] }, spending_target: null, recent: [], upcoming: [], upcoming_total: { minor_units: 0, currency: 'SGD' }, upcoming_unknown_count: 0, increased_commitments: [], capture_issue_count: 2, followup_issue_count: 1, review_count: 0, recurring_suggestion_count: 0, freshness: { gmail_connected: false, gmail_last_checked: null, gmail_needs_reconnection: false, last_capture_processed_at: null } };
 function show(component: React.ReactNode) { return render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter>{component}</MemoryRouter></QueryClientProvider>); }
-beforeEach(() => { vi.resetAllMocks(); vi.mocked(briefingApi.recurringReview).mockResolvedValue({ items: [], total: 0, limit: 50, offset: 0 }); vi.mocked(briefingApi.spendingReview).mockResolvedValue({ items: [], total: 0, limit: 50, offset: 0 }); vi.mocked(briefingApi.refundMatchReview).mockResolvedValue({ items: [], total: 0, limit: 50, offset: 0 }); vi.mocked(briefingApi.duplicateReview).mockResolvedValue({ items: [], total: 0, limit: 50, offset: 0 }); });
+beforeEach(() => {
+  vi.resetAllMocks();
+  vi.mocked(briefingApi.recurringReview).mockResolvedValue({ items: [], total: 0, limit: 50, offset: 0 });
+  vi.mocked(briefingApi.spendingReview).mockResolvedValue({ items: [], total: 0, limit: 50, offset: 0 });
+  vi.mocked(briefingApi.refundMatchReview).mockResolvedValue({ items: [], total: 0, limit: 50, offset: 0 });
+  vi.mocked(briefingApi.duplicateReview).mockResolvedValue({ items: [], total: 0, limit: 50, offset: 0 });
+  vi.mocked(api.getCategoryBreakdownV2).mockResolvedValue({ start: period.start, end: period.end, by_category: {}, unresolved_count: 0, indicative_count: 0, status: 'complete' });
+  vi.mocked(api.getDailyTotalsV2).mockResolvedValue([]);
+});
 afterEach(cleanup);
 
 test('Home keeps evidence periods and categories in links and omits missing income', async () => {
@@ -126,6 +136,67 @@ test('Home omits the target line entirely when no overall budget is set', async 
   show(<HomePage />);
   await screen.findByText('Your money briefing');
   expect(screen.queryByText(/monthly target/)).toBeNull();
+});
+
+test('Home shows the category mix once the breakdown loads, ranked by amount', async () => {
+  vi.mocked(briefingApi.home).mockResolvedValue(home);
+  vi.mocked(api.getCategoryBreakdownV2).mockResolvedValue({
+    start: period.start, end: period.end,
+    by_category: { Food: { minor_units: 3000, currency: 'SGD' }, Transport: { minor_units: 1000, currency: 'SGD' } },
+    unresolved_count: 0, indicative_count: 0, status: 'complete',
+  });
+  show(<HomePage />);
+  expect(await screen.findByText('Food')).toBeTruthy();
+  expect(screen.getByText('Transport')).toBeTruthy();
+  expect(api.getCategoryBreakdownV2).toHaveBeenCalledWith(period.start, period.end);
+});
+
+test('a failed category breakdown shows a retry without losing the rest of the briefing', async () => {
+  vi.mocked(briefingApi.home).mockResolvedValue(home);
+  vi.mocked(api.getCategoryBreakdownV2).mockRejectedValue(new Error('offline'));
+  show(<HomePage />);
+  expect(await screen.findByText(/Couldn't load the category mix/)).toBeTruthy();
+  expect(screen.getByText('Your money briefing')).toBeTruthy();
+});
+
+test('selecting a category and viewing transactions navigates to its evidence', async () => {
+  vi.mocked(briefingApi.home).mockResolvedValue(home);
+  vi.mocked(api.getCategoryBreakdownV2).mockResolvedValue({
+    start: period.start, end: period.end,
+    by_category: { Food: { minor_units: 3000, currency: 'SGD' } },
+    unresolved_count: 0, indicative_count: 0, status: 'complete',
+  });
+  function Destination() { const location = useLocation(); return <output>{location.pathname}{location.search}</output>; }
+  render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <MemoryRouter initialEntries={['/home']}>
+        <Routes><Route path="/home" element={<HomePage />} /><Route path="/evidence" element={<Destination />} /></Routes>
+      </MemoryRouter>
+    </QueryClientProvider>
+  );
+  fireEvent.click(await screen.findByRole('button', { name: /^Food/ }));
+  fireEvent.click(screen.getByRole('button', { name: 'View transactions' }));
+  const destination = await screen.findByText((_, el) => el?.tagName === 'OUTPUT');
+  expect(destination.textContent).toContain('/evidence');
+  const params = new URLSearchParams(destination.textContent!.replace('/evidence', ''));
+  expect(params.get('category')).toBe('Food');
+  expect(params.get('start')).toBe(period.start);
+});
+
+test('the daily trend reflects real data and links to a selected day\'s evidence', async () => {
+  vi.mocked(briefingApi.home).mockResolvedValue(home);
+  vi.mocked(api.getDailyTotalsV2).mockResolvedValue([
+    { date: '2026-09-04', spending: { minor_units: 200, currency: 'SGD' }, income: null, recorded_net_flow: null, transaction_count: 1, unresolved_count: 0, indicative_count: 0, status: 'complete' },
+    { date: '2026-09-05', spending: { minor_units: 500, currency: 'SGD' }, income: null, recorded_net_flow: null, transaction_count: 1, unresolved_count: 0, indicative_count: 0, status: 'complete' },
+  ]);
+  show(<HomePage />);
+  await screen.findByText('Your money briefing');
+  expect(screen.queryByRole('link', { name: /View this day/ })).toBeNull();
+  fireEvent.click(await screen.findByLabelText('Previous day'));
+  const link = await screen.findByRole('link', { name: "View this day's records" });
+  const params = new URL(link.getAttribute('href')!, 'http://localhost').searchParams;
+  expect(params.get('start')).toBe('2026-09-04');
+  expect(params.get('end')).toBe('2026-09-04');
 });
 
 test('capture review queues a deliberate retry and refreshes', async () => {

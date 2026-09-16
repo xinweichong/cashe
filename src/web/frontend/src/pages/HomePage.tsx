@@ -1,12 +1,38 @@
-import { Link } from 'react-router-dom';
+import { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowRight, Plus } from 'lucide-react';
 import { briefingApi, evidenceLink, formatMoney } from '@/api/briefing';
-import { PageCard } from '@/components/ui/cards';
+import { api } from '@/api/client';
+import { HeroCard, PageCard } from '@/components/ui/cards';
+import { HeroAmount } from '@/components/ui/HeroAmount';
 import { LoadFailed } from '@/components/ui/LoadFailed';
+import { Skeleton } from '@/components/ui/skeleton';
+import { TrendLine } from '@/components/charts/TrendLine';
+import { CategoryDonut } from '@/components/charts/CategoryDonut';
 
 export function HomePage() {
+  const navigate = useNavigate();
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const query = useQuery({ queryKey: ['home-briefing'], queryFn: briefingApi.home });
+  const currentStart = query.data?.facts.current.start;
+  const currentEnd = query.data?.facts.current.end;
+  // Both charts read start/end scoped to facts.current — the exact period the
+  // hero amount above them covers — and are built on the same spending_facts
+  // rules as that hero (see src/spending_facts.py's category_breakdown/
+  // daily_totals), never the legacy /api/v2/overview/* SQL aggregates, so
+  // chart and hero totals always reconcile for an identical period.
+  const breakdownQuery = useQuery({
+    queryKey: ['home-category-breakdown', currentStart, currentEnd],
+    queryFn: () => api.getCategoryBreakdownV2(currentStart!, currentEnd!),
+    enabled: !!currentStart && !!currentEnd,
+  });
+  const trendQuery = useQuery({
+    queryKey: ['home-daily-totals', currentStart, currentEnd],
+    queryFn: () => api.getDailyTotalsV2(currentStart!, currentEnd!),
+    enabled: !!currentStart && !!currentEnd,
+  });
   if (!query.data && query.isError) return <div role="alert"><LoadFailed onRetry={() => void query.refetch()} /></div>;
   if (!query.data) return <p role="status" className="p-6 text-muted">Preparing your briefing…</p>;
   const { facts, spending_target, freshness, recent, upcoming, upcoming_total, upcoming_unknown_count, increased_commitments, capture_issue_count, followup_issue_count, review_count, recurring_suggestion_count } = query.data;
@@ -14,6 +40,10 @@ export function HomePage() {
   const unresolved = facts.current.unresolved_count + facts.undated_count;
   const netFlowNegative = !!facts.current.recorded_net_flow && facts.current.recorded_net_flow.minor_units < 0;
   const driver = facts.top_category_driver;
+  const categoryTotals = breakdownQuery.data
+    ? Object.entries(breakdownQuery.data.by_category).map(([category, amount]) => ({ category, total: amount.minor_units / 100 }))
+    : [];
+  const trendPoints = trendQuery.data?.map((day) => ({ date: day.date, amount: day.spending.minor_units / 100 })) ?? [];
   return (
     <div className="max-w-5xl mx-auto p-4 md:p-8 space-y-6 text-base">
       <header className="flex items-center justify-between gap-4">
@@ -21,8 +51,8 @@ export function HomePage() {
         <Link className="min-h-11 min-w-11 inline-flex items-center gap-2 text-teal" to="/transactions?add=1"><Plus aria-hidden="true" size={20} />Add</Link>
       </header>
       {query.isError && <p role="alert" className="text-warning">Couldn’t refresh. This briefing may be out of date. <button className="underline min-h-11" onClick={() => void query.refetch()}>Retry</button></p>}
-      <PageCard title="This month so far" action={<Link className="min-h-11 inline-flex items-center text-teal" to={evidenceLink(facts.current)}>See spending <ArrowRight className="ml-2" size={16} /></Link>}>
-        <p className="text-4xl md:text-5xl font-semibold tabular-nums tracking-tight">{formatMoney(facts.current.spending)}</p>
+      <HeroCard title="Month spending" action={<Link className="min-h-11 inline-flex items-center text-teal" to={evidenceLink(facts.current)}>See spending <ArrowRight className="ml-2" size={16} /></Link>}>
+        <HeroAmount value={facts.current.spending} />
         <p className="mt-2 text-muted">{facts.current.status === 'partial' ? 'Known spending subtotal · some amounts or dates need review.' : facts.current.status === 'indicative' ? 'Recorded spending · includes indicative currency conversions.' : 'Recorded spending this month'}</p>
         <p className="mt-4">{facts.change ? `${formatMoney({ ...facts.change, minor_units: Math.abs(facts.change.minor_units) })} ${facts.change.minor_units >= 0 ? 'more' : 'less'} than the comparable period last month.` : 'A comparison is unavailable while some records need review.'}</p>
         <p className="text-sm text-muted">Comparing {facts.comparison_current.start}–{facts.comparison_current.end} with {facts.previous.start}–{facts.previous.end}.</p>
@@ -30,6 +60,29 @@ export function HomePage() {
         {spending_target && <p className={`mt-4 pt-4 border-t border-border ${overTarget ? 'text-warning' : ''}`}>{overTarget
           ? `${formatMoney({ ...spending_target.remaining, minor_units: Math.abs(spending_target.remaining.minor_units) })} over your ${formatMoney(spending_target.target)} monthly target.`
           : `${formatMoney(spending_target.remaining)} remaining of your ${formatMoney(spending_target.target)} monthly target.`}</p>}
+        <div className="mt-6 pt-4 border-t border-border">
+          {trendQuery.isLoading ? <Skeleton className="h-[160px] w-full" /> : trendQuery.isError ? (
+            <p className="text-sm text-muted">Couldn't load the daily trend. <button className="underline min-h-11" onClick={() => void trendQuery.refetch()}>Retry</button></p>
+          ) : (
+            <>
+              <TrendLine data={trendPoints} selectedDate={selectedDate} onSelectDate={setSelectedDate} />
+              {selectedDate && <Link className="text-sm text-teal min-h-11 inline-flex items-center mt-1" to={`/evidence?start=${selectedDate}&end=${selectedDate}&measure=spending`}>View this day's records</Link>}
+            </>
+          )}
+        </div>
+      </HeroCard>
+      <PageCard title="Where it went">
+        {breakdownQuery.isLoading ? <Skeleton className="h-[220px] w-full" /> : breakdownQuery.isError ? (
+          <p className="text-sm text-muted">Couldn't load the category mix. <button className="underline min-h-11" onClick={() => void breakdownQuery.refetch()}>Retry</button></p>
+        ) : (
+          <CategoryDonut
+            data={categoryTotals}
+            selected={selectedCategory}
+            onSelect={setSelectedCategory}
+            onViewTransactions={(category) => navigate(evidenceLink(facts.current, category))}
+            showLegend
+          />
+        )}
       </PageCard>
       <PageCard title="What changed">
         {facts.category_changes.slice(0, 3).map(item => <div key={item.category} className="py-3 border-b border-border last:border-0">
