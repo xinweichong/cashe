@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/api/client';
@@ -7,7 +7,8 @@ import { PageCard } from '@/components/ui/cards';
 import { LoadFailed } from '@/components/ui/LoadFailed';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CategoryChangeBars } from '@/components/charts/CategoryChangeBars';
-import { getCategoryColor } from '@/lib/utils';
+import { CategoryTrendLine } from '@/components/charts/CategoryTrendLine';
+import { getCategoryColor, cn } from '@/lib/utils';
 
 const WEEKDAY_LABELS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
@@ -92,6 +93,74 @@ function WhichRecurringCostsChanged() {
         {data.annual_renewals.map(r => <Link key={r.subscription_id} to={`/plan/manage?subscription=${r.subscription_id}`} className="block text-sm text-teal underline min-h-11">{r.label}: in {r.days_until_renewal} days</Link>)}
       </div>}
     </QuestionCard>
+  );
+}
+
+function SpendingOverTime() {
+  const { data: categories } = useQuery({ queryKey: ['categories'], queryFn: () => api.getCategories() });
+  const { data: monthFacts } = useQuery({ queryKey: ['explore-month-facts'], queryFn: () => briefingApi.month() });
+  const [selected, setSelected] = useState<string[]>([]);
+  const initialized = useRef(false);
+  useEffect(() => {
+    // Default to at most three selectable categories (the top movers this
+    // period), once — later toggles are the user's own choice, not reset
+    // by a subsequent refetch.
+    if (!initialized.current && monthFacts?.category_changes.length) {
+      initialized.current = true;
+      setSelected(monthFacts.category_changes.slice(0, 3).map((c) => c.category));
+    }
+  }, [monthFacts]);
+
+  const { data: trend, isError, refetch, isLoading } = useQuery({
+    // Shared-facts category_daily_trend (spending_facts.py), not the legacy
+    // getTrendByCategoryV2 SQL — see the increment-3/4 findings in
+    // docs/plans/2026-09-16-cashe-design-language-restoration.md.
+    queryKey: ['explore-category-trend', monthFacts?.current.start, monthFacts?.current.end, selected.join(',')],
+    queryFn: () => api.getCategoryDailyTrendV2(monthFacts!.current.start, monthFacts!.current.end, selected),
+    enabled: !!monthFacts && selected.length > 0,
+  });
+
+  function toggle(category: string) {
+    setSelected((prev) => (prev.includes(category) ? prev.filter((c) => c !== category) : [...prev, category]));
+  }
+
+  const chartData = trend?.map((point) => ({
+    date: point.date,
+    ...Object.fromEntries(selected.map((cat) => [cat, point.categories[cat] ? point.categories[cat]!.minor_units / 100 : 0])),
+  })) ?? [];
+
+  return (
+    <PageCard title="Spending over time">
+      {!!categories?.length && (
+        <div className="flex flex-wrap gap-2 mb-3" role="group" aria-label="Categories to chart">
+          {categories.map((c) => (
+            <button
+              key={c.name}
+              type="button"
+              onClick={() => toggle(c.name)}
+              aria-pressed={selected.includes(c.name)}
+              className={cn(
+                'inline-flex items-center gap-1.5 min-h-9 px-2.5 rounded-pill text-sm border',
+                selected.includes(c.name) ? 'border-transparent text-foreground' : 'border-border text-muted hover:text-foreground'
+              )}
+              style={selected.includes(c.name) ? { background: `color-mix(in srgb, ${getCategoryColor(c.name)} 16%, transparent)` } : undefined}
+            >
+              <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: getCategoryColor(c.name) }} aria-hidden />
+              {c.name}
+            </button>
+          ))}
+        </div>
+      )}
+      {!selected.length ? (
+        <p className="text-muted text-sm">Select a category above to see its daily trend.</p>
+      ) : isError && !trend ? (
+        <div role="alert"><LoadFailed onRetry={() => void refetch()} /></div>
+      ) : isLoading || !trend ? (
+        <p role="status" className="text-muted text-sm">Loading…</p>
+      ) : (
+        <div className="h-[240px]"><CategoryTrendLine data={chartData} /></div>
+      )}
+    </PageCard>
   );
 }
 
@@ -197,7 +266,7 @@ export function ExplorePatternsPage() {
         </TabsList>
       </Tabs>
 
-      {mode === 'over-time' && <WhatDoesANormalWeekLookLike />}
+      {mode === 'over-time' && <><SpendingOverTime /><WhatDoesANormalWeekLookLike /></>}
       {mode === 'by-category' && <WhereDidTheIncreaseComeFrom />}
       {mode === 'by-merchant' && <WhichMerchantsAccountForMostOfThisCategory />}
       {mode === 'recurring' && <WhichRecurringCostsChanged />}

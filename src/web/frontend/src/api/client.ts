@@ -500,6 +500,16 @@ export const api = {
     return request<MerchantRankingV2[]>(`/api/v2/spending/merchants?${params}`);
   },
 
+  // Shared-facts per-day category trend (spending_facts.category_daily_trend)
+  // — distinct from getTrendByCategoryV2's legacy /api/v2/overview/trend-by-
+  // category, which is not proven to reconcile with getDailyTotalsV2/
+  // getCategoryBreakdownV2 for the same period.
+  getCategoryDailyTrendV2: (start: string, end: string, categories?: string[]) => {
+    const params = new URLSearchParams({ start, end });
+    if (categories?.length) params.set('categories', categories.join(','));
+    return request<CategoryTrendPointV2[]>(`/api/v2/spending/trend-by-category?${params}`);
+  },
+
   bulkCorrectTransactions: (data: {
     transaction_ids: number[];
     category?: string;

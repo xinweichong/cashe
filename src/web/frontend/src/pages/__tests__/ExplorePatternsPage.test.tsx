@@ -12,6 +12,7 @@ vi.mock('@/api/client', async importOriginal => ({
     getSubscriptionReviewV2: vi.fn(),
     getCategories: vi.fn(),
     getMerchantRankingFactsV2: vi.fn(),
+    getCategoryDailyTrendV2: vi.fn(),
     getTrips: vi.fn(),
     getTripSummaryV2: vi.fn(),
   },
@@ -45,6 +46,7 @@ beforeEach(() => {
   vi.mocked(api.getSubscriptionReviewV2).mockResolvedValue(emptyReview);
   vi.mocked(api.getCategories).mockResolvedValue([]);
   vi.mocked(api.getMerchantRankingFactsV2).mockResolvedValue([]);
+  vi.mocked(api.getCategoryDailyTrendV2).mockResolvedValue([]);
   vi.mocked(api.getTrips).mockResolvedValue([]);
 });
 afterEach(cleanup);
@@ -88,6 +90,29 @@ test('shows recurring cost changes with a link to the subscription', async () =>
   await selectMode('Recurring');
   const link = await screen.findByRole('link', { name: /Netflix/ });
   expect(link.getAttribute('href')).toBe('/plan/manage?subscription=9');
+});
+
+test('defaults the category trend chart to the top movers and fetches via the shared-facts endpoint (default mode)', async () => {
+  vi.mocked(api.getCategories).mockResolvedValue([
+    { name: 'Food & Drink', keywords: null, icon: null, color: null, type: 'wants' },
+    { name: 'Transport', keywords: null, icon: null, color: null, type: 'needs' },
+  ]);
+  show();
+  const chip = await screen.findByRole('button', { name: 'Food & Drink' });
+  expect(chip.getAttribute('aria-pressed')).toBe('true');
+  expect(screen.getByRole('button', { name: 'Transport' }).getAttribute('aria-pressed')).toBe('false');
+  await waitFor(() => expect(api.getCategoryDailyTrendV2).toHaveBeenCalledWith(period.start, period.end, ['Food & Drink']));
+});
+
+test('toggling a category chip adds it to the trend chart request', async () => {
+  vi.mocked(api.getCategories).mockResolvedValue([
+    { name: 'Food & Drink', keywords: null, icon: null, color: null, type: 'wants' },
+    { name: 'Transport', keywords: null, icon: null, color: null, type: 'needs' },
+  ]);
+  show();
+  await screen.findByRole('button', { name: 'Food & Drink' });
+  fireEvent.click(screen.getByRole('button', { name: 'Transport' }));
+  await waitFor(() => expect(api.getCategoryDailyTrendV2).toHaveBeenCalledWith(period.start, period.end, ['Food & Drink', 'Transport']));
 });
 
 test('shows a weekday pattern bar with weekday-scoped evidence (default mode)', async () => {

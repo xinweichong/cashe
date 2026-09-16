@@ -32,11 +32,18 @@ async function mockAuthenticatedExplore(page: import('@playwright/test').Page) {
     anomaly_multiplier: 2, velocity_alert_threshold: 2, budgets_enabled: true, goals_enabled: true,
     trips_enabled: true, subscriptions_enabled: true, recurring_enabled: true, home_briefing_enabled: true,
   } }));
-  await page.route('**/api/categories', (route) => route.fulfill({ json: [] }));
+  await page.route('**/api/categories', (route) => route.fulfill({ json: [
+    { name: 'Food', keywords: null, icon: null, color: null, type: 'wants' },
+    { name: 'Shopping', keywords: null, icon: null, color: null, type: 'wants' },
+  ] }));
   await page.route('**/api/v2/spending/month**', (route) => route.fulfill({ json: MONTH_FACTS }));
   await page.route('**/api/v2/spending/weekday-pattern**', (route) => route.fulfill({ json: WEEKDAY_PATTERN }));
   await page.route('**/api/v2/subscriptions/review**', (route) => route.fulfill({ json: SUBSCRIPTION_REVIEW }));
   await page.route('**/api/v2/spending/merchants**', (route) => route.fulfill({ json: [] }));
+  await page.route('**/api/v2/spending/trend-by-category**', (route) => route.fulfill({ json: [
+    { date: '2026-09-01', categories: { Food: { minor_units: 1200, currency: 'SGD' } } },
+    { date: '2026-09-02', categories: { Food: { minor_units: 800, currency: 'SGD' } } },
+  ] }));
   await page.route('**/api/trips**', (route) => route.fulfill({ json: [] }));
 }
 
@@ -67,4 +74,14 @@ test('production Explore top-level nav shows the teal active accent', async ({ p
   const spendingPatternsLink = page.getByRole('link', { name: 'Spending patterns' });
   await expect(spendingPatternsLink).toHaveAttribute('aria-current', 'page');
   await page.screenshot({ path: 'e2e/screenshots/explore-production.png', fullPage: true });
+});
+
+test('Over time mode charts the default top-mover categories', async ({ page }) => {
+  await mockAuthenticatedExplore(page);
+  await page.goto('/explore');
+  const foodChip = page.getByRole('button', { name: 'Food' });
+  await expect(foodChip).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('.recharts-line').first()).toBeVisible();
+  await page.waitForTimeout(1000);
+  await page.screenshot({ path: 'e2e/screenshots/explore-over-time-production.png', fullPage: true });
 });
