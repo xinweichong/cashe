@@ -656,6 +656,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/spending/merchants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Spending Merchants
+         * @description Same shared-facts rules as /api/v2/spending/breakdown — a merchant
+         *     ranking scoped to a selected category always agrees with that
+         *     category's breakdown total for the identical period.
+         */
+        get: operations["spending_merchants_api_v2_spending_merchants_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v2/spending/month": {
         parameters: {
             query?: never;
@@ -3451,6 +3473,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SpendingEvidence"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    spending_merchants_api_v2_spending_merchants_get: {
+        parameters: {
+            query: {
+                start: string;
+                end: string;
+                category?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MerchantRanking"][];
                 };
             };
             /** @description Validation Error */

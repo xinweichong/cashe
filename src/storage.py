@@ -106,6 +106,11 @@ class Storage:
         return category_breakdown(self._conn, start, end, timezone)
 
     @_locked
+    def get_merchant_ranking_facts(self, start, end, timezone="Asia/Singapore", category=None, limit=10) -> list[dict]:
+        from src.spending_facts import merchant_ranking
+        return merchant_ranking(self._conn, start, end, timezone, category, limit)
+
+    @_locked
     def get_transactions_v2(
         self,
         start_date: Optional[str] = None,

@@ -269,6 +269,30 @@ def category_breakdown(conn, start: date, end: date, timezone: str = DEFAULT_TIM
     }
 
 
+def merchant_ranking(conn, start: date, end: date, timezone: str = DEFAULT_TIMEZONE,
+                      category: str | None = None, limit: int = 10) -> list[dict]:
+    """Merchant totals for [start, end], optionally scoped to one category —
+    built on the same _rows/_spending_rows primitives _top_category_driver
+    uses internally, so a merchant ranking under a selected category always
+    agrees with that category's total from category_breakdown for the
+    identical period (unlike storage.get_merchant_ranking's legacy SQL)."""
+    rows = _rows(conn, start, end, timezone)
+    selected = _spending_rows(rows, start, end)
+    if category is not None:
+        selected = [row for row in selected if row["category"] == category]
+    totals: dict[str, int] = {}
+    visits: dict[str, int] = {}
+    for row in selected:
+        merchant = row["merchant"] or "Unknown merchant"
+        totals[merchant] = totals.get(merchant, 0) + _signed(row)
+        visits[merchant] = visits.get(merchant, 0) + (row["type"] == "expense")
+    ranked = sorted(totals.items(), key=lambda item: -item[1])
+    return [
+        {"merchant": merchant, "visits": visits[merchant], "total": money(total)}
+        for merchant, total in ranked[:limit]
+    ]
+
+
 def daily_totals(conn, start: date, end: date, timezone: str = DEFAULT_TIMEZONE) -> list[dict]:
     """Per-local-day totals over [start, end], built on the same _rows/
     _aggregate primitives every other shared-fact surface uses (R04 parity).

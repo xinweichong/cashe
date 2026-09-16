@@ -697,6 +697,17 @@ def create_dashboard_app(
         storage = user_manager.get(username).storage
         return await _db(storage.get_category_breakdown, start, end, timezone)
 
+    @app.get("/api/v2/spending/merchants", response_model=list[MerchantRanking])
+    async def spending_merchants(start: date, end: date, category: Optional[str] = None,
+                                  limit: int = Query(10, ge=1, le=50), username: str = Depends(require_auth)):
+        """Same shared-facts rules as /api/v2/spending/breakdown — a merchant
+        ranking scoped to a selected category always agrees with that
+        category's breakdown total for the identical period."""
+        if end < start:
+            raise HTTPException(status_code=422, detail="End must not precede start")
+        storage = user_manager.get(username).storage
+        return await _db(storage.get_merchant_ranking_facts, start, end, timezone, category, limit)
+
     @app.get("/api/v2/transactions/{tx_id}", response_model=TransactionV2)
     async def get_transaction_v2(tx_id: int, username: str = Depends(require_auth)):
         storage = user_manager.get(username).storage

@@ -372,6 +372,56 @@ class TestCategoryBreakdownV2:
         assert sum(v["minor_units"] for v in breakdown["by_category"].values()) == current["spending"]["minor_units"]
 
 
+class TestMerchantRankingFactsV2:
+    @pytest.mark.asyncio
+    async def test_ranks_merchants_by_total(self, client):
+        await client.post("/api/transactions", json={
+            "amount": 30.0, "merchant": "Big Spender", "category": "Food", "type": "expense", "transaction_date": "2026-09-01T09:00:00",
+        })
+        await client.post("/api/transactions", json={
+            "amount": 5.0, "merchant": "Small Buy", "category": "Food", "type": "expense", "transaction_date": "2026-09-01T09:00:00",
+        })
+
+        response = await client.get("/api/v2/spending/merchants?start=2026-09-01&end=2026-09-30")
+
+        assert response.status_code == 200
+        merchants = [row["merchant"] for row in response.json()]
+        assert merchants.index("Big Spender") < merchants.index("Small Buy")
+
+    @pytest.mark.asyncio
+    async def test_category_filter_excludes_other_categories(self, client):
+        await client.post("/api/transactions", json={
+            "amount": 10.0, "merchant": "Food Place", "category": "Food", "type": "expense", "transaction_date": "2026-09-01T09:00:00",
+        })
+        await client.post("/api/transactions", json={
+            "amount": 10.0, "merchant": "Transport Place", "category": "Transport", "type": "expense", "transaction_date": "2026-09-01T09:00:00",
+        })
+
+        response = await client.get("/api/v2/spending/merchants?start=2026-09-01&end=2026-09-30&category=Food")
+
+        merchants = {row["merchant"] for row in response.json()}
+        assert merchants == {"Food Place"}
+
+    @pytest.mark.asyncio
+    async def test_reconciles_with_category_breakdown_for_the_same_category(self, client):
+        await client.post("/api/transactions", json={
+            "amount": 12.0, "merchant": "A", "category": "Food", "type": "expense", "transaction_date": "2026-09-01T09:00:00",
+        })
+        await client.post("/api/transactions", json={
+            "amount": 8.0, "merchant": "B", "category": "Food", "type": "expense", "transaction_date": "2026-09-02T09:00:00",
+        })
+
+        breakdown = (await client.get("/api/v2/spending/breakdown?start=2026-09-01&end=2026-09-30")).json()
+        merchants = (await client.get("/api/v2/spending/merchants?start=2026-09-01&end=2026-09-30&category=Food")).json()
+
+        assert sum(m["total"]["minor_units"] for m in merchants) == breakdown["by_category"]["Food"]["minor_units"]
+
+    @pytest.mark.asyncio
+    async def test_end_before_start_is_rejected(self, client):
+        response = await client.get("/api/v2/spending/merchants?start=2026-09-02&end=2026-09-01")
+        assert response.status_code == 422
+
+
 class TestUpdateTransaction:
     @pytest.mark.asyncio
     async def test_update_transaction(self, client):

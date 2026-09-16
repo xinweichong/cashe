@@ -6108,6 +6108,89 @@
         "summary": "Spending Evidence"
       }
     },
+    "/api/v2/spending/merchants": {
+      "get": {
+        "description": "Same shared-facts rules as /api/v2/spending/breakdown \u2014 a merchant\nranking scoped to a selected category always agrees with that\ncategory's breakdown total for the identical period.",
+        "operationId": "spending_merchants_api_v2_spending_merchants_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "start",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "title": "Start",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "end",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "title": "End",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "category",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Category"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "maximum": 50,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/MerchantRanking"
+                  },
+                  "title": "Response Spending Merchants Api V2 Spending Merchants Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Spending Merchants"
+      }
+    },
     "/api/v2/spending/month": {
       "get": {
         "operationId": "month_spending_api_v2_spending_month_get",
