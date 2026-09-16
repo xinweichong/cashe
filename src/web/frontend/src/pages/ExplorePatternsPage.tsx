@@ -61,18 +61,32 @@ function WhereDidTheIncreaseComeFrom() {
   const top = data?.top_category_driver;
   const selectedDriver = drivers.find(d => d.category === selected);
   return (
-    <QuestionCard title="What changed" isError={isError} onRetry={() => void refetch()} isReady={!!data}>
-      <p className="text-sm text-muted mb-3">Signed change vs. the comparable period, centred on zero.</p>
-      {!drivers.length && <p className="text-muted">{data?.change ? 'No category spending changes this period.' : 'Resolve records needing attention to compare categories.'}</p>}
-      {data && !!drivers.length && <CategoryChangeBars data={drivers.slice(0, 5)} selected={selected} onSelect={(c) => setSelected(selected === c ? null : c)} />}
-      {data && selectedDriver && <div className="mt-3 pt-3 border-t border-border flex gap-6">
-        <Link className="text-teal underline min-h-11 inline-flex items-center" to={evidenceLink(data.comparison_current, selectedDriver.category)}>This period</Link>
-        <Link className="text-teal underline min-h-11 inline-flex items-center" to={evidenceLink(data.previous, selectedDriver.category)}>Previous period</Link>
-      </div>}
-      {top?.merchant_driver && data && <p className="text-sm text-muted mt-2">Biggest mover in {top.category}: <Link className="underline" to={merchantProfileLink(top.merchant_driver.merchant)}>{top.merchant_driver.merchant}</Link> ({formatMoney(top.merchant_driver.change)}) — <Link className="underline" to={evidenceLink(data.comparison_current, top.category, 'spending', top.merchant_driver.merchant)}>view transactions</Link></p>}
-      {top?.one_off_driver && <p className="text-sm text-muted">Largely one purchase: <Link className="underline" to={`/transactions/${top.one_off_driver.transaction_id}`}>{top.one_off_driver.merchant || 'Unnamed transaction'}</Link></p>}
-      {data?.trip_drivers.map(t => <p key={t.trip_id} className="text-sm text-muted">Trip <Link className="underline" to={`/transactions?trip=${t.trip_id}`}>{t.name}</Link>: {formatMoney(t.change)} vs. last period — {t.overlap_note}</p>)}
-    </QuestionCard>
+    <>
+      <QuestionCard title="What changed" isError={isError} onRetry={() => void refetch()} isReady={!!data}>
+        <p className="text-sm text-muted mb-3">Signed change vs. the comparable period, centred on zero.</p>
+        {!drivers.length && <p className="text-muted">{data?.change ? 'No category spending changes this period.' : 'Resolve records needing attention to compare categories.'}</p>}
+        {data && !!drivers.length && <CategoryChangeBars data={drivers.slice(0, 5)} selected={selected} onSelect={(c) => setSelected(selected === c ? null : c)} />}
+        {top?.merchant_driver && data && <p className="text-sm text-muted mt-2">Biggest mover in {top.category}: <Link className="underline" to={merchantProfileLink(top.merchant_driver.merchant)}>{top.merchant_driver.merchant}</Link> ({formatMoney(top.merchant_driver.change)}) — <Link className="underline" to={evidenceLink(data.comparison_current, top.category, 'spending', top.merchant_driver.merchant)}>view transactions</Link></p>}
+        {top?.one_off_driver && <p className="text-sm text-muted">Largely one purchase: <Link className="underline" to={`/transactions/${top.one_off_driver.transaction_id}`}>{top.one_off_driver.merchant || 'Unnamed transaction'}</Link></p>}
+        {data?.trip_drivers.map(t => <p key={t.trip_id} className="text-sm text-muted">Trip <Link className="underline" to={`/transactions?trip=${t.trip_id}`}>{t.name}</Link>: {formatMoney(t.change)} vs. last period — {t.overlap_note}</p>)}
+      </QuestionCard>
+      <PageCard title={selectedDriver ? selectedDriver.category : 'Selected category'}>
+        {!data ? <p role="status" className="text-muted text-sm">Loading…</p> : !selectedDriver ? (
+          <p className="text-muted text-sm">Select a bar in "What changed" to see its evidence links.</p>
+        ) : (
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full shrink-0" style={{ background: getCategoryColor(selectedDriver.category) }} aria-hidden />
+              <span className="text-sm font-medium">{formatMoney(selectedDriver.change)} change</span>
+            </div>
+            <div className="flex gap-6">
+              <Link className="text-teal underline min-h-11 inline-flex items-center" to={evidenceLink(data.comparison_current, selectedDriver.category)}>This period</Link>
+              <Link className="text-teal underline min-h-11 inline-flex items-center" to={evidenceLink(data.previous, selectedDriver.category)}>Previous period</Link>
+            </div>
+          </div>
+        )}
+      </PageCard>
+    </>
   );
 }
 
@@ -266,10 +280,16 @@ export function ExplorePatternsPage() {
         </TabsList>
       </Tabs>
 
-      {mode === 'over-time' && <><SpendingOverTime /><WhatDoesANormalWeekLookLike /></>}
-      {mode === 'by-category' && <WhereDidTheIncreaseComeFrom />}
-      {mode === 'by-merchant' && <WhichMerchantsAccountForMostOfThisCategory />}
-      {mode === 'recurring' && <WhichRecurringCostsChanged />}
+      {/* Main visual + contextual inspection: side by side on wide layouts,
+          stacked on phone/portrait tablet. Modes without a natural
+          selection→detail split (By merchant, Recurring) just leave the
+          second column empty at lg+. */}
+      <div className="grid gap-6 lg:grid-cols-[1fr_320px] items-start">
+        {mode === 'over-time' && <><SpendingOverTime /><WhatDoesANormalWeekLookLike /></>}
+        {mode === 'by-category' && <WhereDidTheIncreaseComeFrom />}
+        {mode === 'by-merchant' && <WhichMerchantsAccountForMostOfThisCategory />}
+        {mode === 'recurring' && <WhichRecurringCostsChanged />}
+      </div>
 
       <HowDidThisTripAffectTheMonth />
     </div>

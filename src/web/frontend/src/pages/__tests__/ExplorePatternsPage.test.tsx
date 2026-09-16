@@ -51,10 +51,11 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
-test('shows the ranked category change, selectable to its evidence links', async () => {
+test('shows the ranked category change, selectable to its evidence links in the inspection panel', async () => {
   show();
   await selectMode('By category');
-  const bar = await screen.findByRole('button', { name: /Food & Drink/ });
+  expect(await screen.findByText('Select a bar in "What changed" to see its evidence links.')).toBeTruthy();
+  const bar = screen.getByRole('button', { name: /Food & Drink/ });
   fireEvent.click(bar);
   const link = await screen.findByRole('link', { name: 'This period' });
   const params = new URL(link.getAttribute('href')!, 'http://localhost').searchParams;

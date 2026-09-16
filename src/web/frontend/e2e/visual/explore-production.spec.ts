@@ -85,3 +85,24 @@ test('Over time mode charts the default top-mover categories', async ({ page }) 
   await page.waitForTimeout(1000);
   await page.screenshot({ path: 'e2e/screenshots/explore-over-time-production.png', fullPage: true });
 });
+
+test('By category shows main visual and inspection panel side by side on desktop, stacked on phone', async ({ page }) => {
+  await mockAuthenticatedExplore(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/explore');
+  await page.getByRole('tab', { name: 'By category' }).click();
+  await expect(page.getByRole('tab', { name: 'By category' })).toHaveAttribute('aria-selected', 'true');
+  const mainCard = page.getByText('What changed', { exact: true }).locator('xpath=ancestor::div[contains(@class, "rounded-md")][1]');
+  const inspectionCard = page.getByText('Select a bar in "What changed"').locator('xpath=ancestor::div[contains(@class, "rounded-md")][1]');
+  await expect(inspectionCard).toBeVisible();
+  const mainBox = (await mainCard.boundingBox())!;
+  const inspectionBox = (await inspectionCard.boundingBox())!;
+  expect(inspectionBox.x).toBeGreaterThan(mainBox.x + mainBox.width - 10); // side by side, not stacked
+  await page.screenshot({ path: 'e2e/screenshots/explore-by-category-desktop.png', fullPage: true });
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.reload();
+  await page.getByRole('tab', { name: 'By category' }).click();
+  await expect(page.getByText('Select a bar in "What changed"')).toBeVisible();
+  await page.screenshot({ path: 'e2e/screenshots/explore-by-category-phone.png', fullPage: true });
+});
