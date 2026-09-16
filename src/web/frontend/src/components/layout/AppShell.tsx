@@ -16,7 +16,7 @@ export function AppShell({ newExperience = false }: { newExperience?: boolean })
   const pageKey = location.pathname.replace(/^(\/(?:activity|transactions|merchants|explore\/merchants))(?:\/.*)?$/, '$1');
 
   return (
-    <div className={`min-h-screen flex ${newExperience ? 'experience-next bg-background' : ''}`} style={newExperience ? undefined : { background: B2_WASH }}>
+    <div className={`min-h-screen flex ${newExperience ? 'experience-next shell-wash' : ''}`} style={newExperience ? undefined : { background: B2_WASH }}>
       <CommandPalette newExperience={newExperience} />
       <Sidebar newExperience={newExperience} />
       <div className="flex-1 min-w-0 flex flex-col">

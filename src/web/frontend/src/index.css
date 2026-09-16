@@ -317,6 +317,31 @@ body {
       transition-duration: var(--dur-fast) !important;
     }
   }
+
+  /* Quiet diagonal shell wash, theme-aware (replaces the fixed-opacity B2_WASH
+     inline style for the new experience). Dark keeps B2_WASH's original
+     intensities; light uses lower coefficients tuned for a white canvas so the
+     brand colours read as a hint rather than a tint. */
+  .shell-wash {
+    background: linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--color-teal) 8%, transparent) 0%,
+      transparent 30%,
+      transparent 68%,
+      color-mix(in srgb, var(--color-tangerine) 7%, transparent) 86%,
+      color-mix(in srgb, var(--color-coral) 6%, transparent) 100%
+    ), var(--color-background);
+  }
+  :root[data-theme="light"] .shell-wash {
+    background: linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--color-teal) 5%, transparent) 0%,
+      transparent 30%,
+      transparent 68%,
+      color-mix(in srgb, var(--color-tangerine) 4%, transparent) 86%,
+      color-mix(in srgb, var(--color-coral) 3%, transparent) 100%
+    ), var(--color-background);
+  }
 }
 
 /* Home and Explore scroll naturally; Activity keeps its list/detail panels. */
