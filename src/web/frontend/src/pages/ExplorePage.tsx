@@ -8,7 +8,7 @@ export function ExplorePage() {
         <p className="text-muted mt-1">Understand spending patterns and the merchants behind them.</p>
         <nav aria-label="Explore views" className="flex gap-2 mt-3">
           {[['/explore', 'Spending patterns'], ['/explore/insights', 'Insights']].map(([to, label]) => (
-            <NavLink key={to} to={to} end={to === '/explore'} className={({ isActive }) => `min-h-11 inline-flex items-center px-3 rounded-lg focus-visible:outline-2 focus-visible:outline-ring ${isActive ? 'bg-foreground/10 font-medium' : 'text-muted hover:text-foreground'}`}>{label}</NavLink>
+            <NavLink key={to} to={to} end={to === '/explore'} className={({ isActive }) => `min-h-11 inline-flex items-center px-3 rounded-sm focus-visible:outline-2 focus-visible:outline-ring ${isActive ? 'bg-teal/13 text-teal font-semibold' : 'text-muted hover:text-foreground'}`}>{label}</NavLink>
           ))}
         </nav>
       </header>

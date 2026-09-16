@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { api } from '@/api/client';
@@ -11,7 +11,7 @@ vi.mock('@/api/client', async importOriginal => ({
   api: {
     getSubscriptionReviewV2: vi.fn(),
     getCategories: vi.fn(),
-    getMerchantRankingV2: vi.fn(),
+    getMerchantRankingFactsV2: vi.fn(),
     getTrips: vi.fn(),
     getTripSummaryV2: vi.fn(),
   },
@@ -20,6 +20,14 @@ vi.mock('@/api/briefing', async importOriginal => ({
   ...await importOriginal<typeof import('@/api/briefing')>(),
   briefingApi: { month: vi.fn(), weekdayPattern: vi.fn() },
 }));
+
+async function selectMode(name: string) {
+  // Radix's TabsTrigger selects on mousedown (not click) — see
+  // @radix-ui/react-tabs' Trigger implementation.
+  const tab = screen.getByRole('tab', { name });
+  fireEvent.mouseDown(tab, { button: 0 });
+  await waitFor(() => expect(tab.getAttribute('aria-selected')).toBe('true'));
+}
 
 const period: SpendingPeriod = { start: '2026-09-01', end: '2026-09-06', spending: { minor_units: 1250, currency: 'SGD' }, income: null, recorded_net_flow: null, transaction_count: 1, unresolved_count: 0, indicative_count: 0, status: 'complete' };
 const monthFacts: SpendingFacts = { as_of: '2026-09-06', timezone: 'Asia/Singapore', undated_count: 0, current: period, comparison_current: period, previous: { ...period, start: '2026-08-01', end: '2026-08-06' }, change: { minor_units: 500, currency: 'SGD' }, category_changes: [{ category: 'Food & Drink', change: { minor_units: 500, currency: 'SGD' } }], top_category_driver: null, trip_drivers: [] };
@@ -36,14 +44,17 @@ beforeEach(() => {
   vi.mocked(briefingApi.weekdayPattern).mockResolvedValue(emptyPattern);
   vi.mocked(api.getSubscriptionReviewV2).mockResolvedValue(emptyReview);
   vi.mocked(api.getCategories).mockResolvedValue([]);
-  vi.mocked(api.getMerchantRankingV2).mockResolvedValue([]);
+  vi.mocked(api.getMerchantRankingFactsV2).mockResolvedValue([]);
   vi.mocked(api.getTrips).mockResolvedValue([]);
 });
 afterEach(cleanup);
 
-test('shows the ranked category change with a working evidence link', async () => {
+test('shows the ranked category change, selectable to its evidence links', async () => {
   show();
-  const link = await screen.findByRole('link', { name: /Food & Drink/ });
+  await selectMode('By category');
+  const bar = await screen.findByRole('button', { name: /Food & Drink/ });
+  fireEvent.click(bar);
+  const link = await screen.findByRole('link', { name: 'This period' });
   const params = new URL(link.getAttribute('href')!, 'http://localhost').searchParams;
   expect(params.get('category')).toBe('Food & Drink');
   expect(params.get('start')).toBe(period.start);
@@ -59,6 +70,7 @@ test('the top category merchant driver links to the merchant profile as a drill-
     },
   });
   show();
+  await selectMode('By category');
   const profileLink = await screen.findByRole('link', { name: 'Fancy Bistro' });
   expect(profileLink.getAttribute('href')).toBe('/explore/merchants/Fancy%20Bistro');
   const evidenceLinkEl = screen.getByRole('link', { name: 'view transactions' });
@@ -73,11 +85,12 @@ test('shows recurring cost changes with a link to the subscription', async () =>
     price_changes: [{ subscription_id: 9, label: 'Netflix', old_amount: { minor_units: 1500, currency: 'SGD' }, new_amount: { minor_units: 2000, currency: 'SGD' }, change: { minor_units: 500, currency: 'SGD' }, annualized_impact: { minor_units: 6000, currency: 'SGD' }, old_date: '2026-08-05', new_date: '2026-09-05' }],
   });
   show();
+  await selectMode('Recurring');
   const link = await screen.findByRole('link', { name: /Netflix/ });
   expect(link.getAttribute('href')).toBe('/plan/manage?subscription=9');
 });
 
-test('shows a weekday pattern bar with weekday-scoped evidence', async () => {
+test('shows a weekday pattern bar with weekday-scoped evidence (default mode)', async () => {
   vi.mocked(briefingApi.weekdayPattern).mockResolvedValue({
     ...emptyPattern,
     pattern: emptyPattern.pattern.map(p => p.weekday === 1 ? { ...p, average: { minor_units: 2000, currency: 'SGD' as const }, transaction_count: 3 } : p),
@@ -88,12 +101,13 @@ test('shows a weekday pattern bar with weekday-scoped evidence', async () => {
   expect(params.get('weekday')).toBe('1');
 });
 
-test('shows merchants ranked within the selected category', async () => {
+test('shows merchants ranked within the selected category, via the shared-facts endpoint', async () => {
   vi.mocked(api.getCategories).mockResolvedValue([{ name: 'Food & Drink', keywords: null, icon: null, color: null, type: 'wants' }]);
-  vi.mocked(api.getMerchantRankingV2).mockResolvedValue([{ merchant: 'Fancy Bistro', visits: 2, total: { minor_units: 4000, currency: 'SGD' } }]);
+  vi.mocked(api.getMerchantRankingFactsV2).mockResolvedValue([{ merchant: 'Fancy Bistro', visits: 2, total: { minor_units: 4000, currency: 'SGD' } }]);
   show();
+  await selectMode('By merchant');
   expect(await screen.findByText('Fancy Bistro')).toBeTruthy();
-  expect(api.getMerchantRankingV2).toHaveBeenCalledWith(period.start, period.end, 10, 'Food & Drink');
+  expect(api.getMerchantRankingFactsV2).toHaveBeenCalledWith(period.start, period.end, 'Food & Drink', 10);
   const profileLink = screen.getByRole('link', { name: 'Profile' });
   expect(profileLink.getAttribute('href')).toBe('/explore/merchants/Fancy%20Bistro');
 });
@@ -119,6 +133,7 @@ test('shows an empty state when there are no trips', async () => {
 test('a failed card announces itself as an alert for screen readers', async () => {
   vi.mocked(api.getSubscriptionReviewV2).mockRejectedValue(new Error('offline'));
   show();
+  await selectMode('Recurring');
   expect(await screen.findByRole('alert')).toBeTruthy();
 });
 
