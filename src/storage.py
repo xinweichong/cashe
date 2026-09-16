@@ -81,6 +81,11 @@ class Storage:
         return spending_evidence(self._conn, start, end, **filters)
 
     @_locked
+    def get_weekday_pattern(self, as_of=None, weeks: int = 8, timezone="Asia/Singapore") -> dict:
+        from src.spending_facts import weekday_pattern
+        return weekday_pattern(self._conn, as_of, weeks, timezone)
+
+    @_locked
     def get_daily_totals(self, start, end, timezone="Asia/Singapore") -> list[dict]:
         from src.spending_facts import daily_totals
         return daily_totals(self._conn, start, end, timezone)
@@ -235,10 +240,22 @@ class Storage:
                                  "date_basis": row["date_basis"], "amount_basis": row["amount_basis"],
                                  "amount_basis_transaction_id": row["amount_basis_transaction_id"],
                                  "amount": money(minor) if minor is not None else None})
+        increased_commitments = []
+        if self.get_setting("subscriptions_enabled", "false") == "true":
+            # R10: a subscription/recurring commitment whose most recent
+            # matched-charge price rose within the current comparison
+            # window — reuses R11's already-canonical-money price-change
+            # detection rather than recomputing it here.
+            current_start = facts["current"]["start"]
+            increased_commitments = [
+                change for change in self.get_subscription_review()["price_changes"]
+                if change["change"]["minor_units"] > 0 and change["new_date"] >= current_start
+            ]
         return {
             "facts": facts, "recent": recent, "upcoming": upcoming,
             "upcoming_total": money(sum(item["amount"]["minor_units"] for item in upcoming if item["amount"])),
             "upcoming_unknown_count": sum(item["amount"] is None for item in upcoming),
+            "increased_commitments": increased_commitments,
             "capture_issue_count": self._conn.execute("""SELECT COUNT(*) FROM source_events e WHERE status != 'processed'
                 AND NOT EXISTS (SELECT 1 FROM capture_issue_resolutions r WHERE r.event_id = e.id)""").fetchone()[0],
             "followup_issue_count": self._conn.execute("SELECT COUNT(*) FROM ingestion_outbox WHERE status != 'done'").fetchone()[0],
@@ -1388,15 +1405,16 @@ class Storage:
         return {"income": income, "expenses": expenses, "net": income - expenses}
 
     @_locked
-    def get_merchant_ranking(self, start_date: str, end_date: str, limit: int = 10) -> list[dict]:
+    def get_merchant_ranking(self, start_date: str, end_date: str, limit: int = 10, category: str | None = None) -> list[dict]:
         rows = self._conn.execute(
             """SELECT merchant, COUNT(*) FILTER (WHERE type IS NULL OR type = 'expense') as visits,
                       SUM((CASE WHEN type = 'refund' THEN -1 ELSE 1 END) * (CASE WHEN reporting_minor_units IS NOT NULL THEN reporting_minor_units / 100.0 WHEN currency = 'SGD' OR currency IS NULL THEN amount WHEN exchange_rate IS NOT NULL AND exchange_rate > 0 AND exchange_rate != 1 THEN amount * exchange_rate ELSE NULL END)) as total
                FROM transactions
                WHERE DATE(transaction_date) >= ? AND DATE(transaction_date) <= ?
                AND merchant IS NOT NULL AND (type IS NULL OR type = 'expense' OR type = 'refund')
+               AND (? IS NULL OR COALESCE(category, 'Other') = ?)
                GROUP BY merchant ORDER BY total DESC LIMIT ?""",
-            (start_date, end_date, limit),
+            (start_date, end_date, category, category, limit),
         ).fetchall()
         return [{"merchant": r["merchant"], "visits": r["visits"], "total": r["total"]} for r in rows]
 

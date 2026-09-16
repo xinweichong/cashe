@@ -533,6 +533,12 @@ export const api = {
   getTrendV2: (start_date: string, end_date: string) =>
     request<TrendPointV2[]>(`/api/v2/overview/trend?start_date=${start_date}&end_date=${end_date}`),
 
+  getMerchantRankingV2: (start_date: string, end_date: string, limit = 10, category?: string) => {
+    const params = new URLSearchParams({ start_date, end_date, limit: String(limit) });
+    if (category) params.set('category', category);
+    return request<MerchantRankingV2[]>(`/api/v2/overview/merchants?${params}`);
+  },
+
   getTrendByCategory: (start_date: string, end_date: string) =>
     request<TrendByCategoryPoint[]>(`/api/trend/by-category?start_date=${start_date}&end_date=${end_date}`),
 

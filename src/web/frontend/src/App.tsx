@@ -23,6 +23,7 @@ const ReviewPage = lazy(() => import('@/pages/ReviewPage').then(m => ({ default:
 const OverviewPage = lazy(() => import('@/pages/OverviewPage').then(m => ({ default: m.OverviewPage })));
 const TransactionsPage = lazy(() => import('@/pages/TransactionsPage').then(m => ({ default: m.TransactionsPage })));
 const AnalyticsPage = lazy(() => import('@/pages/AnalyticsPage').then(m => ({ default: m.AnalyticsPage })));
+const ExplorePatternsPage = lazy(() => import('@/pages/ExplorePatternsPage').then(m => ({ default: m.ExplorePatternsPage })));
 const SettingsPage = lazy(() => import('@/pages/SettingsPage').then(m => ({ default: m.SettingsPage })));
 const MerchantsPage = lazy(() => import('@/pages/MerchantsPage').then(m => ({ default: m.MerchantsPage })));
 const FinancePage = lazy(() => import('@/pages/FinancePage').then(m => ({ default: m.FinancePage })));
@@ -134,7 +135,8 @@ function AppContent() {
           <Route path="plan" element={<PlanPage />} />
           <Route path="plan/manage" element={<FinancePage />} />
           <Route path="explore" element={<ExplorePage />}>
-            <Route index element={<AnalyticsPage />} />
+            <Route index element={<ExplorePatternsPage />} />
+            <Route path="insights" element={<AnalyticsPage />} />
             <Route path="merchants" element={<MerchantsPage />} />
             <Route path="merchants/:merchantName" element={<MerchantsPage />} />
           </Route>

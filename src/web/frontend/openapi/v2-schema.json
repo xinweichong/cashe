@@ -361,12 +361,24 @@
           "gmail_needs_reconnection": {
             "title": "Gmail Needs Reconnection",
             "type": "boolean"
+          },
+          "last_capture_processed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Capture Processed At"
           }
         },
         "required": [
           "gmail_connected",
           "gmail_last_checked",
-          "gmail_needs_reconnection"
+          "gmail_needs_reconnection",
+          "last_capture_processed_at"
         ],
         "title": "CaptureFreshness",
         "type": "object"
@@ -839,6 +851,43 @@
         "title": "DuplicateSide",
         "type": "object"
       },
+      "FrequencyDriver": {
+        "properties": {
+          "classification": {
+            "enum": [
+              "frequency",
+              "size",
+              "mixed",
+              "none"
+            ],
+            "title": "Classification",
+            "type": "string"
+          },
+          "current_avg": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "current_count": {
+            "title": "Current Count",
+            "type": "integer"
+          },
+          "previous_avg": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "previous_count": {
+            "title": "Previous Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "classification",
+          "current_count",
+          "previous_count",
+          "current_avg",
+          "previous_avg"
+        ],
+        "title": "FrequencyDriver",
+        "type": "object"
+      },
       "GoalContributionV2": {
         "properties": {
           "amount": {
@@ -1121,6 +1170,13 @@
           "freshness": {
             "$ref": "#/components/schemas/CaptureFreshness"
           },
+          "increased_commitments": {
+            "items": {
+              "$ref": "#/components/schemas/SubscriptionPriceChange"
+            },
+            "title": "Increased Commitments",
+            "type": "array"
+          },
           "recent": {
             "items": {
               "$ref": "#/components/schemas/SpendingEvidenceItem"
@@ -1157,6 +1213,7 @@
           "upcoming",
           "upcoming_total",
           "upcoming_unknown_count",
+          "increased_commitments",
           "capture_issue_count",
           "followup_issue_count",
           "review_count",
@@ -1164,6 +1221,23 @@
           "freshness"
         ],
         "title": "HomeBriefing",
+        "type": "object"
+      },
+      "MerchantDriver": {
+        "properties": {
+          "change": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "merchant": {
+            "title": "Merchant",
+            "type": "string"
+          }
+        },
+        "required": [
+          "merchant",
+          "change"
+        ],
+        "title": "MerchantDriver",
         "type": "object"
       },
       "MerchantRanking": {
@@ -1356,6 +1430,40 @@
           "amount"
         ],
         "title": "NewMerchant",
+        "type": "object"
+      },
+      "OneOffDriver": {
+        "properties": {
+          "amount": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "date": {
+            "title": "Date",
+            "type": "string"
+          },
+          "merchant": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Merchant"
+          },
+          "transaction_id": {
+            "title": "Transaction Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "transaction_id",
+          "merchant",
+          "amount",
+          "date"
+        ],
+        "title": "OneOffDriver",
         "type": "object"
       },
       "OriginalMoney": {
@@ -2113,6 +2221,23 @@
             "title": "Timezone",
             "type": "string"
           },
+          "top_category_driver": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TopCategoryDriver"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "trip_drivers": {
+            "items": {
+              "$ref": "#/components/schemas/TripDriver"
+            },
+            "title": "Trip Drivers",
+            "type": "array"
+          },
           "undated_count": {
             "title": "Undated Count",
             "type": "integer"
@@ -2127,7 +2252,9 @@
           "comparison_current",
           "previous",
           "change",
-          "category_changes"
+          "category_changes",
+          "top_category_driver",
+          "trip_drivers"
         ],
         "title": "SpendingFacts",
         "type": "object"
@@ -2471,6 +2598,61 @@
           "amount"
         ],
         "title": "SupportingCharge",
+        "type": "object"
+      },
+      "TopCategoryDriver": {
+        "properties": {
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "change": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "frequency_driver": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FrequencyDriver"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "merchant_driver": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MerchantDriver"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "one_off_driver": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/OneOffDriver"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "overlap_note": {
+            "title": "Overlap Note",
+            "type": "string"
+          }
+        },
+        "required": [
+          "category",
+          "change",
+          "merchant_driver",
+          "frequency_driver",
+          "one_off_driver",
+          "overlap_note"
+        ],
+        "title": "TopCategoryDriver",
         "type": "object"
       },
       "TopMerchant": {
@@ -3114,6 +3296,41 @@
         "title": "TripDayTotal",
         "type": "object"
       },
+      "TripDriver": {
+        "properties": {
+          "change": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "current_total": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "overlap_note": {
+            "title": "Overlap Note",
+            "type": "string"
+          },
+          "previous_total": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "trip_id": {
+            "title": "Trip Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "trip_id",
+          "name",
+          "current_total",
+          "previous_total",
+          "change",
+          "overlap_note"
+        ],
+        "title": "TripDriver",
+        "type": "object"
+      },
       "TripInfo": {
         "properties": {
           "created_at": {
@@ -3415,6 +3632,59 @@
           "type"
         ],
         "title": "ValidationError",
+        "type": "object"
+      },
+      "WeekdayPattern": {
+        "properties": {
+          "end": {
+            "title": "End",
+            "type": "string"
+          },
+          "pattern": {
+            "items": {
+              "$ref": "#/components/schemas/WeekdaySpending"
+            },
+            "title": "Pattern",
+            "type": "array"
+          },
+          "start": {
+            "title": "Start",
+            "type": "string"
+          },
+          "weeks": {
+            "title": "Weeks",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "start",
+          "end",
+          "weeks",
+          "pattern"
+        ],
+        "title": "WeekdayPattern",
+        "type": "object"
+      },
+      "WeekdaySpending": {
+        "properties": {
+          "average": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "transaction_count": {
+            "title": "Transaction Count",
+            "type": "integer"
+          },
+          "weekday": {
+            "title": "Weekday",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "weekday",
+          "average",
+          "transaction_count"
+        ],
+        "title": "WeekdaySpending",
         "type": "object"
       }
     }
@@ -4391,6 +4661,22 @@
               "title": "Limit",
               "type": "integer"
             }
+          },
+          {
+            "in": "query",
+            "name": "category",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Category"
+            }
           }
         ],
         "responses": {
@@ -5070,6 +5356,40 @@
           },
           {
             "in": "query",
+            "name": "merchant",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Merchant"
+            }
+          },
+          {
+            "in": "query",
+            "name": "weekday",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 6,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Weekday"
+            }
+          },
+          {
+            "in": "query",
             "name": "measure",
             "required": false,
             "schema": {
@@ -5277,6 +5597,48 @@
           }
         },
         "summary": "Week Spending"
+      }
+    },
+    "/api/v2/spending/weekday-pattern": {
+      "get": {
+        "operationId": "weekday_pattern_api_v2_spending_weekday_pattern_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "weeks",
+            "required": false,
+            "schema": {
+              "default": 8,
+              "maximum": 52,
+              "minimum": 1,
+              "title": "Weeks",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WeekdayPattern"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Weekday Pattern"
       }
     },
     "/api/v2/subscriptions/review": {

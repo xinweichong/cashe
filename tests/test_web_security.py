@@ -466,6 +466,27 @@ async def test_weekly_spending_api_auth_validation_and_periods(client, authed_cl
 
 
 @pytest.mark.asyncio
+async def test_weekday_pattern_api_requires_auth_validates_weeks_and_evidence_matches(client, authed_client, in_memory_db, monkeypatch):
+    from datetime import datetime
+    import src.spending_facts as facts_module
+    monkeypatch.setattr(facts_module, 'local_now', lambda *args: datetime(2026, 9, 14))
+    assert (await client.get('/api/v2/spending/weekday-pattern')).status_code == 401
+    assert (await authed_client.get('/api/v2/spending/weekday-pattern?weeks=0')).status_code == 422
+    storage = Storage(in_memory_db)
+    tx_id = storage.insert_transaction(source='manual', source_id='tue', amount=20,
+                                       transaction_date='2026-09-08T10:00:00')
+    response = await authed_client.get('/api/v2/spending/weekday-pattern?weeks=1')
+    assert response.status_code == 200
+    data = response.json()
+    assert data['start'] == '2026-09-07' and data['end'] == '2026-09-13'
+    tuesday = next(item for item in data['pattern'] if item['weekday'] == 1)
+    assert tuesday['average'] == {'minor_units': 2000, 'currency': 'SGD'}
+    evidence = await authed_client.get('/api/v2/spending/evidence?start=2026-09-07&end=2026-09-13&weekday=1')
+    assert [item['id'] for item in evidence.json()['items']] == [tx_id]
+    assert (await authed_client.get('/api/v2/spending/evidence?start=2026-09-07&end=2026-09-13&weekday=7')).status_code == 422
+
+
+@pytest.mark.asyncio
 async def test_home_briefing_is_private_and_projects_safe_fields(client, authed_client, in_memory_db, monkeypatch):
     from datetime import datetime
     import src.storage as module
@@ -485,6 +506,26 @@ async def test_home_briefing_is_private_and_projects_safe_fields(client, authed_
     assert data['freshness']['gmail_connected'] is False
     assert 'private-source' not in response.text and 'secret-' not in response.text
     assert 'raw_data' not in response.text
+
+
+@pytest.mark.asyncio
+async def test_home_briefing_exposes_driver_and_capture_freshness_fields(authed_client, in_memory_db, monkeypatch):
+    from datetime import datetime
+    import src.storage as module
+    monkeypatch.setattr(module, 'local_now', lambda *args: datetime(2026, 9, 6))
+    storage = Storage(in_memory_db)
+    storage.insert_transaction(source='manual', source_id='old-source', amount=10,
+                               merchant='Cafe', category='Food', transaction_date='2026-08-05T12:00:00')
+    storage.insert_transaction(source='manual', source_id='new-source', amount=100,
+                               merchant='Fancy Bistro', category='Food', transaction_date='2026-09-05T12:00:00')
+    response = await authed_client.get('/api/v2/home')
+    assert response.status_code == 200
+    data = response.json()
+    assert data['facts']['top_category_driver']['category'] == 'Food'
+    assert data['facts']['top_category_driver']['merchant_driver']['merchant'] == 'Fancy Bistro'
+    assert data['facts']['trip_drivers'] == []
+    assert data['increased_commitments'] == []
+    assert data['freshness']['last_capture_processed_at'] is None
 
 
 @pytest.mark.asyncio

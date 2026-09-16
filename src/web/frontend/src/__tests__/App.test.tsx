@@ -9,6 +9,7 @@ vi.mock('@/pages/ReviewPage', () => ({ ReviewPage: () => <div>review-page</div> 
 vi.mock('@/pages/OverviewPage', () => ({ OverviewPage: () => <div>overview-page</div> }));
 vi.mock('@/pages/TransactionsPage', () => ({ TransactionsPage: () => <div>transactions-page</div> }));
 vi.mock('@/pages/AnalyticsPage', () => ({ AnalyticsPage: () => <div>analytics-page</div> }));
+vi.mock('@/pages/ExplorePatternsPage', () => ({ ExplorePatternsPage: () => <div>explore-patterns-page</div> }));
 vi.mock('@/pages/SettingsPage', () => ({ SettingsPage: () => <div>settings-page</div> }));
 vi.mock('@/pages/FinancePage', () => ({ FinancePage: () => <div>finance-page</div> }));
 vi.mock('@/pages/OnboardingPage', () => ({ OnboardingPage: () => <div>onboarding-page</div> }));
@@ -70,6 +71,16 @@ async function renderAppAt(path: string) {
   const { default: App } = await import('@/App');
   return render(<App />);
 }
+
+test('/explore index renders the question-driven patterns page, not the legacy dashboard', async () => {
+  await renderAppAt('/explore');
+  expect(await screen.findByText('explore-patterns-page')).toBeTruthy();
+});
+
+test('/explore/insights renders the legacy dashboard, relocated out of the primary view', async () => {
+  await renderAppAt('/explore/insights');
+  expect(await screen.findByText('analytics-page')).toBeTruthy();
+});
 
 test('new /explore/merchants route renders the merchants page directly, without redirect mangling', async () => {
   await renderAppAt('/explore/merchants?start=2026-09-01');

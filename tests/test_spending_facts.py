@@ -1,5 +1,6 @@
 from datetime import date, datetime
 from itertools import count
+from unittest.mock import patch
 
 import pytest
 
@@ -260,6 +261,146 @@ def test_category_drivers_and_paginated_evidence_reconcile(ledger):
     assert sum(item['amount']['minor_units'] for item in items) == 1250
 
 
+def test_top_category_driver_attributes_change_to_the_dominant_merchant(ledger):
+    storage, add = ledger
+    add(5, category='Transport', merchant='Grab')
+    add(100, category='Food', merchant='Fancy Bistro')
+    add(10, '2026-08-05T00:00:00', category='Food', merchant='Cafe')
+    report = facts(storage)
+    driver = report['top_category_driver']
+    assert driver['category'] == 'Food'
+    assert driver['change']['minor_units'] == 9000
+    assert driver['merchant_driver'] == {'merchant': 'Fancy Bistro', 'change': {'minor_units': 10000, 'currency': 'SGD'}}
+    assert driver['overlap_note']
+
+
+def test_frequency_driver_distinguishes_more_purchases_from_bigger_ones(ledger):
+    storage, add = ledger
+    for _ in range(4):
+        add(10, '2026-08-05T00:00:00', category='Food')
+    for _ in range(8):
+        add(10, category='Food')
+    report = facts(storage)
+    driver = report['top_category_driver']['frequency_driver']
+    assert driver == {
+        'classification': 'frequency', 'current_count': 8, 'previous_count': 4,
+        'current_avg': {'minor_units': 1000, 'currency': 'SGD'}, 'previous_avg': {'minor_units': 1000, 'currency': 'SGD'},
+    }
+
+
+def test_frequency_driver_flags_size_when_count_is_unchanged(ledger):
+    storage, add = ledger
+    for _ in range(4):
+        add(10, '2026-08-05T00:00:00', category='Food')
+    for _ in range(4):
+        add(30, category='Food')
+    report = facts(storage)
+    driver = report['top_category_driver']['frequency_driver']
+    assert driver['classification'] == 'size'
+    assert driver['current_count'] == driver['previous_count'] == 4
+
+
+def test_one_off_driver_flags_a_single_dominant_purchase(ledger):
+    storage, add = ledger
+    add(500, category='Food', merchant='Rare Splurge')
+    add(10, '2026-08-05T00:00:00', category='Food')
+    report = facts(storage)
+    driver = report['top_category_driver']['one_off_driver']
+    assert driver is not None
+    assert driver['merchant'] == 'Rare Splurge'
+    assert driver['amount'] == {'minor_units': 50000, 'currency': 'SGD'}
+
+
+def test_one_off_driver_absent_when_change_is_spread_across_many_purchases(ledger):
+    storage, add = ledger
+    for _ in range(10):
+        add(20, category='Food')
+    add(10, '2026-08-05T00:00:00', category='Food')
+    report = facts(storage)
+    assert report['top_category_driver']['one_off_driver'] is None
+
+
+def test_merchant_driver_evidence_opens_exactly_that_merchants_transactions(ledger):
+    storage, add = ledger
+    add(50, category='Food', merchant='Fancy Bistro')
+    add(10, category='Food', merchant='Cafe')
+    add(10, '2026-08-05T00:00:00', category='Food', merchant='Cafe')
+    evidence = storage.get_spending_evidence(date(2026, 9, 1), date(2026, 9, 6), category='Food', merchant='Fancy Bistro')
+    assert evidence['total'] == 1
+    assert evidence['items'][0]['merchant'] == 'Fancy Bistro'
+
+
+def test_trip_driver_reports_trip_attributed_change_without_double_counting(ledger):
+    storage, add = ledger
+    trip_id = storage.create_trip('Bali', '2026-09-01')
+    tx = add(80, category='Food', merchant='Resort')
+    storage.enlist_transaction(trip_id, tx)
+    add(10, '2026-08-05T00:00:00', category='Food')
+    report = facts(storage)
+    assert len(report['trip_drivers']) == 1
+    trip_driver = report['trip_drivers'][0]
+    assert trip_driver['trip_id'] == trip_id
+    assert trip_driver['name'] == 'Bali'
+    assert trip_driver['current_total'] == {'minor_units': 8000, 'currency': 'SGD'}
+    assert trip_driver['previous_total'] == {'minor_units': 0, 'currency': 'SGD'}
+    assert trip_driver['overlap_note']
+
+
+def test_weekday_pattern_averages_over_complete_trailing_weeks(ledger):
+    storage, add = ledger
+    add(20, '2026-09-08T10:00:00')  # Tuesday, in the trailing complete week
+    add(10, '2026-09-13T10:00:00')  # Sunday, in the trailing complete week
+    add(999, '2026-09-14T10:00:00')  # Monday of the current (excluded, partial) week
+    with patch('src.spending_facts.local_now', return_value=datetime(2026, 9, 14)):
+        pattern = storage.get_weekday_pattern(weeks=1)
+    assert pattern['start'] == '2026-09-07'
+    assert pattern['end'] == '2026-09-13'
+    by_weekday = {item['weekday']: item for item in pattern['pattern']}
+    assert by_weekday[1]['average'] == {'minor_units': 2000, 'currency': 'SGD'}
+    assert by_weekday[1]['transaction_count'] == 1
+    assert by_weekday[6]['average'] == {'minor_units': 1000, 'currency': 'SGD'}
+    assert by_weekday[0]['average'] == {'minor_units': 0, 'currency': 'SGD'}
+
+
+def test_weekday_pattern_divides_by_weeks_not_just_occurrences(ledger):
+    storage, add = ledger
+    add(10, '2026-08-25T10:00:00')  # Tuesday, week 1 of the trailing 2 weeks
+    add(30, '2026-09-01T10:00:00')  # Tuesday, week 2 of the trailing 2 weeks
+    with patch('src.spending_facts.local_now', return_value=datetime(2026, 9, 7)):
+        pattern = storage.get_weekday_pattern(weeks=2)
+    by_weekday = {item['weekday']: item for item in pattern['pattern']}
+    assert by_weekday[1]['average'] == {'minor_units': 2000, 'currency': 'SGD'}
+    assert by_weekday[1]['transaction_count'] == 2
+
+
+def test_weekday_evidence_opens_exactly_that_weekdays_transactions(ledger):
+    storage, add = ledger
+    tuesday = add(20, '2026-09-08T10:00:00')
+    add(10, '2026-09-13T10:00:00')  # Sunday — must not appear
+    evidence = storage.get_spending_evidence(date(2026, 9, 7), date(2026, 9, 13), weekday=1)
+    assert [item['id'] for item in evidence['items']] == [tuesday]
+
+
+def test_merchant_ranking_filters_by_category(ledger):
+    storage, add = ledger
+    add(50, category='Food', merchant='Fancy Bistro')
+    add(20, category='Transport', merchant='Grab')
+    ranking = storage.get_merchant_ranking('2026-09-01', '2026-09-30', category='Food')
+    assert [r['merchant'] for r in ranking] == ['Fancy Bistro']
+    ranking_all = storage.get_merchant_ranking('2026-09-01', '2026-09-30')
+    assert {r['merchant'] for r in ranking_all} == {'Fancy Bistro', 'Grab'}
+
+
+def test_no_top_category_driver_when_no_category_changed(ledger):
+    storage, add = ledger
+    add(10, category='Food')
+    add(10, '2026-08-05T00:00:00', category='Food')
+    report = facts(storage)
+    assert report['category_changes'] == []
+    assert report['top_category_driver'] is None
+    assert report['trip_drivers'] == []
+
+
 @pytest.mark.parametrize(('as_of', 'expected'), [
     ('2026-09-07', ('2026-09-07', '2026-09-07', '2026-08-31', '2026-08-31')),
     ('2026-09-09', ('2026-09-07', '2026-09-09', '2026-08-31', '2026-09-02')),
@@ -343,6 +484,47 @@ def test_home_briefing_recent_list_uses_canonical_money_not_legacy_recompute(led
     recent = briefing['recent'][0]
     assert recent['amount'] is None
     assert recent['conversion_status'] == 'unresolved'
+
+
+def test_home_briefing_surfaces_a_commitment_price_increase_in_the_current_period(ledger):
+    # R10: a subscription whose most recent matched charge rose during the
+    # current comparison window is surfaced as an "increased commitment" —
+    # reusing R11's already-canonical price-change detection rather than a
+    # separate computation.
+    storage, add = ledger
+    storage.set_setting('subscriptions_enabled', 'true')
+    sub = storage.create_subscription('Netflix', 'monthly', billing_day=5)
+    old_upcoming = storage.create_upcoming_transaction(sub, '2026-08-05', 15.0)
+    old_tx = storage.insert_transaction(source='manual', source_id='old', amount=15.0, currency='SGD',
+                                        exchange_rate=1.0, merchant='Netflix', transaction_date='2026-08-05T10:00:00', tx_type='expense')
+    storage.match_upcoming_transaction(old_upcoming, old_tx)
+    new_upcoming = storage.create_upcoming_transaction(sub, '2026-09-05', 20.0)
+    new_tx = storage.insert_transaction(source='manual', source_id='new', amount=20.0, currency='SGD',
+                                        exchange_rate=1.0, merchant='Netflix', transaction_date='2026-09-05T10:00:00', tx_type='expense')
+    storage.match_upcoming_transaction(new_upcoming, new_tx)
+    with patch('src.storage.local_now', return_value=datetime(2026, 9, 6)):
+        briefing = storage.get_home_briefing()
+    assert len(briefing['increased_commitments']) == 1
+    change = briefing['increased_commitments'][0]
+    assert change['subscription_id'] == sub
+    assert change['change']['minor_units'] == 500
+
+
+def test_home_briefing_omits_a_price_decrease_from_increased_commitments(ledger):
+    storage, add = ledger
+    storage.set_setting('subscriptions_enabled', 'true')
+    sub = storage.create_subscription('Netflix', 'monthly', billing_day=5)
+    old_upcoming = storage.create_upcoming_transaction(sub, '2026-08-05', 20.0)
+    old_tx = storage.insert_transaction(source='manual', source_id='old', amount=20.0, currency='SGD',
+                                        exchange_rate=1.0, merchant='Netflix', transaction_date='2026-08-05T10:00:00', tx_type='expense')
+    storage.match_upcoming_transaction(old_upcoming, old_tx)
+    new_upcoming = storage.create_upcoming_transaction(sub, '2026-09-05', 15.0)
+    new_tx = storage.insert_transaction(source='manual', source_id='new', amount=15.0, currency='SGD',
+                                        exchange_rate=1.0, merchant='Netflix', transaction_date='2026-09-05T10:00:00', tx_type='expense')
+    storage.match_upcoming_transaction(new_upcoming, new_tx)
+    with patch('src.storage.local_now', return_value=datetime(2026, 9, 6)):
+        briefing = storage.get_home_briefing()
+    assert briefing['increased_commitments'] == []
 
 
 def test_daily_totals_nets_refunds_excludes_transfers_per_day(ledger):

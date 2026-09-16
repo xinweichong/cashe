@@ -80,6 +80,44 @@ class CategoryChange(BaseModel):
     change: Money
 
 
+class MerchantDriver(BaseModel):
+    merchant: str
+    change: Money
+
+
+class FrequencyDriver(BaseModel):
+    classification: Literal["frequency", "size", "mixed", "none"]
+    current_count: int
+    previous_count: int
+    current_avg: Money
+    previous_avg: Money
+
+
+class OneOffDriver(BaseModel):
+    transaction_id: int
+    merchant: str | None
+    amount: Money
+    date: str
+
+
+class TopCategoryDriver(BaseModel):
+    category: str
+    change: Money
+    merchant_driver: MerchantDriver | None
+    frequency_driver: FrequencyDriver | None
+    one_off_driver: OneOffDriver | None
+    overlap_note: str
+
+
+class TripDriver(BaseModel):
+    trip_id: int
+    name: str
+    current_total: Money
+    previous_total: Money
+    change: Money
+    overlap_note: str
+
+
 class SpendingFacts(BaseModel):
     undated_count: int
     as_of: str
@@ -90,6 +128,21 @@ class SpendingFacts(BaseModel):
     previous: SpendingPeriod
     change: Money | None
     category_changes: list[CategoryChange]
+    top_category_driver: TopCategoryDriver | None
+    trip_drivers: list[TripDriver]
+
+
+class WeekdaySpending(BaseModel):
+    weekday: int
+    average: Money
+    transaction_count: int
+
+
+class WeekdayPattern(BaseModel):
+    start: str
+    end: str
+    weeks: int
+    pattern: list[WeekdaySpending]
 
 
 class SpendingEvidenceItem(BaseModel):
@@ -163,6 +216,18 @@ class CaptureFreshness(BaseModel):
     gmail_connected: bool
     gmail_last_checked: str | None
     gmail_needs_reconnection: bool
+    last_capture_processed_at: str | None
+
+
+class SubscriptionPriceChange(BaseModel):
+    subscription_id: int
+    label: str
+    old_amount: Money
+    new_amount: Money
+    change: Money
+    annualized_impact: Money
+    old_date: str
+    new_date: str
 
 
 class HomeBriefing(BaseModel):
@@ -171,6 +236,7 @@ class HomeBriefing(BaseModel):
     upcoming: list[UpcomingCharge]
     upcoming_total: Money
     upcoming_unknown_count: int
+    increased_commitments: list[SubscriptionPriceChange]
     capture_issue_count: int
     followup_issue_count: int
     review_count: int
@@ -197,17 +263,6 @@ class SubscriptionOverdueItem(BaseModel):
     last_charge_date: str
     days_since_last_charge: int
     expected_interval_days: int
-
-
-class SubscriptionPriceChange(BaseModel):
-    subscription_id: int
-    label: str
-    old_amount: Money
-    new_amount: Money
-    change: Money
-    annualized_impact: Money
-    old_date: str
-    new_date: str
 
 
 class SupportingCharge(BaseModel):

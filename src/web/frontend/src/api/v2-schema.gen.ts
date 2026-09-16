@@ -633,6 +633,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/spending/weekday-pattern": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Weekday Pattern */
+        get: operations["weekday_pattern_api_v2_spending_weekday_pattern_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v2/subscriptions/review": {
         parameters: {
             query?: never;
@@ -951,6 +968,8 @@ export interface components {
             gmail_last_checked: string | null;
             /** Gmail Needs Reconnection */
             gmail_needs_reconnection: boolean;
+            /** Last Capture Processed At */
+            last_capture_processed_at: string | null;
         };
         /** CaptureIssue */
         CaptureIssue: {
@@ -1111,6 +1130,20 @@ export interface components {
             /** Source */
             source: string;
         };
+        /** FrequencyDriver */
+        FrequencyDriver: {
+            /**
+             * Classification
+             * @enum {string}
+             */
+            classification: "frequency" | "size" | "mixed" | "none";
+            current_avg: components["schemas"]["Money"];
+            /** Current Count */
+            current_count: number;
+            previous_avg: components["schemas"]["Money"];
+            /** Previous Count */
+            previous_count: number;
+        };
         /** GoalContributionV2 */
         GoalContributionV2: {
             amount: components["schemas"]["Money"];
@@ -1200,6 +1233,8 @@ export interface components {
             /** Followup Issue Count */
             followup_issue_count: number;
             freshness: components["schemas"]["CaptureFreshness"];
+            /** Increased Commitments */
+            increased_commitments: components["schemas"]["SubscriptionPriceChange"][];
             /** Recent */
             recent: components["schemas"]["SpendingEvidenceItem"][];
             /** Recurring Suggestion Count */
@@ -1211,6 +1246,12 @@ export interface components {
             upcoming_total: components["schemas"]["Money"];
             /** Upcoming Unknown Count */
             upcoming_unknown_count: number;
+        };
+        /** MerchantDriver */
+        MerchantDriver: {
+            change: components["schemas"]["Money"];
+            /** Merchant */
+            merchant: string;
         };
         /** MerchantRanking */
         MerchantRanking: {
@@ -1278,6 +1319,16 @@ export interface components {
             first_date: string;
             /** Merchant */
             merchant: string;
+        };
+        /** OneOffDriver */
+        OneOffDriver: {
+            amount: components["schemas"]["Money"];
+            /** Date */
+            date: string;
+            /** Merchant */
+            merchant: string | null;
+            /** Transaction Id */
+            transaction_id: number;
         };
         /**
          * OriginalMoney
@@ -1542,6 +1593,9 @@ export interface components {
             previous: components["schemas"]["SpendingPeriod"];
             /** Timezone */
             timezone: string;
+            top_category_driver: components["schemas"]["TopCategoryDriver"] | null;
+            /** Trip Drivers */
+            trip_drivers: components["schemas"]["TripDriver"][];
             /** Undated Count */
             undated_count: number;
         };
@@ -1657,6 +1711,17 @@ export interface components {
             date: string;
             /** Transaction Id */
             transaction_id: number;
+        };
+        /** TopCategoryDriver */
+        TopCategoryDriver: {
+            /** Category */
+            category: string;
+            change: components["schemas"]["Money"];
+            frequency_driver: components["schemas"]["FrequencyDriver"] | null;
+            merchant_driver: components["schemas"]["MerchantDriver"] | null;
+            one_off_driver: components["schemas"]["OneOffDriver"] | null;
+            /** Overlap Note */
+            overlap_note: string;
         };
         /** TopMerchant */
         TopMerchant: {
@@ -1854,6 +1919,18 @@ export interface components {
             /** Date */
             date: string;
         };
+        /** TripDriver */
+        TripDriver: {
+            change: components["schemas"]["Money"];
+            current_total: components["schemas"]["Money"];
+            /** Name */
+            name: string;
+            /** Overlap Note */
+            overlap_note: string;
+            previous_total: components["schemas"]["Money"];
+            /** Trip Id */
+            trip_id: number;
+        };
         /** TripInfo */
         TripInfo: {
             /** Created At */
@@ -1957,6 +2034,25 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /** WeekdayPattern */
+        WeekdayPattern: {
+            /** End */
+            end: string;
+            /** Pattern */
+            pattern: components["schemas"]["WeekdaySpending"][];
+            /** Start */
+            start: string;
+            /** Weeks */
+            weeks: number;
+        };
+        /** WeekdaySpending */
+        WeekdaySpending: {
+            average: components["schemas"]["Money"];
+            /** Transaction Count */
+            transaction_count: number;
+            /** Weekday */
+            weekday: number;
         };
     };
     responses: never;
@@ -2584,6 +2680,7 @@ export interface operations {
                 start_date?: string | null;
                 end_date?: string | null;
                 limit?: number;
+                category?: string | null;
             };
             header?: never;
             path?: never;
@@ -2973,6 +3070,8 @@ export interface operations {
                 start: string;
                 end: string;
                 category?: string | null;
+                merchant?: string | null;
+                weekday?: number | null;
                 measure?: "spending" | "income" | "unresolved";
                 limit?: number;
                 offset?: number;
@@ -3084,6 +3183,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SpendingFacts"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    weekday_pattern_api_v2_spending_weekday_pattern_get: {
+        parameters: {
+            query?: {
+                weeks?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WeekdayPattern"];
                 };
             };
             /** @description Validation Error */

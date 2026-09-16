@@ -24,7 +24,7 @@ from src.money import to_minor_units, from_minor_units
 from src.spending_facts import resolve_money
 from src.config import local_now
 from src.web.auth import verify_password, create_session, verify_session, destroy_session
-from src.web.contracts import Balance, BudgetProgress, BulkTransactionRequest, BulkTransactionResultItem, BulkUndoRequest, CaptureFollowup, CaptureIssue, CaptureResolution, CategoryTrendPoint, DailyTotal, GoalProgress, HealthScore, HomeBriefing, MerchantRanking, MerchantSummary, OverviewSummary, QueuedResponse, SpendingAlerts, SpendingComparison, SpendingEvidence, SpendingFacts, SpendingReview, SpendingVelocity, TopMerchantsResult, TransactionCorrection, TransactionCreate, TransactionDeletion, TransactionProvenance, TransactionUndo, TransactionV2, TrendPoint, TripSummary, UpcomingPlan, PlanMutationResponse, RecurringReview, RecurringResolution, RefundMatchReview, RefundMatchResolution, DuplicateReview, DuplicateDismissal, DuplicateMergeRequest, DuplicateMergeResult, DuplicateMergeUndoResult, SubscriptionReview
+from src.web.contracts import Balance, BudgetProgress, BulkTransactionRequest, BulkTransactionResultItem, BulkUndoRequest, CaptureFollowup, CaptureIssue, CaptureResolution, CategoryTrendPoint, DailyTotal, GoalProgress, HealthScore, HomeBriefing, MerchantRanking, MerchantSummary, OverviewSummary, QueuedResponse, SpendingAlerts, SpendingComparison, SpendingEvidence, SpendingFacts, SpendingReview, SpendingVelocity, TopMerchantsResult, TransactionCorrection, TransactionCreate, TransactionDeletion, TransactionProvenance, TransactionUndo, TransactionV2, TrendPoint, TripSummary, UpcomingPlan, PlanMutationResponse, RecurringReview, RecurringResolution, RefundMatchReview, RefundMatchResolution, DuplicateReview, DuplicateDismissal, DuplicateMergeRequest, DuplicateMergeResult, DuplicateMergeUndoResult, SubscriptionReview, WeekdayPattern
 from src.analytics import (
     load_summary,
     get_yoy_comparison,
@@ -262,10 +262,12 @@ def create_dashboard_app(
         ctx = user_manager.get(username)
         report = await _db(ctx.storage.get_home_briefing, timezone)
         poller = ctx.poller
+        capture_health = await _db(ctx.storage.get_capture_health)
         report["freshness"] = {
             "gmail_connected": bool(poller and poller.service),
             "gmail_last_checked": getattr(poller, "last_poll_at", None),
             "gmail_needs_reconnection": bool(getattr(poller, "last_auth_error", None)),
+            "last_capture_processed_at": capture_health["last_capture_processed_at"],
         }
         return report
 
@@ -363,7 +365,8 @@ def create_dashboard_app(
 
     @app.get("/api/v2/spending/evidence", response_model=SpendingEvidence)
     async def spending_evidence(
-        start: date, end: date, category: str | None = None,
+        start: date, end: date, category: str | None = None, merchant: str | None = None,
+        weekday: int | None = Query(None, ge=0, le=6),
         measure: Literal["spending", "income", "unresolved"] = "spending",
         limit: int = Query(50, ge=1, le=100), offset: int = Query(0, ge=0),
         storage=Depends(_get_storage),
@@ -371,7 +374,14 @@ def create_dashboard_app(
         if end < start:
             raise HTTPException(status_code=422, detail="End must not precede start")
         return await _db(storage.get_spending_evidence, start, end, timezone=timezone,
-                         category=category, measure=measure, limit=limit, offset=offset)
+                         category=category, merchant=merchant, weekday=weekday, measure=measure, limit=limit, offset=offset)
+
+    @app.get("/api/v2/spending/weekday-pattern", response_model=WeekdayPattern)
+    async def weekday_pattern(weeks: int = Query(8, ge=1, le=52), storage=Depends(_get_storage)):
+        try:
+            return await _db(storage.get_weekday_pattern, None, weeks, timezone)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from None
 
     # ── Current user ──────────────────────────────────────────────────────────
 
@@ -1143,10 +1153,11 @@ def create_dashboard_app(
         return [{"date": r["date"], "amount": _sgd_money(r["amount"])} for r in rows]
 
     @app.get("/api/v2/overview/merchants", response_model=list[MerchantRanking])
-    async def overview_merchants_v2(start_date: Optional[str] = None, end_date: Optional[str] = None, limit: int = 10, username: str = Depends(require_auth)):
+    async def overview_merchants_v2(start_date: Optional[str] = None, end_date: Optional[str] = None, limit: int = 10,
+                                    category: Optional[str] = None, username: str = Depends(require_auth)):
         storage = user_manager.get(username).storage
         start, end = _default_month_range(start_date, end_date)
-        rows = await _db(storage.get_merchant_ranking, start, end, limit)
+        rows = await _db(storage.get_merchant_ranking, start, end, limit, category)
         return [{"merchant": r["merchant"], "visits": r["visits"], "total": _sgd_money(r["total"])} for r in rows]
 
     @app.get("/api/insights")

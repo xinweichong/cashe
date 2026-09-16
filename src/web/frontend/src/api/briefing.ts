@@ -1,5 +1,9 @@
 import type { SubscriptionConfirmation } from '@/lib/subscriptionConfirmation';
+import type { components } from './v2-schema.gen';
 import { request } from './client';
+
+export type SubscriptionPriceChange = components['schemas']['SubscriptionPriceChange'];
+export type WeekdayPattern = components['schemas']['WeekdayPattern'];
 
 export interface Money { minor_units: number; currency: 'SGD' }
 export interface SpendingPeriod {
@@ -8,10 +12,24 @@ export interface SpendingPeriod {
   unresolved_count: number; indicative_count: number;
   status: 'complete' | 'indicative' | 'partial';
 }
+export interface MerchantDriver { merchant: string; change: Money }
+export interface FrequencyDriver {
+  classification: 'frequency' | 'size' | 'mixed' | 'none';
+  current_count: number; previous_count: number; current_avg: Money; previous_avg: Money;
+}
+export interface OneOffDriver { transaction_id: number; merchant: string | null; amount: Money; date: string }
+export interface TopCategoryDriver {
+  category: string; change: Money; merchant_driver: MerchantDriver | null;
+  frequency_driver: FrequencyDriver | null; one_off_driver: OneOffDriver | null; overlap_note: string;
+}
+export interface TripDriver {
+  trip_id: number; name: string; current_total: Money; previous_total: Money; change: Money; overlap_note: string;
+}
 export interface SpendingFacts {
   as_of: string; timezone: string; undated_count: number;
   current: SpendingPeriod; comparison_current: SpendingPeriod; previous: SpendingPeriod;
   change: Money | null; category_changes: { category: string; change: Money }[];
+  top_category_driver: TopCategoryDriver | null; trip_drivers: TripDriver[];
 }
 export interface EvidenceItem {
   id: number; merchant: string | null; category: string; type: string; date: string | null;
@@ -21,9 +39,10 @@ export interface HomeBriefing {
   facts: SpendingFacts; recent: EvidenceItem[];
   upcoming: { id: number; subscription_id: number; label: string; date: string; amount: Money | null }[];
   upcoming_total: Money; upcoming_unknown_count: number;
+  increased_commitments: SubscriptionPriceChange[];
   capture_issue_count: number; followup_issue_count: number;
   review_count: number; recurring_suggestion_count: number;
-  freshness: { gmail_connected: boolean; gmail_last_checked: string | null; gmail_needs_reconnection: boolean };
+  freshness: { gmail_connected: boolean; gmail_last_checked: string | null; gmail_needs_reconnection: boolean; last_capture_processed_at: string | null };
 }
 export interface CaptureIssue {
   id: number; source: string; handled?: boolean; status: string; attempts: number; error_code: string | null;
@@ -87,6 +106,8 @@ export const briefingApi = {
   dismissPlannedCharge: (id: number) => request(`/api/v2/plan/upcoming/${id}/dismiss`, { method: 'POST' }),
   upcoming: (days = 30, offset = 0) => request<UpcomingPlan>(`/api/v2/plan/upcoming?days=${days}&limit=50&offset=${offset}`),
   home: () => request<HomeBriefing>('/api/v2/home'),
+  month: (as_of?: string) => request<SpendingFacts>(`/api/v2/spending/month${as_of ? `?as_of=${as_of}` : ''}`),
+  weekdayPattern: (weeks = 8) => request<WeekdayPattern>(`/api/v2/spending/weekday-pattern?weeks=${weeks}`),
   spendingReview: (offset = 0) => request<SpendingReview>(`/api/v2/spending/review?limit=50&offset=${offset}`),
   evidence: (query: URLSearchParams) => request<{ items: EvidenceItem[]; total: number; limit: number; offset: number }>(`/api/v2/spending/evidence?${query}`),
   captureIssues: (offset = 0, includeHandled = false) => request<CaptureIssue[]>(`/api/v2/capture/issues?limit=50&offset=${offset}&include_handled=${includeHandled}`),
@@ -98,8 +119,9 @@ export const briefingApi = {
 export function formatMoney(value: Money): string {
   return new Intl.NumberFormat('en-SG', { style: 'currency', currency: 'SGD', currencyDisplay: 'symbol' }).format(value.minor_units / 100);
 }
-export function evidenceLink(period: SpendingPeriod, category?: string, measure = 'spending'): string {
+export function evidenceLink(period: SpendingPeriod, category?: string, measure = 'spending', merchant?: string): string {
   const query = new URLSearchParams({ start: period.start, end: period.end, measure });
   if (category !== undefined) query.set('category', category);
+  if (merchant !== undefined) query.set('merchant', merchant);
   return `/evidence?${query}`;
 }

@@ -137,6 +137,115 @@ def _aggregate(selected: list[dict]) -> dict:
     }
 
 
+def _signed(row: dict) -> int:
+    return -row["minor"] if row["type"] == "refund" else row["minor"]
+
+
+def _spending_rows(rows: list[dict], start: date, end: date) -> list[dict]:
+    return [row for row in rows if row["day"] is not None and start <= row["day"] <= end
+            and row["type"] in ("expense", "refund") and row["minor"] is not None]
+
+
+_OVERLAP_NOTE = "This breaks down the category change above; it is not an additional amount on top of it."
+_TRIP_OVERLAP_NOTE = "Trip spending is already included in the category totals above; shown separately as context, not an additional amount."
+
+
+def _top_category_driver(rows: list[dict], category: str, change: dict,
+                          current_start: date, comparison_end: date,
+                          previous_start: date, previous_end: date) -> dict:
+    """R10: merchant contribution, frequency-vs-size, and one-off breakdown
+    for the single largest category driver. Deliberately scoped to only the
+    top category rather than every one — computing this for every category
+    change multiplies the overlap bookkeeping without adding evidence value
+    beyond what the user actually needs to act on."""
+    current_rows = [row for row in _spending_rows(rows, current_start, comparison_end) if row["category"] == category]
+    previous_rows = [row for row in _spending_rows(rows, previous_start, previous_end) if row["category"] == category]
+
+    current_by_merchant: dict[str, int] = {}
+    previous_by_merchant: dict[str, int] = {}
+    for row in current_rows:
+        merchant = row["merchant"] or "Unknown merchant"
+        current_by_merchant[merchant] = current_by_merchant.get(merchant, 0) + _signed(row)
+    for row in previous_rows:
+        merchant = row["merchant"] or "Unknown merchant"
+        previous_by_merchant[merchant] = previous_by_merchant.get(merchant, 0) + _signed(row)
+    merchant_driver = None
+    merchants = current_by_merchant.keys() | previous_by_merchant.keys()
+    if merchants:
+        best = max(merchants, key=lambda m: abs(current_by_merchant.get(m, 0) - previous_by_merchant.get(m, 0)))
+        merchant_change = current_by_merchant.get(best, 0) - previous_by_merchant.get(best, 0)
+        if merchant_change:
+            merchant_driver = {"merchant": best, "change": money(merchant_change)}
+
+    current_count, previous_count = len(current_rows), len(previous_rows)
+    current_total = sum(_signed(row) for row in current_rows)
+    previous_total = sum(_signed(row) for row in previous_rows)
+    current_avg = round(current_total / current_count) if current_count else 0
+    previous_avg = round(previous_total / previous_count) if previous_count else 0
+    count_changed = current_count != previous_count
+    avg_changed = abs(current_avg - previous_avg) > max(100, abs(previous_avg) * 0.1)
+    if count_changed and not avg_changed:
+        classification = "frequency"
+    elif avg_changed and not count_changed:
+        classification = "size"
+    elif count_changed and avg_changed:
+        classification = "mixed"
+    else:
+        classification = "none"
+    frequency_driver = {
+        "classification": classification, "current_count": current_count, "previous_count": previous_count,
+        "current_avg": money(current_avg), "previous_avg": money(previous_avg),
+    }
+
+    one_off_driver = None
+    if current_rows:
+        largest = max(current_rows, key=lambda row: abs(_signed(row)))
+        change_magnitude = abs(change["minor_units"])
+        if change_magnitude and abs(_signed(largest)) >= change_magnitude * 0.5:
+            one_off_driver = {
+                "transaction_id": largest["id"], "merchant": largest["merchant"],
+                "amount": money(_signed(largest)), "date": largest["day"].isoformat(),
+            }
+
+    return {
+        "category": category, "change": change, "merchant_driver": merchant_driver,
+        "frequency_driver": frequency_driver, "one_off_driver": one_off_driver,
+        "overlap_note": _OVERLAP_NOTE,
+    }
+
+
+def _trip_drivers(conn, rows: list[dict], current_start: date, comparison_end: date,
+                   previous_start: date, previous_end: date) -> list[dict]:
+    trip_map = {row["transaction_id"]: (row["trip_id"], row["name"]) for row in conn.execute(
+        """SELECT tt.transaction_id, tt.trip_id, tr.name FROM trip_transactions tt
+           JOIN trips tr ON tr.id = tt.trip_id""")}
+    if not trip_map:
+        return []
+    current_totals: dict[int, int] = {}
+    previous_totals: dict[int, int] = {}
+    for row in _spending_rows(rows, current_start, comparison_end):
+        info = trip_map.get(row["id"])
+        if info:
+            current_totals[info[0]] = current_totals.get(info[0], 0) + _signed(row)
+    for row in _spending_rows(rows, previous_start, previous_end):
+        info = trip_map.get(row["id"])
+        if info:
+            previous_totals[info[0]] = previous_totals.get(info[0], 0) + _signed(row)
+    names = {trip_id: name for trip_id, name in trip_map.values()}
+    drivers = []
+    for trip_id in current_totals.keys() | previous_totals.keys():
+        current_total = current_totals.get(trip_id, 0)
+        previous_total = previous_totals.get(trip_id, 0)
+        if current_total or previous_total:
+            drivers.append({
+                "trip_id": trip_id, "name": names[trip_id],
+                "current_total": money(current_total), "previous_total": money(previous_total),
+                "change": money(current_total - previous_total), "overlap_note": _TRIP_OVERLAP_NOTE,
+            })
+    drivers.sort(key=lambda driver: (-abs(driver["change"]["minor_units"]), driver["trip_id"]))
+    return drivers
+
+
 def _period(rows: list[dict], start: date, end: date) -> dict:
     selected = [row for row in rows if row["day"] is not None and start <= row["day"] <= end and row["type"] != "transfer"]
     return {"start": start.isoformat(), "end": end.isoformat(), **_aggregate(selected)}
@@ -191,12 +300,19 @@ def _facts(conn, as_of: date, timezone: str, periods: tuple[date, date, date, da
     undated = sum(row["day"] is None and row["type"] != "transfer" for row in rows)
     available = not undated and not comparable["unresolved_count"] and not previous["unresolved_count"]
     drivers = []
+    top_category_driver = None
+    trip_drivers = []
     if available:
         for category in comparable["categories"].keys() | previous["categories"].keys():
             change = comparable["categories"].get(category, 0) - previous["categories"].get(category, 0)
             if change:
                 drivers.append({"category": category, "change": money(change)})
         drivers.sort(key=lambda driver: (-abs(driver["change"]["minor_units"]), driver["category"]))
+        if drivers:
+            top = drivers[0]
+            top_category_driver = _top_category_driver(
+                rows, top["category"], top["change"], current_start, comparison_end, previous_start, previous_end)
+        trip_drivers = _trip_drivers(conn, rows, current_start, comparison_end, previous_start, previous_end)
     for period in (current, comparable, previous):
         del period["categories"]
         if undated:
@@ -208,7 +324,34 @@ def _facts(conn, as_of: date, timezone: str, periods: tuple[date, date, date, da
         "current": current, "comparison_current": comparable, "previous": previous,
         "change": money(comparable["spending"]["minor_units"] - previous["spending"]["minor_units"]) if available else None,
         "category_changes": drivers,
+        "top_category_driver": top_category_driver,
+        "trip_drivers": trip_drivers,
     }
+
+
+def weekday_pattern(conn, as_of: date | None = None, weeks: int = 8, timezone: str = DEFAULT_TIMEZONE) -> dict:
+    """R10 Explore question: 'what does a normal week look like?' — average
+    spend per weekday over the trailing `weeks` *complete* weeks (excluding
+    the current, possibly partial, week), so a big Saturday isn't diluted by
+    a same-weekday that hasn't happened yet this week. The window is exactly
+    weeks*7 days aligned to full weeks, so every weekday occurs exactly
+    `weeks` times — dividing each weekday's total by `weeks` is exact, not
+    an approximation."""
+    if weeks < 1:
+        raise ValueError("weeks must be at least 1")
+    as_of = as_of or local_now(timezone).date()
+    current_week_start = as_of - timedelta(days=as_of.weekday())
+    end = current_week_start - timedelta(days=1)
+    start = end - timedelta(days=weeks * 7 - 1)
+    rows = _spending_rows(_rows(conn, start, end, timezone), start, end)
+    by_weekday: dict[int, list[int]] = {i: [] for i in range(7)}
+    for row in rows:
+        by_weekday[row["day"].weekday()].append(_signed(row))
+    pattern = [
+        {"weekday": weekday, "average": money(round(sum(amounts) / weeks)), "transaction_count": len(amounts)}
+        for weekday, amounts in by_weekday.items()
+    ]
+    return {"start": start.isoformat(), "end": end.isoformat(), "weeks": weeks, "pattern": pattern}
 
 
 def _needs_review(row: dict) -> bool:
@@ -308,13 +451,16 @@ def refund_match_review(conn, *, limit: int = 50, offset: int = 0) -> dict:
 
 
 def spending_evidence(conn, start: date, end: date, *, timezone: str = DEFAULT_TIMEZONE,
-                      category: str | None = None, measure: str = "spending",
-                      limit: int = 50, offset: int = 0) -> dict:
-    if end < start or measure not in ("spending", "income", "unresolved") or not 1 <= limit <= 100 or offset < 0:
+                      category: str | None = None, merchant: str | None = None, weekday: int | None = None,
+                      measure: str = "spending", limit: int = 50, offset: int = 0) -> dict:
+    if (end < start or measure not in ("spending", "income", "unresolved") or not 1 <= limit <= 100 or offset < 0
+            or (weekday is not None and not 0 <= weekday <= 6)):
         raise ValueError("Invalid evidence query")
     kinds = ("expense", "refund") if measure == "spending" else ("income",)
     rows = [row for row in _rows(conn, start, end, timezone)
             if (category is None or row["category"] == category)
+            and (merchant is None or (row["merchant"] or "Unknown merchant") == merchant)
+            and (weekday is None or (row["day"] is not None and row["day"].weekday() == weekday))
             and ((measure == "unresolved" and _needs_review(row))
                  or (measure != "unresolved" and row["day"] is not None and row["type"] in kinds))]
     items = []

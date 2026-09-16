@@ -1,0 +1,164 @@
+import { useState } from 'react';
+import { Link } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { api } from '@/api/client';
+import { briefingApi, evidenceLink, formatMoney, type Money } from '@/api/briefing';
+import { PageCard } from '@/components/ui/cards';
+import { LoadFailed } from '@/components/ui/LoadFailed';
+
+const WEEKDAY_LABELS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+// R10: merchant profiles are a drill-down reached from a question's evidence,
+// not a primary Explore nav destination — no standalone "Merchants" tab.
+function merchantProfileLink(merchant: string): string {
+  return `/explore/merchants/${encodeURIComponent(merchant)}`;
+}
+
+function RankedBar({ label, value, max, href, secondaryHref, secondaryLabel }: {
+  label: string; value: number; max: number; href?: string; secondaryHref?: string; secondaryLabel?: string;
+}) {
+  const pct = max > 0 ? Math.min(100, Math.round((Math.abs(value) / max) * 100)) : 0;
+  return (
+    <div className="py-1">
+      <div className="flex justify-between gap-4 text-sm items-center">
+        <span className="flex flex-wrap items-center gap-x-3">
+          {href ? <Link to={href} className="hover:underline inline-flex items-center min-h-11">{label}</Link> : <span className="inline-flex items-center min-h-11">{label}</span>}
+          {secondaryHref && <Link to={secondaryHref} className="text-xs text-teal underline inline-flex items-center min-h-11">{secondaryLabel ?? 'Profile'}</Link>}
+        </span>
+        <span className="tabular-nums">{formatMoney({ minor_units: value, currency: 'SGD' })}</span>
+      </div>
+      <div className="h-2 rounded bg-foreground/10 mt-1 overflow-hidden"><div className="h-full bg-teal" style={{ width: `${pct}%` }} /></div>
+    </div>
+  );
+}
+
+function QuestionCard({ title, isError, onRetry, isReady, children }: { title: string; isError: boolean; onRetry: () => void; isReady: boolean; children: React.ReactNode }) {
+  // A background refetch failure must not hide already-known-good data behind
+  // an error screen — only show LoadFailed when there is nothing to show yet.
+  return (
+    <PageCard title={title}>
+      {isError && !isReady ? <div role="alert"><LoadFailed onRetry={onRetry} /></div> : !isReady ? <p role="status" className="text-muted">Loading…</p> : children}
+    </PageCard>
+  );
+}
+
+function WhereDidTheIncreaseComeFrom() {
+  const { data, isError, refetch } = useQuery({ queryKey: ['explore-month-facts'], queryFn: () => briefingApi.month() });
+  const drivers = data?.category_changes ?? [];
+  const max = Math.max(1, ...drivers.map(d => Math.abs(d.change.minor_units)));
+  const top = data?.top_category_driver;
+  return (
+    <QuestionCard title="Where did the increase come from?" isError={isError} onRetry={() => void refetch()} isReady={!!data}>
+      {!drivers.length && <p className="text-muted">{data?.change ? 'No category spending changes this period.' : 'Resolve records needing attention to compare categories.'}</p>}
+      {data && drivers.slice(0, 5).map(d => <RankedBar key={d.category} label={d.category} value={d.change.minor_units} max={max} href={evidenceLink(data.comparison_current, d.category)} />)}
+      {top?.merchant_driver && data && <p className="text-sm text-muted mt-2">Biggest mover in {top.category}: <Link className="underline" to={merchantProfileLink(top.merchant_driver.merchant)}>{top.merchant_driver.merchant}</Link> ({formatMoney(top.merchant_driver.change)}) — <Link className="underline" to={evidenceLink(data.comparison_current, top.category, 'spending', top.merchant_driver.merchant)}>view transactions</Link></p>}
+      {top?.one_off_driver && <p className="text-sm text-muted">Largely one purchase: <Link className="underline" to={`/transactions/${top.one_off_driver.transaction_id}`}>{top.one_off_driver.merchant || 'Unnamed transaction'}</Link></p>}
+      {data?.trip_drivers.map(t => <p key={t.trip_id} className="text-sm text-muted">Trip <Link className="underline" to={`/transactions?trip=${t.trip_id}`}>{t.name}</Link>: {formatMoney(t.change)} vs. last period — {t.overlap_note}</p>)}
+    </QuestionCard>
+  );
+}
+
+function WhichRecurringCostsChanged() {
+  const { data, isError, refetch } = useQuery({ queryKey: ['explore-subscription-review'], queryFn: () => api.getSubscriptionReviewV2() });
+  const max = Math.max(1, ...(data?.price_changes ?? []).map(c => Math.abs(c.change.minor_units)));
+  const empty = data && !data.price_changes.length && !data.overdue.length && !data.annual_renewals.length;
+  return (
+    <QuestionCard title="Which recurring costs changed?" isError={isError} onRetry={() => void refetch()} isReady={!!data}>
+      {empty && <p className="text-muted">No recurring cost changes to review.</p>}
+      {data?.price_changes.map(c => <RankedBar key={c.subscription_id} label={c.label} value={c.change.minor_units} max={max} href={`/plan/manage?subscription=${c.subscription_id}`} />)}
+      {!!data?.overdue.length && <div className="mt-3 space-y-1">
+        <p className="text-sm font-medium">Possibly stopped</p>
+        {data.overdue.map(o => <Link key={o.subscription_id} to={`/plan/manage?subscription=${o.subscription_id}`} className="block text-sm text-teal underline min-h-11">{o.label}: {o.days_since_last_charge} days since last charge</Link>)}
+      </div>}
+      {!!data?.annual_renewals.length && <div className="mt-3 space-y-1">
+        <p className="text-sm font-medium">Renewing soon</p>
+        {data.annual_renewals.map(r => <Link key={r.subscription_id} to={`/plan/manage?subscription=${r.subscription_id}`} className="block text-sm text-teal underline min-h-11">{r.label}: in {r.days_until_renewal} days</Link>)}
+      </div>}
+    </QuestionCard>
+  );
+}
+
+function WhatDoesANormalWeekLookLike() {
+  const { data, isError, refetch } = useQuery({ queryKey: ['explore-weekday-pattern'], queryFn: () => briefingApi.weekdayPattern(8) });
+  const max = Math.max(1, ...(data?.pattern ?? []).map(p => p.average.minor_units));
+  return (
+    <QuestionCard title="What does a normal week look like?" isError={isError} onRetry={() => void refetch()} isReady={!!data}>
+      {data && <>
+        <p className="text-sm text-muted mb-2">Average per weekday over the last {data.weeks} complete weeks ({data.start}–{data.end}).</p>
+        {data.pattern.map(p => <RankedBar key={p.weekday} label={WEEKDAY_LABELS[p.weekday]} value={p.average.minor_units} max={max}
+          href={`/evidence?${new URLSearchParams({ start: data.start, end: data.end, weekday: String(p.weekday) })}`} />)}
+      </>}
+    </QuestionCard>
+  );
+}
+
+function WhichMerchantsAccountForMostOfThisCategory() {
+  const [category, setCategory] = useState('');
+  const { data: categories } = useQuery({ queryKey: ['categories'], queryFn: () => api.getCategories() });
+  const { data: monthFacts } = useQuery({ queryKey: ['explore-month-facts'], queryFn: () => briefingApi.month() });
+  const effectiveCategory = category || monthFacts?.category_changes[0]?.category || '';
+  const { data, isError, refetch } = useQuery({
+    queryKey: ['explore-merchants-by-category', effectiveCategory, monthFacts?.current.start, monthFacts?.current.end],
+    queryFn: () => api.getMerchantRankingV2(monthFacts!.current.start, monthFacts!.current.end, 10, effectiveCategory || undefined),
+    enabled: !!monthFacts,
+  });
+  const max = Math.max(1, ...(data ?? []).map(m => m.total.minor_units));
+  const categorySelect = <select value={effectiveCategory} onChange={e => setCategory(e.target.value)} className="select-field text-xs" aria-label="Category">
+    {(categories ?? []).map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
+  </select>;
+  return (
+    <PageCard title="Which merchants account for most of this category?" action={!!categories?.length && categorySelect}>
+      {isError && !data ? <div role="alert"><LoadFailed onRetry={() => void refetch()} /></div> : !data ? <p role="status" className="text-muted">Loading…</p> : !data.length ? <p className="text-muted">No spending in this category yet.</p> :
+        data.map(m => <RankedBar key={m.merchant} label={m.merchant} value={m.total.minor_units} max={max}
+          href={monthFacts ? evidenceLink(monthFacts.current, effectiveCategory, 'spending', m.merchant) : undefined}
+          secondaryHref={merchantProfileLink(m.merchant)} />)}
+    </PageCard>
+  );
+}
+
+function HowDidThisTripAffectTheMonth() {
+  const [tripId, setTripId] = useState<number | null>(null);
+  const { data: trips, isError: tripsError, refetch: refetchTrips } = useQuery({ queryKey: ['trips'], queryFn: () => api.getTrips() });
+  const effectiveTripId = tripId ?? trips?.[0]?.id ?? null;
+  const selectedTrip = trips?.find(t => t.id === effectiveTripId);
+  const { data: summary, isError, refetch } = useQuery({
+    queryKey: ['explore-trip-summary', effectiveTripId],
+    queryFn: () => api.getTripSummaryV2(effectiveTripId!),
+    enabled: effectiveTripId != null,
+  });
+  const { data: monthFacts } = useQuery({
+    queryKey: ['explore-trip-month-facts', selectedTrip?.start_date, selectedTrip?.end_date],
+    queryFn: () => briefingApi.month(selectedTrip!.end_date || selectedTrip!.start_date),
+    enabled: !!selectedTrip,
+  });
+  const monthTotal = monthFacts?.current.spending.minor_units ?? 0;
+  const tripShare = summary && monthTotal ? Math.round((summary.total.minor_units / monthTotal) * 100) : null;
+  const tripSelect = !!trips?.length && (
+    <select value={effectiveTripId ?? ''} onChange={e => setTripId(Number(e.target.value))} className="select-field text-xs" aria-label="Trip">
+      {trips.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+    </select>
+  );
+  return (
+    <PageCard title="How did this trip affect the month?" action={tripSelect}>
+      {tripsError && !trips ? <div role="alert"><LoadFailed onRetry={() => void refetchTrips()} /></div> : !trips ? <p role="status" className="text-muted">Loading…</p> : !trips.length && <p className="text-muted">No trips recorded yet.</p>}
+      {isError && !summary && <div role="alert"><LoadFailed onRetry={() => void refetch()} /></div>}
+      {summary && selectedTrip && <>
+        <p>{formatMoney(summary.total as Money)} over {summary.days} days ({formatMoney(summary.daily_average as Money)}/day).</p>
+        {tripShare != null && <p className="text-sm text-muted">About {tripShare}% of {selectedTrip.name}'s month so far.</p>}
+        <Link to={`/transactions?trip=${effectiveTripId}`} className="text-teal underline min-h-11 inline-flex items-center">See trip transactions</Link>
+      </>}
+    </PageCard>
+  );
+}
+
+export function ExplorePatternsPage() {
+  return (
+    <div className="p-4 md:p-6 space-y-4 max-w-4xl mx-auto">
+      <WhereDidTheIncreaseComeFrom />
+      <WhichRecurringCostsChanged />
+      <WhatDoesANormalWeekLookLike />
+      <WhichMerchantsAccountForMostOfThisCategory />
+      <HowDidThisTripAffectTheMonth />
+    </div>
+  );
+}

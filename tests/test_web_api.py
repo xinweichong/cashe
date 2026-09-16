@@ -891,6 +891,21 @@ class TestOverviewV2:
         assert data[0]["visits"] == 1
 
     @pytest.mark.asyncio
+    async def test_merchants_filters_by_category(self, client):
+        await client.post("/api/v2/transactions", json={
+            "amount": 10.00, "merchant": "Toast Box", "category": "Food", "type": "expense", "transaction_date": "2026-04-10T12:00:00",
+        })
+        await client.post("/api/v2/transactions", json={
+            "amount": 25.00, "merchant": "Grab", "category": "Transport", "type": "expense", "transaction_date": "2026-04-11T12:00:00",
+        })
+        response = await client.get("/api/v2/overview/merchants", params={
+            "start_date": "2026-04-01", "end_date": "2026-04-30", "category": "Food",
+        })
+        assert response.status_code == 200
+        data = response.json()
+        assert [m["merchant"] for m in data] == ["Toast Box"]
+
+    @pytest.mark.asyncio
     async def test_balance_returns_income_expenses_net(self, client):
         await client.post("/api/v2/transactions", json={
             "amount": 3000.00, "category": "Salary", "type": "income", "transaction_date": "2026-04-16T12:00:00",
