@@ -4,17 +4,20 @@ import { useQuery } from '@tanstack/react-query';
 import { ArrowRight, Plus } from 'lucide-react';
 import { briefingApi, evidenceLink, formatMoney } from '@/api/briefing';
 import { api } from '@/api/client';
+import { getCategoryColor } from '@/lib/utils';
 import { HeroCard, PageCard } from '@/components/ui/cards';
 import { HeroAmount } from '@/components/ui/HeroAmount';
 import { LoadFailed } from '@/components/ui/LoadFailed';
 import { Skeleton } from '@/components/ui/skeleton';
 import { TrendLine } from '@/components/charts/TrendLine';
 import { CategoryDonut } from '@/components/charts/CategoryDonut';
+import { CategoryChangeBarRow } from '@/components/charts/CategoryChangeBars';
 
 export function HomePage() {
   const navigate = useNavigate();
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [selectedChangeCategory, setSelectedChangeCategory] = useState<string | null>(null);
   const query = useQuery({ queryKey: ['home-briefing'], queryFn: briefingApi.home });
   const currentStart = query.data?.facts.current.start;
   const currentEnd = query.data?.facts.current.end;
@@ -32,6 +35,11 @@ export function HomePage() {
     queryKey: ['home-daily-totals', currentStart, currentEnd],
     queryFn: () => api.getDailyTotalsV2(currentStart!, currentEnd!),
     enabled: !!currentStart && !!currentEnd,
+  });
+  const merchantsQuery = useQuery({
+    queryKey: ['home-merchants', currentStart, currentEnd, selectedCategory],
+    queryFn: () => api.getMerchantRankingFactsV2(currentStart!, currentEnd!, selectedCategory ?? undefined, 5),
+    enabled: !!currentStart && !!currentEnd && !!selectedCategory,
   });
   if (!query.data && query.isError) return <div role="alert"><LoadFailed onRetry={() => void query.refetch()} /></div>;
   if (!query.data) return <p role="status" className="p-6 text-muted">Preparing your briefing…</p>;
@@ -71,24 +79,71 @@ export function HomePage() {
           )}
         </div>
       </HeroCard>
-      <PageCard title="Where it went">
-        {breakdownQuery.isLoading ? <Skeleton className="h-[220px] w-full" /> : breakdownQuery.isError ? (
-          <p className="text-sm text-muted">Couldn't load the category mix. <button className="underline min-h-11" onClick={() => void breakdownQuery.refetch()}>Retry</button></p>
-        ) : (
-          <CategoryDonut
-            data={categoryTotals}
-            selected={selectedCategory}
-            onSelect={setSelectedCategory}
-            onViewTransactions={(category) => navigate(evidenceLink(facts.current, category))}
-            showLegend
-          />
-        )}
-      </PageCard>
+      <div className="grid md:grid-cols-2 gap-6 items-start">
+        <PageCard title="Where it went">
+          {breakdownQuery.isLoading ? <Skeleton className="h-[220px] w-full" /> : breakdownQuery.isError ? (
+            <p className="text-sm text-muted">Couldn't load the category mix. <button className="underline min-h-11" onClick={() => void breakdownQuery.refetch()}>Retry</button></p>
+          ) : (
+            <CategoryDonut
+              data={categoryTotals}
+              selected={selectedCategory}
+              onSelect={setSelectedCategory}
+              onViewTransactions={(category) => navigate(evidenceLink(facts.current, category))}
+              showLegend
+            />
+          )}
+        </PageCard>
+        <PageCard title="Selected category">
+          {!selectedCategory ? (
+            <p className="text-sm text-muted">Select a category in "Where it went" to see its main merchants.</p>
+          ) : merchantsQuery.isLoading ? (
+            <Skeleton className="h-[160px] w-full" />
+          ) : merchantsQuery.isError ? (
+            <p className="text-sm text-muted">Couldn't load merchants for {selectedCategory}. <button className="underline min-h-11" onClick={() => void merchantsQuery.refetch()}>Retry</button></p>
+          ) : (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full" style={{ background: getCategoryColor(selectedCategory) }} aria-hidden />
+                <span className="font-display text-lg font-semibold">{selectedCategory}</span>
+              </div>
+              {merchantsQuery.data?.length ? (
+                <ul className="space-y-2">
+                  {merchantsQuery.data.map((m) => (
+                    <li key={m.merchant} className="flex justify-between text-sm">
+                      <span>{m.merchant}</span>
+                      <span className="font-mono tabular-nums text-muted">{formatMoney(m.total)}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-muted">No merchant records for {selectedCategory} in this period.</p>
+              )}
+              <Link
+                className="text-sm text-teal min-h-11 inline-flex items-center gap-1"
+                to={evidenceLink(facts.current, selectedCategory)}
+              >
+                View transactions <ArrowRight size={14} />
+              </Link>
+            </div>
+          )}
+        </PageCard>
+      </div>
       <PageCard title="What changed">
-        {facts.category_changes.slice(0, 3).map(item => <div key={item.category} className="py-3 border-b border-border last:border-0">
-          <p>{item.category}: <strong>{formatMoney(item.change)}</strong> change</p>
-          <div className="flex gap-6"><Link className="text-teal min-h-11 inline-flex items-center" to={evidenceLink(facts.comparison_current, item.category)}>This period</Link><Link className="text-teal min-h-11 inline-flex items-center" to={evidenceLink(facts.previous, item.category)}>Previous period</Link></div>
-        </div>)}
+        {!!facts.category_changes.length && <div data-testid="category-change-bars">
+          {(() => {
+            const changes = facts.category_changes.slice(0, 3);
+            const maxChange = Math.max(...changes.map((c) => Math.abs(c.change.minor_units)), 1);
+            return changes.map(item => <div key={item.category} className="py-1 border-b border-border last:border-0">
+              <CategoryChangeBarRow
+                datum={item}
+                max={maxChange}
+                selected={selectedChangeCategory === item.category}
+                onSelect={setSelectedChangeCategory}
+              />
+              <div className="flex gap-6 pl-2 pb-2"><Link className="text-teal min-h-11 inline-flex items-center" to={evidenceLink(facts.comparison_current, item.category)}>This period</Link><Link className="text-teal min-h-11 inline-flex items-center" to={evidenceLink(facts.previous, item.category)}>Previous period</Link></div>
+            </div>);
+          })()}
+        </div>}
         {!facts.category_changes.length && <p className="text-muted">{facts.change ? 'No category spending changes in these periods.' : 'Resolve the records needing attention to compare categories.'}</p>}
         {driver && <div className="mt-4 pt-4 border-t border-border space-y-3">
           <p className="text-sm text-muted">{driver.overlap_note}</p>

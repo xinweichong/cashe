@@ -43,7 +43,7 @@ test.describe('Explore layout study interaction', () => {
     await page.goto('/dev/preview/explore');
     await expect(page.locator('.recharts-line').first()).toBeVisible();
     await page.getByRole('tab', { name: 'By category' }).click();
-    await expect(page.getByTestId('diverging-bars')).toBeVisible();
+    await expect(page.getByTestId('category-change-bars')).toBeVisible();
     await page.getByRole('tab', { name: 'By merchant' }).click();
     await expect(page.getByTestId('merchant-bars')).toBeVisible();
   });

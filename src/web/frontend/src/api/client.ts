@@ -491,6 +491,15 @@ export const api = {
   getCategoryBreakdownV2: (start: string, end: string) =>
     request<CategoryBreakdownV2>(`/api/v2/spending/breakdown?start=${start}&end=${end}`),
 
+  // Shared-facts merchant ranking (spending_facts.merchant_ranking) — distinct
+  // from getMerchantRankingV2's legacy /api/v2/overview/merchants, which is
+  // not proven to reconcile with getCategoryBreakdownV2 for the same period.
+  getMerchantRankingFactsV2: (start: string, end: string, category?: string, limit = 10) => {
+    const params = new URLSearchParams({ start, end, limit: String(limit) });
+    if (category) params.set('category', category);
+    return request<MerchantRankingV2[]>(`/api/v2/spending/merchants?${params}`);
+  },
+
   bulkCorrectTransactions: (data: {
     transaction_ids: number[];
     category?: string;

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { briefingApi, type HomeBriefing, type SpendingPeriod } from '@/api/briefing';
@@ -8,7 +8,7 @@ import { HomePage } from '../HomePage';
 import { ReviewPage } from '../ReviewPage';
 
 vi.mock('@/api/briefing', async (original) => ({ ...await original<typeof import('@/api/briefing')>(), briefingApi: { recurringReview: vi.fn(), resolveRecurring: vi.fn(), home: vi.fn(), spendingReview: vi.fn(), captureIssues: vi.fn(), followups: vi.fn(), retryCapture: vi.fn(), retryFollowup: vi.fn(), refundMatchReview: vi.fn(), resolveRefundMatch: vi.fn(), duplicateReview: vi.fn(), dismissDuplicate: vi.fn(), mergeDuplicates: vi.fn(), undoDuplicateMerge: vi.fn() } }));
-vi.mock('@/api/client', async (original) => ({ ...await original<typeof import('@/api/client')>(), api: { getCategoryBreakdownV2: vi.fn(), getDailyTotalsV2: vi.fn() } }));
+vi.mock('@/api/client', async (original) => ({ ...await original<typeof import('@/api/client')>(), api: { getCategoryBreakdownV2: vi.fn(), getDailyTotalsV2: vi.fn(), getMerchantRankingFactsV2: vi.fn() } }));
 const period: SpendingPeriod = { start: '2026-09-01', end: '2026-09-06', spending: { minor_units: 1250, currency: 'SGD' }, income: null, recorded_net_flow: null, transaction_count: 1, unresolved_count: 0, indicative_count: 0, status: 'complete' };
 const home: HomeBriefing = { facts: { as_of: '2026-09-06', timezone: 'Asia/Singapore', undated_count: 0, current: period, comparison_current: period, previous: { ...period, start: '2026-08-01', end: '2026-08-06' }, change: { minor_units: 500, currency: 'SGD' }, category_changes: [{ category: 'Food & Drink', change: { minor_units: 500, currency: 'SGD' } }], top_category_driver: null, trip_drivers: [] }, spending_target: null, recent: [], upcoming: [], upcoming_total: { minor_units: 0, currency: 'SGD' }, upcoming_unknown_count: 0, increased_commitments: [], capture_issue_count: 2, followup_issue_count: 1, review_count: 0, recurring_suggestion_count: 0, freshness: { gmail_connected: false, gmail_last_checked: null, gmail_needs_reconnection: false, last_capture_processed_at: null } };
 function show(component: React.ReactNode) { return render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter>{component}</MemoryRouter></QueryClientProvider>); }
@@ -20,6 +20,7 @@ beforeEach(() => {
   vi.mocked(briefingApi.duplicateReview).mockResolvedValue({ items: [], total: 0, limit: 50, offset: 0 });
   vi.mocked(api.getCategoryBreakdownV2).mockResolvedValue({ start: period.start, end: period.end, by_category: {}, unresolved_count: 0, indicative_count: 0, status: 'complete' });
   vi.mocked(api.getDailyTotalsV2).mockResolvedValue([]);
+  vi.mocked(api.getMerchantRankingFactsV2).mockResolvedValue([]);
 });
 afterEach(cleanup);
 
@@ -174,13 +175,44 @@ test('selecting a category and viewing transactions navigates to its evidence', 
       </MemoryRouter>
     </QueryClientProvider>
   );
-  fireEvent.click(await screen.findByRole('button', { name: /^Food/ }));
+  const legend = await screen.findByTestId('category-donut-legend');
+  fireEvent.click(within(legend).getByRole('button', { name: /^Food/ }));
   fireEvent.click(screen.getByRole('button', { name: 'View transactions' }));
   const destination = await screen.findByText((_, el) => el?.tagName === 'OUTPUT');
   expect(destination.textContent).toContain('/evidence');
   const params = new URLSearchParams(destination.textContent!.replace('/evidence', ''));
   expect(params.get('category')).toBe('Food');
   expect(params.get('start')).toBe(period.start);
+});
+
+test('selecting a category shows its main merchants and a scoped evidence link', async () => {
+  vi.mocked(briefingApi.home).mockResolvedValue(home);
+  vi.mocked(api.getCategoryBreakdownV2).mockResolvedValue({
+    start: period.start, end: period.end,
+    by_category: { Food: { minor_units: 3000, currency: 'SGD' } },
+    unresolved_count: 0, indicative_count: 0, status: 'complete',
+  });
+  vi.mocked(api.getMerchantRankingFactsV2).mockResolvedValue([
+    { merchant: 'FairPrice', visits: 3, total: { minor_units: 2000, currency: 'SGD' } },
+  ]);
+  show(<HomePage />);
+  const legend = await screen.findByTestId('category-donut-legend');
+  fireEvent.click(within(legend).getByRole('button', { name: /^Food/ }));
+  expect(await screen.findByText('FairPrice')).toBeTruthy();
+  expect(api.getMerchantRankingFactsV2).toHaveBeenCalledWith(period.start, period.end, 'Food', 5);
+  const href = screen.getByRole('link', { name: /View transactions/ }).getAttribute('href')!;
+  const params = new URL(href, 'http://localhost').searchParams;
+  expect(params.get('category')).toBe('Food');
+});
+
+test('category-change bars share the "This period"/"Previous period" evidence links', async () => {
+  vi.mocked(briefingApi.home).mockResolvedValue(home);
+  show(<HomePage />);
+  const bars = await screen.findByTestId('category-change-bars');
+  expect(within(bars).getByRole('button', { name: /Food & Drink/ })).toBeTruthy();
+  const href = screen.getByRole('link', { name: 'Previous period' }).getAttribute('href')!;
+  const params = new URL(href, 'http://localhost').searchParams;
+  expect(params.get('category')).toBe('Food & Drink');
 });
 
 test('the daily trend reflects real data and links to a selected day\'s evidence', async () => {

@@ -4,6 +4,7 @@ import { PageCard } from '@/components/ui/cards';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { CategoryTrendLine } from '@/components/charts/CategoryTrendLine';
+import { CategoryChangeBars } from '@/components/charts/CategoryChangeBars';
 import { getCategoryColor, formatCurrency, cn } from '@/lib/utils';
 import { OVER_TIME_TREND, CATEGORY_CHANGES, MERCHANT_RANKING, RECURRING_CHANGES } from './exploreFixtures';
 
@@ -55,7 +56,11 @@ export function ExploreLayoutStudy() {
         {mode === 'by-category' && (
           <PageCard title="What changed">
             <p className="text-sm text-muted mb-4">Signed change vs. the comparable period, centred on zero.</p>
-            <DivergingBars data={CATEGORY_CHANGES} selected={selectedCategory} onSelect={setSelectedCategory} />
+            <CategoryChangeBars
+              data={CATEGORY_CHANGES.map((d) => ({ category: d.category, change: { minor_units: Math.round(d.change * 100), currency: 'SGD' as const } }))}
+              selected={selectedCategory}
+              onSelect={setSelectedCategory}
+            />
           </PageCard>
         )}
         {mode === 'by-merchant' && (
@@ -102,51 +107,6 @@ export function ExploreLayoutStudy() {
         </PageCard>
       </div>
     </div>
-  );
-}
-
-function DivergingBars({
-  data, selected, onSelect,
-}: {
-  data: { category: string; change: number }[];
-  selected: string | null;
-  onSelect: (c: string) => void;
-}) {
-  const max = Math.max(...data.map((d) => Math.abs(d.change)), 1);
-  return (
-    <ul className="space-y-2" data-testid="diverging-bars">
-      {data.map((d) => {
-        const widthPct = (Math.abs(d.change) / max) * 50;
-        const isPositive = d.change >= 0;
-        return (
-          <li key={d.category}>
-            <button
-              type="button"
-              onClick={() => onSelect(d.category)}
-              aria-pressed={selected === d.category}
-              className={cn('flex w-full items-center gap-2 min-h-11 px-2 py-1 rounded-md', selected === d.category ? 'bg-card-hover' : 'hover:bg-card-hover')}
-            >
-              <span className="w-24 shrink-0 text-sm text-left truncate">{d.category}</span>
-              <span className="relative flex-1 h-4">
-                <span className="absolute left-1/2 top-0 bottom-0 w-px bg-border" aria-hidden />
-                <span
-                  className="absolute top-0.5 h-3 rounded-sm"
-                  style={{
-                    background: getCategoryColor(d.category),
-                    width: `${widthPct}%`,
-                    left: isPositive ? '50%' : `${50 - widthPct}%`,
-                  }}
-                  aria-hidden
-                />
-              </span>
-              <span className={cn('w-20 shrink-0 text-sm font-mono tabular-nums text-right', isPositive ? 'text-coral' : 'text-teal')}>
-                {isPositive ? '+' : '−'}{formatCurrency(Math.abs(d.change))}
-              </span>
-            </button>
-          </li>
-        );
-      })}
-    </ul>
   );
 }
 
