@@ -34,7 +34,7 @@ export function ExploreLayoutStudy() {
         <p className="text-muted text-sm">Follow a pattern from day to category to merchant to transaction.</p>
       </header>
 
-      <Tabs value={mode} onValueChange={(v) => setMode(v as Mode)}>
+      <Tabs value={mode} onValueChange={(v) => setMode(v as Mode)} className="flex justify-center">
         <TabsList>
           {MODES.map((m) => (
             <TabsTrigger key={m.value} value={m.value}>{m.label}</TabsTrigger>
