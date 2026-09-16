@@ -252,7 +252,12 @@ body {
   .hero-glow-teal,
   .hero-glow-coral {
     position: relative;
-    overflow: hidden;
+    /* No overflow:hidden here — box-shadow (including the ::after pulse
+       below) must bloom evenly past every edge, corners included. Clipping
+       the shadow to the box would cut the round corners flat, since a
+       descendant's box-shadow is clipped by an ancestor's overflow:hidden
+       even though the ancestor's own shadow is not. Only .hero-hairline
+       needs clipping — it gets its own scoped wrapper instead. */
   }
 
   .hero-glow-warm::after,
@@ -264,6 +269,18 @@ body {
     border-radius: inherit;
     will-change: opacity;
     animation: glow-pulse-opacity 3s ease-in-out infinite;
+    pointer-events: none;
+  }
+
+  /* Scoped clip for the hairline only — keeps the glow box-shadows above
+     (base + ::after pulse) unclipped so they bloom uniformly at every
+     corner instead of being cut flat where the hairline's clip box met the
+     rounded edge. */
+  .hero-glow-clip {
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    overflow: hidden;
     pointer-events: none;
   }
 

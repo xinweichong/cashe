@@ -23,7 +23,7 @@ export function PlanLayoutStudy() {
   const total = PROJECTION.recorded + PROJECTION.committed + PROJECTION.estimatedRemaining;
 
   return (
-    <div className="max-w-6xl mx-auto p-4 md:p-8 space-y-6" data-testid="plan-layout-study">
+    <div className="max-w-6xl mx-auto p-4 md:p-8 space-y-8" data-testid="plan-layout-study">
       <header>
         <h1 className="font-display text-2xl font-semibold">Plan</h1>
         <p className="text-muted text-sm">Understand what's approaching and when.</p>

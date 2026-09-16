@@ -64,7 +64,9 @@ interface HeroCardProps {
 export function HeroCard({ title, action, children, className, glowColor = 'warm' }: HeroCardProps) {
   return (
     <div className={cn('rounded-[24px] p-8', GLOW_CLASS[glowColor], className)}>
-      <div className="hero-hairline" aria-hidden />
+      <div className="hero-glow-clip" aria-hidden>
+        <div className="hero-hairline" />
+      </div>
       <div className="flex flex-row items-center justify-between gap-2 mb-3">
         <span className="text-xs uppercase tracking-[0.22em] text-muted font-semibold font-mono">
           {title}

@@ -47,7 +47,7 @@ export function HomePrototype() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto p-4 md:p-8 space-y-6 text-base" data-testid="home-prototype">
+    <div className="max-w-5xl mx-auto p-4 md:p-8 space-y-8 text-base" data-testid="home-prototype">
       <header className="flex items-center justify-between gap-4">
         <div>
           <h1 className="font-display text-2xl font-semibold">Your money briefing</h1>
