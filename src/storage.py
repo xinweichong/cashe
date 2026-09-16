@@ -101,6 +101,11 @@ class Storage:
         return daily_totals(self._conn, start, end, timezone)
 
     @_locked
+    def get_category_breakdown(self, start, end, timezone="Asia/Singapore") -> dict:
+        from src.spending_facts import category_breakdown
+        return category_breakdown(self._conn, start, end, timezone)
+
+    @_locked
     def get_transactions_v2(
         self,
         start_date: Optional[str] = None,

@@ -251,6 +251,24 @@ def _period(rows: list[dict], start: date, end: date) -> dict:
     return {"start": start.isoformat(), "end": end.isoformat(), **_aggregate(selected)}
 
 
+def category_breakdown(conn, start: date, end: date, timezone: str = DEFAULT_TIMEZONE) -> dict:
+    """Category totals for [start, end], built on the same _rows/_period/
+    _aggregate primitives month_facts/day_facts use — so a chart built on
+    this reconciles with the hero's spending total for the same period
+    instead of risking the timezone/conversion drift the legacy SQL
+    aggregates (storage.get_spending_summary et al.) can introduce near a
+    day boundary or an unvalidated currency code."""
+    rows = _rows(conn, start, end, timezone)
+    period = _period(rows, start, end)
+    return {
+        "start": period["start"], "end": period["end"],
+        "by_category": {category: money(amount) for category, amount in period["categories"].items()},
+        "unresolved_count": period["unresolved_count"],
+        "indicative_count": period["indicative_count"],
+        "status": period["status"],
+    }
+
+
 def daily_totals(conn, start: date, end: date, timezone: str = DEFAULT_TIMEZONE) -> list[dict]:
     """Per-local-day totals over [start, end], built on the same _rows/
     _aggregate primitives every other shared-fact surface uses (R04 parity).

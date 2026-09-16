@@ -24,7 +24,7 @@ from src.money import to_minor_units, from_minor_units
 from src.spending_facts import resolve_money
 from src.config import local_now
 from src.web.auth import verify_password, create_session, verify_session, destroy_session
-from src.web.contracts import Balance, BudgetProgress, BulkTransactionRequest, BulkTransactionResultItem, BulkUndoRequest, CaptureFollowup, CaptureIssue, CaptureResolution, CategoryTrendPoint, DailyTotal, GoalProgress, HealthScore, HomeBriefing, MerchantRanking, MerchantSummary, OverviewSummary, QueuedResponse, SpendingAlerts, SpendingComparison, SpendingEvidence, SpendingFacts, SpendingReview, SpendingVelocity, TopMerchantsResult, TransactionCorrection, TransactionCreate, TransactionDeletion, TransactionProvenance, TransactionUndo, TransactionV2, TrendPoint, TripSummary, UpcomingPlan, PlanMutationResponse, RecurringReview, RecurringResolution, RefundMatchReview, RefundMatchResolution, DuplicateReview, DuplicateDismissal, DuplicateMergeRequest, DuplicateMergeResult, DuplicateMergeUndoResult, SubscriptionReview, WeekdayPattern, MonthForecast, ScenarioRequest, ScenarioResponse
+from src.web.contracts import Balance, BudgetProgress, BulkTransactionRequest, BulkTransactionResultItem, BulkUndoRequest, CaptureFollowup, CaptureIssue, CaptureResolution, CategoryBreakdown, CategoryTrendPoint, DailyTotal, GoalProgress, HealthScore, HomeBriefing, MerchantRanking, MerchantSummary, OverviewSummary, QueuedResponse, SpendingAlerts, SpendingComparison, SpendingEvidence, SpendingFacts, SpendingReview, SpendingVelocity, TopMerchantsResult, TransactionCorrection, TransactionCreate, TransactionDeletion, TransactionProvenance, TransactionUndo, TransactionV2, TrendPoint, TripSummary, UpcomingPlan, PlanMutationResponse, RecurringReview, RecurringResolution, RefundMatchReview, RefundMatchResolution, DuplicateReview, DuplicateDismissal, DuplicateMergeRequest, DuplicateMergeResult, DuplicateMergeUndoResult, SubscriptionReview, WeekdayPattern, MonthForecast, ScenarioRequest, ScenarioResponse
 from src.analytics import (
     load_summary,
     get_yoy_comparison,
@@ -685,6 +685,17 @@ def create_dashboard_app(
             raise HTTPException(status_code=422, detail="End must not precede start")
         storage = user_manager.get(username).storage
         return await _db(storage.get_daily_totals, start, end, timezone)
+
+    @app.get("/api/v2/spending/breakdown", response_model=CategoryBreakdown)
+    async def spending_breakdown(start: date, end: date, username: str = Depends(require_auth)):
+        """Category totals for [start, end] on the same shared-facts rules as
+        /api/v2/home's hero (spending_facts.py), not the legacy SQL
+        aggregates behind /api/v2/overview/* — see the increment-3 finding in
+        docs/plans/2026-09-16-cashe-design-language-restoration.md."""
+        if end < start:
+            raise HTTPException(status_code=422, detail="End must not precede start")
+        storage = user_manager.get(username).storage
+        return await _db(storage.get_category_breakdown, start, end, timezone)
 
     @app.get("/api/v2/transactions/{tx_id}", response_model=TransactionV2)
     async def get_transaction_v2(tx_id: int, username: str = Depends(require_auth)):

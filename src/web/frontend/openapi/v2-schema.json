@@ -478,6 +478,52 @@
         "title": "CaptureResolution",
         "type": "object"
       },
+      "CategoryBreakdown": {
+        "properties": {
+          "by_category": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Money"
+            },
+            "title": "By Category",
+            "type": "object"
+          },
+          "end": {
+            "title": "End",
+            "type": "string"
+          },
+          "indicative_count": {
+            "title": "Indicative Count",
+            "type": "integer"
+          },
+          "start": {
+            "title": "Start",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "complete",
+              "indicative",
+              "partial"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "unresolved_count": {
+            "title": "Unresolved Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "start",
+          "end",
+          "by_category",
+          "unresolved_count",
+          "indicative_count",
+          "status"
+        ],
+        "title": "CategoryBreakdown",
+        "type": "object"
+      },
       "CategoryChange": {
         "properties": {
           "category": {
@@ -5824,6 +5870,57 @@
           }
         },
         "summary": "Resolve Refund Match"
+      }
+    },
+    "/api/v2/spending/breakdown": {
+      "get": {
+        "description": "Category totals for [start, end] on the same shared-facts rules as\n/api/v2/home's hero (spending_facts.py), not the legacy SQL\naggregates behind /api/v2/overview/* \u2014 see the increment-3 finding in\ndocs/plans/2026-09-16-cashe-design-language-restoration.md.",
+        "operationId": "spending_breakdown_api_v2_spending_breakdown_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "start",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "title": "Start",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "end",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "title": "End",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CategoryBreakdown"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Spending Breakdown"
       }
     },
     "/api/v2/spending/day": {

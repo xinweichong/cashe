@@ -328,6 +328,50 @@ class TestDailyTotalsV2:
         assert response.status_code == 422
 
 
+class TestCategoryBreakdownV2:
+    @pytest.mark.asyncio
+    async def test_category_breakdown_over_range(self, client):
+        await client.post("/api/transactions", json={
+            "amount": 12.0, "merchant": "A", "category": "Food", "type": "expense", "transaction_date": "2026-09-01T09:00:00",
+        })
+        await client.post("/api/transactions", json={
+            "amount": 8.0, "merchant": "B", "category": "Transport", "type": "expense", "transaction_date": "2026-09-01T09:00:00",
+        })
+
+        response = await client.get("/api/v2/spending/breakdown?start=2026-09-01&end=2026-09-30")
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["by_category"]["Food"]["minor_units"] == 1200
+        assert body["by_category"]["Transport"]["minor_units"] == 800
+
+    @pytest.mark.asyncio
+    async def test_end_before_start_is_rejected(self, client):
+        response = await client.get("/api/v2/spending/breakdown?start=2026-09-02&end=2026-09-01")
+        assert response.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_reconciles_with_home_briefing_current_period_total(self, client):
+        """The whole point of this endpoint: its category totals must sum to
+        the same figure Home's hero shows for the identical period, unlike
+        the legacy /api/v2/overview/* aggregates (see the increment-3
+        finding in docs/plans/2026-09-16-cashe-design-language-restoration.md)."""
+        await client.post("/api/transactions", json={
+            "amount": 12.0, "merchant": "A", "category": "Food", "type": "expense",
+        })
+        await client.post("/api/transactions", json={
+            "amount": 8.0, "merchant": "B", "category": "Transport", "type": "expense",
+        })
+
+        home = (await client.get("/api/v2/home")).json()
+        current = home["facts"]["current"]
+        breakdown = (await client.get(
+            f"/api/v2/spending/breakdown?start={current['start']}&end={current['end']}"
+        )).json()
+
+        assert sum(v["minor_units"] for v in breakdown["by_category"].values()) == current["spending"]["minor_units"]
+
+
 class TestUpdateTransaction:
     @pytest.mark.asyncio
     async def test_update_transaction(self, client):

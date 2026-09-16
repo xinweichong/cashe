@@ -599,6 +599,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/spending/breakdown": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Spending Breakdown
+         * @description Category totals for [start, end] on the same shared-facts rules as
+         *     /api/v2/home's hero (spending_facts.py), not the legacy SQL
+         *     aggregates behind /api/v2/overview/* — see the increment-3 finding in
+         *     docs/plans/2026-09-16-cashe-design-language-restoration.md.
+         */
+        get: operations["spending_breakdown_api_v2_spending_breakdown_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v2/spending/day": {
         parameters: {
             query?: never;
@@ -1071,6 +1094,26 @@ export interface components {
             handled: boolean;
             /** Id */
             id: number;
+        };
+        /** CategoryBreakdown */
+        CategoryBreakdown: {
+            /** By Category */
+            by_category: {
+                [key: string]: components["schemas"]["Money"];
+            };
+            /** End */
+            end: string;
+            /** Indicative Count */
+            indicative_count: number;
+            /** Start */
+            start: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "complete" | "indicative" | "partial";
+            /** Unresolved Count */
+            unresolved_count: number;
         };
         /** CategoryChange */
         CategoryChange: {
@@ -3307,6 +3350,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RefundMatchResolution"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    spending_breakdown_api_v2_spending_breakdown_get: {
+        parameters: {
+            query: {
+                start: string;
+                end: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CategoryBreakdown"];
                 };
             };
             /** @description Validation Error */

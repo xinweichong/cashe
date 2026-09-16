@@ -75,6 +75,15 @@ class DailyTotal(BaseModel):
     status: Literal["complete", "indicative", "partial"]
 
 
+class CategoryBreakdown(BaseModel):
+    start: str
+    end: str
+    by_category: dict[str, Money]
+    unresolved_count: int
+    indicative_count: int
+    status: Literal["complete", "indicative", "partial"]
+
+
 class CategoryChange(BaseModel):
     category: str
     change: Money
