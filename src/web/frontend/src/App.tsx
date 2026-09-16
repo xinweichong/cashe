@@ -33,6 +33,9 @@ const SetPasswordPage = lazy(() => import('@/pages/SetPasswordPage').then(m => (
 const DevPreviewPage = import.meta.env.DEV
   ? lazy(() => import('@/dev/DevPreviewPage').then(m => ({ default: m.DevPreviewPage })))
   : null;
+const HomePrototype = import.meta.env.DEV
+  ? lazy(() => import('@/dev/HomePrototype').then(m => ({ default: m.HomePrototype })))
+  : null;
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -174,6 +177,7 @@ export default function App() {
               <Route path="/admin/*" element={<AdminPage />} />
               {/* Dev-only, auth-free visual harness for shared primitives — never registered in a production build */}
               {DevPreviewPage && <Route path="/dev/preview" element={<DevPreviewPage />} />}
+              {HomePrototype && <Route path="/dev/preview/home" element={<HomePrototype />} />}
               <Route
                 path="*"
                 element={
