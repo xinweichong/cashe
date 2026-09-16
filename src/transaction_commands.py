@@ -80,6 +80,7 @@ def to_v2(tx: dict, storage) -> dict:
         },
         "refund_of": refund_of,
         "refunded_by": refunded_by,
+        "excluded_from_baseline": bool(tx.get("excluded_from_baseline")),
     }
 
 

@@ -368,6 +368,48 @@ class TestTripAPI:
         assert resp.json()["destination"] == "Japan"
 
     @pytest.mark.asyncio
+    async def test_trip_baseline_exclusion_marks_enlisted_transactions(self, api):
+        ac, storage = api
+        create = await ac.post("/api/trips", json={"name": "Bali", "start_date": "2026-08-01"})
+        trip_id = create.json()["id"]
+        tx_id = storage.insert_transaction(source="manual", source_id="bali-1", amount=900.0,
+                                           merchant="Resort", transaction_date="2026-08-04T09:00:00")
+        storage.enlist_transaction(trip_id, tx_id)
+        resp = await ac.post(f"/api/v2/trips/{trip_id}/baseline-exclusion", json={"excluded": True})
+        assert resp.status_code == 200
+        assert resp.json() == {"status": "ok", "transactions_updated": 1}
+        assert storage.get_transaction(tx_id)["excluded_from_baseline"] == 1
+
+    @pytest.mark.asyncio
+    async def test_trip_baseline_exclusion_requires_a_boolean(self, api):
+        ac, _ = api
+        create = await ac.post("/api/trips", json={"name": "Bali", "start_date": "2026-08-01"})
+        trip_id = create.json()["id"]
+        resp = await ac.post(f"/api/v2/trips/{trip_id}/baseline-exclusion", json={"excluded": "yes"})
+        assert resp.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_period_baseline_exclusion_marks_transactions_in_range(self, api):
+        ac, storage = api
+        inside = storage.insert_transaction(source="manual", source_id="p-1", amount=50.0,
+                                            transaction_date="2026-08-10T09:00:00")
+        outside = storage.insert_transaction(source="manual", source_id="p-2", amount=50.0,
+                                             transaction_date="2026-08-20T09:00:00")
+        resp = await ac.post("/api/v2/baseline-exclusion/period",
+                             json={"start": "2026-08-01", "end": "2026-08-15", "excluded": True})
+        assert resp.status_code == 200
+        assert resp.json() == {"status": "ok", "transactions_updated": 1}
+        assert storage.get_transaction(inside)["excluded_from_baseline"] == 1
+        assert storage.get_transaction(outside)["excluded_from_baseline"] == 0
+
+    @pytest.mark.asyncio
+    async def test_period_baseline_exclusion_rejects_inverted_range(self, api):
+        ac, _ = api
+        resp = await ac.post("/api/v2/baseline-exclusion/period",
+                             json={"start": "2026-08-15", "end": "2026-08-01", "excluded": True})
+        assert resp.status_code == 422
+
+    @pytest.mark.asyncio
     async def test_activate_trip(self, api):
         ac, _ = api
         create = await ac.post("/api/trips", json={"name": "X", "start_date": "2026-04-01"})

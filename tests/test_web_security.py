@@ -487,6 +487,50 @@ async def test_weekday_pattern_api_requires_auth_validates_weeks_and_evidence_ma
 
 
 @pytest.mark.asyncio
+async def test_month_forecast_api_requires_auth_and_computes_from_real_data(client, authed_client, in_memory_db, monkeypatch):
+    from datetime import datetime
+    import src.forecast as forecast_module
+    monkeypatch.setattr(forecast_module, 'local_now', lambda *args: datetime(2026, 9, 28))
+    assert (await client.get('/api/v2/forecast/month')).status_code == 401
+    assert (await authed_client.get('/api/v2/forecast/month?as_of=invalid')).status_code == 422
+    storage = Storage(in_memory_db)
+    storage.insert_transaction(source='manual', source_id='sep-1', amount=50,
+                               transaction_date='2026-09-05T12:00:00')
+    response = await authed_client.get('/api/v2/forecast/month')
+    assert response.status_code == 200
+    data = response.json()
+    assert data['recorded_actual'] == {'minor_units': 5000, 'currency': 'SGD'}
+    assert data['status'] == 'unavailable'
+    assert data['reasons'] == ['insufficient_history']
+    assert data['projected_total'] is None
+
+
+@pytest.mark.asyncio
+async def test_forecast_scenario_api_requires_auth_validates_and_computes(client, authed_client, in_memory_db, monkeypatch):
+    from datetime import datetime
+    import src.forecast as forecast_module
+    monkeypatch.setattr(forecast_module, 'local_now', lambda *args: datetime(2026, 9, 28))
+    body = {"adjustments": [{"kind": "one_off_exclusion", "transaction_id": 1}]}
+    assert (await client.post('/api/v2/forecast/scenario', json=body)).status_code == 401
+    assert (await authed_client.post('/api/v2/forecast/scenario', json={"adjustments": []})).status_code == 422
+    storage = Storage(in_memory_db)
+    for day in ['2026-08-04', '2026-08-11', '2026-08-18', '2026-08-25', '2026-08-05', '2026-08-12', '2026-08-19', '2026-08-26']:
+        storage.insert_transaction(source='manual', source_id=f'hist-{day}', amount=10, merchant='Cafe',
+                                   category='Food', transaction_date=f'{day}T09:00:00')
+    tx_id = storage.insert_transaction(source='manual', source_id='splurge', amount=300, merchant='Splurge',
+                                       category='Food', transaction_date='2026-09-05T12:00:00')
+    response = await authed_client.post('/api/v2/forecast/scenario', json={
+        "adjustments": [{"kind": "one_off_exclusion", "transaction_id": tx_id}]
+    })
+    assert response.status_code == 200
+    data = response.json()
+    assert data['adjustments'][0]['amount_delta'] == {'minor_units': -30000, 'currency': 'SGD'}
+    assert data['result']['projected_total']['minor_units'] == data['base']['projected_total']['minor_units'] - 30000
+    # Read-only — no transaction, goal, or schedule state changes.
+    assert (await authed_client.get(f'/api/v2/transactions/{tx_id}')).json()['id'] == tx_id
+
+
+@pytest.mark.asyncio
 async def test_home_briefing_is_private_and_projects_safe_fields(client, authed_client, in_memory_db, monkeypatch):
     from datetime import datetime
     import src.storage as module

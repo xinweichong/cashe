@@ -362,6 +362,21 @@ def test_weekday_pattern_averages_over_complete_trailing_weeks(ledger):
     assert by_weekday[0]['average'] == {'minor_units': 0, 'currency': 'SGD'}
 
 
+def test_weekday_pattern_excludes_transactions_explicitly_flagged_unusual(ledger):
+    storage, add = ledger
+    normal = add(20, '2026-09-08T10:00:00')  # Tuesday
+    splurge = add(500, '2026-09-08T18:00:00')  # same Tuesday — a flagged one-off
+    storage.update_transaction(splurge, excluded_from_baseline=True)
+    with patch('src.spending_facts.local_now', return_value=datetime(2026, 9, 14)):
+        pattern = storage.get_weekday_pattern(weeks=1)
+    by_weekday = {item['weekday']: item for item in pattern['pattern']}
+    assert by_weekday[1]['average'] == {'minor_units': 2000, 'currency': 'SGD'}
+    assert by_weekday[1]['transaction_count'] == 1
+    # Still real spending, unaffected in evidence/actual totals.
+    evidence = storage.get_spending_evidence(date(2026, 9, 7), date(2026, 9, 13))
+    assert {normal, splurge} <= {item['id'] for item in evidence['items']}
+
+
 def test_weekday_pattern_divides_by_weeks_not_just_occurrences(ledger):
     storage, add = ledger
     add(10, '2026-08-25T10:00:00')  # Tuesday, week 1 of the trailing 2 weeks
@@ -484,6 +499,43 @@ def test_home_briefing_recent_list_uses_canonical_money_not_legacy_recompute(led
     recent = briefing['recent'][0]
     assert recent['amount'] is None
     assert recent['conversion_status'] == 'unresolved'
+
+
+def test_home_briefing_has_no_spending_target_when_no_overall_budget_exists(ledger):
+    storage, add = ledger
+    briefing = storage.get_home_briefing()
+    assert briefing['spending_target'] is None
+
+
+def test_home_briefing_computes_spending_target_from_the_overall_budget_and_shared_facts(ledger):
+    storage, add = ledger
+    storage.create_budget(category=None, amount=1000.0, period='monthly')
+    add(300, '2026-09-05T12:00:00')
+    briefing = storage.get_home_briefing()
+    assert briefing['spending_target'] == {
+        'target': {'minor_units': 100000, 'currency': 'SGD'},
+        'remaining': {'minor_units': 70000, 'currency': 'SGD'},
+    }
+    # The remaining figure must come from the same current-period spending
+    # Home already displays, not a separately computed total.
+    assert briefing['spending_target']['target']['minor_units'] - briefing['spending_target']['remaining']['minor_units'] \
+        == briefing['facts']['current']['spending']['minor_units']
+
+
+def test_home_briefing_spending_target_can_go_negative_when_over_budget(ledger):
+    storage, add = ledger
+    storage.create_budget(category=None, amount=100.0, period='monthly')
+    add(300, '2026-09-05T12:00:00')
+    briefing = storage.get_home_briefing()
+    assert briefing['spending_target']['remaining'] == {'minor_units': -20000, 'currency': 'SGD'}
+
+
+def test_home_briefing_spending_target_ignores_per_category_and_weekly_budgets(ledger):
+    storage, add = ledger
+    storage.create_budget(category='Food', amount=200.0, period='monthly')
+    storage.create_budget(category=None, amount=50.0, period='weekly')
+    briefing = storage.get_home_briefing()
+    assert briefing['spending_target'] is None
 
 
 def test_home_briefing_surfaces_a_commitment_price_increase_in_the_current_period(ledger):

@@ -122,7 +122,8 @@ class TestGoalProgress:
         goal_id = storage.create_goal(name="Fund", target_amount=1000.0)
         progress = storage.get_goal_progress(goal_id)
         assert progress["percent"] == 0.0
-        assert progress["monthly_rate"] == 0.0
+        assert progress["monthly_rate"] is None
+        assert progress["rate_window"] is None
         assert progress["months_to_target"] is None
 
     def test_percent_calculated_correctly(self, in_memory_db):
@@ -132,29 +133,69 @@ class TestGoalProgress:
         progress = storage.get_goal_progress(goal_id)
         assert progress["percent"] == pytest.approx(25.0, 0.01)
 
-    def test_monthly_rate_uses_last_3_auto_contributions(self, in_memory_db):
+    def test_a_single_contribution_has_no_elapsed_window_and_rate_is_unavailable(self, in_memory_db):
+        # R13: sparse histories must produce an unavailable estimate rather
+        # than an invented rate — a lone contribution has no elapsed window.
+        storage = Storage(connection=in_memory_db)
+        goal_id = storage.create_goal(name="Fund", target_amount=1000.0)
+        storage.add_contribution(goal_id, amount=250.0, month="2026-04", source="manual", contributed_date="2026-04-15")
+        progress = storage.get_goal_progress(goal_id)
+        assert progress["monthly_rate"] is None
+        assert progress["rate_window"] is None
+        assert progress["months_to_target"] is None
+
+    def test_same_day_contributions_have_no_elapsed_window_and_rate_is_unavailable(self, in_memory_db):
+        storage = Storage(connection=in_memory_db)
+        goal_id = storage.create_goal(name="Fund", target_amount=1000.0)
+        for amount in (100.0, 100.0, 100.0):
+            storage.add_contribution(goal_id, amount=amount, month="2026-04", source="manual", contributed_date="2026-04-15")
+        progress = storage.get_goal_progress(goal_id)
+        assert progress["monthly_rate"] is None
+
+    def test_same_contribution_amounts_on_different_dates_produce_different_rate_estimates(self, in_memory_db):
+        # The exact R13 exit check: the same three $100 contributions imply a
+        # different pace depending on whether they happened in one day or
+        # were spread across three months.
+        storage = Storage(connection=in_memory_db)
+        bunched_goal = storage.create_goal(name="Bunched", target_amount=10000.0)
+        for _ in range(3):
+            storage.add_contribution(bunched_goal, amount=100.0, month="2026-04", source="manual", contributed_date="2026-04-15")
+        bunched = storage.get_goal_progress(bunched_goal)
+
+        spread_goal = storage.create_goal(name="Spread", target_amount=10000.0)
+        for date_str in ("2026-01-15", "2026-02-15", "2026-04-15"):
+            storage.add_contribution(spread_goal, amount=100.0, month=date_str[:7], source="manual", contributed_date=date_str)
+        spread = storage.get_goal_progress(spread_goal)
+
+        assert bunched["monthly_rate"] is None  # zero elapsed days between first and last
+        assert spread["monthly_rate"] is not None
+        assert spread["monthly_rate"] != bunched["monthly_rate"]
+
+    def test_monthly_rate_uses_the_dated_elapsed_window_not_a_flat_average(self, in_memory_db):
         storage = Storage(connection=in_memory_db)
         goal_id = storage.create_goal(name="Fund", target_amount=10000.0)
-        # 4 auto contributions; only last 3 should factor into monthly_rate
-        for month, amount in [
-            ("2026-01", 100.0),
-            ("2026-02", 200.0),
-            ("2026-03", 300.0),
-            ("2026-04", 400.0),
+        # $100 + $200 + $300 + $400 = $1000 total, spread across exactly 3
+        # calendar months (Jan 1 to Apr 1 = 90 days ≈ 2.957 months).
+        for date_str, amount in [
+            ("2026-01-01", 100.0), ("2026-02-01", 200.0), ("2026-03-01", 300.0), ("2026-04-01", 400.0),
         ]:
-            storage.add_contribution(goal_id, amount=amount, month=month, source="auto")
+            storage.add_contribution(goal_id, amount=amount, month=date_str[:7], source="auto", contributed_date=date_str)
         progress = storage.get_goal_progress(goal_id)
-        # Average of 200, 300, 400 = 300
-        assert progress["monthly_rate"] == pytest.approx(300.0, 0.01)
+        expected_rate = 1000.0 / (90 / 30.436875)
+        assert progress["monthly_rate"] == pytest.approx(expected_rate, 0.01)
+        assert progress["rate_window"] == {"start": "2026-01-01", "end": "2026-04-01"}
 
     def test_months_to_target_calculated(self, in_memory_db):
         storage = Storage(connection=in_memory_db)
         goal_id = storage.create_goal(name="Fund", target_amount=1200.0)
-        # 3 auto contributions of 100 each → rate=100, saved=300, remaining=900 → 9 months
-        for month, amount in [("2026-02", 100.0), ("2026-03", 100.0), ("2026-04", 100.0)]:
-            storage.add_contribution(goal_id, amount=amount, month=month, source="auto")
+        # $100 x 3, dated Feb 1 to Apr 1 (59 days elapsed ≈ 1.94 months):
+        # rate ≈ $300 / 1.94 ≈ $154.76/mo, saved=$300, remaining=$900.
+        for date_str in ("2026-02-01", "2026-03-01", "2026-04-01"):
+            storage.add_contribution(goal_id, amount=100.0, month=date_str[:7], source="auto", contributed_date=date_str)
         progress = storage.get_goal_progress(goal_id)
-        assert progress["months_to_target"] == pytest.approx(9.0, 0.1)
+        expected_rate = 300.0 / (59 / 30.436875)
+        assert progress["monthly_rate"] == pytest.approx(expected_rate, 0.01)
+        assert progress["months_to_target"] == pytest.approx(900.0 / expected_rate, 0.01)
 
     def test_on_track_status_when_no_deadline(self, in_memory_db):
         storage = Storage(connection=in_memory_db)
@@ -291,7 +332,8 @@ class TestGoalAPIV2:
         assert goal["name"] == "Emergency Fund"
         assert goal["target_amount"] == {"minor_units": 100000, "currency": "SGD"}
         assert goal["saved_amount"] == {"minor_units": 25000, "currency": "SGD"}
-        assert goal["monthly_rate"] == {"minor_units": 25000, "currency": "SGD"}
+        assert goal["monthly_rate"] is None  # a single contribution has no elapsed window to infer a rate from
+        assert goal["rate_window"] is None
         assert goal["percent"] == 25.0
         assert len(goal["contributions"]) == 1
         contribution = goal["contributions"][0]

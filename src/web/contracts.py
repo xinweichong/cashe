@@ -145,6 +145,76 @@ class WeekdayPattern(BaseModel):
     pattern: list[WeekdaySpending]
 
 
+class WeekdayMedian(BaseModel):
+    weekday: int
+    median: Money | None
+    low: Money | None
+    high: Money | None
+    eligible_weeks: int
+
+
+class ForecastWindow(BaseModel):
+    start: str
+    end: str
+
+
+class MonthForecast(BaseModel):
+    """R12: a distinct method from the existing SpendingVelocity straight-line
+    daily-rate projection — not a replacement, both remain available. The
+    low/high fields are historical ranges (lowest/highest ever recorded on
+    each remaining weekday), never a statistical confidence interval."""
+    as_of: str
+    timezone: str
+    period_start: str
+    period_end: str
+    status: Literal["complete", "partial", "unavailable"]
+    reasons: list[Literal["insufficient_history", "unresolved_conversion", "unpriced_commitment"]]
+    recorded_actual: Money
+    confirmed_commitments: Money
+    unpriced_commitment_count: int
+    remaining_variable_estimate: Money | None
+    remaining_variable_low: Money | None
+    remaining_variable_high: Money | None
+    projected_total: Money | None
+    projected_total_low: Money | None
+    projected_total_high: Money | None
+    weekday_medians: list[WeekdayMedian]
+    lookback_window: ForecastWindow
+    assumptions: list[str]
+
+
+class ScenarioAdjustmentRequest(BaseModel):
+    """One hypothetical adjustment in a POST /api/v2/forecast/scenario
+    request. Read-only — this never writes transaction, goal, or schedule
+    state; it only previews an alternate total."""
+    kind: Literal["one_off_exclusion", "category_reduction", "subscription_removal"]
+    transaction_id: int | None = None
+    category: str | None = None
+    reduce_by_percent: float | None = None
+    subscription_id: int | None = None
+
+
+class ScenarioRequest(BaseModel):
+    adjustments: list[ScenarioAdjustmentRequest]
+
+
+class ScenarioAdjustmentResult(BaseModel):
+    kind: str
+    label: str | None
+    amount_delta: Money | None
+    note: str | None
+
+
+class ScenarioProjection(BaseModel):
+    projected_total: Money
+
+
+class ScenarioResponse(BaseModel):
+    base: MonthForecast
+    adjustments: list[ScenarioAdjustmentResult]
+    result: ScenarioProjection | None
+
+
 class SpendingEvidenceItem(BaseModel):
     id: int
     merchant: str | None
@@ -230,8 +300,17 @@ class SubscriptionPriceChange(BaseModel):
     new_date: str
 
 
+class SpendingTarget(BaseModel):
+    """R13: one overall monthly spending target — target and remaining
+    (which may be negative, meaning over target), never framed as
+    safe-to-spend or a bank balance."""
+    target: Money
+    remaining: Money
+
+
 class HomeBriefing(BaseModel):
     facts: SpendingFacts
+    spending_target: SpendingTarget | None
     recent: list[SpendingEvidenceItem]
     upcoming: list[UpcomingCharge]
     upcoming_total: Money
@@ -407,6 +486,7 @@ class TransactionV2(BaseModel):
     conversion: ConversionProvenance
     refund_of: RefundEvidence | None = None
     refunded_by: list[RefundEvidence] = []
+    excluded_from_baseline: bool = False
 
 
 class TransactionCorrection(BaseModel):
@@ -425,6 +505,12 @@ class TransactionCorrection(BaseModel):
     # parsing — the route checks model_fields_set to tell "explicitly null
     # (unlink)" apart from "omitted (leave alone)".
     refund_of_transaction_id: int | None = None
+    # R13: marks this purchase as unusual so it doesn't skew the weekday-
+    # median baselines (forecast.py, spending_facts.weekday_pattern). Never
+    # affects actual totals or evidence. Unlike refund_of_transaction_id,
+    # false and omitted are the same "don't change it" request, so no
+    # model_fields_set special-casing is needed here.
+    excluded_from_baseline: bool | None = None
     remember_category: bool = False
     expected_revision: int | None = None
 
@@ -731,6 +817,12 @@ class GoalContributionV2(BaseModel):
 
 
 class GoalProgress(BaseModel):
+    """R13: monthly_rate is derived from dated contributions over the actual
+    elapsed window between the first and last contribution (rate_window),
+    not an average of the last 3 raw amounts regardless of timing — a goal
+    with fewer than 2 contributions, or all contributions on the same day,
+    has no elapsed window to infer a rate from and reports None rather than
+    an invented number."""
     id: int
     name: str
     target_amount: Money
@@ -738,7 +830,8 @@ class GoalProgress(BaseModel):
     target_date: str | None
     status: Literal["active", "completed", "paused"]
     percent: float
-    monthly_rate: Money
+    monthly_rate: Money | None
+    rate_window: ForecastWindow | None
     months_to_target: float | None
     on_track: Literal["on_track", "ahead", "behind"] | None
     contributions: list[GoalContributionV2]

@@ -2,20 +2,60 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
-import { briefingApi, type UpcomingPlan } from '@/api/briefing';
+import { briefingApi, type MonthForecast, type UpcomingPlan } from '@/api/briefing';
 import { PlanPage } from '../PlanPage';
 
-vi.mock('@/api/briefing', async importOriginal => ({ ...await importOriginal<typeof import('@/api/briefing')>(), briefingApi: { upcoming: vi.fn(), updatePlannedCharge: vi.fn(), dismissPlannedCharge: vi.fn() } }));
+vi.mock('@/api/briefing', async importOriginal => ({ ...await importOriginal<typeof import('@/api/briefing')>(), briefingApi: { upcoming: vi.fn(), updatePlannedCharge: vi.fn(), dismissPlannedCharge: vi.fn(), monthForecast: vi.fn() } }));
 const report: UpcomingPlan = {
   start: '2026-09-08', end: '2026-10-07', timezone: 'Asia/Singapore', enabled: true,
   items: [{ id: 1, subscription_id: 3, label: 'Internet', date: '2026-09-09', frequency: 'monthly', schedule_status: 'possibly_cancelled', confirmation_source: 'unknown', amount: null, date_basis: 'schedule', amount_basis: 'unknown', amount_basis_transaction_id: null }],
   total: 1, limit: 50, offset: 0, known_total: { minor_units: 0, currency: 'SGD' }, unknown_count: 1, status: 'partial',
 };
-beforeEach(() => { vi.resetAllMocks(); vi.mocked(briefingApi.upcoming).mockResolvedValue(report); });
+const forecast: MonthForecast = {
+  as_of: '2026-09-16', timezone: 'Asia/Singapore', period_start: '2026-09-01', period_end: '2026-09-30',
+  status: 'unavailable', reasons: ['insufficient_history'],
+  recorded_actual: { minor_units: 5000, currency: 'SGD' }, confirmed_commitments: { minor_units: 0, currency: 'SGD' },
+  unpriced_commitment_count: 0, remaining_variable_estimate: null, remaining_variable_low: null, remaining_variable_high: null,
+  projected_total: null, projected_total_low: null, projected_total_high: null,
+  weekday_medians: [], lookback_window: { start: '2026-07-20', end: '2026-09-13' }, assumptions: [],
+};
+beforeEach(() => { vi.resetAllMocks(); vi.mocked(briefingApi.upcoming).mockResolvedValue(report); vi.mocked(briefingApi.monthForecast).mockResolvedValue(forecast); });
 afterEach(cleanup);
 function show() {
   return render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter><PlanPage /></MemoryRouter></QueryClientProvider>);
 }
+
+test('projection card explains unavailability rather than guessing', async () => {
+  show();
+  expect(await screen.findByText(/Not enough recorded history yet/)).toBeTruthy();
+});
+
+test('projection card shows the projected total, its historical range, and the calculation notes', async () => {
+  vi.mocked(briefingApi.monthForecast).mockResolvedValue({
+    ...forecast, status: 'complete', reasons: [],
+    recorded_actual: { minor_units: 10000, currency: 'SGD' },
+    projected_total: { minor_units: 30000, currency: 'SGD' },
+    projected_total_low: { minor_units: 25000, currency: 'SGD' },
+    projected_total_high: { minor_units: 40000, currency: 'SGD' },
+    assumptions: ['Test assumption one.'],
+  });
+  show();
+  expect(await screen.findByText('$300.00')).toBeTruthy();
+  expect(screen.getByText(/\$250\.00.*\$400\.00/)).toBeTruthy();
+  fireEvent.click(screen.getByText('How this is calculated'));
+  expect(screen.getByText('Test assumption one.')).toBeTruthy();
+});
+
+test('projection card flags an unpriced commitment without hiding the rest of the projection', async () => {
+  vi.mocked(briefingApi.monthForecast).mockResolvedValue({
+    ...forecast, status: 'partial', reasons: ['unpriced_commitment'], unpriced_commitment_count: 1,
+    projected_total: { minor_units: 10000, currency: 'SGD' },
+    projected_total_low: { minor_units: 10000, currency: 'SGD' },
+    projected_total_high: { minor_units: 10000, currency: 'SGD' },
+  });
+  show();
+  expect(await screen.findByText(/1 upcoming charge has no known amount/)).toBeTruthy();
+});
 
 test('shows uncertain charges and links directly to schedule controls', async () => {
   show();

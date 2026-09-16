@@ -9,7 +9,8 @@ export function HomePage() {
   const query = useQuery({ queryKey: ['home-briefing'], queryFn: briefingApi.home });
   if (!query.data && query.isError) return <div role="alert"><LoadFailed onRetry={() => void query.refetch()} /></div>;
   if (!query.data) return <p role="status" className="p-6 text-muted">Preparing your briefing…</p>;
-  const { facts, freshness, recent, upcoming, upcoming_total, upcoming_unknown_count, increased_commitments, capture_issue_count, followup_issue_count, review_count, recurring_suggestion_count } = query.data;
+  const { facts, spending_target, freshness, recent, upcoming, upcoming_total, upcoming_unknown_count, increased_commitments, capture_issue_count, followup_issue_count, review_count, recurring_suggestion_count } = query.data;
+  const overTarget = !!spending_target && spending_target.remaining.minor_units < 0;
   const unresolved = facts.current.unresolved_count + facts.undated_count;
   const netFlowNegative = !!facts.current.recorded_net_flow && facts.current.recorded_net_flow.minor_units < 0;
   const driver = facts.top_category_driver;
@@ -26,6 +27,9 @@ export function HomePage() {
         <p className="mt-4">{facts.change ? `${formatMoney({ ...facts.change, minor_units: Math.abs(facts.change.minor_units) })} ${facts.change.minor_units >= 0 ? 'more' : 'less'} than the comparable period last month.` : 'A comparison is unavailable while some records need review.'}</p>
         <p className="text-sm text-muted">Comparing {facts.comparison_current.start}–{facts.comparison_current.end} with {facts.previous.start}–{facts.previous.end}.</p>
         {facts.current.income && <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2"><Link className="text-teal min-h-11 inline-flex items-center" to={evidenceLink(facts.current, undefined, 'income')}>Recorded income {formatMoney(facts.current.income)}</Link>{facts.current.recorded_net_flow && <p className={`py-2 ${netFlowNegative ? 'text-warning' : ''}`}>Recorded net {netFlowNegative ? 'outflow' : 'flow'} {formatMoney(facts.current.recorded_net_flow)}</p>}</div>}
+        {spending_target && <p className={`mt-4 pt-4 border-t border-border ${overTarget ? 'text-warning' : ''}`}>{overTarget
+          ? `${formatMoney({ ...spending_target.remaining, minor_units: Math.abs(spending_target.remaining.minor_units) })} over your ${formatMoney(spending_target.target)} monthly target.`
+          : `${formatMoney(spending_target.remaining)} remaining of your ${formatMoney(spending_target.target)} monthly target.`}</p>}
       </PageCard>
       <PageCard title="What changed">
         {facts.category_changes.slice(0, 3).map(item => <div key={item.category} className="py-3 border-b border-border last:border-0">

@@ -89,6 +89,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/baseline-exclusion/period": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Set Period Baseline Exclusion */
+        post: operations["set_period_baseline_exclusion_api_v2_baseline_exclusion_period_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v2/budgets/progress": {
         parameters: {
             query?: never;
@@ -270,6 +287,40 @@ export interface paths {
         put?: never;
         /** Dismiss Duplicate */
         post: operations["dismiss_duplicate_api_v2_duplicates__transaction_a_id___transaction_b_id__dismiss_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/forecast/month": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Month Forecast */
+        get: operations["month_forecast_api_v2_forecast_month_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/forecast/scenario": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Forecast Scenario */
+        post: operations["forecast_scenario_api_v2_forecast_scenario_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -806,6 +857,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/trips/{trip_id}/baseline-exclusion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Set Trip Baseline Exclusion */
+        post: operations["set_trip_baseline_exclusion_api_v2_trips__trip_id__baseline_exclusion_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v2/trips/{trip_id}/summary": {
         parameters: {
             query?: never;
@@ -1130,6 +1198,13 @@ export interface components {
             /** Source */
             source: string;
         };
+        /** ForecastWindow */
+        ForecastWindow: {
+            /** End */
+            end: string;
+            /** Start */
+            start: string;
+        };
         /** FrequencyDriver */
         FrequencyDriver: {
             /**
@@ -1165,13 +1240,21 @@ export interface components {
              */
             source: "auto" | "manual";
         };
-        /** GoalProgress */
+        /**
+         * GoalProgress
+         * @description R13: monthly_rate is derived from dated contributions over the actual
+         *     elapsed window between the first and last contribution (rate_window),
+         *     not an average of the last 3 raw amounts regardless of timing — a goal
+         *     with fewer than 2 contributions, or all contributions on the same day,
+         *     has no elapsed window to infer a rate from and reports None rather than
+         *     an invented number.
+         */
         GoalProgress: {
             /** Contributions */
             contributions: components["schemas"]["GoalContributionV2"][];
             /** Id */
             id: number;
-            monthly_rate: components["schemas"]["Money"];
+            monthly_rate: components["schemas"]["Money"] | null;
             /** Months To Target */
             months_to_target: number | null;
             /** Name */
@@ -1180,6 +1263,7 @@ export interface components {
             on_track: ("on_track" | "ahead" | "behind") | null;
             /** Percent */
             percent: number;
+            rate_window: components["schemas"]["ForecastWindow"] | null;
             saved_amount: components["schemas"]["Money"];
             /**
              * Status
@@ -1241,6 +1325,7 @@ export interface components {
             recurring_suggestion_count: number;
             /** Review Count */
             review_count: number;
+            spending_target: components["schemas"]["SpendingTarget"] | null;
             /** Upcoming */
             upcoming: components["schemas"]["UpcomingCharge"][];
             upcoming_total: components["schemas"]["Money"];
@@ -1309,6 +1394,45 @@ export interface components {
             currency: "SGD";
             /** Minor Units */
             minor_units: number;
+        };
+        /**
+         * MonthForecast
+         * @description R12: a distinct method from the existing SpendingVelocity straight-line
+         *     daily-rate projection — not a replacement, both remain available. The
+         *     low/high fields are historical ranges (lowest/highest ever recorded on
+         *     each remaining weekday), never a statistical confidence interval.
+         */
+        MonthForecast: {
+            /** As Of */
+            as_of: string;
+            /** Assumptions */
+            assumptions: string[];
+            confirmed_commitments: components["schemas"]["Money"];
+            lookback_window: components["schemas"]["ForecastWindow"];
+            /** Period End */
+            period_end: string;
+            /** Period Start */
+            period_start: string;
+            projected_total: components["schemas"]["Money"] | null;
+            projected_total_high: components["schemas"]["Money"] | null;
+            projected_total_low: components["schemas"]["Money"] | null;
+            /** Reasons */
+            reasons: ("insufficient_history" | "unresolved_conversion" | "unpriced_commitment")[];
+            recorded_actual: components["schemas"]["Money"];
+            remaining_variable_estimate: components["schemas"]["Money"] | null;
+            remaining_variable_high: components["schemas"]["Money"] | null;
+            remaining_variable_low: components["schemas"]["Money"] | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "complete" | "partial" | "unavailable";
+            /** Timezone */
+            timezone: string;
+            /** Unpriced Commitment Count */
+            unpriced_commitment_count: number;
+            /** Weekday Medians */
+            weekday_medians: components["schemas"]["WeekdayMedian"][];
         };
         /** NewMerchant */
         NewMerchant: {
@@ -1518,6 +1642,53 @@ export interface components {
             /** Merchant */
             merchant: string | null;
         };
+        /**
+         * ScenarioAdjustmentRequest
+         * @description One hypothetical adjustment in a POST /api/v2/forecast/scenario
+         *     request. Read-only — this never writes transaction, goal, or schedule
+         *     state; it only previews an alternate total.
+         */
+        ScenarioAdjustmentRequest: {
+            /** Category */
+            category?: string | null;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "one_off_exclusion" | "category_reduction" | "subscription_removal";
+            /** Reduce By Percent */
+            reduce_by_percent?: number | null;
+            /** Subscription Id */
+            subscription_id?: number | null;
+            /** Transaction Id */
+            transaction_id?: number | null;
+        };
+        /** ScenarioAdjustmentResult */
+        ScenarioAdjustmentResult: {
+            amount_delta: components["schemas"]["Money"] | null;
+            /** Kind */
+            kind: string;
+            /** Label */
+            label: string | null;
+            /** Note */
+            note: string | null;
+        };
+        /** ScenarioProjection */
+        ScenarioProjection: {
+            projected_total: components["schemas"]["Money"];
+        };
+        /** ScenarioRequest */
+        ScenarioRequest: {
+            /** Adjustments */
+            adjustments: components["schemas"]["ScenarioAdjustmentRequest"][];
+        };
+        /** ScenarioResponse */
+        ScenarioResponse: {
+            /** Adjustments */
+            adjustments: components["schemas"]["ScenarioAdjustmentResult"][];
+            base: components["schemas"]["MonthForecast"];
+            result: components["schemas"]["ScenarioProjection"] | null;
+        };
         /** SpendingAlerts */
         SpendingAlerts: {
             /** Anomalies */
@@ -1644,6 +1815,16 @@ export interface components {
             /** Reasons */
             reasons: ("missing_date" | "unresolved_money" | "unknown_type" | "missing_merchant" | "missing_category")[];
         };
+        /**
+         * SpendingTarget
+         * @description R13: one overall monthly spending target — target and remaining
+         *     (which may be negative, meaning over target), never framed as
+         *     safe-to-spend or a bank balance.
+         */
+        SpendingTarget: {
+            remaining: components["schemas"]["Money"];
+            target: components["schemas"]["Money"];
+        };
         /** SpendingVelocity */
         SpendingVelocity: {
             current_mtd: components["schemas"]["Money"];
@@ -1755,6 +1936,8 @@ export interface components {
             description?: string | null;
             /** Exchange Rate */
             exchange_rate?: number | null;
+            /** Excluded From Baseline */
+            excluded_from_baseline?: boolean | null;
             /** Expected Revision */
             expected_revision?: number | null;
             /** Merchant */
@@ -1819,6 +2002,11 @@ export interface components {
             deleted_at: string;
             /** Description */
             description: string | null;
+            /**
+             * Excluded From Baseline
+             * @default false
+             */
+            excluded_from_baseline: boolean;
             /** Id */
             id: number;
             /** Ingested At */
@@ -1876,6 +2064,11 @@ export interface components {
             conversion: components["schemas"]["ConversionProvenance"];
             /** Description */
             description: string | null;
+            /**
+             * Excluded From Baseline
+             * @default false
+             */
+            excluded_from_baseline: boolean;
             /** Id */
             id: number;
             /** Ingested At */
@@ -2034,6 +2227,16 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /** WeekdayMedian */
+        WeekdayMedian: {
+            /** Eligible Weeks */
+            eligible_weeks: number;
+            high: components["schemas"]["Money"] | null;
+            low: components["schemas"]["Money"] | null;
+            median: components["schemas"]["Money"] | null;
+            /** Weekday */
+            weekday: number;
         };
         /** WeekdayPattern */
         WeekdayPattern: {
@@ -2194,6 +2397,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SpendingVelocity"];
+                };
+            };
+        };
+    };
+    set_period_baseline_exclusion_api_v2_baseline_exclusion_period_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
         };
@@ -2522,6 +2745,70 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DuplicateDismissal"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    month_forecast_api_v2_forecast_month_get: {
+        parameters: {
+            query?: {
+                as_of?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MonthForecast"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    forecast_scenario_api_v2_forecast_scenario_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScenarioRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScenarioResponse"];
                 };
             };
             /** @description Validation Error */
@@ -3600,6 +3887,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TransactionV2"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_trip_baseline_exclusion_api_v2_trips__trip_id__baseline_exclusion_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                trip_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

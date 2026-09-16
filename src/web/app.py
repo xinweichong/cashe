@@ -24,7 +24,7 @@ from src.money import to_minor_units, from_minor_units
 from src.spending_facts import resolve_money
 from src.config import local_now
 from src.web.auth import verify_password, create_session, verify_session, destroy_session
-from src.web.contracts import Balance, BudgetProgress, BulkTransactionRequest, BulkTransactionResultItem, BulkUndoRequest, CaptureFollowup, CaptureIssue, CaptureResolution, CategoryTrendPoint, DailyTotal, GoalProgress, HealthScore, HomeBriefing, MerchantRanking, MerchantSummary, OverviewSummary, QueuedResponse, SpendingAlerts, SpendingComparison, SpendingEvidence, SpendingFacts, SpendingReview, SpendingVelocity, TopMerchantsResult, TransactionCorrection, TransactionCreate, TransactionDeletion, TransactionProvenance, TransactionUndo, TransactionV2, TrendPoint, TripSummary, UpcomingPlan, PlanMutationResponse, RecurringReview, RecurringResolution, RefundMatchReview, RefundMatchResolution, DuplicateReview, DuplicateDismissal, DuplicateMergeRequest, DuplicateMergeResult, DuplicateMergeUndoResult, SubscriptionReview, WeekdayPattern
+from src.web.contracts import Balance, BudgetProgress, BulkTransactionRequest, BulkTransactionResultItem, BulkUndoRequest, CaptureFollowup, CaptureIssue, CaptureResolution, CategoryTrendPoint, DailyTotal, GoalProgress, HealthScore, HomeBriefing, MerchantRanking, MerchantSummary, OverviewSummary, QueuedResponse, SpendingAlerts, SpendingComparison, SpendingEvidence, SpendingFacts, SpendingReview, SpendingVelocity, TopMerchantsResult, TransactionCorrection, TransactionCreate, TransactionDeletion, TransactionProvenance, TransactionUndo, TransactionV2, TrendPoint, TripSummary, UpcomingPlan, PlanMutationResponse, RecurringReview, RecurringResolution, RefundMatchReview, RefundMatchResolution, DuplicateReview, DuplicateDismissal, DuplicateMergeRequest, DuplicateMergeResult, DuplicateMergeUndoResult, SubscriptionReview, WeekdayPattern, MonthForecast, ScenarioRequest, ScenarioResponse
 from src.analytics import (
     load_summary,
     get_yoy_comparison,
@@ -381,6 +381,23 @@ def create_dashboard_app(
         try:
             return await _db(storage.get_weekday_pattern, None, weeks, timezone)
         except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from None
+
+    @app.get("/api/v2/forecast/month", response_model=MonthForecast)
+    async def month_forecast(as_of: date | None = None, storage=Depends(_get_storage)):
+        try:
+            return await _db(storage.get_month_forecast, as_of, timezone)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from None
+
+    @app.post("/api/v2/forecast/scenario", response_model=ScenarioResponse)
+    async def forecast_scenario(request: ScenarioRequest, storage=Depends(_get_storage)):
+        if not request.adjustments:
+            raise HTTPException(status_code=422, detail="At least one adjustment is required")
+        adjustments = [a.model_dump(exclude_none=True) for a in request.adjustments]
+        try:
+            return await _db(storage.get_forecast_scenario, adjustments, None, timezone)
+        except (KeyError, ValueError) as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from None
 
     # ── Current user ──────────────────────────────────────────────────────────
@@ -1626,7 +1643,8 @@ def create_dashboard_app(
                 "target_date": progress["target_date"],
                 "status": progress["status"],
                 "percent": progress["percent"],
-                "monthly_rate": _sgd_money(progress["monthly_rate"]),
+                "monthly_rate": _sgd_money(progress["monthly_rate"]) if progress["monthly_rate"] is not None else None,
+                "rate_window": progress["rate_window"],
                 "months_to_target": progress["months_to_target"],
                 "on_track": progress["on_track"],
                 "contributions": [
@@ -1802,6 +1820,26 @@ def create_dashboard_app(
         except ValueError as e:
             raise HTTPException(status_code=404, detail=str(e))
         return await _db(storage.get_trip, trip_id)
+
+    @app.post("/api/v2/trips/{trip_id}/baseline-exclusion")
+    async def set_trip_baseline_exclusion(trip_id: int, request: Request, storage=Depends(_get_storage)):
+        body = await request.json()
+        excluded = body.get("excluded")
+        if not isinstance(excluded, bool):
+            raise HTTPException(status_code=422, detail="excluded must be a boolean")
+        count = await _db(storage.set_trip_baseline_exclusion, trip_id, excluded)
+        return {"status": "ok", "transactions_updated": count}
+
+    @app.post("/api/v2/baseline-exclusion/period")
+    async def set_period_baseline_exclusion(request: Request, storage=Depends(_get_storage)):
+        body = await request.json()
+        start, end, excluded = body.get("start"), body.get("end"), body.get("excluded")
+        if not isinstance(start, str) or not isinstance(end, str) or end < start:
+            raise HTTPException(status_code=422, detail="start/end must be ISO dates with start <= end")
+        if not isinstance(excluded, bool):
+            raise HTTPException(status_code=422, detail="excluded must be a boolean")
+        count = await _db(storage.set_period_baseline_exclusion, start, end, excluded)
+        return {"status": "ok", "transactions_updated": count}
 
     @app.delete("/api/trips/{trip_id}")
     async def delete_trip(trip_id: int, storage=Depends(_get_storage)):

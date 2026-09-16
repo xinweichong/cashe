@@ -4,6 +4,7 @@ import { request } from './client';
 
 export type SubscriptionPriceChange = components['schemas']['SubscriptionPriceChange'];
 export type WeekdayPattern = components['schemas']['WeekdayPattern'];
+export type MonthForecast = components['schemas']['MonthForecast'];
 
 export interface Money { minor_units: number; currency: 'SGD' }
 export interface SpendingPeriod {
@@ -35,8 +36,9 @@ export interface EvidenceItem {
   id: number; merchant: string | null; category: string; type: string; date: string | null;
   amount: Money | null; conversion_status: 'native' | 'indicative' | 'unresolved';
 }
+export interface SpendingTarget { target: Money; remaining: Money }
 export interface HomeBriefing {
-  facts: SpendingFacts; recent: EvidenceItem[];
+  facts: SpendingFacts; spending_target: SpendingTarget | null; recent: EvidenceItem[];
   upcoming: { id: number; subscription_id: number; label: string; date: string; amount: Money | null }[];
   upcoming_total: Money; upcoming_unknown_count: number;
   increased_commitments: SubscriptionPriceChange[];
@@ -108,6 +110,7 @@ export const briefingApi = {
   home: () => request<HomeBriefing>('/api/v2/home'),
   month: (as_of?: string) => request<SpendingFacts>(`/api/v2/spending/month${as_of ? `?as_of=${as_of}` : ''}`),
   weekdayPattern: (weeks = 8) => request<WeekdayPattern>(`/api/v2/spending/weekday-pattern?weeks=${weeks}`),
+  monthForecast: (as_of?: string) => request<MonthForecast>(`/api/v2/forecast/month${as_of ? `?as_of=${as_of}` : ''}`),
   spendingReview: (offset = 0) => request<SpendingReview>(`/api/v2/spending/review?limit=50&offset=${offset}`),
   evidence: (query: URLSearchParams) => request<{ items: EvidenceItem[]; total: number; limit: number; offset: number }>(`/api/v2/spending/evidence?${query}`),
   captureIssues: (offset = 0, includeHandled = false) => request<CaptureIssue[]>(`/api/v2/capture/issues?limit=50&offset=${offset}&include_handled=${includeHandled}`),

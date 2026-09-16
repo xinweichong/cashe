@@ -256,7 +256,8 @@ function goalV2ToLegacy(g: GoalProgressV2): GoalProgress {
     target_date: g.target_date,
     status: g.status,
     percent: g.percent,
-    monthly_rate: g.monthly_rate.minor_units / 100,
+    monthly_rate: g.monthly_rate ? g.monthly_rate.minor_units / 100 : null,
+    rate_window: g.rate_window,
     months_to_target: g.months_to_target,
     on_track: g.on_track,
     contributions: g.contributions.map(c => ({
@@ -449,11 +450,13 @@ function GoalCard({ g, onContribute, onEdit, onDelete }: {
           <p className="text-sm text-foreground mt-1">
             ${g.saved_amount.toFixed(0)} saved of ${g.target_amount.toFixed(0)}
           </p>
-          {g.monthly_rate > 0 && (
+          {g.monthly_rate != null && g.monthly_rate > 0 ? (
             <p className="text-xs text-muted font-mono mt-0.5">
               ~${g.monthly_rate.toFixed(0)}/mo
               {g.months_to_target != null && ` · ${g.months_to_target.toFixed(0)} months to target`}
             </p>
+          ) : g.contributions.length > 0 && (
+            <p className="text-xs text-muted mt-0.5">Not enough dated contribution history yet to estimate a pace.</p>
           )}
         </div>
       </div>

@@ -86,6 +86,16 @@ class Storage:
         return weekday_pattern(self._conn, as_of, weeks, timezone)
 
     @_locked
+    def get_month_forecast(self, as_of=None, timezone="Asia/Singapore") -> dict:
+        from src.forecast import month_forecast
+        return month_forecast(self._conn, as_of, timezone)
+
+    @_locked
+    def get_forecast_scenario(self, adjustments: list[dict], as_of=None, timezone="Asia/Singapore") -> dict:
+        from src.forecast import scenario
+        return scenario(self._conn, adjustments, as_of, timezone)
+
+    @_locked
     def get_daily_totals(self, start, end, timezone="Asia/Singapore") -> list[dict]:
         from src.spending_facts import daily_totals
         return daily_totals(self._conn, start, end, timezone)
@@ -210,9 +220,23 @@ class Storage:
 
     @_locked
     def get_home_briefing(self, timezone="Asia/Singapore") -> dict:
+        from src.money import to_minor_units
         from src.spending_facts import convert_legacy_sgd, money, resolve_money
         today = local_now(timezone).date()
         facts = self.get_month_spending_facts(today, timezone)
+        # R13: one overall spending target, reusing the existing budget
+        # setting (category IS NULL, monthly) and the same current-period
+        # spending figure Home already shows — never a separately computed
+        # total that could silently disagree, and never framed as
+        # safe-to-spend or a bank balance, just "remaining against target".
+        spending_target = None
+        overall_budget = self._conn.execute(
+            "SELECT amount FROM budgets WHERE category IS NULL AND period = 'monthly'"
+        ).fetchone()
+        if overall_budget is not None:
+            target_minor = to_minor_units(overall_budget["amount"], "SGD")
+            spent_minor = facts["current"]["spending"]["minor_units"]
+            spending_target = {"target": money(target_minor), "remaining": money(target_minor - spent_minor)}
         recent = []
         for row in self.query_transactions(limit=5):
             minor, status = resolve_money(row)
@@ -252,7 +276,7 @@ class Storage:
                 if change["change"]["minor_units"] > 0 and change["new_date"] >= current_start
             ]
         return {
-            "facts": facts, "recent": recent, "upcoming": upcoming,
+            "facts": facts, "spending_target": spending_target, "recent": recent, "upcoming": upcoming,
             "upcoming_total": money(sum(item["amount"]["minor_units"] for item in upcoming if item["amount"])),
             "upcoming_unknown_count": sum(item["amount"] is None for item in upcoming),
             "increased_commitments": increased_commitments,
@@ -1910,6 +1934,36 @@ class Storage:
         return len(ids)
 
     @_locked
+    def set_trip_baseline_exclusion(self, trip_id: int, excluded: bool) -> int:
+        """R13: mark every transaction currently enlisted in a trip as
+        unusual (or not), so it stops (or resumes) skewing the weekday-median
+        baselines. A point-in-time bulk decision, not a live join — a
+        transaction added to the trip later is unaffected until explicitly
+        included. Reuses update_transaction per row, same precedent as
+        apply_category_rule_to_existing, so mutation history/undo work
+        exactly as they do for any other correction."""
+        ids = [r["transaction_id"] for r in self._conn.execute(
+            "SELECT transaction_id FROM trip_transactions WHERE trip_id = ?", (trip_id,)
+        ).fetchall()]
+        for tx_id in ids:
+            self.update_transaction(tx_id, excluded_from_baseline=excluded)
+        return len(ids)
+
+    @_locked
+    def set_period_baseline_exclusion(self, start_date: str, end_date: str, excluded: bool) -> int:
+        """R13: mark every expense/refund transaction in [start_date,
+        end_date] as unusual (or not) — the "period" case, for spending that
+        isn't trip-linked (e.g. a home renovation)."""
+        ids = [r["id"] for r in self._conn.execute(
+            """SELECT id FROM transactions WHERE DATE(transaction_date) >= DATE(?)
+               AND DATE(transaction_date) <= DATE(?) AND (type IS NULL OR type IN ('expense', 'refund'))""",
+            (start_date, end_date),
+        ).fetchall()]
+        for tx_id in ids:
+            self.update_transaction(tx_id, excluded_from_baseline=excluded)
+        return len(ids)
+
+    @_locked
     def get_merchant_trend(self, merchant: str, months: int = 6) -> dict:
         """Return monthly spend totals for a merchant over the last N months."""
         rows = self._conn.execute(
@@ -2223,15 +2277,30 @@ class Storage:
         goal = dict(row)
         contributions = self.get_contributions(goal_id)
 
-        # Monthly rate: average of last 3 contributions
-        recent = [c["amount"] for c in contributions[-3:]]
-        monthly_rate = sum(recent) / len(recent) if recent else 0.0
+        # R13: monthly rate over the dated elapsed window between the first and
+        # last contribution — not an average of the last 3 contribution amounts
+        # regardless of when they happened, which let the same three amounts
+        # imply wildly different paces depending on whether they were spread
+        # over one week or six months. A single contribution (or none) has no
+        # elapsed window to infer a rate from, so it's reported as unavailable
+        # (None) rather than an invented number.
+        monthly_rate = None
+        rate_window = None
+        if len(contributions) >= 2:
+            first_date = datetime.strptime(contributions[0]["contributed_date"], "%Y-%m-%d")
+            last_date = datetime.strptime(contributions[-1]["contributed_date"], "%Y-%m-%d")
+            elapsed_days = (last_date - first_date).days
+            if elapsed_days > 0:
+                total_contributed = sum(c["amount"] for c in contributions)
+                elapsed_months = elapsed_days / 30.436875  # average Gregorian month length
+                monthly_rate = total_contributed / elapsed_months
+                rate_window = {"start": contributions[0]["contributed_date"], "end": contributions[-1]["contributed_date"]}
 
         saved = goal["saved_amount"]
         target = goal["target_amount"]
         percent = round(saved / target * 100, 1) if target > 0 else 0.0
         remaining = target - saved
-        months_to_target = round(remaining / monthly_rate, 1) if monthly_rate > 0 else None
+        months_to_target = round(remaining / monthly_rate, 1) if monthly_rate else None
 
         on_track = None
         if goal["target_date"] and months_to_target is not None:
@@ -2248,7 +2317,8 @@ class Storage:
         return {
             **goal,
             "percent": percent,
-            "monthly_rate": round(monthly_rate, 2),
+            "monthly_rate": round(monthly_rate, 2) if monthly_rate is not None else None,
+            "rate_window": rate_window,
             "months_to_target": months_to_target,
             "on_track": on_track,
             "contributions": contributions,

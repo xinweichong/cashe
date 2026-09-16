@@ -851,6 +851,24 @@
         "title": "DuplicateSide",
         "type": "object"
       },
+      "ForecastWindow": {
+        "properties": {
+          "end": {
+            "title": "End",
+            "type": "string"
+          },
+          "start": {
+            "title": "Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "start",
+          "end"
+        ],
+        "title": "ForecastWindow",
+        "type": "object"
+      },
       "FrequencyDriver": {
         "properties": {
           "classification": {
@@ -954,6 +972,7 @@
         "type": "object"
       },
       "GoalProgress": {
+        "description": "R13: monthly_rate is derived from dated contributions over the actual\nelapsed window between the first and last contribution (rate_window),\nnot an average of the last 3 raw amounts regardless of timing \u2014 a goal\nwith fewer than 2 contributions, or all contributions on the same day,\nhas no elapsed window to infer a rate from and reports None rather than\nan invented number.",
         "properties": {
           "contributions": {
             "items": {
@@ -967,7 +986,14 @@
             "type": "integer"
           },
           "monthly_rate": {
-            "$ref": "#/components/schemas/Money"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Money"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "months_to_target": {
             "anyOf": [
@@ -1003,6 +1029,16 @@
           "percent": {
             "title": "Percent",
             "type": "number"
+          },
+          "rate_window": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ForecastWindow"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "saved_amount": {
             "$ref": "#/components/schemas/Money"
@@ -1040,6 +1076,7 @@
           "status",
           "percent",
           "monthly_rate",
+          "rate_window",
           "months_to_target",
           "on_track",
           "contributions"
@@ -1192,6 +1229,16 @@
             "title": "Review Count",
             "type": "integer"
           },
+          "spending_target": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SpendingTarget"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "upcoming": {
             "items": {
               "$ref": "#/components/schemas/UpcomingCharge"
@@ -1209,6 +1256,7 @@
         },
         "required": [
           "facts",
+          "spending_target",
           "recent",
           "upcoming",
           "upcoming_total",
@@ -1396,6 +1444,157 @@
           "minor_units"
         ],
         "title": "Money",
+        "type": "object"
+      },
+      "MonthForecast": {
+        "description": "R12: a distinct method from the existing SpendingVelocity straight-line\ndaily-rate projection \u2014 not a replacement, both remain available. The\nlow/high fields are historical ranges (lowest/highest ever recorded on\neach remaining weekday), never a statistical confidence interval.",
+        "properties": {
+          "as_of": {
+            "title": "As Of",
+            "type": "string"
+          },
+          "assumptions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Assumptions",
+            "type": "array"
+          },
+          "confirmed_commitments": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "lookback_window": {
+            "$ref": "#/components/schemas/ForecastWindow"
+          },
+          "period_end": {
+            "title": "Period End",
+            "type": "string"
+          },
+          "period_start": {
+            "title": "Period Start",
+            "type": "string"
+          },
+          "projected_total": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Money"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "projected_total_high": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Money"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "projected_total_low": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Money"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reasons": {
+            "items": {
+              "enum": [
+                "insufficient_history",
+                "unresolved_conversion",
+                "unpriced_commitment"
+              ],
+              "type": "string"
+            },
+            "title": "Reasons",
+            "type": "array"
+          },
+          "recorded_actual": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "remaining_variable_estimate": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Money"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "remaining_variable_high": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Money"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "remaining_variable_low": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Money"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "enum": [
+              "complete",
+              "partial",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          },
+          "unpriced_commitment_count": {
+            "title": "Unpriced Commitment Count",
+            "type": "integer"
+          },
+          "weekday_medians": {
+            "items": {
+              "$ref": "#/components/schemas/WeekdayMedian"
+            },
+            "title": "Weekday Medians",
+            "type": "array"
+          }
+        },
+        "required": [
+          "as_of",
+          "timezone",
+          "period_start",
+          "period_end",
+          "status",
+          "reasons",
+          "recorded_actual",
+          "confirmed_commitments",
+          "unpriced_commitment_count",
+          "remaining_variable_estimate",
+          "remaining_variable_low",
+          "remaining_variable_high",
+          "projected_total",
+          "projected_total_low",
+          "projected_total_high",
+          "weekday_medians",
+          "lookback_window",
+          "assumptions"
+        ],
+        "title": "MonthForecast",
         "type": "object"
       },
       "NewMerchant": {
@@ -1976,6 +2175,176 @@
         "title": "RefundMatchSide",
         "type": "object"
       },
+      "ScenarioAdjustmentRequest": {
+        "description": "One hypothetical adjustment in a POST /api/v2/forecast/scenario\nrequest. Read-only \u2014 this never writes transaction, goal, or schedule\nstate; it only previews an alternate total.",
+        "properties": {
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "kind": {
+            "enum": [
+              "one_off_exclusion",
+              "category_reduction",
+              "subscription_removal"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "reduce_by_percent": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reduce By Percent"
+          },
+          "subscription_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subscription Id"
+          },
+          "transaction_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Transaction Id"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "ScenarioAdjustmentRequest",
+        "type": "object"
+      },
+      "ScenarioAdjustmentResult": {
+        "properties": {
+          "amount_delta": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Money"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          }
+        },
+        "required": [
+          "kind",
+          "label",
+          "amount_delta",
+          "note"
+        ],
+        "title": "ScenarioAdjustmentResult",
+        "type": "object"
+      },
+      "ScenarioProjection": {
+        "properties": {
+          "projected_total": {
+            "$ref": "#/components/schemas/Money"
+          }
+        },
+        "required": [
+          "projected_total"
+        ],
+        "title": "ScenarioProjection",
+        "type": "object"
+      },
+      "ScenarioRequest": {
+        "properties": {
+          "adjustments": {
+            "items": {
+              "$ref": "#/components/schemas/ScenarioAdjustmentRequest"
+            },
+            "title": "Adjustments",
+            "type": "array"
+          }
+        },
+        "required": [
+          "adjustments"
+        ],
+        "title": "ScenarioRequest",
+        "type": "object"
+      },
+      "ScenarioResponse": {
+        "properties": {
+          "adjustments": {
+            "items": {
+              "$ref": "#/components/schemas/ScenarioAdjustmentResult"
+            },
+            "title": "Adjustments",
+            "type": "array"
+          },
+          "base": {
+            "$ref": "#/components/schemas/MonthForecast"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScenarioProjection"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "base",
+          "adjustments",
+          "result"
+        ],
+        "title": "ScenarioResponse",
+        "type": "object"
+      },
       "SpendingAlerts": {
         "properties": {
           "anomalies": {
@@ -2416,6 +2785,23 @@
         "title": "SpendingReviewItem",
         "type": "object"
       },
+      "SpendingTarget": {
+        "description": "R13: one overall monthly spending target \u2014 target and remaining\n(which may be negative, meaning over target), never framed as\nsafe-to-spend or a bank balance.",
+        "properties": {
+          "remaining": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "target": {
+            "$ref": "#/components/schemas/Money"
+          }
+        },
+        "required": [
+          "target",
+          "remaining"
+        ],
+        "title": "SpendingTarget",
+        "type": "object"
+      },
       "SpendingVelocity": {
         "properties": {
           "current_mtd": {
@@ -2766,6 +3152,17 @@
             ],
             "title": "Exchange Rate"
           },
+          "excluded_from_baseline": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Excluded From Baseline"
+          },
           "expected_revision": {
             "anyOf": [
               {
@@ -2953,6 +3350,11 @@
               }
             ],
             "title": "Description"
+          },
+          "excluded_from_baseline": {
+            "default": false,
+            "title": "Excluded From Baseline",
+            "type": "boolean"
           },
           "id": {
             "title": "Id",
@@ -3142,6 +3544,11 @@
               }
             ],
             "title": "Description"
+          },
+          "excluded_from_baseline": {
+            "default": false,
+            "title": "Excluded From Baseline",
+            "type": "boolean"
           },
           "id": {
             "title": "Id",
@@ -3634,6 +4041,57 @@
         "title": "ValidationError",
         "type": "object"
       },
+      "WeekdayMedian": {
+        "properties": {
+          "eligible_weeks": {
+            "title": "Eligible Weeks",
+            "type": "integer"
+          },
+          "high": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Money"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "low": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Money"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "median": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Money"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "weekday": {
+            "title": "Weekday",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "weekday",
+          "median",
+          "low",
+          "high",
+          "eligible_weeks"
+        ],
+        "title": "WeekdayMedian",
+        "type": "object"
+      },
       "WeekdayPattern": {
         "properties": {
           "end": {
@@ -3881,6 +4339,22 @@
           }
         },
         "summary": "Analytics Velocity V2"
+      }
+    },
+    "/api/v2/baseline-exclusion/period": {
+      "post": {
+        "operationId": "set_period_baseline_exclusion_api_v2_baseline_exclusion_period_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Set Period Baseline Exclusion"
       }
     },
     "/api/v2/budgets/progress": {
@@ -4361,6 +4835,91 @@
           }
         },
         "summary": "Dismiss Duplicate"
+      }
+    },
+    "/api/v2/forecast/month": {
+      "get": {
+        "operationId": "month_forecast_api_v2_forecast_month_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "as_of",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "As Of"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MonthForecast"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Month Forecast"
+      }
+    },
+    "/api/v2/forecast/scenario": {
+      "post": {
+        "operationId": "forecast_scenario_api_v2_forecast_scenario_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScenarioRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScenarioResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Forecast Scenario"
       }
     },
     "/api/v2/goals": {
@@ -6295,6 +6854,43 @@
           }
         },
         "summary": "Undo Transaction V2"
+      }
+    },
+    "/api/v2/trips/{trip_id}/baseline-exclusion": {
+      "post": {
+        "operationId": "set_trip_baseline_exclusion_api_v2_trips__trip_id__baseline_exclusion_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "trip_id",
+            "required": true,
+            "schema": {
+              "title": "Trip Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Trip Baseline Exclusion"
       }
     },
     "/api/v2/trips/{trip_id}/summary": {

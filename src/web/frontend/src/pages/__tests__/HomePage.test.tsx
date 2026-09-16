@@ -8,7 +8,7 @@ import { ReviewPage } from '../ReviewPage';
 
 vi.mock('@/api/briefing', async (original) => ({ ...await original<typeof import('@/api/briefing')>(), briefingApi: { recurringReview: vi.fn(), resolveRecurring: vi.fn(), home: vi.fn(), spendingReview: vi.fn(), captureIssues: vi.fn(), followups: vi.fn(), retryCapture: vi.fn(), retryFollowup: vi.fn(), refundMatchReview: vi.fn(), resolveRefundMatch: vi.fn(), duplicateReview: vi.fn(), dismissDuplicate: vi.fn(), mergeDuplicates: vi.fn(), undoDuplicateMerge: vi.fn() } }));
 const period: SpendingPeriod = { start: '2026-09-01', end: '2026-09-06', spending: { minor_units: 1250, currency: 'SGD' }, income: null, recorded_net_flow: null, transaction_count: 1, unresolved_count: 0, indicative_count: 0, status: 'complete' };
-const home: HomeBriefing = { facts: { as_of: '2026-09-06', timezone: 'Asia/Singapore', undated_count: 0, current: period, comparison_current: period, previous: { ...period, start: '2026-08-01', end: '2026-08-06' }, change: { minor_units: 500, currency: 'SGD' }, category_changes: [{ category: 'Food & Drink', change: { minor_units: 500, currency: 'SGD' } }], top_category_driver: null, trip_drivers: [] }, recent: [], upcoming: [], upcoming_total: { minor_units: 0, currency: 'SGD' }, upcoming_unknown_count: 0, increased_commitments: [], capture_issue_count: 2, followup_issue_count: 1, review_count: 0, recurring_suggestion_count: 0, freshness: { gmail_connected: false, gmail_last_checked: null, gmail_needs_reconnection: false, last_capture_processed_at: null } };
+const home: HomeBriefing = { facts: { as_of: '2026-09-06', timezone: 'Asia/Singapore', undated_count: 0, current: period, comparison_current: period, previous: { ...period, start: '2026-08-01', end: '2026-08-06' }, change: { minor_units: 500, currency: 'SGD' }, category_changes: [{ category: 'Food & Drink', change: { minor_units: 500, currency: 'SGD' } }], top_category_driver: null, trip_drivers: [] }, spending_target: null, recent: [], upcoming: [], upcoming_total: { minor_units: 0, currency: 'SGD' }, upcoming_unknown_count: 0, increased_commitments: [], capture_issue_count: 2, followup_issue_count: 1, review_count: 0, recurring_suggestion_count: 0, freshness: { gmail_connected: false, gmail_last_checked: null, gmail_needs_reconnection: false, last_capture_processed_at: null } };
 function show(component: React.ReactNode) { return render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter>{component}</MemoryRouter></QueryClientProvider>); }
 beforeEach(() => { vi.resetAllMocks(); vi.mocked(briefingApi.recurringReview).mockResolvedValue({ items: [], total: 0, limit: 50, offset: 0 }); vi.mocked(briefingApi.spendingReview).mockResolvedValue({ items: [], total: 0, limit: 50, offset: 0 }); vi.mocked(briefingApi.refundMatchReview).mockResolvedValue({ items: [], total: 0, limit: 50, offset: 0 }); vi.mocked(briefingApi.duplicateReview).mockResolvedValue({ items: [], total: 0, limit: 50, offset: 0 }); });
 afterEach(cleanup);
@@ -107,6 +107,25 @@ test('Home shows the last processed capture time', async () => {
   vi.mocked(briefingApi.home).mockResolvedValue({ ...home, freshness: { ...home.freshness, last_capture_processed_at: '2026-09-06T08:00:00' } });
   show(<HomePage />);
   expect(await screen.findByText(/Last capture processed: 2026-09-06T08:00:00/)).toBeTruthy();
+});
+
+test('Home shows remaining spending against an overall target', async () => {
+  vi.mocked(briefingApi.home).mockResolvedValue({ ...home, spending_target: { target: { minor_units: 100000, currency: 'SGD' }, remaining: { minor_units: 30000, currency: 'SGD' } } });
+  show(<HomePage />);
+  expect(await screen.findByText(/\$300\.00 remaining of your \$1,000\.00 monthly target\./)).toBeTruthy();
+});
+
+test('Home frames an over-target spend as a warning, not a safe-to-spend figure', async () => {
+  vi.mocked(briefingApi.home).mockResolvedValue({ ...home, spending_target: { target: { minor_units: 100000, currency: 'SGD' }, remaining: { minor_units: -5000, currency: 'SGD' } } });
+  show(<HomePage />);
+  expect(await screen.findByText(/\$50\.00 over your \$1,000\.00 monthly target\./)).toBeTruthy();
+});
+
+test('Home omits the target line entirely when no overall budget is set', async () => {
+  vi.mocked(briefingApi.home).mockResolvedValue({ ...home, spending_target: null });
+  show(<HomePage />);
+  await screen.findByText('Your money briefing');
+  expect(screen.queryByText(/monthly target/)).toBeNull();
 });
 
 test('capture review queues a deliberate retry and refreshes', async () => {

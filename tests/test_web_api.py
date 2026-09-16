@@ -460,6 +460,16 @@ class TestRefundLinkingV2:
         assert purchase_get.json()["refunded_by"][0]["transaction_id"] == refund_id
 
     @pytest.mark.asyncio
+    async def test_correction_can_flag_a_purchase_as_excluded_from_baseline(self, client):
+        create = await client.post("/api/transactions", json={"amount": 900.00, "merchant": "Splurge", "type": "expense"})
+        tx_id = create.json()["id"]
+        response = await client.put(f"/api/v2/transactions/{tx_id}", json={"excluded_from_baseline": True})
+        assert response.status_code == 200
+        assert response.json()["excluded_from_baseline"] is True
+        get_resp = await client.get(f"/api/v2/transactions/{tx_id}")
+        assert get_resp.json()["excluded_from_baseline"] is True
+
+    @pytest.mark.asyncio
     async def test_unlink_with_explicit_null(self, client):
         purchase_resp = await client.post("/api/transactions", json={"amount": 100.00, "type": "expense"})
         purchase_id = purchase_resp.json()["id"]

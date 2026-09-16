@@ -13,6 +13,28 @@ const amountBasisLabels: Record<'matched_charge' | 'user' | 'unknown', string> =
   unknown: 'Amount unknown — no confirmed charge yet',
 };
 
+function MonthProjectionCard() {
+  const { data, isError, refetch } = useQuery({ queryKey: ['month-forecast'], queryFn: () => briefingApi.monthForecast() });
+  return (
+    <PageCard title="This month's projection">
+      {isError && !data ? <div role="alert"><LoadFailed onRetry={() => void refetch()} /></div> : !data ? <p role="status" className="text-muted">Loading…</p> :
+        data.status === 'unavailable' ? <p className="text-muted">Not enough recorded history yet to project the rest of this month — at least 4 weeks of history is needed for each remaining weekday.</p> : <>
+        <p className="text-3xl font-semibold tabular-nums">{formatMoney(data.projected_total!)}</p>
+        <p className="text-muted">Projected total for {data.period_start} to {data.period_end} · {formatMoney(data.recorded_actual)} recorded so far</p>
+        <p className="text-sm text-muted">Likely range {formatMoney(data.projected_total_low!)}–{formatMoney(data.projected_total_high!)} — the lowest and highest ever recorded on these weekdays, not a statistical estimate.</p>
+        {!!data.unpriced_commitment_count && <p className="text-warning">{data.unpriced_commitment_count} upcoming charge{data.unpriced_commitment_count > 1 ? 's have' : ' has'} no known amount and {data.unpriced_commitment_count > 1 ? "aren't" : "isn't"} included.</p>}
+        {data.reasons.includes('unresolved_conversion') && <p className="text-warning">Some recorded spending this month has an unresolved currency conversion and is excluded from the actual figure above.</p>}
+        <details className="mt-2">
+          <summary className="cursor-pointer text-teal min-h-11 inline-flex items-center">How this is calculated</summary>
+          <ul className="text-sm text-muted list-disc pl-5 mt-2 space-y-1">
+            {data.assumptions.map((assumption, i) => <li key={i}>{assumption}</li>)}
+          </ul>
+        </details>
+      </>}
+    </PageCard>
+  );
+}
+
 export function PlanPage() {
   const location = useLocation();
   const [days, setDays] = useState(30);
@@ -34,6 +56,7 @@ export function PlanPage() {
       <p className="text-muted">Upcoming charges from your recorded subscription schedules.</p>
       <Link to="/plan/manage" className="text-teal min-h-11 inline-flex items-center">Manage subscriptions, budgets, goals, and trips</Link>
     </header>
+    <MonthProjectionCard />
     <label className="flex items-center gap-3">Show
       <select className="select-field min-h-11" value={days} onChange={event => { setDays(Number(event.target.value)); setOffset(0); }}>
         <option value={14}>Next 14 days</option><option value={30}>Next 30 days</option><option value={90}>Next 90 days</option>

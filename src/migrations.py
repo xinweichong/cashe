@@ -374,6 +374,21 @@ MIGRATIONS = (
             "ON upcoming_transactions(matched_transaction_id) WHERE matched_transaction_id IS NOT NULL",
         ),
     )),
+    (22, (
+        # R13: explicit baseline-exclusion — a user can mark a purchase or an
+        # entire trip as unusual, so forecast.py's weekday-median baseline and
+        # spending_facts.weekday_pattern don't let it skew what "normal"
+        # spending looks like. This never touches actual totals or evidence:
+        # every existing money query keeps summing every transaction exactly
+        # as before — only the two baseline-pattern computations added in
+        # R10/R12 read this column at all. Deliberately not carried through
+        # deleted_transactions/restore_deleted_transaction: it's a baseline
+        # hint, not money truth, so a deleted-then-restored transaction
+        # reverting to "not excluded" is an accepted narrow gap, not a
+        # correctness bug — unlike refund_of_transaction_id or the
+        # canonical-money columns, which are.
+        _add_column_if_table_exists("transactions", "excluded_from_baseline INTEGER NOT NULL DEFAULT 0"),
+    )),
 )
 
 

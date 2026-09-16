@@ -126,7 +126,8 @@ export interface GoalProgress {
   target_date: string | null;
   status: 'active' | 'completed' | 'paused';
   percent: number;
-  monthly_rate: number;
+  monthly_rate: number | null;
+  rate_window: { start: string; end: string } | null;
   months_to_target: number | null;
   on_track: 'on_track' | 'ahead' | 'behind' | null;
   contributions: GoalContribution[];
