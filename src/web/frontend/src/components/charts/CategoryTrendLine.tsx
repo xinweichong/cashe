@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { useReducedMotion } from 'framer-motion';
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
@@ -7,6 +8,9 @@ import { formatDateTick, formatDateLabel, useChartTheme } from '@/lib/chartTheme
 
 export function CategoryTrendLine({ data }: { data: Record<string, string | number | null>[] }) {
   const { CHART_AXIS_PROPS, CHART_TOOLTIP_STYLE, CHART_CURSOR_LINE, CHART_LEGEND_STYLE } = useChartTheme();
+  // Recharts' Line animates its draw-in on its own JS timer, independent of
+  // the CSS-level reduced-motion override in index.css.
+  const reduceMotion = useReducedMotion();
   const categories = useMemo(() => {
     const cats = new Set<string>();
     data.forEach(d => Object.keys(d).filter(k => k !== 'date').forEach(k => cats.add(k)));
@@ -47,6 +51,7 @@ export function CategoryTrendLine({ data }: { data: Record<string, string | numb
               dot={{ r: 2, fill: getCategoryColor(cat) }}
               activeDot={{ r: 4 }}
               connectNulls
+              isAnimationActive={!reduceMotion}
             />
           ))}
         </LineChart>

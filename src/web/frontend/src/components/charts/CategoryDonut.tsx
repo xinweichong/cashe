@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useReducedMotion } from 'framer-motion';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { getCategoryColor, formatCurrency, cn } from '@/lib/utils';
 import { useChartTheme } from '@/lib/chartTheme';
@@ -28,6 +29,10 @@ interface CategoryDonutProps {
 export function CategoryDonut({ data, selected, onSelect, onViewTransactions, showLegend = false }: CategoryDonutProps) {
   const { CHART_TOOLTIP_STYLE } = useChartTheme();
   const [remainingExpanded, setRemainingExpanded] = useState(false);
+  // Recharts' Pie animates its sweep on its own JS timer, independent of the
+  // CSS-level reduced-motion override in index.css — must be wired here
+  // explicitly or reduced-motion users still get the animated draw-in.
+  const reduceMotion = useReducedMotion();
 
   if (!data || data.length === 0) {
     return (
@@ -71,6 +76,7 @@ export function CategoryDonut({ data, selected, onSelect, onViewTransactions, sh
               innerRadius="60%"
               outerRadius="85%"
               paddingAngle={2}
+              isAnimationActive={!reduceMotion}
               strokeWidth={0}
               onClick={(entry: { category?: string; payload?: CategoryData }) => {
                 const category = entry.category ?? entry.payload?.category;

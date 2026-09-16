@@ -28,8 +28,12 @@ for (const theme of ['dark', 'light'] as const) {
       await page.goto('/dev/preview/home');
       await expect(page.getByTestId('home-prototype')).toBeVisible();
       // Recharts' ResponsiveContainer measures on a post-mount tick; wait for
-      // an actual pie slice rather than racing the initial paint.
+      // an actual pie slice rather than racing the initial paint. The slice
+      // then animates its sweep in over ~800ms on its own JS timer (separate
+      // from the CSS reduced-motion override), so also wait past that or the
+      // screenshot catches a half-drawn donut, not a rendering bug.
       await expect(page.locator('.recharts-pie-sector').first()).toBeVisible();
+      await page.waitForTimeout(1000);
       await page.screenshot({ path: `e2e/screenshots/home-${name}-${theme}.png`, fullPage: true });
     });
   }

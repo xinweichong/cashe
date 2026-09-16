@@ -1,4 +1,5 @@
 import { useId } from 'react';
+import { useReducedMotion } from 'framer-motion';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, Dot,
@@ -22,6 +23,9 @@ interface TrendLineProps {
 export function TrendLine({ data, selectedDate, onSelectDate }: TrendLineProps) {
   const { CHART_AXIS_PROPS, CHART_TOOLTIP_STYLE, COLOR_TEAL } = useChartTheme();
   const gradientId = useId().replace(/:/g, '');
+  // Recharts' Area animates its draw-in on its own JS timer, independent of
+  // the CSS-level reduced-motion override in index.css.
+  const reduceMotion = useReducedMotion();
 
   if (!data || data.length === 0) {
     return <div className="w-full h-full min-h-[160px] flex items-center justify-center text-muted text-sm">No trend data</div>;
@@ -68,6 +72,7 @@ export function TrendLine({ data, selectedDate, onSelectDate }: TrendLineProps) 
               stroke={COLOR_TEAL}
               strokeWidth={2}
               fill={`url(#${gradientId})`}
+              isAnimationActive={!reduceMotion}
               activeDot={onSelectDate ? {
                 r: 5,
                 // Recharts' DotProps type omits `payload` even though it spreads the

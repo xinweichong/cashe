@@ -25,6 +25,9 @@ for (const theme of ['dark', 'light'] as const) {
       await page.goto('/dev/preview/explore');
       await expect(page.getByTestId('explore-layout-study')).toBeVisible();
       await expect(page.locator('.recharts-line').first()).toBeVisible();
+      // Let the line's draw-in animation (Recharts' own JS timer) finish
+      // before capturing, or the screenshot catches a half-drawn line.
+      await page.waitForTimeout(1000);
       await page.screenshot({ path: `e2e/screenshots/explore-${name}-${theme}.png`, fullPage: true });
     });
 
