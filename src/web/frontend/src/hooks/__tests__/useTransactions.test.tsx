@@ -65,6 +65,30 @@ test('update rolls every cache back on error', async () => {
   expect(qc.getQueryData<Transaction>(['transaction', 1])!.category).toBe('Food');
 });
 
+test('update invalidates Home, Explore and Plan caches, not just transactions/home-briefing', async () => {
+  // Regression for a real gap: these mutations used to invalidate only a
+  // handful of keys (transactions, home-briefing, spending-evidence,
+  // spending-review), leaving Explore's and Plan's own shared-facts queries
+  // — and even most of Home's own breakdown queries — showing stale,
+  // pre-edit numbers on a fast cached return. See "Query invalidation needs
+  // journey review" in the baseline audit.
+  const { qc, wrapper } = setup();
+  for (const key of [
+    'home-category-breakdown', 'home-daily-totals', 'home-merchants',
+    'explore-month-facts', 'explore-category-trend', 'explore-weekday-pattern',
+    'month-forecast', 'plan-upcoming', 'plan-upcoming-calendar',
+  ]) qc.setQueryData([key], { placeholder: true });
+  vi.mocked(api.updateTransaction).mockResolvedValue({} as Awaited<ReturnType<typeof api.updateTransaction>>);
+  const { result } = renderHook(() => useUpdateTransaction(), { wrapper });
+  act(() => { result.current.mutate({ id: 1, data: { category: 'Transport' } }); });
+  await waitFor(() => expect(result.current.isSuccess).toBe(true));
+  for (const key of [
+    'home-category-breakdown', 'home-daily-totals', 'home-merchants',
+    'explore-month-facts', 'explore-category-trend', 'explore-weekday-pattern',
+    'month-forecast', 'plan-upcoming', 'plan-upcoming-calendar',
+  ]) expect(qc.getQueryState([key])?.isInvalidated).toBe(true);
+});
+
 test('delete removes the row optimistically and restores it on error', async () => {
   const { qc, wrapper } = setup();
   vi.mocked(api.deleteTransaction).mockRejectedValue(new Error('500'));

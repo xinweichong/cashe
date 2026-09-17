@@ -5,6 +5,7 @@ import { briefingApi, formatMoney, type DuplicateSide } from '@/api/briefing';
 import { PageCard } from '@/components/ui/cards';
 import { Button } from '@/components/ui/button';
 import { LoadFailed } from '@/components/ui/LoadFailed';
+import { invalidateSpendingQueries } from '@/hooks/useTransactions';
 
 const sourceLabels: Record<string, string> = { telegram_nl: 'Telegram entry', gmail: 'Gmail', wallet_request: 'Wallet request', apple_wallet: 'Apple Wallet' };
 const effectLabels: Record<string, string> = { trip: 'Trip assignment', recurring: 'Recurring analysis', notification: 'Transaction notification', suggestion: 'Recurring suggestion' };
@@ -90,11 +91,14 @@ function DuplicateReviewList() {
   });
   const merge = useMutation({
     mutationFn: ({ survivorId, loserId }: { survivorId: number; loserId: number }) => briefingApi.mergeDuplicates(survivorId, loserId),
-    onSuccess: async () => { await client.invalidateQueries({ queryKey: ['duplicate-review'] }); },
+    // A merge changes which transaction records exist, so every spending
+    // total downstream of them (Home, Explore, Plan, evidence) needs to
+    // refetch too — not just this review list.
+    onSuccess: async () => { await client.invalidateQueries({ queryKey: ['duplicate-review'] }); invalidateSpendingQueries(client); },
   });
   const undo = useMutation({
     mutationFn: (mergeId: number) => briefingApi.undoDuplicateMerge(mergeId),
-    onSuccess: async () => { await client.invalidateQueries({ queryKey: ['duplicate-review'] }); },
+    onSuccess: async () => { await client.invalidateQueries({ queryKey: ['duplicate-review'] }); invalidateSpendingQueries(client); },
   });
   return <PageCard title="Possible duplicates">
     <p className="text-sm text-muted mb-3">Two records from different sources that look like the same purchase. Keep whichever one you want as the record — its evidence, trip, and any billing match carry over. Keep separate if they're actually different.</p>
@@ -128,7 +132,11 @@ function RefundMatchReviewList() {
   const query = useQuery({ queryKey: ['refund-match-review'], queryFn: () => briefingApi.refundMatchReview() });
   const resolve = useMutation({
     mutationFn: ({ id, action }: { id: number; action: 'accept' | 'dismiss' }) => briefingApi.resolveRefundMatch(id, action),
-    onSuccess: async () => { await client.invalidateQueries({ queryKey: ['refund-match-review'] }); },
+    // Accepting links the refund as evidence against a purchase, which can
+    // change refund-netting in every spending total; dismissing only clears
+    // this review item. Invalidate broadly in both cases rather than
+    // special-casing — a stale total is worse than one extra refetch.
+    onSuccess: async () => { await client.invalidateQueries({ queryKey: ['refund-match-review'] }); invalidateSpendingQueries(client); },
   });
   return <PageCard title="Refund matches">
     <p className="text-sm text-muted mb-3">A likely purchase for an unlinked refund, based on matching merchant, currency, and amount within 180 days. Confirm to link it as evidence, or dismiss if it's wrong.</p>
@@ -155,8 +163,12 @@ function RecurringReviewList() {
   const resolve = useMutation({
     mutationFn: ({ id, action }: { id: string; action: 'accept' | 'dismiss' }) => briefingApi.resolveRecurring(id, action),
     onSuccess: async () => {
-      await Promise.all(['recurring-review', 'subscriptions', 'subscription-upcoming', 'plan-upcoming', 'home-briefing'].map(key =>
+      // Accepting creates a tracked schedule (a new confirmed commitment for
+      // Plan's forecast); both actions clear this suggestion from Explore's
+      // Recurring mode too.
+      await Promise.all(['recurring-review', 'subscriptions', 'subscription-upcoming', 'explore-subscription-review'].map(key =>
         client.invalidateQueries({ queryKey: [key] })));
+      invalidateSpendingQueries(client);
     },
   });
   const frequencies: Record<string, string> = { weekly: 'Weekly', biweekly: 'Every two weeks', monthly: 'Monthly' };

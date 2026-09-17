@@ -90,3 +90,25 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
     expect(sweptHeight).toBeGreaterThan(containerBox.height * 0.7);
   });
 }
+
+test('production Home hero glow is static, never an infinite pulse', async ({ page }) => {
+  // Regression for a real bug: .hero-glow-*::after used to run an
+  // `infinite` opacity keyframe, and the reduced-motion override only
+  // shortened the animation-duration rather than stopping the loop — so a
+  // reduced-motion user saw the glow flicker several times a second instead
+  // of a static halo. Checked in both motion modes since the fix makes the
+  // glow unconditionally static, not just reduced-motion-safe.
+  await mockAuthenticatedHome(page);
+  await page.goto('/');
+  const glow = page.locator('.hero-glow-warm, .hero-glow-teal, .hero-glow-coral').first();
+  await expect(glow).toBeVisible();
+  const animationName = await glow.evaluate((el) => getComputedStyle(el, '::after').animationName);
+  expect(animationName).toBe('none');
+
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.reload();
+  const glowReduced = page.locator('.hero-glow-warm, .hero-glow-teal, .hero-glow-coral').first();
+  await expect(glowReduced).toBeVisible();
+  const animationNameReduced = await glowReduced.evaluate((el) => getComputedStyle(el, '::after').animationName);
+  expect(animationNameReduced).toBe('none');
+});

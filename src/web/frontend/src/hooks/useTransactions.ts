@@ -29,21 +29,37 @@ export function useTransactions(params?: Record<string, string | number>) {
   });
 }
 
+// Every cache key downstream of "a transaction's money/date/category
+// changed" — Home, Explore and Plan each read their own shared-facts
+// queries under their own key prefixes (not just 'home-briefing'), so a
+// transaction mutation that only invalidated a few of these left the other
+// destinations showing pre-edit numbers on a fast cached return. See the
+// "Query invalidation needs journey review" finding in
+// docs/plans/2026-09-16-cashe-design-restoration-baseline-audit.md.
+// react-query's invalidateQueries does prefix matching, so each entry here
+// covers every parameterised variant of that query (e.g. ['home-daily-
+// totals', start, end] is invalidated by the bare ['home-daily-totals']).
+const SPENDING_AFFECTED_KEYS = [
+  'transactions', 'transactions-v2', 'transaction', 'transaction-v2',
+  'transactions-daily-totals', 'summary', 'balance',
+  'home-briefing', 'home-category-breakdown', 'home-daily-totals', 'home-merchants',
+  'explore-month-facts', 'explore-category-trend', 'explore-weekday-pattern',
+  'explore-merchants-by-category', 'explore-subscription-review',
+  'explore-trip-summary', 'explore-trip-month-facts',
+  'month-forecast', 'plan-upcoming', 'plan-upcoming-calendar', 'plan-upcoming-day',
+  'spending-evidence', 'spending-review',
+] as const;
+
+export function invalidateSpendingQueries(qc: ReturnType<typeof useQueryClient>) {
+  for (const key of SPENDING_AFFECTED_KEYS) qc.invalidateQueries({ queryKey: [key] });
+}
+
 export function useCreateTransaction() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ data, requestKey }: { data: Partial<TransactionCreateV2> & { amount: number }; requestKey: string }) =>
       api.createTransaction(data, requestKey),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['transactions'] });
-      qc.invalidateQueries({ queryKey: ['transactions-v2'] });
-      qc.invalidateQueries({ queryKey: ['transactions-daily-totals'] });
-      qc.invalidateQueries({ queryKey: ['summary'] });
-      qc.invalidateQueries({ queryKey: ['home-briefing'] });
-      qc.invalidateQueries({ queryKey: ['spending-evidence'] });
-      qc.invalidateQueries({ queryKey: ['spending-review'] });
-      qc.invalidateQueries({ queryKey: ['balance'] });
-    },
+    onSuccess: () => invalidateSpendingQueries(qc),
   });
 }
 
@@ -75,31 +91,8 @@ export function useUpdateTransaction() {
       for (const [key, snapshot] of ctx.listSnapshots) qc.setQueryData(key, snapshot);
       if (ctx.single) qc.setQueryData(['transaction', ctx.id], ctx.single);
     },
-    onSettled: (_data, _err, { id }) => {
-      qc.invalidateQueries({ queryKey: ['transactions'] });
-      qc.invalidateQueries({ queryKey: ['transaction', id] });
-      qc.invalidateQueries({ queryKey: ['transactions-v2'] });
-      qc.invalidateQueries({ queryKey: ['transaction-v2', id] });
-      qc.invalidateQueries({ queryKey: ['transactions-daily-totals'] });
-      qc.invalidateQueries({ queryKey: ['summary'] });
-      qc.invalidateQueries({ queryKey: ['home-briefing'] });
-      qc.invalidateQueries({ queryKey: ['spending-evidence'] });
-      qc.invalidateQueries({ queryKey: ['spending-review'] });
-    },
+    onSettled: () => invalidateSpendingQueries(qc),
   });
-}
-
-function invalidateAfterBulkChange(qc: ReturnType<typeof useQueryClient>) {
-  qc.invalidateQueries({ queryKey: ['transactions'] });
-  qc.invalidateQueries({ queryKey: ['transactions-v2'] });
-  qc.invalidateQueries({ queryKey: ['transaction'] });
-  qc.invalidateQueries({ queryKey: ['transaction-v2'] });
-  qc.invalidateQueries({ queryKey: ['transactions-daily-totals'] });
-  qc.invalidateQueries({ queryKey: ['summary'] });
-  qc.invalidateQueries({ queryKey: ['home-briefing'] });
-  qc.invalidateQueries({ queryKey: ['spending-evidence'] });
-  qc.invalidateQueries({ queryKey: ['spending-review'] });
-  qc.invalidateQueries({ queryKey: ['balance'] });
 }
 
 // R09: no optimistic patch — a bulk action can partially conflict per row,
@@ -109,7 +102,7 @@ export function useBulkCorrectTransactions() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: api.bulkCorrectTransactions,
-    onSettled: () => invalidateAfterBulkChange(qc),
+    onSettled: () => invalidateSpendingQueries(qc),
   });
 }
 
@@ -117,7 +110,7 @@ export function useBulkUndoTransactions() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: api.bulkUndoTransactions,
-    onSettled: () => invalidateAfterBulkChange(qc),
+    onSettled: () => invalidateSpendingQueries(qc),
   });
 }
 
@@ -139,15 +132,6 @@ export function useDeleteTransaction() {
       for (const [key, snapshot] of ctx.listSnapshots) qc.setQueryData(key, snapshot);
       toast("Couldn't delete — restored.");
     },
-    onSettled: () => {
-      qc.invalidateQueries({ queryKey: ['transactions'] });
-      qc.invalidateQueries({ queryKey: ['transactions-v2'] });
-      qc.invalidateQueries({ queryKey: ['transactions-daily-totals'] });
-      qc.invalidateQueries({ queryKey: ['summary'] });
-      qc.invalidateQueries({ queryKey: ['home-briefing'] });
-      qc.invalidateQueries({ queryKey: ['spending-evidence'] });
-      qc.invalidateQueries({ queryKey: ['spending-review'] });
-      qc.invalidateQueries({ queryKey: ['balance'] });
-    },
+    onSettled: () => invalidateSpendingQueries(qc),
   });
 }

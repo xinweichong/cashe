@@ -84,11 +84,6 @@
   --shadow-elev-card:  0 8px 32px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.04);
 }
 
-@keyframes glow-pulse-opacity {
-  0%, 100% { opacity: 0.45; }
-  50%       { opacity: 1;    }
-}
-
 @keyframes skeleton-shimmer {
   0%   { background-position: -200% 0; }
   100% { background-position:  200% 0; }
@@ -267,8 +262,11 @@ body {
     position: absolute;
     inset: 0;
     border-radius: inherit;
-    will-change: opacity;
-    animation: glow-pulse-opacity 3s ease-in-out infinite;
+    /* Static, not pulsing — "Keep glow static" per docs/design-language.md
+       and the restoration plan's motion contract. This layer's stronger
+       box-shadow (below, per variant) sits at a fixed opacity as a second
+       static halo rather than animating between it and the base layer. */
+    opacity: 0.7;
     pointer-events: none;
   }
 
@@ -329,8 +327,15 @@ body {
   /* ── Reduced motion ────────────────────────────────────────────────── */
 
   @media (prefers-reduced-motion: reduce) {
+    /* animation-iteration-count: 1 matters as much as the duration here —
+       without it, an `infinite` animation (glow pulse, skeleton shimmer)
+       just loops faster under this override instead of stopping, which
+       reads as rapid flicker rather than the "immediate final state" the
+       motion contract requires (docs/plans/2026-09-16-cashe-design-
+       language-restoration.md's Reduced motion row). */
     *, *::before, *::after {
       animation-duration: var(--dur-fast) !important;
+      animation-iteration-count: 1 !important;
       transition-duration: var(--dur-fast) !important;
     }
   }
