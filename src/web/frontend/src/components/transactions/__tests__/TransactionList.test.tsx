@@ -108,3 +108,25 @@ it('in selection mode, renders a checkbox per row and clicking toggles selection
   expect(onToggleSelect).toHaveBeenCalledWith(2);
   expect(onTransactionClick).not.toHaveBeenCalled();
 });
+
+it('opens a row with the keyboard, and excludes the decorative checkbox from tab order', () => {
+  const transactions = [tx({ id: 1, merchant: 'Cafe' })];
+  const onTransactionClick = vi.fn();
+  const onToggleSelect = vi.fn();
+  render(
+    <TransactionList
+      transactions={transactions}
+      onLoadMore={() => {}}
+      hasMore={false}
+      isLoading={false}
+      onTransactionClick={onTransactionClick}
+      selectionMode
+      selectedIds={new Set()}
+      onToggleSelect={onToggleSelect}
+    />
+  );
+  const row = screen.getByRole('button', { name: /Cafe/ });
+  expect(screen.getByRole('checkbox')).toHaveAttribute('tabIndex', '-1');
+  fireEvent.keyDown(row, { key: 'Enter' });
+  expect(onToggleSelect).toHaveBeenCalledWith(1);
+});

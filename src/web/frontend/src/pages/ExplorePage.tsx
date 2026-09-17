@@ -4,7 +4,7 @@ export function ExplorePage() {
   return (
     <section className="explore-page">
       <header className="px-4 pt-4 md:px-6 md:pt-6">
-        <h1 className="text-2xl font-semibold">Explore</h1>
+        <h1 className="font-display text-2xl font-semibold">Explore</h1>
         <p className="text-muted mt-1">Understand spending patterns and the merchants behind them.</p>
         <nav aria-label="Explore views" className="flex gap-2 mt-3">
           {[['/explore', 'Spending patterns'], ['/explore/insights', 'Insights']].map(([to, label]) => (

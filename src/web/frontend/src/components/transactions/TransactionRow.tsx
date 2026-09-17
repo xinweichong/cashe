@@ -2,6 +2,7 @@ import { type Transaction } from '@/api/client';
 import { cn, formatCurrency, formatDateTime, getCategoryColor } from '@/lib/utils';
 import { SOURCE_DISPLAY_LABELS } from '@/lib/sourceLabels';
 import { Button } from '@/components/ui/button';
+import { CategoryAvatar } from '@/components/ui/CategoryAvatar';
 import { Trash2 } from 'lucide-react';
 
 export function TransactionRow({
@@ -32,11 +33,16 @@ export function TransactionRow({
   return (
     <div
       onClick={isClickable ? onClick : undefined}
+      role={isClickable ? 'button' : undefined}
+      tabIndex={isClickable ? 0 : undefined}
+      onKeyDown={isClickable ? (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick?.(); }
+      } : undefined}
       className={cn(
         'grid gap-3 items-center px-3.5 py-2.5 border-b border-border/30 last:border-b-0',
         'transition-[background,transform] duration-[150ms]',
         onRemove ? 'grid-cols-[36px_1fr_auto_auto]' : 'grid-cols-[36px_1fr_auto]',
-        isClickable && 'cursor-pointer',
+        isClickable && 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
       )}
       style={{ background: `${categoryColor}${selected ? '1A' : '0D'}` }}
       onMouseEnter={isClickable ? (e) => {
@@ -51,6 +57,7 @@ export function TransactionRow({
       {selectable ? (
         <input
           type="checkbox"
+          tabIndex={-1}
           aria-label={`Select ${tx.merchant || tx.description || 'transaction'}`}
           checked={selected}
           readOnly
@@ -58,12 +65,7 @@ export function TransactionRow({
           style={{ color: categoryColor }}
         />
       ) : (
-        <div
-          className="w-8 h-8 rounded-md flex items-center justify-center text-sm font-bold shrink-0"
-          style={{ background: `${categoryColor}33`, color: categoryColor }}
-        >
-          {isIncome ? '+' : tx.category?.charAt(0) ?? '·'}
-        </div>
+        <CategoryAvatar category={tx.category} isIncome={isIncome} />
       )}
 
       <div className="min-w-0">

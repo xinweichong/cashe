@@ -16,7 +16,7 @@ export function PageCard({ title, action, children, className, contentClassName,
   return (
     <Card className={cn(className)}>
       <div className={cn('flex flex-row items-center justify-between p-4 gap-2', headerClassName)}>
-        <span className="min-w-0 truncate text-base font-semibold text-foreground font-display">{title}</span>
+        <span className="min-w-0 text-base font-semibold text-foreground font-display">{title}</span>
         {action && <div className="shrink-0 ml-2">{action}</div>}
       </div>
       <CardContent className={cn('p-4 pt-0', contentClassName)}>{children}</CardContent>
@@ -36,7 +36,7 @@ export function ChartCard({ title, action, children, className }: ChartCardProps
   return (
     <Card className={cn(className)}>
       <div className="flex flex-row items-center justify-between p-4 gap-2">
-        <span className="min-w-0 truncate text-base font-semibold text-foreground font-display">{title}</span>
+        <span className="min-w-0 text-base font-semibold text-foreground font-display">{title}</span>
         {action && <div className="shrink-0 ml-2">{action}</div>}
       </div>
       <CardContent className="p-0">{children}</CardContent>

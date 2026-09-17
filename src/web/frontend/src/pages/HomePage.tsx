@@ -7,6 +7,7 @@ import { api } from '@/api/client';
 import { getCategoryColor } from '@/lib/utils';
 import { HeroCard, PageCard } from '@/components/ui/cards';
 import { HeroAmount } from '@/components/ui/HeroAmount';
+import { CategoryAvatar } from '@/components/ui/CategoryAvatar';
 import { LoadFailed } from '@/components/ui/LoadFailed';
 import { Skeleton } from '@/components/ui/skeleton';
 import { TrendLine } from '@/components/charts/TrendLine';
@@ -182,7 +183,13 @@ export function HomePage() {
         </PageCard>
       </div>
       <PageCard title="Recent activity" action={<Link to="/transactions" className="text-teal min-h-11 inline-flex items-center">All activity</Link>}>
-        {recent.map(item => <Link key={item.id} to={`/transactions/${item.id}`} className="flex justify-between gap-4 py-3 min-h-11 border-b border-border last:border-0 hover:underline"><div>{item.merchant || 'Unnamed transaction'}<p className="text-sm text-muted">{item.date?.slice(0, 10) ?? 'Date unknown'} · {item.category} · {item.type}</p></div><div>{item.amount ? formatMoney(item.amount) : 'Amount unresolved'}{item.conversion_status === 'indicative' && <p className="text-sm text-muted">Indicative</p>}</div></Link>)}
+        {recent.map(item => <Link key={item.id} to={`/transactions/${item.id}`} className="flex items-center gap-3 py-3 min-h-11 border-b border-border last:border-0 hover:underline">
+          <CategoryAvatar category={item.category} isIncome={item.type === 'income'} />
+          <div className="flex-1 min-w-0 flex justify-between gap-4">
+            <div className="min-w-0">{item.merchant || 'Unnamed transaction'}<p className="text-sm text-muted">{item.date?.slice(0, 10) ?? 'Date unknown'} · {item.category} · {item.type}</p></div>
+            <div className="text-right shrink-0">{item.amount ? formatMoney(item.amount) : 'Amount unresolved'}{item.conversion_status === 'indicative' && <p className="text-sm text-muted">Indicative</p>}</div>
+          </div>
+        </Link>)}
         {!recent.length && <p className="text-muted">Your captured purchases will appear here. Add a transaction or connect a source to begin.</p>}
       </PageCard>
     </div>

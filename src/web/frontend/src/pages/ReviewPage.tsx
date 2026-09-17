@@ -20,7 +20,7 @@ export function ReviewPage() {
   const retry = useMutation({ mutationFn: ({ id, type }: { id: number; type: 'capture' | 'followup' }) => type === 'capture' ? briefingApi.retryCapture(id) : briefingApi.retryFollowup(id), onSuccess: async () => { await Promise.all([client.invalidateQueries({ queryKey: ['capture-review'] }), client.invalidateQueries({ queryKey: ['home-briefing'] })]); } });
   const resolve = useMutation({ mutationFn: ({ id, handled }: { id: number; handled: boolean }) => briefingApi.resolveCapture(id, handled), onSuccess: async () => { await Promise.all([client.invalidateQueries({ queryKey: ['capture-review'] }), client.invalidateQueries({ queryKey: ['home-briefing'] })]); } });
   return <div className="max-w-4xl mx-auto p-4 md:p-8 space-y-6">
-    <header><Link to="/home" className="text-teal min-h-11 inline-flex items-center">Back to briefing</Link><h1 className="text-2xl font-semibold">Review</h1><p className="text-muted">Spending records, recurring suggestions, and capture follow-ups that need attention.</p></header>
+    <header className="space-y-1"><Link to="/home" className="text-teal min-h-11 inline-flex items-center">Back to briefing</Link><h1 className="font-display text-2xl font-semibold">Review</h1><p className="text-muted">Spending records, recurring suggestions, and capture follow-ups that need attention.</p></header>
     <SpendingReviewList />
     <DuplicateReviewList />
     <RefundMatchReviewList />
