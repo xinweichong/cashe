@@ -56,7 +56,11 @@ export function HomePage() {
   return (
     <div className="max-w-5xl mx-auto p-4 md:p-8 space-y-6 text-base">
       <header className="flex items-center justify-between gap-4">
-        <div><h1 className="text-2xl font-semibold font-display">Your money briefing</h1><p className="text-muted">Through {facts.as_of} · {facts.timezone}</p></div>
+        <div className="flex flex-col gap-1">
+          <div className="text-xs uppercase tracking-[0.22em] text-muted font-mono font-semibold">Home</div>
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground font-display">Where the dollars go.</h1>
+          <p className="text-muted">Through {facts.as_of} · {facts.timezone}</p>
+        </div>
         <Link className="min-h-11 min-w-11 inline-flex items-center gap-2 text-teal" to="/transactions?add=1"><Plus aria-hidden="true" size={20} />Add</Link>
       </header>
       {query.isError && <p role="alert" className="text-warning">Couldn’t refresh. This briefing may be out of date. <button className="underline min-h-11" onClick={() => void query.refetch()}>Retry</button></p>}

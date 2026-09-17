@@ -65,7 +65,7 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
     await mockAuthenticatedHome(page);
     await page.setViewportSize(viewport);
     await page.goto('/');
-    await expect(page.getByText('Your money briefing')).toBeVisible();
+    await expect(page.getByText('Where the dollars go.')).toBeVisible();
 
     const sectors = page.locator('.recharts-pie-sector');
     await expect(sectors.first()).toBeVisible();

@@ -27,7 +27,7 @@ afterEach(cleanup);
 test('Home keeps evidence periods and categories in links and omits missing income', async () => {
   vi.mocked(briefingApi.home).mockResolvedValue(home);
   show(<HomePage />);
-  expect(await screen.findByText('Your money briefing')).toBeTruthy();
+  expect(await screen.findByText('Where the dollars go.')).toBeTruthy();
   const href = screen.getByRole('link', { name: 'Previous period' }).getAttribute('href')!;
   const params = new URL(href, 'http://localhost').searchParams;
   expect(params.get('start')).toBe('2026-08-01');
@@ -135,7 +135,7 @@ test('Home frames an over-target spend as a warning, not a safe-to-spend figure'
 test('Home omits the target line entirely when no overall budget is set', async () => {
   vi.mocked(briefingApi.home).mockResolvedValue({ ...home, spending_target: null });
   show(<HomePage />);
-  await screen.findByText('Your money briefing');
+  await screen.findByText('Where the dollars go.');
   expect(screen.queryByText(/monthly target/)).toBeNull();
 });
 
@@ -157,7 +157,7 @@ test('a failed category breakdown shows a retry without losing the rest of the b
   vi.mocked(api.getCategoryBreakdownV2).mockRejectedValue(new Error('offline'));
   show(<HomePage />);
   expect(await screen.findByText(/Couldn't load the category mix/)).toBeTruthy();
-  expect(screen.getByText('Your money briefing')).toBeTruthy();
+  expect(screen.getByText('Where the dollars go.')).toBeTruthy();
 });
 
 test('selecting a category and viewing transactions navigates to its evidence', async () => {
@@ -222,7 +222,7 @@ test('the daily trend reflects real data and links to a selected day\'s evidence
     { date: '2026-09-05', spending: { minor_units: 500, currency: 'SGD' }, income: null, recorded_net_flow: null, transaction_count: 1, unresolved_count: 0, indicative_count: 0, status: 'complete' },
   ]);
   show(<HomePage />);
-  await screen.findByText('Your money briefing');
+  await screen.findByText('Where the dollars go.');
   expect(screen.queryByRole('link', { name: /View this day/ })).toBeNull();
   fireEvent.click(await screen.findByLabelText('Previous day'));
   const link = await screen.findByRole('link', { name: "View this day's records" });
