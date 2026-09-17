@@ -497,6 +497,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/plan/upcoming/calendar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Upcoming Calendar */
+        get: operations["upcoming_calendar_api_v2_plan_upcoming_calendar_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v2/plan/upcoming/{upcoming_id}": {
         parameters: {
             query?: never;
@@ -2253,6 +2270,33 @@ export interface components {
             transaction_count: number;
             trip: components["schemas"]["TripInfo"];
         };
+        /** UpcomingCalendar */
+        UpcomingCalendar: {
+            /** Days */
+            days: components["schemas"]["UpcomingCalendarDay"][];
+            /** End */
+            end: string;
+            /** Start */
+            start: string;
+            /** Timezone */
+            timezone: string;
+        };
+        /**
+         * UpcomingCalendarDay
+         * @description One day's complete pending-charge summary within a requested calendar
+         *     window — aggregated server-side over every matching row, never a slice
+         *     of a paginated items list, so a day with more charges than any page
+         *     limit still reports a true count and total.
+         */
+        UpcomingCalendarDay: {
+            /** Date */
+            date: string;
+            known_total: components["schemas"]["Money"];
+            /** Recorded Charge Count */
+            recorded_charge_count: number;
+            /** Unknown Count */
+            unknown_count: number;
+        };
         /** UpcomingCharge */
         UpcomingCharge: {
             amount: components["schemas"]["Money"] | null;
@@ -3186,6 +3230,7 @@ export interface operations {
                 days?: number;
                 limit?: number;
                 offset?: number;
+                date?: string | null;
             };
             header?: never;
             path?: never;
@@ -3200,6 +3245,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UpcomingPlan"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upcoming_calendar_api_v2_plan_upcoming_calendar_get: {
+        parameters: {
+            query: {
+                start: string;
+                end: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpcomingCalendar"];
                 };
             };
             /** @description Validation Error */

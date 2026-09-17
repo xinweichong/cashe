@@ -3909,6 +3909,65 @@
         "title": "TripSummary",
         "type": "object"
       },
+      "UpcomingCalendar": {
+        "properties": {
+          "days": {
+            "items": {
+              "$ref": "#/components/schemas/UpcomingCalendarDay"
+            },
+            "title": "Days",
+            "type": "array"
+          },
+          "end": {
+            "title": "End",
+            "type": "string"
+          },
+          "start": {
+            "title": "Start",
+            "type": "string"
+          },
+          "timezone": {
+            "title": "Timezone",
+            "type": "string"
+          }
+        },
+        "required": [
+          "start",
+          "end",
+          "timezone",
+          "days"
+        ],
+        "title": "UpcomingCalendar",
+        "type": "object"
+      },
+      "UpcomingCalendarDay": {
+        "description": "One day's complete pending-charge summary within a requested calendar\nwindow \u2014 aggregated server-side over every matching row, never a slice\nof a paginated items list, so a day with more charges than any page\nlimit still reports a true count and total.",
+        "properties": {
+          "date": {
+            "title": "Date",
+            "type": "string"
+          },
+          "known_total": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "recorded_charge_count": {
+            "title": "Recorded Charge Count",
+            "type": "integer"
+          },
+          "unknown_count": {
+            "title": "Unknown Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "date",
+          "known_total",
+          "unknown_count",
+          "recorded_charge_count"
+        ],
+        "title": "UpcomingCalendarDay",
+        "type": "object"
+      },
       "UpcomingCharge": {
         "properties": {
           "amount": {
@@ -5545,6 +5604,23 @@
               "title": "Offset",
               "type": "integer"
             }
+          },
+          {
+            "in": "query",
+            "name": "date",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Date"
+            }
           }
         ],
         "responses": {
@@ -5570,6 +5646,56 @@
           }
         },
         "summary": "Upcoming Plan"
+      }
+    },
+    "/api/v2/plan/upcoming/calendar": {
+      "get": {
+        "operationId": "upcoming_calendar_api_v2_plan_upcoming_calendar_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "start",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "title": "Start",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "end",
+            "required": true,
+            "schema": {
+              "format": "date",
+              "title": "End",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpcomingCalendar"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Upcoming Calendar"
       }
     },
     "/api/v2/plan/upcoming/{upcoming_id}": {
