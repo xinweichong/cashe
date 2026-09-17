@@ -51,6 +51,31 @@ def to_v2(tx: dict, storage) -> dict:
 
     refunded_by = [_refund_evidence(r) for r in storage.get_refunds_of(tx["id"])]
 
+    original_minor = tx.get("original_minor_units")
+    reporting_minor = tx.get("reporting_minor_units")
+    conversion_status = tx.get("conversion_status")
+    conversion_rate = tx.get("conversion_rate")
+    conversion_source = tx.get("conversion_source")
+    conversion_quoted_at = tx.get("conversion_quoted_at")
+    if original_minor is None:
+        # Straggler row whose canonical columns were never computed — a
+        # pre-R02 row, or one written by something that bypassed
+        # Storage.insert_transaction. Recompute read-time from the legacy
+        # amount/currency/exchange_rate columns using the same compatibility
+        # path canonical_money.compute_transaction_canonical already
+        # implements for backfill, instead of letting a real, known amount
+        # collapse to a genuine $0 here (every other money aggregate in this
+        # codebase already falls back this way — spending_facts.resolve_money,
+        # storage.py's CASE-fallback SQL).
+        from src.canonical_money import compute_transaction_canonical
+        fallback = compute_transaction_canonical(tx)
+        original_minor = fallback["original_minor_units"]
+        reporting_minor = fallback["reporting_minor_units"]
+        conversion_status = fallback["conversion_status"]
+        conversion_rate = fallback["conversion_rate"]
+        conversion_source = fallback["conversion_source"]
+        conversion_quoted_at = fallback["conversion_quoted_at"]
+
     return {
         "id": tx["id"],
         "revision": tx["revision"],
@@ -65,18 +90,18 @@ def to_v2(tx: dict, storage) -> dict:
         "transaction_date": tx.get("transaction_date"),
         "ingested_at": tx.get("ingested_at"),
         "original": {
-            "minor_units": tx.get("original_minor_units"),
+            "minor_units": original_minor,
             "currency": tx.get("currency") or "SGD",
         },
         "reporting": (
-            {"minor_units": tx["reporting_minor_units"], "currency": "SGD"}
-            if tx.get("reporting_minor_units") is not None else None
+            {"minor_units": reporting_minor, "currency": "SGD"}
+            if reporting_minor is not None else None
         ),
         "conversion": {
-            "status": tx.get("conversion_status"),
-            "rate": tx.get("conversion_rate"),
-            "source": tx.get("conversion_source"),
-            "quoted_at": tx.get("conversion_quoted_at"),
+            "status": conversion_status,
+            "rate": conversion_rate,
+            "source": conversion_source,
+            "quoted_at": conversion_quoted_at,
         },
         "refund_of": refund_of,
         "refunded_by": refunded_by,
