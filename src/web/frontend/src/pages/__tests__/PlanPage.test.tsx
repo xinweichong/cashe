@@ -5,7 +5,7 @@ import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { briefingApi, type MonthForecast, type UpcomingPlan } from '@/api/briefing';
 import { PlanPage } from '../PlanPage';
 
-vi.mock('@/api/briefing', async importOriginal => ({ ...await importOriginal<typeof import('@/api/briefing')>(), briefingApi: { upcoming: vi.fn(), updatePlannedCharge: vi.fn(), dismissPlannedCharge: vi.fn(), monthForecast: vi.fn() } }));
+vi.mock('@/api/briefing', async importOriginal => ({ ...await importOriginal<typeof import('@/api/briefing')>(), briefingApi: { upcoming: vi.fn(), upcomingOnDate: vi.fn(), upcomingCalendar: vi.fn(), updatePlannedCharge: vi.fn(), dismissPlannedCharge: vi.fn(), monthForecast: vi.fn() } }));
 const report: UpcomingPlan = {
   start: '2026-09-08', end: '2026-10-07', timezone: 'Asia/Singapore', enabled: true,
   items: [{ id: 1, subscription_id: 3, label: 'Internet', date: '2026-09-09', frequency: 'monthly', schedule_status: 'possibly_cancelled', confirmation_source: 'unknown', amount: null, date_basis: 'schedule', amount_basis: 'unknown', amount_basis_transaction_id: null }],
@@ -19,7 +19,13 @@ const forecast: MonthForecast = {
   projected_total: null, projected_total_low: null, projected_total_high: null,
   weekday_medians: [], lookback_window: { start: '2026-07-20', end: '2026-09-13' }, assumptions: [],
 };
-beforeEach(() => { vi.resetAllMocks(); vi.mocked(briefingApi.upcoming).mockResolvedValue(report); vi.mocked(briefingApi.monthForecast).mockResolvedValue(forecast); });
+beforeEach(() => {
+  vi.resetAllMocks();
+  vi.mocked(briefingApi.upcoming).mockResolvedValue(report);
+  vi.mocked(briefingApi.monthForecast).mockResolvedValue(forecast);
+  vi.mocked(briefingApi.upcomingCalendar).mockResolvedValue({ start: '2026-09-01', end: '2026-09-30', timezone: 'Asia/Singapore', days: [] });
+  vi.mocked(briefingApi.upcomingOnDate).mockResolvedValue({ ...report, items: [] });
+});
 afterEach(cleanup);
 function show() {
   return render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter><PlanPage /></MemoryRouter></QueryClientProvider>);

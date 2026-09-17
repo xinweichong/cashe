@@ -57,6 +57,8 @@ export interface UpcomingPlan {
   total: number; limit: number; offset: number; known_total: Money;
   unknown_count: number; status: 'partial' | 'estimated';
 }
+export interface UpcomingCalendarDay { date: string; known_total: Money; unknown_count: number; recorded_charge_count: number }
+export interface UpcomingCalendar { start: string; end: string; timezone: string; days: UpcomingCalendarDay[] }
 export interface SpendingReview {
   items: { id: number; merchant: string | null; category: string; date: string | null;
     reasons: ('missing_date' | 'unresolved_money' | 'unknown_type' | 'missing_merchant' | 'missing_category')[] }[];
@@ -107,6 +109,8 @@ export const briefingApi = {
     request(`/api/v2/plan/upcoming/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   dismissPlannedCharge: (id: number) => request(`/api/v2/plan/upcoming/${id}/dismiss`, { method: 'POST' }),
   upcoming: (days = 30, offset = 0) => request<UpcomingPlan>(`/api/v2/plan/upcoming?days=${days}&limit=50&offset=${offset}`),
+  upcomingOnDate: (date: string, offset = 0) => request<UpcomingPlan>(`/api/v2/plan/upcoming?date=${date}&limit=50&offset=${offset}`),
+  upcomingCalendar: (start: string, end: string) => request<UpcomingCalendar>(`/api/v2/plan/upcoming/calendar?start=${start}&end=${end}`),
   home: () => request<HomeBriefing>('/api/v2/home'),
   month: (as_of?: string) => request<SpendingFacts>(`/api/v2/spending/month${as_of ? `?as_of=${as_of}` : ''}`),
   weekdayPattern: (weeks = 8) => request<WeekdayPattern>(`/api/v2/spending/weekday-pattern?weeks=${weeks}`),

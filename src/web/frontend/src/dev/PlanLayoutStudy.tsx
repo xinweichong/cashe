@@ -3,7 +3,7 @@ import { HeroCard, PageCard } from '@/components/ui/cards';
 import { Button } from '@/components/ui/button';
 import { formatCurrency, formatShortDate, cn } from '@/lib/utils';
 import { PROJECTION, PENDING_CHARGES, MONTH_LABEL, MONTH_DAYS, MONTH_START_WEEKDAY } from './planFixtures';
-import { useIsDesktop } from './useIsDesktop';
+import { useIsDesktop } from '@/hooks/useIsDesktop';
 
 // Plan layout study (increment 2): spatial composition of the projection
 // hero and the month-calendar/agenda pairing across breakpoints, per
