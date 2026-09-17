@@ -733,17 +733,17 @@ export function SettingsPage() {
                 { key: 'subscriptions_enabled' as const, label: 'Subscriptions', desc: 'Track recurring services and upcoming charges' },
                 { key: 'recurring_enabled' as const, label: 'Recurring Transactions', desc: 'Detect and surface repeating transaction patterns' },
               ]).map(({ key, label, desc }) => (
-                <div key={key} className="flex items-center justify-between py-4">
-                  <div>
+                <div key={key} className="flex items-center justify-between gap-4 py-4">
+                  <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium text-foreground">{label}</p>
-                    <p className="text-xs text-muted font-mono">{desc}</p>
+                    <p className="text-xs text-muted">{desc}</p>
                   </div>
                   <button
                     role="switch"
                     aria-checked={!!settings?.[key]}
                     aria-label={label}
                     onClick={() => toggleSetting(key, !settings?.[key])}
-                    className={`relative w-10 h-5 rounded-full transition-colors ${settings?.[key] ? 'toggle-on' : 'bg-foreground/20'}`}
+                    className={`relative w-10 h-5 rounded-full shrink-0 transition-colors ${settings?.[key] ? 'toggle-on' : 'bg-foreground/20'}`}
                   >
                     <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${settings?.[key] ? 'translate-x-5' : 'translate-x-0'}`} />
                   </button>

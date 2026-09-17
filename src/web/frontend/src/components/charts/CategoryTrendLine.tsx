@@ -4,7 +4,7 @@ import {
   LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
 import { formatCurrency, getCategoryColor } from '@/lib/utils';
-import { formatDateTick, formatDateLabel, useChartTheme } from '@/lib/chartTheme';
+import { formatDateTick, formatDateLabel, useChartTheme, CHART_Y_DOMAIN } from '@/lib/chartTheme';
 
 export function CategoryTrendLine({ data }: { data: Record<string, string | number | null>[] }) {
   const { CHART_AXIS_PROPS, CHART_TOOLTIP_STYLE, CHART_CURSOR_LINE, CHART_LEGEND_STYLE } = useChartTheme();
@@ -32,6 +32,7 @@ export function CategoryTrendLine({ data }: { data: Record<string, string | numb
           />
           <YAxis
             {...CHART_AXIS_PROPS}
+            domain={CHART_Y_DOMAIN}
             tickFormatter={(v: number) => `$${v}`}
           />
           <Tooltip

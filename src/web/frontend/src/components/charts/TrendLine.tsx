@@ -5,7 +5,7 @@ import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, Dot,
 } from 'recharts';
 import { formatCurrency, formatShortDate } from '@/lib/utils';
-import { formatDateTick, formatDateLabel, useChartTheme } from '@/lib/chartTheme';
+import { formatDateTick, formatDateLabel, useChartTheme, CHART_Y_DOMAIN } from '@/lib/chartTheme';
 
 interface TrendPoint {
   date: string;
@@ -59,6 +59,7 @@ export function TrendLine({ data, selectedDate, onSelectDate }: TrendLineProps) 
             />
             <YAxis
               {...CHART_AXIS_PROPS}
+              domain={CHART_Y_DOMAIN}
               tickFormatter={(v: number) => `$${v}`}
             />
             <Tooltip

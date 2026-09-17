@@ -2,7 +2,7 @@ import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
 import { formatCurrency } from '@/lib/utils';
-import { useChartTheme } from '@/lib/chartTheme';
+import { useChartTheme, CHART_Y_DOMAIN } from '@/lib/chartTheme';
 
 interface ComparisonData {
   category: string;
@@ -23,6 +23,7 @@ export function ComparisonBarChart({ data }: { data: ComparisonData[] }) {
           />
           <YAxis
             {...CHART_AXIS_PROPS}
+            domain={CHART_Y_DOMAIN}
             tickFormatter={(v: number) => `$${v}`}
           />
           <Tooltip

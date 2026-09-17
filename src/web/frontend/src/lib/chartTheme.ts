@@ -15,6 +15,13 @@ export const CHART_AXIS_PROPS = {
   axisLine: false,
 };
 
+// Recharts' default numeric-axis domain is [dataMin, dataMax] with zero
+// headroom, so a line/bar chart's highest point sits exactly on the plot
+// area's top edge with no breathing room — the stroke can render a pixel or
+// two past the boundary, and visually the mark reads as if it's hitting the
+// card's ceiling. Every numeric YAxis should spread this in as its `domain`.
+export const CHART_Y_DOMAIN: [number, (max: number) => number] = [0, (max: number) => Math.ceil(max * 1.15) || 1];
+
 export const CHART_CURSOR_BAR = { fill: '#1C1C22' };
 export const CHART_CURSOR_LINE = { stroke: '#2A2A3F', strokeWidth: 1 };
 

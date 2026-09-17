@@ -5,7 +5,7 @@ import {
 } from 'recharts';
 import { api } from '@/api/client';
 import { ChartCard } from '@/components/ui/cards';
-import { COLOR_CORAL, useChartTheme } from '@/lib/chartTheme';
+import { COLOR_CORAL, useChartTheme, CHART_Y_DOMAIN } from '@/lib/chartTheme';
 
 type Mode = '6mo' | '12mo' | 'yoy';
 
@@ -99,6 +99,7 @@ export function IncomeExpenseBar() {
             <XAxis dataKey="month" {...CHART_AXIS_PROPS} />
             <YAxis
               {...CHART_AXIS_PROPS}
+              domain={CHART_Y_DOMAIN}
               tickFormatter={(v: number) => `$${v}`}
             />
             <Tooltip
