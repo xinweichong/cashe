@@ -284,7 +284,7 @@ export function PlanPage() {
   return <div className="max-w-4xl mx-auto p-4 md:p-8 space-y-6 text-base">
     <header className="space-y-2">
       <div className="text-xs uppercase tracking-[0.22em] text-muted font-mono font-semibold">Plan</div>
-      <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground font-display">See what's coming.</h1>
+      <h1 className="text-xl font-bold leading-tight tracking-tight text-foreground font-display">See what's coming.</h1>
       <p className="text-muted">Upcoming charges from your recorded subscription schedules.</p>
       <Link to="/plan/manage" className="text-teal min-h-11 inline-flex items-center">Manage subscriptions, budgets, goals, and trips</Link>
     </header>

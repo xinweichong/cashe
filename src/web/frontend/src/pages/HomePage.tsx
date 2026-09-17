@@ -58,7 +58,7 @@ export function HomePage() {
       <header className="flex items-center justify-between gap-4">
         <div className="flex flex-col gap-1">
           <div className="text-xs uppercase tracking-[0.22em] text-muted font-mono font-semibold">Home</div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground font-display">Where the dollars go.</h1>
+          <h1 className="text-xl font-bold leading-tight tracking-tight text-foreground font-display">Where the dollars go.</h1>
           <p className="text-muted">Through {facts.as_of} · {facts.timezone}</p>
         </div>
         <Link className="min-h-11 min-w-11 inline-flex items-center gap-2 text-teal" to="/transactions?add=1"><Plus aria-hidden="true" size={20} />Add</Link>

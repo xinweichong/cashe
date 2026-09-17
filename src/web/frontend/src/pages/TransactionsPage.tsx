@@ -343,12 +343,12 @@ export function TransactionsPage() {
         ref={scrollRef}
         className={`flex-1 overflow-y-auto p-4 md:p-6 space-y-4 transition-[margin-right] duration-300 ease-out${selectedTransaction ? ' hidden md:block md:mr-96' : ''}`}
       >
-        <div className="flex items-start justify-between pb-5 border-b border-border">
+        <div className="flex items-start justify-between pb-4 border-b border-border">
           <div className="flex flex-col gap-1">
             <div className="text-xs uppercase tracking-[0.22em] text-muted font-mono font-semibold">
               {activityPath === '/activity' ? 'Activity' : 'Transactions'}
             </div>
-            <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground font-display">
+            <h1 className="text-xl font-bold leading-tight tracking-tight text-foreground font-display">
               Every dollar tracked.
             </h1>
           </div>

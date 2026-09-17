@@ -106,3 +106,22 @@ test('By category shows main visual and inspection panel side by side on desktop
   await expect(page.getByText('Select a bar in "What changed"')).toBeVisible();
   await page.screenshot({ path: 'e2e/screenshots/explore-by-category-phone.png', fullPage: true });
 });
+
+test('mode tabs scroll within their own bounds on phone instead of overflowing the page', async ({ page }) => {
+  // Regression: the four mode tabs (Over time/By category/By merchant/
+  // Recurring) used to have no overflow handling at all on a narrow
+  // viewport, so the row spilled past the page's content width. It now
+  // scrolls horizontally within its own container — every tab stays
+  // reachable, and the list's own right edge never exceeds the viewport.
+  await mockAuthenticatedExplore(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/explore');
+  const tabList = page.getByRole('tablist');
+  const listBox = (await tabList.boundingBox())!;
+  expect(listBox.x + listBox.width).toBeLessThanOrEqual(390);
+
+  const recurringTab = page.getByRole('tab', { name: 'Recurring' });
+  await recurringTab.scrollIntoViewIfNeeded();
+  await recurringTab.click();
+  await expect(recurringTab).toHaveAttribute('aria-selected', 'true');
+});
