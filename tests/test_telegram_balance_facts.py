@@ -84,7 +84,7 @@ async def test_undated_income_suppresses_flow_and_marks_known_subtotals(bot):
     text = (await balance(bot)).args[0]
     assert 'Income known subtotal: `S$20.00`' in text
     assert '1 undated records' in text
-    assert 'Recorded net flow is unavailable while records remain unresolved.' in text
+    assert 'Recorded net flow unavailable — records still need review.' in text
 
 
 @pytest.mark.asyncio

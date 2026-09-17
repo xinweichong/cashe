@@ -113,7 +113,7 @@ async def test_digest_projects_timezone_and_bounds_compact_category_labels(bot):
 async def test_digest_empty_and_undated_states_do_not_claim_complete_capture(bot):
     text = await digest(bot)
     assert 'No income recorded.' in text
-    assert 'do not establish capture completeness' in text
+    assert "don't prove every purchase was captured" in text
     add(bot.storage, 'Undated', None)
     text = await digest(bot)
     assert text.count('1 undated records') == 2

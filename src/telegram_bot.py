@@ -734,7 +734,7 @@ class TelegramBotService:
         if current["status"] == "partial":
             lines.append("Known subtotals are incomplete. Open Review to resolve missing information.")
         if facts["change"] is None:
-            lines.append("Comparison unavailable because records remain unresolved.")
+            lines.append("Comparison unavailable — records still need review.")
         else:
             comparable, previous = facts["comparison_current"], facts["previous"]
             lines.extend([
@@ -764,7 +764,7 @@ class TelegramBotService:
                 lines.append(f"{item['date']} · {merchant} · `{value}`{suffix} · ID {item['id']}")
             if report["total"] > len(report["items"]):
                 lines.append("Open Activity for the remaining records.")
-        lines.append("\nTotals reflect recorded data; they do not establish capture completeness.")
+        lines.append("\nTotals reflect recorded data — they don't prove every purchase was captured.")
         return "\n".join(lines)
 
     async def _week(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1078,7 +1078,7 @@ class TelegramBotService:
             if current["recorded_net_flow"] is not None:
                 lines.append(f"Recorded net flow: `{amount(current['recorded_net_flow'])}`")
             else:
-                lines.append("Recorded net flow is unavailable while records remain unresolved.")
+                lines.append("Recorded net flow unavailable — records still need review.")
         if current["unresolved_count"]:
             lines.append(f"{current['unresolved_count']} records in this period have unresolved money or classification.")
         if facts["undated_count"]:
@@ -1090,7 +1090,7 @@ class TelegramBotService:
         days_remaining = calendar.monthrange(today.year, today.month)[1] - today.day
         lines.extend([
             f"_{days_remaining} days remaining this month_",
-            "Recorded flow is not an account balance and does not establish capture completeness.",
+            "This isn't an account balance — it doesn't prove every purchase was captured.",
         ])
         keyboard = InlineKeyboardMarkup([[
             InlineKeyboardButton("📊 Insights", callback_data="cmd_insights"),
@@ -1278,7 +1278,7 @@ class TelegramBotService:
 
         summary = ctx.storage.get_trip_summary(active["id"])
         if not summary:
-            await update.message.reply_text("Could not load trip summary.")
+            await update.message.reply_text("Couldn't load trip summary — try again.")
             return
 
         from datetime import datetime as _dt
@@ -1438,7 +1438,7 @@ class TelegramBotService:
         category, date = draft["category"], draft["date"]
         summary = (
             f"*{self._escape_md(merchant)}* — {self._escape_md(currency)} {amount:.2f}\n"
-            f"{self._escape_md(category)}  |  {self._escape_md(date)}\nThis draft expires 24 hours after it was created."
+            f"{self._escape_md(category)}  |  {self._escape_md(date)}\nExpires in 24 hours."
         )
         keyboard = InlineKeyboardMarkup([[
             InlineKeyboardButton("Add", callback_data=f"nl_confirm:{draft_id}"),
@@ -1492,7 +1492,7 @@ class TelegramBotService:
             if tx_id is None:
                 return
 
-            msg = f"Added: *{self._escape_md(pending['merchant'])}* {self._escape_md(pending['currency'])} {float(pending['amount']):.2f}"
+            msg = f"cash, caught. [${float(pending['amount']):.2f} · {self._escape_md(pending['merchant'])}]"
             if pending["currency"] != "SGD":
                 if exchange_rate is None or exchange_rate == 1:
                     msg += "\nSGD conversion unresolved."
