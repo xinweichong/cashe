@@ -1741,8 +1741,36 @@ async def test_upcoming_plan_api_is_sanitized_bounded_and_authenticated(client, 
     assert 'notes' not in report['items'][0]
     assert (await client.get('/api/v2/plan/upcoming?days=91')).status_code == 422
     assert (await client.get('/api/v2/plan/upcoming?offset=-1')).status_code == 422
+    on_date = await client.get('/api/v2/plan/upcoming?date=2026-09-08')
+    assert on_date.status_code == 200
+    assert on_date.json()['start'] == on_date.json()['end'] == '2026-09-08'
+    assert on_date.json()['known_total']['minor_units'] == 1201
     await client.post('/api/logout')
     assert (await client.get('/api/v2/plan/upcoming')).status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_upcoming_calendar_api_covers_full_window_bounded_and_authenticated(client, in_memory_db):
+    storage = Storage(in_memory_db)
+    sub = storage.create_subscription('Cafe', 'annual', notes='PRIVATE NOTES')
+    for i in range(60):
+        storage.create_upcoming_transaction(sub, f'2026-09-{(i % 28) + 1:02d}', 12.005)
+    storage.create_upcoming_transaction(sub, '2026-09-05', None)
+    response = await client.get('/api/v2/plan/upcoming/calendar?start=2026-09-01&end=2026-09-30')
+    assert response.status_code == 200
+    calendar = response.json()
+    assert calendar['start'] == '2026-09-01'
+    assert calendar['end'] == '2026-09-30'
+    assert 'PRIVATE NOTES' not in response.text
+    by_date = {d['date']: d for d in calendar['days']}
+    # day 1 gets charges at i=0 and i=28, i=56 -> three charges
+    assert by_date['2026-09-01']['recorded_charge_count'] == 3
+    assert by_date['2026-09-05']['unknown_count'] == 1
+    assert sum(d['recorded_charge_count'] for d in calendar['days']) == 61
+    assert (await client.get('/api/v2/plan/upcoming/calendar?start=2026-09-30&end=2026-09-01')).status_code == 422
+    assert (await client.get('/api/v2/plan/upcoming/calendar?start=2026-01-01&end=2026-12-31')).status_code == 422
+    await client.post('/api/logout')
+    assert (await client.get('/api/v2/plan/upcoming/calendar?start=2026-09-01&end=2026-09-30')).status_code == 401
 
 
 @pytest.mark.asyncio

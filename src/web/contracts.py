@@ -291,6 +291,24 @@ class UpcomingPlan(BaseModel):
     status: Literal["partial", "estimated"]
 
 
+class UpcomingCalendarDay(BaseModel):
+    """One day's complete pending-charge summary within a requested calendar
+    window — aggregated server-side over every matching row, never a slice
+    of a paginated items list, so a day with more charges than any page
+    limit still reports a true count and total."""
+    date: str
+    known_total: Money
+    unknown_count: int
+    recorded_charge_count: int
+
+
+class UpcomingCalendar(BaseModel):
+    start: str
+    end: str
+    timezone: str
+    days: list[UpcomingCalendarDay]
+
+
 class CaptureFreshness(BaseModel):
     gmail_connected: bool
     gmail_last_checked: str | None

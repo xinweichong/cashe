@@ -24,7 +24,7 @@ from src.money import to_minor_units, from_minor_units
 from src.spending_facts import resolve_money
 from src.config import local_now
 from src.web.auth import verify_password, create_session, verify_session, destroy_session
-from src.web.contracts import Balance, BudgetProgress, BulkTransactionRequest, BulkTransactionResultItem, BulkUndoRequest, CaptureFollowup, CaptureIssue, CaptureResolution, CategoryBreakdown, CategoryTrendPoint, DailyTotal, GoalProgress, HealthScore, HomeBriefing, MerchantRanking, MerchantSummary, OverviewSummary, QueuedResponse, SpendingAlerts, SpendingComparison, SpendingEvidence, SpendingFacts, SpendingReview, SpendingVelocity, TopMerchantsResult, TransactionCorrection, TransactionCreate, TransactionDeletion, TransactionProvenance, TransactionUndo, TransactionV2, TrendPoint, TripSummary, UpcomingPlan, PlanMutationResponse, RecurringReview, RecurringResolution, RefundMatchReview, RefundMatchResolution, DuplicateReview, DuplicateDismissal, DuplicateMergeRequest, DuplicateMergeResult, DuplicateMergeUndoResult, SubscriptionReview, WeekdayPattern, MonthForecast, ScenarioRequest, ScenarioResponse
+from src.web.contracts import Balance, BudgetProgress, BulkTransactionRequest, BulkTransactionResultItem, BulkUndoRequest, CaptureFollowup, CaptureIssue, CaptureResolution, CategoryBreakdown, CategoryTrendPoint, DailyTotal, GoalProgress, HealthScore, HomeBriefing, MerchantRanking, MerchantSummary, OverviewSummary, QueuedResponse, SpendingAlerts, SpendingComparison, SpendingEvidence, SpendingFacts, SpendingReview, SpendingVelocity, TopMerchantsResult, TransactionCorrection, TransactionCreate, TransactionDeletion, TransactionProvenance, TransactionUndo, TransactionV2, TrendPoint, TripSummary, UpcomingPlan, UpcomingCalendar, PlanMutationResponse, RecurringReview, RecurringResolution, RefundMatchReview, RefundMatchResolution, DuplicateReview, DuplicateDismissal, DuplicateMergeRequest, DuplicateMergeResult, DuplicateMergeUndoResult, SubscriptionReview, WeekdayPattern, MonthForecast, ScenarioRequest, ScenarioResponse
 from src.analytics import (
     load_summary,
     get_yoy_comparison,
@@ -254,8 +254,16 @@ def create_dashboard_app(
 
     @app.get("/api/v2/plan/upcoming", response_model=UpcomingPlan)
     async def upcoming_plan(days: int = Query(30, ge=1, le=90), limit: int = Query(50, ge=1, le=100),
-                            offset: int = Query(0, ge=0), storage=Depends(_get_storage)):
-        return await _db(storage.get_upcoming_plan, days, timezone, limit, offset)
+                            offset: int = Query(0, ge=0), on_date: date | None = Query(None, alias="date"),
+                            storage=Depends(_get_storage)):
+        return await _db(storage.get_upcoming_plan, days, timezone, limit, offset, on_date)
+
+    @app.get("/api/v2/plan/upcoming/calendar", response_model=UpcomingCalendar)
+    async def upcoming_calendar(start: date, end: date, storage=Depends(_get_storage)):
+        try:
+            return await _db(storage.get_upcoming_calendar, start, end, timezone)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from None
 
     @app.get("/api/v2/home", response_model=HomeBriefing)
     async def home_briefing(username: str = Depends(require_auth)):

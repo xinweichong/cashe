@@ -200,12 +200,15 @@ class Storage:
         return [dict(r) for r in rows]
 
     @_locked
-    def get_upcoming_plan(self, days=30, timezone="Asia/Singapore", limit=50, offset=0) -> dict:
+    def get_upcoming_plan(self, days=30, timezone="Asia/Singapore", limit=50, offset=0, on_date=None) -> dict:
         from src.spending_facts import convert_legacy_sgd, money
         if not 1 <= days <= 90 or not 1 <= limit <= 100 or offset < 0:
             raise ValueError("Invalid upcoming query")
-        start = local_now(timezone).date()
-        end = start + timedelta(days=days - 1)
+        if on_date is not None:
+            start = end = on_date
+        else:
+            start = local_now(timezone).date()
+            end = start + timedelta(days=days - 1)
         items = []
         for row in self._conn.execute(
             """SELECT u.id, u.expected_date, u.expected_amount, u.date_basis, u.amount_basis,
@@ -232,6 +235,36 @@ class Storage:
                 "items": items[offset:offset + limit], "total": len(items), "limit": limit, "offset": offset,
                 "known_total": money(sum(item["amount"]["minor_units"] for item in items if item["amount"])),
                 "unknown_count": unknown, "status": "partial" if unknown else "estimated"}
+
+    @_locked
+    def get_upcoming_calendar(self, start, end, timezone="Asia/Singapore") -> dict:
+        """Complete per-day pending-charge summary for a bounded calendar
+        window, aggregated server-side over every matching row (same
+        pending/unmatched/active-subscription filter as get_upcoming_plan)
+        so a day's count and total are never truncated by a page limit."""
+        from src.spending_facts import convert_legacy_sgd, money
+        if end < start or (end - start).days > 62:
+            raise ValueError("Invalid calendar window")
+        days: dict[str, dict] = {}
+        for row in self._conn.execute(
+            """SELECT DATE(u.expected_date) AS d, u.expected_amount
+               FROM upcoming_transactions u JOIN subscriptions s ON s.id = u.subscription_id
+               WHERE u.status = 'pending' AND u.matched_transaction_id IS NULL
+               AND s.status IN ('active', 'possibly_cancelled')
+               AND DATE(u.expected_date) >= ? AND DATE(u.expected_date) <= ?
+               ORDER BY d""", (start.isoformat(), end.isoformat()),
+        ):
+            entry = days.setdefault(row["d"], {"known_minor": 0, "unknown_count": 0, "recorded_charge_count": 0})
+            entry["recorded_charge_count"] += 1
+            minor, _ = convert_legacy_sgd({"amount": row["expected_amount"], "currency": "SGD"})
+            if minor is None:
+                entry["unknown_count"] += 1
+            else:
+                entry["known_minor"] += minor
+        return {"start": start.isoformat(), "end": end.isoformat(), "timezone": timezone,
+                "days": [{"date": d, "known_total": money(v["known_minor"]),
+                          "unknown_count": v["unknown_count"], "recorded_charge_count": v["recorded_charge_count"]}
+                         for d, v in sorted(days.items())]}
 
     @_locked
     def get_home_briefing(self, timezone="Asia/Singapore") -> dict:
