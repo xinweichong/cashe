@@ -376,41 +376,66 @@ Five tiers. Most surfaces use `elev-none` (a single 1px border on `--color-backg
 
 ## 7 · Components
 
+### 7.0 Reuse contract and component registry
+
+**One visual role and interaction contract should have one shared owner. Always reuse it.** This applies across classic/new pages, admin/auth/onboarding and previews. Search the component library and existing callers before implementing a surface. Do not create a different button, pill, field or card by changing a caller's classes or inline styles.
+
+New screens may compose established elements without new design approval. If the system cannot express a needed element, **obtain explicit user approval before implementing a new primitive, variant, interaction pattern or bespoke interface treatment**, including a new extraction from duplicated markup. Prepare a written specification of the reuse alternatives, proposed API/states/tokens, consumers and migration impact first. A proposed component in a plan is not approval. Previously granted approval for the same concrete scope remains valid. See [AGENTS.md](../AGENTS.md#mandatory-reuse-and-approval-gate).
+
+Current registry (paths relative to `src/web/frontend/src/`):
+
+| Role | Shared owner | Rule |
+|---|---|---|
+| Command, submit, cancel, retry, icon action | `components/ui/button.tsx` | Use existing variants; navigation CTA uses `asChild` with `Link`/`a`. Plain inline navigation remains a link. |
+| Noninteractive status label | `components/ui/badge.tsx` | Existing `tone` for spectrum meaning, `outline` for neutral labels. Never turn a badge into the control itself. |
+| Panel switching | `components/ui/tabs.tsx` | Use actual tabs with matching panel semantics; do not substitute tabs for form values, multi-select filters or navigation links. |
+| Category-coloured transaction row/avatar | `components/ui/ActivityRowShell.tsx`, `CategoryAvatar.tsx` | Caller owns money formatting and navigation; shared component owns presentation. |
+| Standard card / chart surface / hero / positive highlight | `components/ui/cards.tsx` | Use the matching role. Raw `Card` is for established structural exceptions, not a new visual system. |
+| Compact KPI / new-experience hero amount | `components/ui/StatCard.tsx`, `HeroAmount.tsx` | Use their actual APIs; retain money precision and quality labels. |
+| Text fields | `.input-field` in `index.css`; `components/ui/input.tsx` wrapper | Consolidate the wrapper onto the utility contract; do not create another style string. |
+| Native / custom select | `.select-field`; `components/ui/select.tsx` | Different interaction mechanisms, same theme/geometry intent. Keep native semantics where suitable. |
+| Dialog, sheet, dropdown | Existing `components/ui/` Radix wrappers | Preserve focus/keyboard/portal behaviour; fix shared styles rather than overriding every caller. |
+| Loading / recoverable failure / transient feedback | `Skeleton`, `LoadFailed`, existing toast provider | Compose known patterns; no page-local alternative feedback system. |
+| Category-change visual | `components/charts/CategoryChangeBars.tsx` | Home and Explore reuse the same row/scale contract. |
+
+**Not yet shared primitives:** filter/choice chips, switch, status dot, category label, generic selectable list row and progress indicator. Existing examples are references, not permission to clone them. The [surface audit](plans/2026-09-17-cashe-production-experience-polish.md#mandatory-first-pass-ui-surface-audit-and-consolidation) specifies which require consolidation and approval. Do not pretend a documented HTML example is an implemented component.
+
+Layout/width, content and documented semantic colour may vary by caller. New fills, radii, selection styles, motion variants or arbitrary component sizing need a shared documented owner, not accumulating `className` overrides. Keep role distinctions: read-only badges, multi-select filters, single-choice form controls, calendar dates and tabs must not be collapsed into one misleading semantic control.
+
 ### 7.1 Buttons
 
-CVA-based with six variants and five sizes.
+CVA-based. The implemented API has six variants and four sizes; do not invent props from older aspirational examples. The current primary is the full-spectrum gradient. This inventory does not authorise changing all primary buttons to a different fill.
 
 | Variant | Use |
 |---|---|
-| `default` | Primary action. Teal background, dark text. The most common button. |
-| `hero` | Splash, empty-state CTA, "Get started". Full spectrum gradient background with hover sweep animation. Used 2–4 places in the entire app. |
-| `destructive` | Delete, sign out, remove. Red `#FF453A` background. |
-| `outline` | Cancel, secondary actions. Transparent with `border-foreground/20`. |
+| `default` | Primary action. Existing full-spectrum gradient, `text-on-brand`; reserve prominence for the main command. |
+| `destructive` | Confirm an irreversible destructive action, using themed destructive tokens. |
+| `outline` | Cancel/secondary actions. Existing background/input-border treatment with neutral hover. |
 | `ghost` | View all, dropdown trigger, low-emphasis. Transparent, hover to `bg-foreground/5`. **Never** hover to teal. |
-| `link` | Inline text-style action. Teal foreground, underline on hover. |
+| `link` | Inline text-style command. Intended teal/underline treatment; current `text-primary` token reference needs repair in the shared owner before migration. |
+| `secondary` | Existing compatibility variant; unresolved secondary token references need repair in the shared owner before new use. |
 
 Sizes:
 
 | Size | Height | Padding | Use |
 |---|---|---|---|
-| `xs` | 28px | 10px | Inline edit/delete buttons in dense rows |
-| `sm` | 34px | 12px | Toolbar buttons, secondary actions |
+| `sm` | 36px | 12px | Toolbar buttons, secondary actions |
 | `default` | 40px | 16px | Standard buttons |
-| `lg` | 46px | 22px | Primary CTAs, hero CTAs |
-| `icon` | 36×36 | — | Icon-only buttons (settings cog, close, more) |
+| `lg` | 44px | 32px | Primary CTAs, hero CTAs |
+| `icon` | 40×40 | — | Icon-only buttons (settings cog, close, more) |
 
-**Ghost-button bug fix:** today's ghost variant hovers to `bg-accent text-accent-foreground` which paints the button teal. New ghost variant hovers to `bg-foreground/5 text-foreground` — a quiet darken, no colour shift.
+Provide at least 44px effective touch targets in the new experience without inventing page-local compact sizes. `hero` and `xs` are not implemented Button variants/sizes; adding either requires approval. `.btn-action` is deprecated migration debt, not an alternative to `Button`. Ghost hover is already neutral; preserve it. Align control radii to §5 in the shared owner rather than overriding them on individual pages.
 
 ### 7.2 Form fields
 
-Unified around the `.input-field` utility class. The Radix `<Input>` wrapper is retired (or made a thin wrapper over the utility class) — one way to style an input, always.
+The consolidation target is `.input-field` with `Input` as a thin wrapper over the same contract. Today the wrapper still has separate sizing/focus/placeholder classes; migrate it and its callers together rather than claiming it is retired. Native checkbox/radio/date behaviour remains intact.
 
-- **Resting:** `bg-background border border-border rounded-md px-3 py-1.5 text-sm text-foreground`
+- **Resting target:** `bg-background border border-border rounded-sm px-3 py-1.5 text-sm text-foreground` — the 6px control radius from §5; the current utility's `rounded-md` is migration debt, to be corrected in the shared owner.
 - **Focus:** `border-foreground ring-1 ring-foreground/20` — subtle but visible
 - **Error:** `border-destructive/40` — combined with `text-destructive` helper text below the field
 - **Disabled:** `opacity-50 cursor-not-allowed`
 
-`.select-field` keeps the SVG chevron approach (white chevron, 50% opacity, no colour shift on hover).
+`.select-field` keeps the existing theme-aware SVG chevron. Use it for native selects rather than `.input-field`. Custom Radix Select remains appropriate where needed; do not replace native selects solely for appearance. Field focus must meet §15 and the current global focus treatment.
 
 ### 7.3 Badges
 
@@ -424,7 +449,7 @@ CVA-based with the original four variants (`default`, `secondary`, `destructive`
 | `notable` | `#FB923C` @ 13% | `#FB923C` | `#FB923C` @ 25% |
 | `warm` | `#FF6B6B` @ 13% | `#FF6B6B` | `#FF6B6B` @ 25% |
 
-Replaces ad-hoc inline colour classes for category pills, source labels, and status pills.
+These tones are implemented and resolve through theme tokens; the hex values above are dark-spectrum references, not instructions to hardcode light-theme text. `tone` takes precedence over `variant`. Replace ad-hoc status pills with this shared owner. Category identity uses `getCategoryColor`, not an arbitrary status tone; a common category-label extraction is approval-gated. A filter is an interactive control, not a clickable Badge.
 
 ### 7.4 Status dots
 
@@ -437,21 +462,21 @@ A new quieter pattern for status that doesn't need full pill weight (recurring d
 </span>
 ```
 
-Where `.dot` is a 6×6 rounded pill in the spectrum colour, and the text is normal-weight body. Use status dots when stacked or repeated — they scale visually better than pills.
+Where `.dot` is a 6×6 rounded pill in the spectrum colour, and the text is normal-weight body. Use status dots when stacked or repeated — they scale visually better than pills. This is a design specification: there is currently no shared `StatusDot` component or implementation of those example classes. Request approval for its shared extraction before adding new dot/label variants. Chart points and navigation indicators are not status labels and retain their own roles.
 
 ### 7.5 Cards
 
-Three reusable wrappers + two new highlights:
+Five shared surface roles:
 
 | Component | Use | Token |
 |---|---|---|
 | `<PageCard>` | Content, tables, lists, SVG visuals | `radius-md`, `elev-none` |
 | `<ChartCard>` | Recharts charts (edge-to-edge content) | `radius-md`, `elev-none` |
-| `<StatCard>` | Compact KPI display | `radius-lg`, `elev-none`, variant maps to expense/income/neutral |
-| `<HeroCard>` **(new)** | Overview's top card — the hero numeric | `radius-2xl`, `elev-glow-warm`, radial-tint background + gradient hairline along top edge |
-| `<HighlightCard>` **(new)** | Goal-completed callout, on-track health card, savings streak | `radius-lg`, `elev-glow-teal`, teal-tinted left-edge radial wash |
+| `<StatCard>` | Compact KPI display | Target `radius-lg`, `elev-none`; actual API uses `color`, not an expense/income `variant` |
+| `<HeroCard>` | Hero numeric surface | `radius-2xl`, warm glow, radial tint and gradient hairline |
+| `<HighlightCard>` | Supported positive-outcome callout | `radius-lg`, teal glow and left-edge wash |
 
-All five accept `title`, optional `action` (right-aligned in header), and `children`. `className` forwards to the root for one-off overrides.
+`PageCard`, `ChartCard`, `HeroCard` and `HighlightCard` accept `title`, optional `action`, and `children`. `StatCard` accepts `label`, `value`, `color`, optional `delta`, `sparklineData`, `hero`, `subtext` and `className`. Class overrides are for placement, not new surface designs. Current Card resting elevation, StatCard radius and hardcoded highlight treatments differ from the targets; fix them centrally as tracked in the surface audit. Do not paper over those differences in callers.
 
 ### 7.6 Chart conventions
 

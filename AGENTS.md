@@ -311,29 +311,47 @@ The `IngestionPipeline` is instantiated per-user inside `UserManager._build_cont
 
 ## Frontend UI Design System
 
+### Mandatory reuse and approval gate
+
+**Reuse an existing element whenever it serves the same interaction or visual role. Do not invent a parallel design.** This applies to classic and new-experience pages, admin/auth/onboarding, and development previews. Read [docs/design-language.md](docs/design-language.md), search `src/web/frontend/src/components/ui/` and domain components, and inspect an existing caller before changing UI.
+
+- Identify the canonical component and its existing props/variants before implementation. Compose those components for new screens; layout, content, data and accessibility wiring do not justify a new button, pill, card or control style.
+- Use `Button` for command/CTA/icon actions (`asChild` with a real link for navigation CTAs); `Badge` for noninteractive labels; `Tabs` for switching panels; `ActivityRowShell`/`CategoryAvatar` for transaction-like rows; existing card wrappers, field utilities and Radix wrappers for their documented roles. See the registry in design-language.md §7.0.
+- `className`, inline styles, local CSS, `motion.button`, or wrapping a `Badge` in a button must not be used to bypass reuse and create a new visual variant. Layout/width and documented semantic colour are allowed; new radius, padding scale, fill, hover, selection or motion treatments belong in an approved shared owner.
+- Preserve semantics: a status badge is not a filter toggle, a form choice is not automatically a tab, and a calendar cell is not a primary CTA. Keep existing specialised controls while consolidating their repeated implementations; do not force them into an unsuitable component merely to remove native tags.
+- **Before creating a new UI primitive, visual variant, interaction pattern or interface treatment that the existing system cannot express, stop that part of the implementation and ask the user for explicit approval.** First prepare a concrete written proposal: closest existing components inspected, why composition is insufficient, proposed API/states/tokens, intended consumers and migration impact. Do not implement the new element or its bespoke prototype before approval. Continue independent work that reuses existing elements.
+- This gate also covers extracting a missing shared primitive from duplicated page markup (for example a filter chip or switch). A plan's proposed component name is not approval to create it. Once the user explicitly approves that element/scope, do not ask again for its documented uses.
+- Routine reuse, bug/accessibility fixes restoring an established contract, and new pages composed entirely from approved elements need no new design approval. TypeScript data interfaces are not UI elements and are outside this gate.
+- After an approved addition, put it in the appropriate shared module, migrate the agreed consumers, and update the design-language registry with usage, states and approval context. Never leave a new page-local copy as a competing standard.
+- In each UI change summary, name reused components, approved additions (if any), and the visual/interaction checks run. Existing duplicated code is migration debt, not precedent for new duplication.
+
+The [production-polish surface audit](docs/plans/2026-09-17-cashe-production-experience-polish.md#mandatory-first-pass-ui-surface-audit-and-consolidation) names the current duplicates and migration targets. Its consolidation work precedes new polish; missing primitives listed there remain approval-gated.
+
 ### Tech Stack
 
 React 19 + TypeScript + Vite. Tailwind CSS v4 (`@theme` block in `index.css` — no config file). Recharts for all charts. Radix UI primitives (Dialog, Select, DropdownMenu, Tabs, Separator, Slot). shadcn/ui component patterns with CVA (class-variance-authority). lucide-react for all icons. TanStack Query for server state. Frontend root: `src/web/frontend/src/`.
 
 ### Color Tokens
 
-Defined in `src/web/frontend/src/index.css` under `@theme`. These become both CSS custom properties and Tailwind utility classes.
+Defined in `src/web/frontend/src/index.css` under `@theme`, keyed off `:root[data-theme]`. These become both CSS custom properties and Tailwind utility classes. The table below lists the **dark** (default) values — dark is `:root`'s base, light overrides live under `:root[data-theme="light"]`. `ThemeProvider` (`src/hooks/ThemeProvider.tsx`) resolves `system`/`light`/`dark` and follows the OS preference by default; never hardcode a theme's hex value in a component — use the token.
 
-| Token | Hex | Role |
+| Token | Dark hex | Role |
 |---|---|---|
-| `--color-background` | `#0B0B14` | Page background |
-| `--color-card` | `#161624` | Card surfaces, tooltip background |
+| `--color-background` | `#0B0B14` | Page background (light: `#F6F5F8`) |
+| `--color-card` | `#161624` | Card surfaces, tooltip background (light: `#FFFFFF`) |
 | `--color-card-elev` | `#1B1B2C` | Elevated surfaces (dialogs, dropdowns, toasts) |
 | `--color-card-hover` | `#1C1C22` | Bar chart hover cursor (Radix compat) |
-| `--color-border` | `#2A2A3F` | All borders and dividers |
-| `--color-foreground` | `#EEEAF5` | Primary text |
-| `--color-muted` | `#7A7488` | Secondary text, axis ticks, labels |
-| `--color-teal` / `--color-ring` | `#00D4AA` | CTAs, active states, trend lines, focus ring |
+| `--color-border` | `#2A2A3F` | All borders and dividers (light: `#D9D5E1`) |
+| `--color-foreground` | `#EEEAF5` | Primary text (light: `#201C2C`) |
+| `--color-muted` | `#7A7488` | Secondary text, axis ticks, labels (light: `#625C70`, dark: `#A8A1B5` — both meet 4.5:1 AA on card/elevated surfaces) |
+| `--color-teal` / `--color-ring` | `#00D4AA` | CTAs, active states, trend lines, focus ring (light: `#007A63`) |
 | `--color-accent` | `#EEEAF5` | Radix UI compat token only — **not** the brand teal |
 | `--color-destructive` | `#FF453A` | Delete actions, error messages, overspend alerts |
 | `--color-success` | `#00D4AA` (= teal) | Income amounts, "on track" / saved status |
 | `--color-warning` | `#FBBF24` (= honey) | Unusual spending alerts |
 | `--color-info` | `#34D399` (= mint) | Informational, "under pace" velocity |
+
+Full palette, gradients, spacing, radii, elevation, states (loading/empty/error/stale/offline/estimated), motion, and accessibility rules: **`docs/design-language.md` is the single source of truth** for visual/interaction direction — read it before any UI change, not just this summary.
 
 **Semantic color rules — these have caused real bugs, apply carefully:**
 - `text-destructive` for delete buttons, error messages, and "spending ahead of pace" — **never `text-accent`**.
@@ -388,39 +406,47 @@ Three tiers — use the highest applicable tier, not the lower primitives direct
 |---|---|---|
 | `PageCard` | Content, tables, lists, SVG-based visuals | `CardContent` retains `p-4` padding |
 | `ChartCard` | Recharts chart components | `CardContent className="p-0"` — charts render edge-to-edge |
-| `StatCard` | Compact numeric KPI display | Props: `label`, `value`, `variant` (`'expense'`/`'income'`/`'neutral'`) |
+| `StatCard` | Compact numeric KPI display | Actual props: `label`, `value`, `color`, optional `delta`, `sparklineData`, `hero`, `subtext` |
 | `HeroCard` | Large prominent stat with gradient wash | Used for savings overview, health score hero |
-| `HighlightCard` | Secondary accent stats in pairs | Paired with HeroCard |
+| `HighlightCard` | Supported positive-outcome highlight | Teal emphasis, subject to the per-viewport glow budget; not mandatory pairing |
 
-All accept `title`, `children`, and optional `action` (rendered right-aligned in the header). `className` is forwarded to the Card root for one-off overrides.
+`PageCard`, `ChartCard`, `HeroCard` and `HighlightCard` accept `title`, `children` and optional `action`. `StatCard` uses its own API above. `className` permits layout placement, not an unapproved new surface style.
 
 **Tier 3 — Bespoke (use raw `Card`):**
 - Alert card in Analytics — `border-warning/30` semantics, intentionally not abstracted
 - Login card — unique layout, not a repeating pattern
+
+These are existing exceptions, not permission to create new bespoke surfaces. Persistent list/detail chrome can retain an existing base-Card composition when a wrapper would break scrolling. New exceptions require the approval gate above.
 
 ### CSS Utility Classes
 
 Utility classes defined in `src/web/frontend/src/index.css` under `@layer components`:
 
 - **`.input-field`** — use on native `<input>` elements: `px-3 py-1.5 text-sm bg-background border border-border rounded-md text-foreground`. Replaces the repeated inline string.
-- **`.btn-action`** — use for primary save/submit `<button>` elements outside the Button CVA system: `px-4 py-1.5 text-sm bg-foreground text-background rounded-md hover:opacity-90`.
+- **`.btn-action`** — legacy duplication, deprecated for new work. Migrate existing save/submit callers to `Button` with the appropriate existing variant; do not introduce another primary-button path.
 - **`.btn-gradient`** — gradient background for the `default` Button variant. Do not apply manually; the CVA default variant uses it.
 - **`.select-field`** — use on all native `<select>` elements. Includes the white SVG chevron via `background-image`. Never use `.input-field` on a `<select>`.
 - **`.grid-scroll-panel`** — use on grid-area children that may contain long content: `overflow-y: auto; min-height: 0`. The `min-height: 0` is critical and must not be removed.
-- **`.toggle-on`** — gradient active state for toggle switches. Applied by the toggle component; do not apply manually.
+- **`.toggle-on`** — existing switch fill utility; Settings and Finance currently duplicate switch markup. Do not copy it into new controls. A shared switch extraction requires approval; preserve current semantics until that migration is agreed.
 - **`.area-header`**, **`.area-title`**, **`.area-left`**, **`.area-right`**, **`.area-top`** — `grid-area` assignments for named CSS Grid template areas. No-ops outside a grid parent (safe on mobile).
 - **`.page-grid-overview`**, **`.page-grid-analytics`**, **`.page-grid-finance`**, **`.page-grid-settings`** — per-page grid template definitions with responsive `@media` overrides. Mobile: single-column stack. Desktop (`md+`): multi-column viewport-filling grid.
 - **Radix `<SelectTrigger>` chevron** — always `opacity-50` (`<ChevronDown className="h-4 w-4 opacity-50" />`). Do not change to `text-foreground` or any explicit color. The 50% opacity is intentional and must be preserved across all usages.
 
 ### Navigation Pattern
 
-Sidebar (`hidden md:flex`, `w-56` md / `w-64` lg, `sticky top-0 h-screen`, `bg-card border-r border-border`) + bottom tabs (`md:hidden fixed bottom-0 h-16`, `bg-card border-t border-border`). Main content always has `pb-20 md:pb-0` for bottom-tab clearance.
+Sidebar (`hidden md:flex`, `w-14` md / `w-56` lg, `sticky top-0 h-screen`, `bg-card border-r border-border`) + bottom tabs (`md:hidden`, `bg-card border-t border-border`, `BottomTabs.tsx`). Main content has `pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0` for bottom-tab and Home-indicator clearance.
 
-Nav item states: active `bg-foreground/10 text-foreground font-medium`, inactive `text-muted hover:text-foreground hover:bg-foreground/5`. Six routes: Overview `/`, Transactions `/transactions`, Analytics `/analytics`, Finance `/finance`, Merchants `/merchants`, Settings `/settings`.
+Nav item states: active `bg-foreground/10 text-foreground font-medium`, inactive `text-muted hover:text-foreground hover:bg-foreground/5`. All nav targets have a 44px minimum hit area.
+
+**Two navigation modes, both still live** (`settings.home_briefing_enabled`, toggled in Profile → Settings as "New experience"):
+- **New experience (default target):** four destinations — Home `/`, Activity `/activity`, Plan `/plan` (+ `/plan/manage` for the existing subscriptions/budgets/goals tools), Explore `/explore` (nested: patterns index, `insights`, `merchants`). Settings and Review move behind the profile menu; Review also links from Home/Activity.
+- **Classic (legacy fallback):** Overview `/overview`, Transactions `/transactions`, Analytics `/analytics`, Finance `/finance`, Merchants `/merchants`, Settings `/settings`.
+
+Old URLs redirect to their new-experience equivalent with suffix/query/fragment intact (`LegacyRedirect`) when `home_briefing_enabled` is on; both modes route through the same `AppShell`/`TransactionsPage`/`FinancePage` components, so layout and data-fetching code must keep serving both.
 
 ### Dashboard Layout Principles
 
-Four rules that govern how all dashboard pages are structured. Introduced to eliminate page-level scrolling on desktop and keep interactive controls always visible.
+Four rules that govern how dashboard pages are structured on desktop. Originally introduced to eliminate page-level scrolling everywhere; **revised** — Home and Explore now scroll naturally like a normal page, while Activity (`/activity`, `/transactions`) and the Plan management view (`/plan/manage`) keep the viewport-filling, non-scrolling split layout so their list/detail panels and persistent action bars stay independently scrollable and always visible. Apply rules 1–4 below only to that latter group (and to the legacy classic-nav grid pages, which are unchanged); Home/Explore/Plan's timeline are plain stacked content with normal browser scroll and do not use `page-grid-*`/`grid-scroll-panel` at all.
 
 #### 1. Viewport-Native Grid Layout
 
@@ -489,14 +515,14 @@ const pageItems = (items ?? []).slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 Pagination control (only rendered when `totalPages > 1`):
 ```tsx
 <div className="flex items-center gap-1">
-  <Button variant="ghost" size="icon" className="h-6 w-6"
+  <Button variant="ghost" size="icon" className="min-h-11 min-w-11" aria-label="Previous page"
     onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>
-    <ChevronLeft className="h-3 w-3" />
+    <ChevronLeft className="h-4 w-4" />
   </Button>
   <span className="text-xs text-muted">{page}/{totalPages}</span>
-  <Button variant="ghost" size="icon" className="h-6 w-6"
+  <Button variant="ghost" size="icon" className="min-h-11 min-w-11" aria-label="Next page"
     onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}>
-    <ChevronRight className="h-3 w-3" />
+    <ChevronRight className="h-4 w-4" />
   </Button>
 </div>
 ```
