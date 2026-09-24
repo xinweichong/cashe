@@ -26,7 +26,7 @@ export function MerchantTable({ data }: { data: MerchantData[] }) {
             <div className="flex items-center gap-2 mt-1">
               <div className="flex-1 h-1.5 bg-border rounded-full overflow-hidden">
                 <div
-                  className="h-full bg-accent rounded-full"
+                  className="h-full bg-teal rounded-full"
                   style={{ width: `${(m.total / maxTotal) * 100}%` }}
                 />
               </div>

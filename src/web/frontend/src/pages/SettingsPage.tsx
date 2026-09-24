@@ -606,7 +606,7 @@ export function SettingsPage() {
                             <button
                               key={ic}
                               type="button"
-                              className={`w-7 h-7 rounded text-sm flex items-center justify-center border transition-colors ${editIcon === ic ? 'border-primary bg-primary/10' : 'border-transparent hover:bg-accent'}`}
+                              className={`w-7 h-7 rounded text-sm flex items-center justify-center border transition-colors ${editIcon === ic ? 'border-primary bg-primary/10' : 'border-transparent hover:bg-foreground/5'}`}
                               onClick={() => setEditIcon(ic)}
                             >
                               {ic}
@@ -825,7 +825,7 @@ export function SettingsPage() {
                   <button
                     key={ic}
                     type="button"
-                    className={`w-7 h-7 rounded text-sm flex items-center justify-center border transition-colors ${newCatIcon === ic ? 'border-primary bg-primary/10' : 'border-transparent hover:bg-accent'}`}
+                    className={`w-7 h-7 rounded text-sm flex items-center justify-center border transition-colors ${newCatIcon === ic ? 'border-primary bg-primary/10' : 'border-transparent hover:bg-foreground/5'}`}
                     onClick={() => setNewCatIcon(ic)}
                   >
                     {ic}

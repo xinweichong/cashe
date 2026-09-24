@@ -259,7 +259,7 @@ export function TransactionDetail({
                 <Button
                   variant="link"
                   size="sm"
-                  className="h-auto p-0 text-xs text-accent hover:text-accent hover:bg-transparent gap-1"
+                  className="h-auto min-h-11 p-0 text-xs gap-1"
                   onClick={() => navigate(`/merchants/${encodeURIComponent(tx.merchant!)}`)}
                 >
                   View merchant profile
@@ -466,7 +466,7 @@ function RefundEvidenceSection({ tx }: { tx: Transaction }) {
               <p className="text-muted">{formatDateTime(v2.refund_of.transaction_date ?? '')}</p>
               {v2.refund_of.warning && <p className="text-warning mt-1">{v2.refund_of.warning}</p>}
             </div>
-            <button onClick={unlink} disabled={updateTx.isPending} className="text-muted hover:text-destructive shrink-0">Unlink</button>
+            <Button type="button" variant="ghost" size="sm" className="shrink-0" onClick={unlink} disabled={updateTx.isPending}>Unlink</Button>
           </div>
         ) : linking ? (
           <div className="space-y-1.5">
@@ -475,7 +475,6 @@ function RefundEvidenceSection({ tx }: { tx: Transaction }) {
               placeholder="Search purchases by merchant…"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              className="h-8 text-xs"
             />
             {query && (
               <div className="space-y-1 max-h-40 overflow-y-auto">
@@ -494,12 +493,12 @@ function RefundEvidenceSection({ tx }: { tx: Transaction }) {
                 ))}
               </div>
             )}
-            <button onClick={() => { setLinking(false); setQuery(''); }} className="text-xs text-muted hover:text-foreground">Cancel</button>
+            <Button type="button" variant="ghost" size="sm" onClick={() => { setLinking(false); setQuery(''); }}>Cancel</Button>
           </div>
         ) : (
-          <button onClick={() => setLinking(true)} className="text-xs text-accent hover:opacity-80 transition-opacity">
+          <Button type="button" variant="link" size="sm" className="h-auto min-h-11 p-0 text-xs" onClick={() => setLinking(true)}>
             + Link to purchase
-          </button>
+          </Button>
         )}
       </div>
     );
@@ -608,25 +607,17 @@ function TripMembershipItem({ trip, txId }: { trip: Trip; txId: number }) {
     <div className="flex items-center justify-between gap-2">
       {inTrip ? (
         <>
-          <span className="text-xs text-accent">✓ {trip.name}</span>
-          <button
-            onClick={() => delist.mutate()}
-            disabled={delist.isPending}
-            className="text-xs text-muted hover:text-destructive transition-colors"
-          >
+          <span className="text-xs text-success">✓ {trip.name}</span>
+          <Button type="button" variant="ghost" size="sm" onClick={() => delist.mutate()} disabled={delist.isPending}>
             {delist.isPending ? 'Removing…' : 'Remove'}
-          </button>
+          </Button>
         </>
       ) : (
         <>
           <span className="text-xs text-muted">{trip.name}</span>
-          <button
-            onClick={() => enlist.mutate()}
-            disabled={enlist.isPending}
-            className="text-xs text-accent hover:opacity-80 transition-opacity"
-          >
+          <Button type="button" variant="link" size="sm" className="h-auto min-h-11 p-0 text-xs" onClick={() => enlist.mutate()} disabled={enlist.isPending}>
             {enlist.isPending ? 'Adding…' : '+ Add'}
-          </button>
+          </Button>
         </>
       )}
     </div>

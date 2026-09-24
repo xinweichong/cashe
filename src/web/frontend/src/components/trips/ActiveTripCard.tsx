@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { api } from '@/api/client';
 import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
@@ -47,15 +48,13 @@ export function ActiveTripCard({ showEndButton = false }: { showEndButton?: bool
   const daysElapsed = Math.max(1, Math.floor((today.getTime() - start.getTime()) / 86400000) + 1);
 
   return (
-    <Card className="border-accent/40 bg-accent/5">
+    <Card>
       <CardContent className="p-4">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
             <div className="flex items-center gap-2">
               <span className="text-base font-semibold text-foreground">✈️ {activeTrip.name}</span>
-              <span className="text-xs px-1.5 py-0.5 rounded bg-accent/20 text-accent font-medium">
-                Active
-              </span>
+              <Badge tone="active">Active</Badge>
             </div>
             {activeTrip.destination && (
               <p className="text-xs text-muted mt-0.5">{activeTrip.destination}</p>
