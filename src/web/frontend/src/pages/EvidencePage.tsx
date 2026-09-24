@@ -4,7 +4,7 @@ import { briefingApi, formatMoney } from '@/api/briefing';
 import { PageCard } from '@/components/ui/cards';
 import { Button } from '@/components/ui/button';
 import { LoadFailed } from '@/components/ui/LoadFailed';
-import { CategoryAvatar } from '@/components/ui/CategoryAvatar';
+import { ActivityRowShell } from '@/components/ui/ActivityRowShell';
 
 export function EvidencePage() {
   const [search, setSearch] = useSearchParams();
@@ -20,16 +20,19 @@ export function EvidencePage() {
       <h1 className="font-display text-2xl font-semibold">{[search.get('merchant'), search.get('category')].filter(Boolean).join(' · ') || 'Spending'} evidence</h1>
       <p className="text-muted">{search.get('start')}–{search.get('end')} · {search.get('measure') || 'spending'}</p>
     </header>
-    {query.isError ? <div role="alert"><LoadFailed onRetry={() => void query.refetch()} /></div> : !query.data ? <p role="status">{query.isLoading ? 'Loading supporting transactions…' : 'Choose a period from your briefing.'}</p> : <PageCard title={`${query.data.total} supporting records`}>
-      {query.data.items.map(item => <Link to={`/transactions/${item.id}?returnTo=${encodeURIComponent(`/evidence?${search}`)}`} key={item.id} className="flex items-center gap-3 py-4 border-b border-border last:border-0 hover:underline">
-        <CategoryAvatar category={item.category} isIncome={item.type === 'income'} />
-        <div className="flex-1 min-w-0 flex justify-between gap-4">
-          <div className="min-w-0">{item.merchant || 'Unnamed transaction'}<p className="text-sm text-muted">{item.date || 'Date unknown'} · {item.category} · {item.type}</p></div>
-          <div className="text-right shrink-0">{item.amount ? formatMoney(item.amount) : 'Amount unresolved'}{item.conversion_status === 'indicative' && <p className="text-muted text-sm">Indicative conversion</p>}</div>
-        </div>
-      </Link>)}
-      {!query.data.items.length && <p className="text-muted py-4">No records match this period and filter.</p>}
-      <div className="flex items-center justify-between pt-4"><Button variant="outline" disabled={!offset} onClick={() => move(Math.max(0, offset - 50))}>Previous</Button><span className="text-sm text-muted">Page {Math.floor(offset / 50) + 1}</span><Button variant="outline" disabled={offset + 50 >= query.data.total} onClick={() => move(offset + 50)}>Next</Button></div>
+    {query.isError ? <div role="alert"><LoadFailed onRetry={() => void query.refetch()} /></div> : !query.data ? <p role="status">{query.isLoading ? 'Loading supporting transactions…' : 'Choose a period from your briefing.'}</p> : <PageCard title={`${query.data.total} supporting records`} contentClassName="p-0">
+      {query.data.items.map(item => <ActivityRowShell
+        key={item.id}
+        href={`/transactions/${item.id}?returnTo=${encodeURIComponent(`/evidence?${search}`)}`}
+        category={item.category}
+        isIncome={item.type === 'income'}
+        title={item.merchant || 'Unnamed transaction'}
+        metaPrimary={`${item.date || 'Date unknown'} · ${item.type}`}
+        amount={item.amount ? formatMoney(item.amount) : 'Amount unresolved'}
+        amountSub={item.conversion_status === 'indicative' ? 'Indicative conversion' : undefined}
+      />)}
+      {!query.data.items.length && <p className="text-muted p-4">No records match this period and filter.</p>}
+      <div className="flex items-center justify-between p-4"><Button variant="outline" disabled={!offset} onClick={() => move(Math.max(0, offset - 50))}>Previous</Button><span className="text-sm text-muted">Page {Math.floor(offset / 50) + 1}</span><Button variant="outline" disabled={offset + 50 >= query.data.total} onClick={() => move(offset + 50)}>Next</Button></div>
     </PageCard>}
   </div>;
 }
