@@ -74,21 +74,23 @@ export function HomePage() {
           ? `${formatMoney({ ...spending_target.remaining, minor_units: Math.abs(spending_target.remaining.minor_units) })} over your ${formatMoney(spending_target.target)} monthly target.`
           : `${formatMoney(spending_target.remaining)} remaining of your ${formatMoney(spending_target.target)} monthly target.`}</p>}
         <div className="mt-6 pt-4 border-t border-border">
-          {trendQuery.isLoading ? <Skeleton className="h-[160px] w-full" /> : trendQuery.isError ? (
-            <p className="text-sm text-muted">Couldn't load the daily trend. <button className="underline min-h-11" onClick={() => void trendQuery.refetch()}>Retry</button></p>
-          ) : (
+          {trendQuery.data ? (
             <>
+              {trendQuery.isError && <p className="text-xs text-warning mb-1">Couldn't refresh the daily trend — showing the last loaded data. <button className="underline min-h-11" onClick={() => void trendQuery.refetch()}>Retry</button></p>}
               <TrendLine data={trendPoints} selectedDate={selectedDate} onSelectDate={setSelectedDate} />
               {selectedDate && <Link className="text-sm text-teal min-h-11 inline-flex items-center mt-1" to={`/evidence?start=${selectedDate}&end=${selectedDate}&measure=spending`}>View this day's records</Link>}
             </>
+          ) : trendQuery.isLoading ? (
+            <Skeleton className="h-[160px] w-full" />
+          ) : (
+            <p className="text-sm text-muted">Couldn't load the daily trend. <button className="underline min-h-11" onClick={() => void trendQuery.refetch()}>Retry</button></p>
           )}
         </div>
       </HeroCard>
-      <div className="grid md:grid-cols-2 gap-6 items-start">
-        <PageCard title="Where it went">
-          {breakdownQuery.isLoading ? <Skeleton className="h-[220px] w-full" /> : breakdownQuery.isError ? (
-            <p className="text-sm text-muted">Couldn't load the category mix. <button className="underline min-h-11" onClick={() => void breakdownQuery.refetch()}>Retry</button></p>
-          ) : (
+      <PageCard title="Where it went">
+        {breakdownQuery.data ? (
+          <>
+            {breakdownQuery.isError && <p className="text-xs text-warning mb-2">Couldn't refresh the category mix — showing the last loaded data. <button className="underline min-h-11" onClick={() => void breakdownQuery.refetch()}>Retry</button></p>}
             <CategoryDonut
               data={categoryTotals}
               selected={selectedCategory}
@@ -96,43 +98,51 @@ export function HomePage() {
               onViewTransactions={(category) => navigate(evidenceLink(facts.current, category))}
               showLegend
             />
-          )}
-        </PageCard>
-        <PageCard title="Selected category">
-          {!selectedCategory ? (
-            <p className="text-sm text-muted">Select a category in "Where it went" to see its main merchants.</p>
-          ) : merchantsQuery.isLoading ? (
-            <Skeleton className="h-[160px] w-full" />
-          ) : merchantsQuery.isError ? (
-            <p className="text-sm text-muted">Couldn't load merchants for {selectedCategory}. <button className="underline min-h-11" onClick={() => void merchantsQuery.refetch()}>Retry</button></p>
-          ) : (
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full" style={{ background: getCategoryColor(selectedCategory) }} aria-hidden />
-                <span className="font-display text-lg font-semibold">{selectedCategory}</span>
+            {selectedCategory && (
+              <div className="mt-6 pt-4 border-t border-border space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full" style={{ background: getCategoryColor(selectedCategory) }} aria-hidden />
+                    <span className="font-display text-lg font-semibold">{selectedCategory}</span>
+                  </div>
+                  <button className="text-sm text-muted underline min-h-11" onClick={() => setSelectedCategory(null)}>Clear</button>
+                </div>
+                {merchantsQuery.data ? (
+                  <>
+                    {merchantsQuery.isError && <p className="text-xs text-warning">Couldn't refresh merchants for {selectedCategory} — showing the last loaded data. <button className="underline min-h-11" onClick={() => void merchantsQuery.refetch()}>Retry</button></p>}
+                    {merchantsQuery.data.length ? (
+                      <ul className="space-y-2">
+                        {merchantsQuery.data.map((m) => (
+                          <li key={m.merchant} className="flex justify-between text-sm">
+                            <span>{m.merchant}</span>
+                            <span className="font-mono tabular-nums text-muted">{formatMoney(m.total)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-sm text-muted">No merchant records for {selectedCategory} in this period.</p>
+                    )}
+                  </>
+                ) : merchantsQuery.isLoading ? (
+                  <Skeleton className="h-[100px] w-full" />
+                ) : (
+                  <p className="text-sm text-muted">Couldn't load merchants for {selectedCategory}. <button className="underline min-h-11" onClick={() => void merchantsQuery.refetch()}>Retry</button></p>
+                )}
+                <Link
+                  className="text-sm text-teal min-h-11 inline-flex items-center gap-1"
+                  to={evidenceLink(facts.current, selectedCategory)}
+                >
+                  View transactions <ArrowRight size={14} />
+                </Link>
               </div>
-              {merchantsQuery.data?.length ? (
-                <ul className="space-y-2">
-                  {merchantsQuery.data.map((m) => (
-                    <li key={m.merchant} className="flex justify-between text-sm">
-                      <span>{m.merchant}</span>
-                      <span className="font-mono tabular-nums text-muted">{formatMoney(m.total)}</span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-sm text-muted">No merchant records for {selectedCategory} in this period.</p>
-              )}
-              <Link
-                className="text-sm text-teal min-h-11 inline-flex items-center gap-1"
-                to={evidenceLink(facts.current, selectedCategory)}
-              >
-                View transactions <ArrowRight size={14} />
-              </Link>
-            </div>
-          )}
-        </PageCard>
-      </div>
+            )}
+          </>
+        ) : breakdownQuery.isLoading ? (
+          <Skeleton className="h-[220px] w-full" />
+        ) : (
+          <p className="text-sm text-muted">Couldn't load the category mix. <button className="underline min-h-11" onClick={() => void breakdownQuery.refetch()}>Retry</button></p>
+        )}
+      </PageCard>
       <PageCard title="What changed">
         {!!facts.category_changes.length && <div data-testid="category-change-bars">
           {(() => {

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { briefingApi, type HomeBriefing, type SpendingPeriod } from '@/api/briefing';
@@ -229,6 +229,50 @@ test('the daily trend reflects real data and links to a selected day\'s evidence
   const params = new URL(link.getAttribute('href')!, 'http://localhost').searchParams;
   expect(params.get('start')).toBe('2026-09-04');
   expect(params.get('end')).toBe('2026-09-04');
+});
+
+test('Home does not reserve an empty selected-category card before selection', async () => {
+  vi.mocked(briefingApi.home).mockResolvedValue(home);
+  show(<HomePage />);
+  await screen.findByText('Where the dollars go.');
+  expect(screen.queryByText('Selected category')).toBeNull();
+  expect(screen.queryByText(/Select a category in/)).toBeNull();
+});
+
+test('a stale category mix keeps rendering while a background refresh fails', async () => {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  vi.mocked(briefingApi.home).mockResolvedValue(home);
+  vi.mocked(api.getCategoryBreakdownV2).mockResolvedValue({
+    start: period.start, end: period.end,
+    by_category: { Food: { minor_units: 3000, currency: 'SGD' } },
+    unresolved_count: 0, indicative_count: 0, status: 'complete',
+  });
+  render(<QueryClientProvider client={queryClient}><MemoryRouter><HomePage /></MemoryRouter></QueryClientProvider>);
+  expect(await screen.findByText('Food')).toBeTruthy();
+  vi.mocked(api.getCategoryBreakdownV2).mockRejectedValue(new Error('offline'));
+  await act(async () => {
+    await queryClient.refetchQueries({ queryKey: ['home-category-breakdown'] });
+  });
+  expect(await screen.findByText(/Couldn't refresh the category mix/)).toBeTruthy();
+  expect(screen.getByText('Food')).toBeTruthy();
+});
+
+test('a stale daily trend keeps rendering while a background refresh fails', async () => {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  vi.mocked(briefingApi.home).mockResolvedValue(home);
+  vi.mocked(api.getDailyTotalsV2).mockResolvedValue([
+    { date: '2026-09-04', spending: { minor_units: 200, currency: 'SGD' }, income: null, recorded_net_flow: null, transaction_count: 1, unresolved_count: 0, indicative_count: 0, status: 'complete' },
+  ]);
+  render(<QueryClientProvider client={queryClient}><MemoryRouter><HomePage /></MemoryRouter></QueryClientProvider>);
+  await screen.findByText('Where the dollars go.');
+  const chart = document.querySelector('.recharts-responsive-container') ?? document.querySelector('svg');
+  expect(chart).toBeTruthy();
+  vi.mocked(api.getDailyTotalsV2).mockRejectedValue(new Error('offline'));
+  await act(async () => {
+    await queryClient.refetchQueries({ queryKey: ['home-daily-totals'] });
+  });
+  expect(await screen.findByText(/Couldn't refresh the daily trend/)).toBeTruthy();
+  expect(document.querySelector('.recharts-responsive-container') ?? document.querySelector('svg')).toBeTruthy();
 });
 
 test('capture review queues a deliberate retry and refreshes', async () => {
