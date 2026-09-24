@@ -228,10 +228,25 @@ function SelectedDayDetail({ date }: { date: string }) {
 export function PlanPage() {
   const location = useLocation();
   const [search, setSearch] = useSearchParams();
-  const [days, setDays] = useState(30);
-  const [offset, setOffset] = useState(0);
-  const [showCalendarMobile, setShowCalendarMobile] = useState(false);
   const isDesktop = useIsDesktop();
+  // Window, page and phone calendar view live in the URL (replace-history)
+  // so returning from schedule management restores them. Invalid values
+  // fall back to defaults.
+  const daysParam = Number(search.get('days'));
+  const days = [14, 30, 90].includes(daysParam) ? daysParam : 30;
+  const offsetParam = Number(search.get('offset'));
+  const offset = Number.isInteger(offsetParam) && offsetParam > 0 && offsetParam % 50 === 0 ? offsetParam : 0;
+  const showCalendarMobile = search.get('view') === 'calendar';
+  function updateParams(changes: Record<string, string | null>) {
+    const params = new URLSearchParams(search);
+    for (const [key, value] of Object.entries(changes)) {
+      if (value === null) params.delete(key); else params.set(key, value);
+    }
+    setSearch(params, { replace: true });
+  }
+  const setDays = (value: number) => updateParams({ days: value === 30 ? null : String(value), offset: null });
+  const setOffset = (value: number) => updateParams({ offset: value ? String(value) : null });
+  const setShowCalendarMobile = (open: boolean) => updateParams({ view: open ? 'calendar' : null });
   const selectedDate = search.get('date');
   const calendarMonth = search.get('month') || toDateStr(new Date()).slice(0, 7);
   const query = useQuery({
@@ -265,14 +280,19 @@ export function PlanPage() {
     setSearch(params, { replace: true });
   }
 
-  const selectedInAgenda = selectedDate ? grouped.some(g => g.date === selectedDate) : false;
+  // A date's charges can straddle an agenda page boundary; only treat the
+  // highlighted agenda group as the full day when it cannot have been cut.
+  const selectedIndex = selectedDate ? grouped.findIndex(g => g.date === selectedDate) : -1;
+  const cutBefore = offset > 0 && selectedIndex === 0;
+  const cutAfter = !!report && offset + report.items.length < report.total && selectedIndex === grouped.length - 1;
+  const selectedInAgenda = selectedIndex >= 0 && !cutBefore && !cutAfter;
 
   const calendarPane = isDesktop ? (
     <MonthCalendar month={calendarMonth} onMonth={setCalendarMonth} selectedDate={selectedDate} onSelect={selectDate} />
   ) : (
     <div className="mb-4">
       <WeekStrip selectedDate={selectedDate} onSelect={selectDate} />
-      <Button variant="ghost" size="sm" className="mt-2 text-teal" onClick={() => setShowCalendarMobile(v => !v)}>
+      <Button variant="ghost" size="sm" className="mt-2 text-teal" aria-expanded={showCalendarMobile} onClick={() => setShowCalendarMobile(!showCalendarMobile)}>
         {showCalendarMobile ? 'Hide calendar' : 'View calendar'}
       </Button>
       {showCalendarMobile && <div className="mt-3">
@@ -290,7 +310,7 @@ export function PlanPage() {
     </header>
     <ProjectionHero />
     <label className="flex items-center gap-3">Show
-      <select className="select-field min-h-11" value={days} onChange={event => { setDays(Number(event.target.value)); setOffset(0); }}>
+      <select className="select-field min-h-11" value={days} onChange={event => setDays(Number(event.target.value))}>
         <option value={14}>Next 14 days</option><option value={30}>Next 30 days</option><option value={90}>Next 90 days</option>
       </select>
     </label>

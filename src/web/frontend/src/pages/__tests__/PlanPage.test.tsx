@@ -156,3 +156,33 @@ test.each([
   expect(await screen.findByText(label)).toBeTruthy();
   expect(screen.getByText(/Dates and amounts are estimates, not confirmed charges/)).toBeTruthy();
 });
+
+function showAt(path: string) {
+  return render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter initialEntries={[path]}><PlanPage /></MemoryRouter></QueryClientProvider>);
+}
+
+test('a selected date split across agenda pages gets its complete own detail list', async () => {
+  const item = report.items[0];
+  const page = Array.from({ length: 50 }, (_, i) => ({ ...item, id: i + 1, label: `Charge ${i + 1}`, date: i < 49 ? '2026-09-09' : '2026-09-20' }));
+  vi.mocked(briefingApi.upcoming).mockResolvedValue({ ...report, items: page, total: 53 });
+  vi.mocked(briefingApi.upcomingOnDate).mockResolvedValue({ ...report, items: [{ ...item, id: 99, label: 'Late charge', date: '2026-09-20' }], total: 4 });
+  showAt('/plan?date=2026-09-20');
+  await screen.findByText('Charge 50');
+  await waitFor(() => expect(briefingApi.upcomingOnDate).toHaveBeenCalledWith('2026-09-20', 0));
+});
+
+test('a selected date wholly inside the agenda page is inspected there, without a second list', async () => {
+  showAt('/plan?date=2026-09-09');
+  await screen.findByText('Internet');
+  expect(briefingApi.upcomingOnDate).not.toHaveBeenCalled();
+});
+
+test('window, page and calendar view restore from the URL; invalid values fall back', async () => {
+  vi.mocked(briefingApi.upcoming).mockResolvedValue({ ...report, total: 120 });
+  showAt('/plan?days=90&offset=50');
+  await waitFor(() => expect(briefingApi.upcoming).toHaveBeenCalledWith(90, 50));
+  cleanup();
+  vi.mocked(briefingApi.upcoming).mockClear();
+  showAt('/plan?days=7&offset=13');
+  await waitFor(() => expect(briefingApi.upcoming).toHaveBeenCalledWith(30, 0));
+});
