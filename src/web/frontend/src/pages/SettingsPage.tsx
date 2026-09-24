@@ -778,7 +778,7 @@ export function SettingsPage() {
                 className="input-field w-32"
               />
             </div>
-            <button onClick={saveSettings} className="btn-action">Save</button>
+            <Button type="button" onClick={saveSettings}>Save</Button>
             {settingsError && <p className="text-sm text-destructive mt-1">{settingsError}</p>}
           </div>
         </PageCard>

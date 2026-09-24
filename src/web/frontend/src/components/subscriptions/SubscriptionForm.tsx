@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { Button } from '@/components/ui/button';
 import { api, type Subscription } from '@/api/client';
 
 type Mode = 'create' | 'edit';
@@ -172,19 +173,16 @@ export function SubscriptionForm({ onClose, onSave, initial }: SubscriptionFormP
         <div className="shrink-0 px-4 py-3 border-t border-border space-y-2">
           {error && <p className="text-sm text-destructive">{error}</p>}
           <div className="flex justify-end gap-2">
-            <button
-              onClick={onClose}
-              className="px-3 py-1.5 text-sm text-muted hover:text-foreground"
-            >
+            <Button type="button" variant="ghost" onClick={onClose}>
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
+              type="button"
               onClick={() => mutation.mutate()}
               disabled={!merchant || !!billingDayError || mutation.isPending}
-              className="btn-action disabled:opacity-40"
             >
               {mutation.isPending ? 'Saving…' : mode === 'create' ? 'Create' : 'Save'}
-            </button>
+            </Button>
           </div>
         </div>
       </SheetContent>

@@ -407,15 +407,16 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
                             </option>
                           ))}
                         </select>
-                        <button
+                        <Button
+                          type="button"
+                          className="shrink-0"
                           onClick={() => {
                             if (linkSelectedId) linkMutation.mutate(Number(linkSelectedId));
                           }}
                           disabled={!linkSelectedId || linkMutation.isPending}
-                          className="btn-action disabled:opacity-40 shrink-0"
                         >
                           {linkMutation.isPending ? 'Linking…' : 'Link'}
-                        </button>
+                        </Button>
                       </div>
                     )}
                   </div>
@@ -446,19 +447,17 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
                     Delete this subscription permanently? Matched transactions are not deleted.
                   </p>
                   <div className="flex justify-end gap-2">
-                    <button
-                      onClick={() => setConfirmDelete(false)}
-                      className="px-3 py-1.5 text-sm text-muted hover:text-foreground"
-                    >
+                    <Button type="button" variant="ghost" onClick={() => setConfirmDelete(false)}>
                       Cancel
-                    </button>
-                    <button
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="destructive"
                       onClick={() => deleteMutation.mutate()}
                       disabled={deleteMutation.isPending}
-                      className="px-3 py-1.5 text-sm bg-destructive text-white rounded-md disabled:opacity-40"
                     >
                       {deleteMutation.isPending ? 'Deleting…' : 'Delete'}
-                    </button>
+                    </Button>
                   </div>
                 </div>
               )}
@@ -525,13 +524,14 @@ function UpcomingRow({ upcoming, recentTxs, onMatch, onDismiss }: UpcomingRowPro
             </option>
           ))}
         </select>
-        <button
+        <Button
+          type="button"
+          className="shrink-0"
           onClick={() => { if (selectedTxId) onMatch(Number(selectedTxId)); }}
           disabled={!selectedTxId}
-          className="btn-action disabled:opacity-40 shrink-0"
         >
           Match
-        </button>
+        </Button>
       </div>
     </div>
   );

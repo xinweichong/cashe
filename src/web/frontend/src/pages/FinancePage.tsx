@@ -120,13 +120,13 @@ function BudgetRow({
                 onChange={(e) => setInputVal(e.target.value)}
                 className={cn('input-field', 'w-24 !py-1 !text-xs')}
               />
-              <button onClick={handleSave} className="btn-action">Save</button>
-              <button onClick={() => setEditing(false)} className="text-xs text-muted hover:text-foreground">Cancel</button>
+              <Button type="button" size="sm" onClick={handleSave}>Save</Button>
+              <Button type="button" size="sm" variant="ghost" onClick={() => setEditing(false)}>Cancel</Button>
             </>
           ) : (
             <>
-              <button onClick={() => setEditing(true)} className="text-xs text-muted hover:text-foreground">Edit</button>
-              <button onClick={() => onDelete(b.id)} className="text-xs text-destructive hover:text-destructive/80">Delete</button>
+              <Button type="button" size="sm" variant="ghost" onClick={() => setEditing(true)}>Edit</Button>
+              <Button type="button" size="sm" variant="destructive" onClick={() => onDelete(b.id)}>Delete</Button>
             </>
           )}
         </div>
@@ -202,13 +202,13 @@ function AddBudgetForm({ categories, onAdd }: { categories: Category[]; onAdd: (
           placeholder="Amount"
           className={cn('input-field', 'w-28 placeholder:text-muted')}
         />
-        <button
+        <Button
+          type="button"
           onClick={() => createMutation.mutate()}
           disabled={!amount || parseFloat(amount) <= 0 || createMutation.isPending}
-          className={cn('btn-action', 'disabled:opacity-40 transition-opacity')}
         >
           Add
-        </button>
+        </Button>
       </div>
       {error && <p className="text-xs text-destructive">{error}</p>}
     </div>
@@ -413,19 +413,12 @@ function GoalCard({ g, onContribute, onEdit, onDelete }: {
           </div>
         </div>
         <div className="flex gap-2">
-          <button
-            onClick={handleEdit}
-            disabled={!editName.trim() || !editTarget}
-            className="btn-action disabled:opacity-40"
-          >
+          <Button type="button" size="sm" onClick={handleEdit} disabled={!editName.trim() || !editTarget}>
             Save
-          </button>
-          <button
-            onClick={() => setEditing(false)}
-            className="px-3 py-1.5 text-sm border border-border rounded-md text-muted hover:text-foreground transition-colors"
-          >
+          </Button>
+          <Button type="button" size="sm" variant="outline" onClick={() => setEditing(false)}>
             Cancel
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -575,30 +568,27 @@ function GoalCard({ g, onContribute, onEdit, onDelete }: {
       )}
 
       <div className="flex gap-2">
-        <button
-          onClick={() => { setContributing(!contributing); setEditing(false); }}
-          className="text-xs px-2.5 py-1 border border-border rounded-md text-muted hover:text-foreground transition-colors"
-        >
+        <Button type="button" size="sm" variant="outline" onClick={() => { setContributing(!contributing); setEditing(false); }}>
           + Add Contribution
-        </button>
-        <button
-          onClick={startEdit}
-          className="text-xs px-2.5 py-1 border border-border rounded-md text-muted hover:text-foreground transition-colors"
-        >
-          <Pencil className="w-3.5 h-3.5 inline mr-1" />
+        </Button>
+        <Button type="button" size="sm" variant="outline" onClick={startEdit}>
+          <Pencil className="w-3.5 h-3.5" />
           Edit
-        </button>
-        <button
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          className="text-destructive hover:text-destructive"
           onClick={() => {
             if (window.confirm(`Delete goal "${g.name}"? This will also remove all contribution history.`)) {
               onDelete(g.id);
             }
           }}
-          className="text-xs px-2.5 py-1 border border-border rounded-md text-destructive hover:text-destructive/70 transition-colors"
         >
-          <Trash2 className="w-3.5 h-3.5 inline mr-1" />
+          <Trash2 className="w-3.5 h-3.5" />
           Delete
-        </button>
+        </Button>
       </div>
 
       {contributing && (
@@ -617,13 +607,9 @@ function GoalCard({ g, onContribute, onEdit, onDelete }: {
             placeholder="Note (optional)"
             className="input-field flex-1"
           />
-          <button
-            onClick={handleContrib}
-            disabled={!contribAmount}
-            className="btn-action disabled:opacity-40"
-          >
+          <Button type="button" size="sm" onClick={handleContrib} disabled={!contribAmount}>
             Save
-          </button>
+          </Button>
         </div>
       )}
     </div>
@@ -756,13 +742,13 @@ function GoalsSection() {
               )}
             </div>
           </div>
-          <button
+          <Button
+            type="button"
             onClick={() => createMutation.mutate()}
             disabled={!newName || !newTarget || createMutation.isPending}
-            className="btn-action disabled:opacity-40"
           >
             {createMutation.isPending ? 'Creating…' : 'Create Goal'}
-          </button>
+          </Button>
         </div>
       )}
     </PageCard>
@@ -1082,13 +1068,13 @@ function TripsSection() {
                 />
               </label>
             </div>
-            <button
+            <Button
+              type="button"
               onClick={() => createMutation.mutate()}
               disabled={!newName || !newStartDate || createMutation.isPending}
-              className="btn-action disabled:opacity-40"
             >
               {createMutation.isPending ? 'Creating…' : 'Create Trip'}
-            </button>
+            </Button>
           </div>
         )}
 

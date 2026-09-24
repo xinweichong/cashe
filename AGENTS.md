@@ -422,8 +422,8 @@ These are existing exceptions, not permission to create new bespoke surfaces. Pe
 
 Utility classes defined in `src/web/frontend/src/index.css` under `@layer components`:
 
-- **`.input-field`** — use on native `<input>` elements: `px-3 py-1.5 text-sm bg-background border border-border rounded-md text-foreground`. Replaces the repeated inline string.
-- **`.btn-action`** — legacy duplication, deprecated for new work. Migrate existing save/submit callers to `Button` with the appropriate existing variant; do not introduce another primary-button path.
+- **`.input-field`** — use on native `<input>` elements: `px-3 py-1.5 text-sm bg-background border border-border rounded-sm text-foreground`. Replaces the repeated inline string.
+- **`.btn-action`** — removed. All callers migrated to `Button` with the appropriate variant; do not reintroduce it or another primary-button path.
 - **`.btn-gradient`** — gradient background for the `default` Button variant. Do not apply manually; the CVA default variant uses it.
 - **`.select-field`** — use on all native `<select>` elements. Includes the white SVG chevron via `background-image`. Never use `.input-field` on a `<select>`.
 - **`.grid-scroll-panel`** — use on grid-area children that may contain long content: `overflow-y: auto; min-height: 0`. The `min-height: 0` is critical and must not be removed.

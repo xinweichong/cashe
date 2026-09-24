@@ -412,8 +412,8 @@ CVA-based. The implemented API has six variants and four sizes; do not invent pr
 | `destructive` | Confirm an irreversible destructive action, using themed destructive tokens. |
 | `outline` | Cancel/secondary actions. Existing background/input-border treatment with neutral hover. |
 | `ghost` | View all, dropdown trigger, low-emphasis. Transparent, hover to `bg-foreground/5`. **Never** hover to teal. |
-| `link` | Inline text-style command. Intended teal/underline treatment; current `text-primary` token reference needs repair in the shared owner before migration. |
-| `secondary` | Existing compatibility variant; unresolved secondary token references need repair in the shared owner before new use. |
+| `link` | Inline text-style command. `text-teal` underline treatment. |
+| `secondary` | Existing compatibility variant, now resolved to a neutral `card-elev`/`foreground` fill via the shared theme aliases; still not in production use. |
 
 Sizes:
 
@@ -424,13 +424,13 @@ Sizes:
 | `lg` | 44px | 32px | Primary CTAs, hero CTAs |
 | `icon` | 40×40 | — | Icon-only buttons (settings cog, close, more) |
 
-Provide at least 44px effective touch targets in the new experience without inventing page-local compact sizes. `hero` and `xs` are not implemented Button variants/sizes; adding either requires approval. `.btn-action` is deprecated migration debt, not an alternative to `Button`. Ghost hover is already neutral; preserve it. Align control radii to §5 in the shared owner rather than overriding them on individual pages.
+Provide at least 44px effective touch targets in the new experience without inventing page-local compact sizes. `hero` and `xs` are not implemented Button variants/sizes; adding either requires approval. `.btn-action` has been removed; all callers use `Button`. Ghost hover is already neutral; preserve it. Align control radii to §5 in the shared owner rather than overriding them on individual pages.
 
 ### 7.2 Form fields
 
 The consolidation target is `.input-field` with `Input` as a thin wrapper over the same contract. Today the wrapper still has separate sizing/focus/placeholder classes; migrate it and its callers together rather than claiming it is retired. Native checkbox/radio/date behaviour remains intact.
 
-- **Resting target:** `bg-background border border-border rounded-sm px-3 py-1.5 text-sm text-foreground` — the 6px control radius from §5; the current utility's `rounded-md` is migration debt, to be corrected in the shared owner.
+- **Resting target:** `bg-background border border-border rounded-sm px-3 py-1.5 text-sm text-foreground` — the 6px control radius from §5, now the shared owner's actual radius.
 - **Focus:** `border-foreground ring-1 ring-foreground/20` — subtle but visible
 - **Error:** `border-destructive/40` — combined with `text-destructive` helper text below the field
 - **Disabled:** `opacity-50 cursor-not-allowed`
