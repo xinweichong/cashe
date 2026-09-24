@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -44,6 +44,7 @@ export function TransactionForm({ categories, onClose }: TransactionFormProps) {
   // are the only fields needed to capture something fast; everything else
   // stays collapsed until the user asks for it (R09).
   const [showMore, setShowMore] = useState(false);
+  const moreId = useId();
   const [datetime, setDatetime] = useState(() => {
     const now = new Date();
     const pad = (n: number) => String(n).padStart(2, '0');
@@ -153,17 +154,21 @@ export function TransactionForm({ categories, onClose }: TransactionFormProps) {
           </div>
         </div>
 
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="sm"
+          className="min-h-11 px-2 text-xs text-muted"
+          aria-expanded={showMore}
+          aria-controls={moreId}
           onClick={() => setShowMore((v) => !v)}
-          className="flex items-center gap-1 text-xs text-muted hover:text-foreground min-h-11"
         >
           {showMore ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
           {showMore ? 'Fewer details' : 'Currency, date, category, notes…'}
-        </button>
+        </Button>
 
         {showMore && (
-          <div className="space-y-3">
+          <div id={moreId} className="space-y-3">
             <div>
               <label className="text-xs text-muted">Currency</label>
               <Select value={currency} onValueChange={setCurrency}>

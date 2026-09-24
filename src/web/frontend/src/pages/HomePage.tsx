@@ -106,7 +106,7 @@ export function HomePage() {
                     <span className="w-2 h-2 rounded-full" style={{ background: getCategoryColor(selectedCategory) }} aria-hidden />
                     <span className="font-display text-lg font-semibold">{selectedCategory}</span>
                   </div>
-                  <button className="text-sm text-muted underline min-h-11" onClick={() => setSelectedCategory(null)}>Clear</button>
+                  <Button type="button" variant="ghost" size="sm" onClick={() => setSelectedCategory(null)}>Clear selection</Button>
                 </div>
                 {merchantsQuery.data ? (
                   <>

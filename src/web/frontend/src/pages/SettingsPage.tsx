@@ -702,14 +702,17 @@ export function SettingsPage() {
                       )}
                       {(overridesByCategory.get(cat.name)?.length ?? 0) > 0 && (
                         <div className="mt-1.5 ml-7">
-                          <button
+                          <Button
                             type="button"
+                            variant="outline"
+                            size="sm"
+                            className="text-xs text-muted"
+                            aria-expanded={expandedCategory === cat.name}
                             onClick={() => setExpandedCategory(expandedCategory === cat.name ? null : cat.name)}
-                            className="flex items-center gap-1 px-2 py-0.5 text-xs rounded-full border border-border text-muted hover:text-foreground hover:border-foreground/50 transition-colors"
                           >
                             <span>{overridesByCategory.get(cat.name)!.length} learned</span>
                             <ChevronDown className={`w-3 h-3 transition-transform ${expandedCategory === cat.name ? 'rotate-180' : ''}`} />
-                          </button>
+                          </Button>
                           {expandedCategory === cat.name && (
                             <div className="flex flex-wrap gap-1.5 mt-2">
                               {overridesByCategory.get(cat.name)!.map((merchant) => (
@@ -719,6 +722,7 @@ export function SettingsPage() {
                                     type="button"
                                     onClick={() => handleDeleteOverride(merchant)}
                                     disabled={deleteOverride.isPending}
+                                    aria-label={`Remove learned override for ${merchant}`}
                                     className="text-muted hover:text-destructive transition-colors"
                                   >
                                     <X className="w-2.5 h-2.5" />

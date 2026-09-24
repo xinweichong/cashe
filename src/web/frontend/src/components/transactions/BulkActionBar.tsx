@@ -38,15 +38,16 @@ export function BulkActionBar({ count, categories, onCategorize, onSetType, onCa
       </select>
       <div className="flex gap-1 flex-wrap">
         {TYPE_OPTIONS.map((t) => (
-          <button
+          <Button
             key={t.value}
             type="button"
+            variant="outline"
+            size="sm"
             disabled={disabled}
             onClick={() => onSetType(t.value)}
-            className="px-2.5 py-1 text-xs rounded-full border border-border text-muted hover:text-foreground disabled:opacity-50 disabled:hover:text-muted"
           >
             {t.label}
-          </button>
+          </Button>
         ))}
       </div>
       <Button variant="ghost" size="sm" onClick={onCancel} disabled={pending} className="ml-auto">

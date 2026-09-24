@@ -311,15 +311,12 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
                     Transaction merchant is <strong>{adoptPrompt.txMerchant}</strong>. Update subscription for future auto-matching?
                   </span>
                   <div className="flex gap-2 ml-3 shrink-0">
-                    <button
-                      onClick={() => adoptMutation.mutate(adoptPrompt.txMerchant)}
-                      className="text-foreground underline underline-offset-2"
-                    >
+                    <Button type="button" size="sm" variant="outline" onClick={() => adoptMutation.mutate(adoptPrompt.txMerchant)}>
                       Yes
-                    </button>
-                    <button onClick={() => setAdoptPrompt(null)} className="text-muted">
+                    </Button>
+                    <Button type="button" size="sm" variant="ghost" onClick={() => setAdoptPrompt(null)}>
                       No
-                    </button>
+                    </Button>
                   </div>
                 </div>
               )}
@@ -376,12 +373,15 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
                   <p className="text-[10px] font-mono font-semibold uppercase tracking-[0.22em] text-muted">
                     History
                   </p>
-                  <button
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    aria-expanded={showLinkPicker}
                     onClick={() => setShowLinkPicker((v) => !v)}
-                    className="text-xs text-muted hover:text-foreground underline underline-offset-2"
                   >
                     {showLinkPicker ? 'Hide' : 'Link past transaction'}
-                  </button>
+                  </Button>
                 </div>
 
                 {showLinkPicker && (
@@ -502,12 +502,9 @@ function UpcomingRow({ upcoming, recentTxs, onMatch, onDismiss }: UpcomingRowPro
             <span className="text-xs text-muted">S${upcoming.expected_amount.toFixed(2)}</span>
           )}
         </div>
-        <button
-          onClick={onDismiss}
-          className="text-xs text-muted hover:text-foreground underline underline-offset-2"
-        >
+        <Button type="button" variant="ghost" size="sm" onClick={onDismiss}>
           Dismiss
-        </button>
+        </Button>
       </div>
       <div className="flex gap-2">
         <select

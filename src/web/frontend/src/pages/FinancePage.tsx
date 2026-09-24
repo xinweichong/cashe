@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api, type BudgetProgressV2, type Category, type GoalProgress, type GoalProgressV2, type Trip, type RecurringTransaction } from '@/api/client';
 import { PageCard, HeroCard, HighlightCard } from '@/components/ui/cards';
@@ -1120,7 +1120,6 @@ function TripsSection() {
 
 export function FinancePage() {
   const qc = useQueryClient();
-  const navigate = useNavigate();
   const [showAddForm, setShowAddForm] = useState(false);
   const [search, setSearch] = useSearchParams();
   const requestedSubId = Number(search.get('subscription'));
@@ -1175,12 +1174,9 @@ export function FinancePage() {
         <p className="text-muted text-sm">
           Enable Budgets, Goals, Trips, Subscriptions, or Recurring in Settings to get started.
         </p>
-        <button
-          onClick={() => navigate('/settings')}
-          className="text-sm underline underline-offset-2 text-foreground/70 hover:text-foreground"
-        >
+        <Link to="/settings" className="text-sm text-teal underline-offset-4 hover:underline min-h-11 inline-flex items-center">
           Go to Settings →
-        </button>
+        </Link>
       </div>
     );
   }
