@@ -2,7 +2,6 @@ import { useState, useEffect, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useQueryClient, useMutation, useQuery } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Card } from '@/components/ui/card';
 import { PageCard } from '@/components/ui/cards';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -556,14 +555,17 @@ export function SettingsPage() {
       <div className="area-right grid-scroll-panel space-y-4">
 
         {/* Categories */}
-        <Card className="border-border">
-          <div className="p-4 border-b border-border flex items-center justify-between">
-            <h2 className="font-medium">Categories</h2>
+        <PageCard
+          title="Categories"
+          headerClassName="border-b border-border"
+          contentClassName="p-0"
+          action={
             <Button size="sm" variant="ghost" onClick={() => { setShowAddCategory(true); setCatError(''); }}>
               <Plus className="w-4 h-4 mr-1" />
               Add
             </Button>
-          </div>
+          }
+        >
           <motion.div
             className="divide-y divide-border"
             variants={staggerContainerVariants}
@@ -719,7 +721,7 @@ export function SettingsPage() {
               <div className="p-6 text-center text-muted text-sm">No categories yet</div>
             )}
           </motion.div>
-        </Card>
+        </PageCard>
 
         {/* Feature Toggles */}
         <div id="feature-toggles">

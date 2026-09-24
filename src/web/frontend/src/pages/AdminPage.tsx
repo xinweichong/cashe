@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
+import { PageCard } from '@/components/ui/cards';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { CheckCircle2, X } from 'lucide-react';
@@ -245,8 +246,7 @@ function AdminDashboard({ token, onLogout }: { token: string; onLogout: () => vo
 
       <div className="max-w-3xl mx-auto space-y-6">
         {/* Create user */}
-        <Card className="p-6 space-y-4">
-          <h2 className="text-sm font-semibold text-foreground">Create Account</h2>
+        <PageCard title="Create Account" contentClassName="space-y-4">
           <div className="flex flex-col sm:flex-row gap-2">
             <Input
               placeholder="Username"
@@ -282,7 +282,7 @@ function AdminDashboard({ token, onLogout }: { token: string; onLogout: () => vo
               </Button>
             </div>
           )}
-        </Card>
+        </PageCard>
 
         {/* Users table */}
         <Card className="overflow-hidden">

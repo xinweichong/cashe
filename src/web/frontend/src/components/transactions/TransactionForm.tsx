@@ -106,7 +106,7 @@ export function TransactionForm({ categories, onClose }: TransactionFormProps) {
   };
 
   return (
-    <Card className="p-4 bg-card border-border">
+    <Card className="p-4">
       <form onSubmit={handleSubmit} className="space-y-3">
         <div className="flex rounded-md border border-border overflow-hidden">
           {TX_TYPES.map((t, i) => (
