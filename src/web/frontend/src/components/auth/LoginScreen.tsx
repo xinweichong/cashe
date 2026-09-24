@@ -62,7 +62,6 @@ export function LoginScreen() {
               placeholder="Username"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              className="bg-background border-border"
               autoFocus
               autoComplete="username"
             />
@@ -71,7 +70,6 @@ export function LoginScreen() {
               placeholder="Password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="bg-background border-border"
               autoComplete="current-password"
             />
             {error && (

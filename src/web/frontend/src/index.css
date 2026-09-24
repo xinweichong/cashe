@@ -98,6 +98,17 @@
   100% { background-position:  200% 0; }
 }
 
+/* Radix overlay motion (§14.2): entrances ease out, exits are quicker fades.
+   Only `transform` animates; centering uses Tailwind's separate `translate`. */
+@keyframes overlay-in  { from { opacity: 0; } }
+@keyframes overlay-out { to   { opacity: 0; } }
+@keyframes pop-in   { from { opacity: 0; transform: translateY(8px) scale(0.97); } }
+@keyframes pop-out  { to   { opacity: 0; transform: scale(0.97); } }
+@keyframes sheet-in-right  { from { transform: translateX(100%); } }
+@keyframes sheet-in-left   { from { transform: translateX(-100%); } }
+@keyframes sheet-in-top    { from { transform: translateY(-100%); } }
+@keyframes sheet-in-bottom { from { transform: translateY(100%); } }
+
 @layer base {
   /* §9.2 — all lucide icons render at 1.5 stroke, overridden once, never per-instance */
   svg.lucide {
@@ -140,6 +151,17 @@ body {
   .toggle-on {
     background: linear-gradient(90deg, #00D4AA, #FB923C);
   }
+
+  /* Owned by the dialog, sheet, dropdown-menu and select wrappers — not for page use. */
+  .overlay-motion[data-state="open"]   { animation: overlay-in var(--dur-base) var(--ease-out-expo); }
+  .overlay-motion[data-state="closed"] { animation: overlay-out var(--dur-fast) ease-in; }
+  .pop-motion[data-state="open"]    { animation: pop-in var(--dur-base) var(--ease-out-expo); }
+  .pop-motion[data-state="closed"]  { animation: pop-out var(--dur-fast) ease-in; }
+  .sheet-motion-right[data-state="open"]  { animation: sheet-in-right var(--dur-base) var(--ease-out-expo); }
+  .sheet-motion-left[data-state="open"]   { animation: sheet-in-left var(--dur-base) var(--ease-out-expo); }
+  .sheet-motion-top[data-state="open"]    { animation: sheet-in-top var(--dur-base) var(--ease-out-expo); }
+  .sheet-motion-bottom[data-state="open"] { animation: sheet-in-bottom var(--dur-base) var(--ease-out-expo); }
+  [class*="sheet-motion-"][data-state="closed"] { animation: overlay-out var(--dur-fast) ease-in; }
 
   /* ── Grid layout utilities ─────────────────────────────────────────────── */
 

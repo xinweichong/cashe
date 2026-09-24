@@ -111,7 +111,7 @@ export function TransactionFilters({
           placeholder="Search merchant, alias, description, category, or amount..."
           value={search}
           onChange={(e) => onSearchChange(e.target.value)}
-          className="pl-9 bg-background border-border"
+          className="pl-9"
         />
       </div>
       <div className="flex flex-wrap gap-2">

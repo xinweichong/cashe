@@ -138,7 +138,7 @@ export function TransactionForm({ categories, onClose }: TransactionFormProps) {
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               placeholder="0.00"
-              className="bg-background border-border text-lg font-semibold"
+              className="text-lg font-semibold"
               required
               autoFocus
             />
@@ -149,7 +149,6 @@ export function TransactionForm({ categories, onClose }: TransactionFormProps) {
               value={merchant}
               onChange={(e) => setMerchant(e.target.value)}
               placeholder="e.g. Coffee Shop"
-              className="bg-background border-border"
             />
           </div>
         </div>
@@ -168,7 +167,7 @@ export function TransactionForm({ categories, onClose }: TransactionFormProps) {
             <div>
               <label className="text-xs text-muted">Currency</label>
               <Select value={currency} onValueChange={setCurrency}>
-                <SelectTrigger className="bg-background border-border">
+                <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -182,7 +181,7 @@ export function TransactionForm({ categories, onClose }: TransactionFormProps) {
             <div>
               <label className="text-xs text-muted">Category</label>
               <Select value={category} onValueChange={setCategory}>
-                <SelectTrigger className="bg-background border-border">
+                <SelectTrigger>
                   <SelectValue placeholder="Select category" />
                 </SelectTrigger>
                 <SelectContent>
@@ -199,7 +198,6 @@ export function TransactionForm({ categories, onClose }: TransactionFormProps) {
                 type="datetime-local"
                 value={datetime}
                 onChange={(e) => setDatetime(e.target.value)}
-                className="bg-background border-border"
               />
             </div>
 
@@ -209,7 +207,6 @@ export function TransactionForm({ categories, onClose }: TransactionFormProps) {
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Notes..."
-                className="bg-background border-border"
               />
             </div>
 
@@ -232,7 +229,7 @@ export function TransactionForm({ categories, onClose }: TransactionFormProps) {
                     setTripTouched(true);
                   }}
                 >
-                  <SelectTrigger className="bg-background border-border">
+                  <SelectTrigger>
                     <SelectValue placeholder="No trip" />
                   </SelectTrigger>
                   <SelectContent>

@@ -317,13 +317,13 @@ export function TransactionDetail({
               <Input
                 value={merchant}
                 onChange={(e) => setMerchant(e.target.value)}
-                className="bg-background border-border text-sm"
+                className="text-sm"
               />
             </div>
             <div>
               <label className="text-xs text-muted mb-1 block">Category</label>
               <Select value={category} onValueChange={setCategory}>
-                <SelectTrigger className="bg-background border-border text-sm">
+                <SelectTrigger>
                   <SelectValue placeholder="Category" />
                 </SelectTrigger>
                 <SelectContent>
@@ -349,7 +349,7 @@ export function TransactionDetail({
               <div>
                 <label className="text-xs text-muted mb-1 block">Card</label>
                 <Select value={description} onValueChange={setDescription}>
-                  <SelectTrigger className="bg-background border-border text-sm">
+                  <SelectTrigger>
                     <SelectValue placeholder="Card (Apple Wallet)" />
                   </SelectTrigger>
                   <SelectContent>
@@ -370,7 +370,7 @@ export function TransactionDetail({
                   type="number"
                   value={exchangeRate}
                   onChange={(e) => setExchangeRate(e.target.value)}
-                  className="bg-background border-border text-sm"
+                  className="text-sm"
                   step="any"
                   min="0"
                 />

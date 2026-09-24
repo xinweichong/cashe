@@ -112,7 +112,6 @@ function AdminLogin({ onSuccess }: { onSuccess: (token: string) => void }) {
               placeholder="Admin password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="bg-background border-border"
               autoFocus
             />
             {error && <p className="text-sm text-destructive">{error}</p>}
@@ -252,7 +251,7 @@ function AdminDashboard({ token, onLogout }: { token: string; onLogout: () => vo
               placeholder="Username"
               value={newUsername}
               onChange={(e) => setNewUsername(e.target.value.toLowerCase())}
-              className="bg-background border-border flex-1"
+              className="flex-1"
             />
             <Button onClick={handleCreate} disabled={createLoading || !newUsername}>
               {createLoading ? 'Creating…' : 'Create Account'}
@@ -353,7 +352,7 @@ function AdminDashboard({ token, onLogout }: { token: string; onLogout: () => vo
 
       {/* Reset Password Modal */}
       <Dialog open={!!resetTarget} onOpenChange={(open) => { if (!open) { setResetTarget(null); setResetPassword(''); setResetError(''); } }}>
-        <DialogContent className="bg-card border-border">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>Reset password for {resetTarget}</DialogTitle>
           </DialogHeader>
@@ -364,7 +363,7 @@ function AdminDashboard({ token, onLogout }: { token: string; onLogout: () => vo
                 placeholder="New password"
                 value={resetPassword}
                 onChange={(e) => setResetPassword(e.target.value)}
-                className="bg-background border-border flex-1"
+                className="flex-1"
                 autoFocus
               />
               <Button variant="outline" onClick={() => setResetPassword(generatePassword())}>
@@ -387,7 +386,7 @@ function AdminDashboard({ token, onLogout }: { token: string; onLogout: () => vo
 
       {/* Delete Confirm Modal */}
       <Dialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
-        <DialogContent className="bg-card border-border">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>Delete {deleteTarget}?</DialogTitle>
           </DialogHeader>
@@ -398,7 +397,7 @@ function AdminDashboard({ token, onLogout }: { token: string; onLogout: () => vo
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancel</Button>
               <Button
-                className="text-destructive-foreground bg-destructive hover:bg-destructive/90"
+                variant="destructive"
                 onClick={handleDelete}
                 disabled={deleteLoading}
               >

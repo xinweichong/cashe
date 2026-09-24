@@ -336,7 +336,6 @@ export function SettingsPage() {
                 placeholder="Current password"
                 value={currentPw}
                 onChange={(e) => setCurrentPw(e.target.value)}
-                className="bg-background border-border"
                 autoComplete="current-password"
               />
               <Input
@@ -344,7 +343,6 @@ export function SettingsPage() {
                 placeholder="New password"
                 value={newPw}
                 onChange={(e) => setNewPw(e.target.value)}
-                className="bg-background border-border"
                 autoComplete="new-password"
               />
               <Input
@@ -352,7 +350,6 @@ export function SettingsPage() {
                 placeholder="Confirm new password"
                 value={confirmPw}
                 onChange={(e) => setConfirmPw(e.target.value)}
-                className="bg-background border-border"
                 autoComplete="new-password"
               />
               {pwError && <p className="text-sm text-destructive">{pwError}</p>}
@@ -603,7 +600,7 @@ export function SettingsPage() {
                           value={editKeywords}
                           onChange={(e) => setEditKeywords(e.target.value)}
                           placeholder="keyword1, keyword2"
-                          className="bg-background border-border text-sm"
+                          className="text-sm"
                           autoFocus
                         />
                       </div>
@@ -787,7 +784,7 @@ export function SettingsPage() {
 
       {/* Add Category Dialog */}
       <Dialog open={showAddCategory} onOpenChange={(open) => { setShowAddCategory(open); if (!open) { setNewCatName(''); setNewCatKeywords(''); setNewCatIcon('📌'); setNewCatColor(''); setCatError(''); } }}>
-        <DialogContent className="bg-card border-border">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>Add Category</DialogTitle>
           </DialogHeader>
@@ -798,7 +795,6 @@ export function SettingsPage() {
                 value={newCatName}
                 onChange={(e) => setNewCatName(e.target.value)}
                 placeholder="e.g. Healthcare"
-                className="bg-background border-border"
                 autoFocus
               />
             </div>
@@ -823,7 +819,6 @@ export function SettingsPage() {
                 value={newCatKeywords}
                 onChange={(e) => setNewCatKeywords(e.target.value)}
                 placeholder="e.g. clinic, pharmacy, doctor"
-                className="bg-background border-border"
               />
             </div>
             <div>
