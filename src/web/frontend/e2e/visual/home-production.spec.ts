@@ -112,3 +112,17 @@ test('production Home hero glow is static, never an infinite pulse', async ({ pa
   const animationNameReduced = await glowReduced.evaluate((el) => getComputedStyle(el, '::after').animationName);
   expect(animationNameReduced).toBe('none');
 });
+
+test('initial Home load renders visible shape-matched skeletons in light theme', async ({ page }) => {
+  await page.addInitScript(() => window.localStorage.setItem('cashe-appearance', 'light'));
+  await mockAuthenticatedHome(page);
+  await page.route('**/api/v2/home', () => new Promise(() => {}));
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+  const status = page.getByRole('status', { name: 'Preparing your briefing' });
+  await expect(status).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Where the dollars go.' })).toBeVisible();
+  const bg = await status.locator('.skeleton-pulse').first().evaluate((el) => getComputedStyle(el).backgroundImage);
+  expect(bg).not.toContain('255, 255, 255');
+  await page.screenshot({ path: 'e2e/screenshots/home-initial-skeleton-light.png' });
+});

@@ -43,8 +43,36 @@ export function HomePage() {
     queryFn: () => api.getMerchantRankingFactsV2(currentStart!, currentEnd!, selectedCategory ?? undefined, 5),
     enabled: !!currentStart && !!currentEnd && !!selectedCategory,
   });
-  if (!query.data && query.isError) return <div role="alert"><LoadFailed onRetry={() => void query.refetch()} /></div>;
-  if (!query.data) return <p role="status" className="p-6 text-muted">Preparing your briefing…</p>;
+  const header = (asOf: React.ReactNode) => (
+    <header className="flex items-center justify-between gap-4">
+      <div className="flex flex-col gap-1">
+        <div className="text-xs uppercase tracking-[0.22em] text-muted font-mono font-semibold">Home</div>
+        <h1 className="text-xl font-bold leading-tight tracking-tight text-foreground font-display">Where the dollars go.</h1>
+        {asOf}
+      </div>
+      <Link className="min-h-11 min-w-11 inline-flex items-center gap-2 text-teal" to="/transactions?add=1"><Plus aria-hidden="true" size={20} />Add</Link>
+    </header>
+  );
+  if (!query.data && query.isError) return (
+    <div className="max-w-5xl mx-auto p-4 md:p-8 space-y-6 text-base">
+      {header(null)}
+      <div role="alert"><LoadFailed onRetry={() => void query.refetch()} /></div>
+    </div>
+  );
+  if (!query.data) return (
+    <div className="max-w-5xl mx-auto p-4 md:p-8 space-y-6 text-base">
+      {header(<Skeleton className="h-5 w-48" />)}
+      <div role="status" aria-label="Preparing your briefing" className="space-y-6">
+        <HeroCard title="Month spending">
+          <Skeleton className="h-12 w-48" />
+          <Skeleton className="mt-3 h-4 w-64 max-w-full" />
+          <Skeleton className="mt-6 h-[160px] w-full" />
+        </HeroCard>
+        <PageCard title="Where it went"><Skeleton className="h-[220px] w-full" /></PageCard>
+        <PageCard title="What changed"><Skeleton className="h-24 w-full" /></PageCard>
+      </div>
+    </div>
+  );
   const { facts, spending_target, freshness, recent, upcoming, upcoming_total, upcoming_unknown_count, increased_commitments, capture_issue_count, followup_issue_count, review_count, recurring_suggestion_count } = query.data;
   const overTarget = !!spending_target && spending_target.remaining.minor_units < 0;
   const unresolved = facts.current.unresolved_count + facts.undated_count;
@@ -56,14 +84,7 @@ export function HomePage() {
   const trendPoints = trendQuery.data?.map((day) => ({ date: day.date, amount: day.spending.minor_units / 100 })) ?? [];
   return (
     <div className="max-w-5xl mx-auto p-4 md:p-8 space-y-6 text-base">
-      <header className="flex items-center justify-between gap-4">
-        <div className="flex flex-col gap-1">
-          <div className="text-xs uppercase tracking-[0.22em] text-muted font-mono font-semibold">Home</div>
-          <h1 className="text-xl font-bold leading-tight tracking-tight text-foreground font-display">Where the dollars go.</h1>
-          <p className="text-muted">Through {facts.as_of} · {facts.timezone}</p>
-        </div>
-        <Link className="min-h-11 min-w-11 inline-flex items-center gap-2 text-teal" to="/transactions?add=1"><Plus aria-hidden="true" size={20} />Add</Link>
-      </header>
+      {header(<p className="text-muted">Through {facts.as_of} · {facts.timezone}</p>)}
       {query.isError && <p role="alert" className="text-warning">Couldn’t refresh. This briefing may be out of date. <Button type="button" variant="link" size="sm" className="h-auto min-h-11 p-0 align-baseline" onClick={() => void query.refetch()}>Retry</Button></p>}
       <HeroCard title="Month spending" action={<Link className="min-h-11 inline-flex items-center text-teal" to={evidenceLink(facts.current)}>See spending <ArrowRight className="ml-2" size={16} /></Link>}>
         <HeroAmount value={facts.current.spending} />

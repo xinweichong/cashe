@@ -27,7 +27,7 @@ afterEach(cleanup);
 test('Home keeps evidence periods and categories in links and omits missing income', async () => {
   vi.mocked(briefingApi.home).mockResolvedValue(home);
   show(<HomePage />);
-  expect(await screen.findByText('Where the dollars go.')).toBeTruthy();
+  expect(await screen.findByText(/^Through 2026-09-06/)).toBeTruthy();
   const href = screen.getByRole('link', { name: 'Previous period' }).getAttribute('href')!;
   const params = new URL(href, 'http://localhost').searchParams;
   expect(params.get('start')).toBe('2026-08-01');
@@ -135,7 +135,7 @@ test('Home frames an over-target spend as a warning, not a safe-to-spend figure'
 test('Home omits the target line entirely when no overall budget is set', async () => {
   vi.mocked(briefingApi.home).mockResolvedValue({ ...home, spending_target: null });
   show(<HomePage />);
-  await screen.findByText('Where the dollars go.');
+  await screen.findByText(/^Through 2026-09-06/);
   expect(screen.queryByText(/monthly target/)).toBeNull();
 });
 
@@ -222,7 +222,7 @@ test('the daily trend reflects real data and links to a selected day\'s evidence
     { date: '2026-09-05', spending: { minor_units: 500, currency: 'SGD' }, income: null, recorded_net_flow: null, transaction_count: 1, unresolved_count: 0, indicative_count: 0, status: 'complete' },
   ]);
   show(<HomePage />);
-  await screen.findByText('Where the dollars go.');
+  await screen.findByText(/^Through 2026-09-06/);
   expect(screen.queryByRole('link', { name: /View this day/ })).toBeNull();
   fireEvent.click(await screen.findByLabelText('Previous day'));
   const link = await screen.findByRole('link', { name: "View this day's records" });
@@ -231,10 +231,18 @@ test('the daily trend reflects real data and links to a selected day\'s evidence
   expect(params.get('end')).toBe('2026-09-04');
 });
 
+test('initial load shows the heading and a labelled skeleton, not a bare message', async () => {
+  vi.mocked(briefingApi.home).mockReturnValue(new Promise(() => {}));
+  show(<HomePage />);
+  expect(screen.getByRole('heading', { name: 'Where the dollars go.' })).toBeTruthy();
+  expect(screen.getByRole('status', { name: 'Preparing your briefing' })).toBeTruthy();
+  expect(screen.queryByText('Recorded spending this month')).toBeNull();
+});
+
 test('Home does not reserve an empty selected-category card before selection', async () => {
   vi.mocked(briefingApi.home).mockResolvedValue(home);
   show(<HomePage />);
-  await screen.findByText('Where the dollars go.');
+  await screen.findByText(/^Through 2026-09-06/);
   expect(screen.queryByText('Selected category')).toBeNull();
   expect(screen.queryByText(/Select a category in/)).toBeNull();
 });
@@ -264,7 +272,7 @@ test('a stale daily trend keeps rendering while a background refresh fails', asy
     { date: '2026-09-04', spending: { minor_units: 200, currency: 'SGD' }, income: null, recorded_net_flow: null, transaction_count: 1, unresolved_count: 0, indicative_count: 0, status: 'complete' },
   ]);
   render(<QueryClientProvider client={queryClient}><MemoryRouter><HomePage /></MemoryRouter></QueryClientProvider>);
-  await screen.findByText('Where the dollars go.');
+  await screen.findByText(/^Through 2026-09-06/);
   const chart = document.querySelector('.recharts-responsive-container') ?? document.querySelector('svg');
   expect(chart).toBeTruthy();
   vi.mocked(api.getDailyTotalsV2).mockRejectedValue(new Error('offline'));
