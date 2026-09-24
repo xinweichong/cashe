@@ -1,8 +1,6 @@
 import type { ReactNode } from 'react';
-import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { springs } from '@/lib/motionPresets';
 import { DeltaBadge, Sparkline } from '@/lib/animations';
 
 type StatColor = 'teal' | 'warm' | 'coral' | 'mint' | 'default';
@@ -60,8 +58,8 @@ export function StatCard({
     'text-2xl';
 
   return (
-    <motion.div whileHover={{ y: -2 }} transition={springs.snappy} className={cn(className)}>
-      <Card className={cn(glowClass, 'h-full')}>
+    <div className={cn(className)}>
+      <Card className={cn(glowClass, 'h-full rounded-lg shadow-none')}>
         {glowClass && <div className="hero-glow-clip" aria-hidden><div className="hero-hairline" /></div>}
         <CardHeader className="pb-1">
           <CardTitle className="text-xs font-semibold font-mono uppercase tracking-[0.22em] text-muted">
@@ -99,6 +97,6 @@ export function StatCard({
           </div>
         </CardContent>
       </Card>
-    </motion.div>
+    </div>
   );
 }

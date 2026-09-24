@@ -63,7 +63,7 @@ interface HeroCardProps {
 
 export function HeroCard({ title, action, children, className, glowColor = 'warm' }: HeroCardProps) {
   return (
-    <div className={cn('rounded-[24px] p-8', GLOW_CLASS[glowColor], className)}>
+    <div className={cn('rounded-2xl p-8', GLOW_CLASS[glowColor], className)}>
       <div className="hero-glow-clip" aria-hidden>
         <div className="hero-hairline" />
       </div>
@@ -87,11 +87,12 @@ interface HighlightCardProps {
 }
 
 const HIGHLIGHT_CARD_STYLE: CSSProperties = {
-  border: '1px solid rgba(0,212,170,.25)',
+  border: '1px solid color-mix(in srgb, var(--color-teal) 25%, transparent)',
   background:
-    'radial-gradient(120% 100% at 0% 0%, rgba(0,212,170,.08) 0%, rgba(11,11,20,0) 50%), var(--color-card)',
-  boxShadow: '0 0 0 1px rgba(0,212,170,.18), 0 0 36px -8px rgba(0,212,170,.28)',
-  borderRadius: '14px',
+    'radial-gradient(120% 100% at 0% 0%, color-mix(in srgb, var(--color-teal) 8%, transparent) 0%, transparent 50%), var(--color-card)',
+  boxShadow:
+    '0 0 0 1px color-mix(in srgb, var(--color-teal) 18%, transparent), 0 0 36px -8px color-mix(in srgb, var(--color-teal) 28%, transparent)',
+  borderRadius: 'var(--radius-lg)',
   padding: '20px',
 };
 
@@ -99,7 +100,7 @@ export function HighlightCard({ title, action, children, className }: HighlightC
   return (
     <div style={HIGHLIGHT_CARD_STYLE} className={cn(className)}>
       <div className="flex flex-row items-center justify-between gap-2 mb-3">
-        <span className="text-xs uppercase tracking-[0.22em] font-semibold font-mono" style={{ color: '#00D4AA' }}>
+        <span className="text-xs uppercase tracking-[0.22em] font-semibold font-mono" style={{ color: 'var(--color-teal)' }}>
           {title}
         </span>
         {action && <div className="shrink-0">{action}</div>}

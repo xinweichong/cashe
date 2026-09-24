@@ -29,6 +29,15 @@
   --color-warning:            var(--color-honey);
   --color-info:               var(--color-mint);
 
+  /* Compatibility aliases — resolve shadcn/ui token references through
+     established theme colours rather than leaving them undefined. */
+  --color-primary:              var(--color-teal);
+  --color-primary-foreground:   var(--color-on-brand);
+  --color-secondary:            var(--color-card-elev);
+  --color-secondary-foreground: var(--color-foreground);
+  --color-muted-foreground:     var(--color-muted);
+  --color-card-foreground:      var(--color-foreground);
+
   /* Fonts */
   --font-display: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
   --font-body:    'Inter', system-ui, -apple-system, sans-serif;
