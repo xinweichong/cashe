@@ -7,6 +7,7 @@ import { Link } from 'react-router-dom';
 import { api } from '@/api/client';
 import type { Transaction } from '@/api/client';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { ChartCard } from '@/components/ui/cards';
 import { useChartTheme } from '@/lib/chartTheme';
 import { X } from 'lucide-react';
@@ -146,9 +147,9 @@ export function MerchantProfile({
             <Badge variant="outline" className="mt-1 text-xs">{profile.category}</Badge>
           )}
         </div>
-        <button onClick={onClose} className="text-muted hover:text-foreground p-1">
+        <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close">
           <X className="w-4 h-4" />
-        </button>
+        </Button>
       </div>
 
       {/* Scrollable body */}
@@ -241,13 +242,16 @@ export function MerchantProfile({
             {ruleImpact.differing_count > 0 ? (
               <>
                 <p className="text-sm text-muted">{ruleImpact.differing_count} past transaction{ruleImpact.differing_count === 1 ? '' : 's'} still {ruleImpact.differing_count === 1 ? 'has' : 'have'} a different category.</p>
-                <button
+                <Button
+                  type="button"
+                  variant="link"
+                  size="sm"
+                  className="h-auto min-h-11 p-0"
                   onClick={() => applyRuleMutation.mutate()}
                   disabled={applyRuleMutation.isPending}
-                  className="text-xs font-medium text-teal hover:underline disabled:opacity-50"
                 >
                   Apply to {ruleImpact.differing_count} existing transaction{ruleImpact.differing_count === 1 ? '' : 's'}
-                </button>
+                </Button>
                 {applyRuleMutation.isError && <p className="text-xs text-destructive">Couldn’t apply the rule. Try again.</p>}
               </>
             ) : (

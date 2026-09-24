@@ -102,7 +102,7 @@ function DuplicateReviewList() {
   });
   return <PageCard title="Possible duplicates">
     <p className="text-sm text-muted mb-3">Two records from different sources that look like the same purchase. Keep whichever one you want as the record — its evidence, trip, and any billing match carry over. Keep separate if they're actually different.</p>
-    {merge.isSuccess && !undo.isSuccess && <p role="status" className="py-2">Merged. <button className="text-teal underline min-h-11" disabled={undo.isPending} onClick={() => undo.mutate(merge.data.merge_id)}>Undo</button></p>}
+    {merge.isSuccess && !undo.isSuccess && <p role="status" className="py-2">Merged. <Button type="button" variant="link" size="sm" className="h-auto min-h-11 p-0 align-baseline" disabled={undo.isPending} onClick={() => undo.mutate(merge.data.merge_id)}>Undo</Button></p>}
     {undo.isSuccess && <p role="status" className="py-2">Merge undone.</p>}
     {(dismiss.isError || merge.isError || undo.isError) && <p role="alert" className="text-destructive">Couldn’t update this pair. Please try again.</p>}
     {query.isError ? <div role="alert"><LoadFailed onRetry={() => void query.refetch()} /></div> : !query.data ? <p role="status">Loading possible duplicates…</p> : <>

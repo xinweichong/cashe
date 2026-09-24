@@ -384,14 +384,16 @@ export function TransactionsPage() {
         {lastBulkUndo && (
           <p role="status" className="text-sm text-muted">
             Updated {lastBulkUndo.ids.length}.{' '}
-            <button
+            <Button
               type="button"
-              className="text-teal underline min-h-11"
+              variant="link"
+              size="sm"
+              className="h-auto min-h-11 p-0 align-baseline"
               disabled={bulkUndo.isPending}
               onClick={handleBulkUndo}
             >
               {bulkUndo.isPending ? 'Undoing…' : 'Undo'}
-            </button>
+            </Button>
           </p>
         )}
 

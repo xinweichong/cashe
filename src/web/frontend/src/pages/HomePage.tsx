@@ -5,6 +5,7 @@ import { ArrowRight, Plus } from 'lucide-react';
 import { briefingApi, evidenceLink, formatMoney } from '@/api/briefing';
 import { api } from '@/api/client';
 import { getCategoryColor } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
 import { HeroCard, PageCard } from '@/components/ui/cards';
 import { HeroAmount } from '@/components/ui/HeroAmount';
 import { ActivityRowShell } from '@/components/ui/ActivityRowShell';
@@ -63,7 +64,7 @@ export function HomePage() {
         </div>
         <Link className="min-h-11 min-w-11 inline-flex items-center gap-2 text-teal" to="/transactions?add=1"><Plus aria-hidden="true" size={20} />Add</Link>
       </header>
-      {query.isError && <p role="alert" className="text-warning">Couldn’t refresh. This briefing may be out of date. <button className="underline min-h-11" onClick={() => void query.refetch()}>Retry</button></p>}
+      {query.isError && <p role="alert" className="text-warning">Couldn’t refresh. This briefing may be out of date. <Button type="button" variant="link" size="sm" className="h-auto min-h-11 p-0 align-baseline" onClick={() => void query.refetch()}>Retry</Button></p>}
       <HeroCard title="Month spending" action={<Link className="min-h-11 inline-flex items-center text-teal" to={evidenceLink(facts.current)}>See spending <ArrowRight className="ml-2" size={16} /></Link>}>
         <HeroAmount value={facts.current.spending} />
         <p className="mt-2 text-muted">{facts.current.status === 'partial' ? 'Known spending subtotal · some amounts or dates need review.' : facts.current.status === 'indicative' ? 'Recorded spending · includes indicative currency conversions.' : 'Recorded spending this month'}</p>
@@ -76,21 +77,21 @@ export function HomePage() {
         <div className="mt-6 pt-4 border-t border-border">
           {trendQuery.data ? (
             <>
-              {trendQuery.isError && <p className="text-xs text-warning mb-1">Couldn't refresh the daily trend — showing the last loaded data. <button className="underline min-h-11" onClick={() => void trendQuery.refetch()}>Retry</button></p>}
+              {trendQuery.isError && <p className="text-xs text-warning mb-1">Couldn't refresh the daily trend — showing the last loaded data. <Button type="button" variant="link" size="sm" className="h-auto min-h-11 p-0 align-baseline" onClick={() => void trendQuery.refetch()}>Retry</Button></p>}
               <TrendLine data={trendPoints} selectedDate={selectedDate} onSelectDate={setSelectedDate} />
               {selectedDate && <Link className="text-sm text-teal min-h-11 inline-flex items-center mt-1" to={`/evidence?start=${selectedDate}&end=${selectedDate}&measure=spending`}>View this day's records</Link>}
             </>
           ) : trendQuery.isLoading ? (
             <Skeleton className="h-[160px] w-full" />
           ) : (
-            <p className="text-sm text-muted">Couldn't load the daily trend. <button className="underline min-h-11" onClick={() => void trendQuery.refetch()}>Retry</button></p>
+            <p className="text-sm text-muted">Couldn't load the daily trend. <Button type="button" variant="link" size="sm" className="h-auto min-h-11 p-0 align-baseline" onClick={() => void trendQuery.refetch()}>Retry</Button></p>
           )}
         </div>
       </HeroCard>
       <PageCard title="Where it went">
         {breakdownQuery.data ? (
           <>
-            {breakdownQuery.isError && <p className="text-xs text-warning mb-2">Couldn't refresh the category mix — showing the last loaded data. <button className="underline min-h-11" onClick={() => void breakdownQuery.refetch()}>Retry</button></p>}
+            {breakdownQuery.isError && <p className="text-xs text-warning mb-2">Couldn't refresh the category mix — showing the last loaded data. <Button type="button" variant="link" size="sm" className="h-auto min-h-11 p-0 align-baseline" onClick={() => void breakdownQuery.refetch()}>Retry</Button></p>}
             <CategoryDonut
               data={categoryTotals}
               selected={selectedCategory}
@@ -109,7 +110,7 @@ export function HomePage() {
                 </div>
                 {merchantsQuery.data ? (
                   <>
-                    {merchantsQuery.isError && <p className="text-xs text-warning">Couldn't refresh merchants for {selectedCategory} — showing the last loaded data. <button className="underline min-h-11" onClick={() => void merchantsQuery.refetch()}>Retry</button></p>}
+                    {merchantsQuery.isError && <p className="text-xs text-warning">Couldn't refresh merchants for {selectedCategory} — showing the last loaded data. <Button type="button" variant="link" size="sm" className="h-auto min-h-11 p-0 align-baseline" onClick={() => void merchantsQuery.refetch()}>Retry</Button></p>}
                     {merchantsQuery.data.length ? (
                       <ul className="space-y-2">
                         {merchantsQuery.data.map((m) => (
@@ -126,7 +127,7 @@ export function HomePage() {
                 ) : merchantsQuery.isLoading ? (
                   <Skeleton className="h-[100px] w-full" />
                 ) : (
-                  <p className="text-sm text-muted">Couldn't load merchants for {selectedCategory}. <button className="underline min-h-11" onClick={() => void merchantsQuery.refetch()}>Retry</button></p>
+                  <p className="text-sm text-muted">Couldn't load merchants for {selectedCategory}. <Button type="button" variant="link" size="sm" className="h-auto min-h-11 p-0 align-baseline" onClick={() => void merchantsQuery.refetch()}>Retry</Button></p>
                 )}
                 <Link
                   className="text-sm text-teal min-h-11 inline-flex items-center gap-1"
@@ -140,7 +141,7 @@ export function HomePage() {
         ) : breakdownQuery.isLoading ? (
           <Skeleton className="h-[220px] w-full" />
         ) : (
-          <p className="text-sm text-muted">Couldn't load the category mix. <button className="underline min-h-11" onClick={() => void breakdownQuery.refetch()}>Retry</button></p>
+          <p className="text-sm text-muted">Couldn't load the category mix. <Button type="button" variant="link" size="sm" className="h-auto min-h-11 p-0 align-baseline" onClick={() => void breakdownQuery.refetch()}>Retry</Button></p>
         )}
       </PageCard>
       <PageCard title="What changed">

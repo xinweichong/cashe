@@ -209,9 +209,9 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
               </div>
             )}
           </div>
-          <button onClick={onClose} className="text-muted hover:text-foreground p-1 shrink-0">
+          <Button variant="ghost" size="icon" className="shrink-0" onClick={onClose} aria-label="Close">
             <X className="w-4 h-4" />
-          </button>
+          </Button>
         </div>
 
         {/* Action bar — persistent chrome */}
@@ -221,19 +221,18 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
               <div className="flex items-center justify-between px-4 py-2 gap-3">
                 <span className="text-sm text-foreground">Cancel this subscription?</span>
                 <div className="flex gap-2 shrink-0">
-                  <button
-                    onClick={() => setConfirmCancel(false)}
-                    className="px-3 py-1 text-xs text-muted hover:text-foreground"
-                  >
+                  <Button type="button" size="sm" variant="ghost" onClick={() => setConfirmCancel(false)}>
                     Back
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="bg-warning text-background hover:bg-warning/90"
                     onClick={() => cancelMutation.mutate()}
                     disabled={cancelMutation.isPending}
-                    className="px-3 py-1 text-xs bg-warning text-background rounded-md disabled:opacity-40"
                   >
                     {cancelMutation.isPending ? 'Cancelling…' : 'Confirm'}
-                  </button>
+                  </Button>
                 </div>
               </div>
             ) : (

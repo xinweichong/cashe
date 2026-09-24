@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, Dot,
 } from 'recharts';
+import { Button } from '@/components/ui/button';
 import { formatCurrency, formatShortDate } from '@/lib/utils';
 import { formatDateTick, formatDateLabel, useChartTheme, CHART_Y_DOMAIN } from '@/lib/chartTheme';
 
@@ -97,27 +98,29 @@ export function TrendLine({ data, selectedDate, onSelectDate }: TrendLineProps) 
       </div>
       {onSelectDate && (
         <div className="flex items-center justify-between gap-2 mt-2" data-testid="trend-day-readout">
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="icon"
             onClick={() => step(-1)}
             disabled={activeIndex <= 0}
             aria-label="Previous day"
-            className="min-h-11 min-w-11 inline-flex items-center justify-center text-muted disabled:opacity-30"
           >
             <ChevronLeft size={16} aria-hidden />
-          </button>
+          </Button>
           <p className="text-sm font-mono tabular-nums text-center">
             {formatShortDate(activePoint.date)} · <span className="font-semibold text-foreground">{formatCurrency(activePoint.amount)}</span>
           </p>
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="icon"
             onClick={() => step(1)}
             disabled={activeIndex === -1 || activeIndex >= data.length - 1}
             aria-label="Next day"
-            className="min-h-11 min-w-11 inline-flex items-center justify-center text-muted disabled:opacity-30"
           >
             <ChevronRight size={16} aria-hidden />
-          </button>
+          </Button>
         </div>
       )}
     </div>

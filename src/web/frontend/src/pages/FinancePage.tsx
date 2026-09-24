@@ -406,9 +406,9 @@ function GoalCard({ g, onContribute, onEdit, onDelete }: {
               title="Deadline (optional)"
             />
             {editDate && (
-              <button type="button" onClick={() => setEditDate('')} className="text-muted hover:text-foreground transition-colors">
+              <Button type="button" variant="ghost" size="icon" onClick={() => setEditDate('')} aria-label="Clear deadline">
                 <X className="w-3.5 h-3.5" />
-              </button>
+              </Button>
             )}
           </div>
         </div>
@@ -735,9 +735,9 @@ function GoalsSection() {
                 title="Deadline (optional)"
               />
               {newDate && (
-                <button type="button" onClick={() => setNewDate('')} className="text-muted hover:text-foreground transition-colors">
+                <Button type="button" variant="ghost" size="icon" onClick={() => setNewDate('')} aria-label="Clear deadline">
                   <X className="w-3.5 h-3.5" />
-                </button>
+                </Button>
               )}
             </div>
           </div>
