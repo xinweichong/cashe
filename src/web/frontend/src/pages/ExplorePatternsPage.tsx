@@ -237,13 +237,24 @@ function HowDidThisTripAffectTheMonth() {
     queryFn: () => api.getTripSummaryV2(effectiveTripId!),
     enabled: effectiveTripId != null,
   });
+  // Month-to-date as of the trip's end, or today for an ongoing trip. Only
+  // trip spending dated inside that same period is compared with it; the
+  // whole-trip total can span other months and is reported separately.
   const { data: monthFacts } = useQuery({
-    queryKey: ['explore-trip-month-facts', selectedTrip?.start_date, selectedTrip?.end_date],
-    queryFn: () => briefingApi.month(selectedTrip!.end_date || selectedTrip!.start_date),
+    queryKey: ['explore-trip-month-facts', selectedTrip?.end_date ?? 'today'],
+    queryFn: () => briefingApi.month(selectedTrip!.end_date ?? undefined),
     enabled: !!selectedTrip,
   });
-  const monthTotal = monthFacts?.current.spending.minor_units ?? 0;
-  const tripShare = summary && monthTotal ? Math.round((summary.total.minor_units / monthTotal) * 100) : null;
+  const monthPeriod = monthFacts?.current;
+  const inPeriod = summary && monthPeriod
+    ? summary.by_day.filter(d => d.date >= monthPeriod.start && d.date <= monthPeriod.end)
+    : null;
+  const tripInPeriod = inPeriod ? inPeriod.reduce((sum, d) => sum + d.amount.minor_units, 0) : null;
+  const tripOutsidePeriod = !!summary && !!inPeriod && inPeriod.length < summary.by_day.length;
+  const shareAvailable = !!monthPeriod && monthPeriod.status !== 'partial' && monthPeriod.spending.minor_units > 0;
+  const tripShare = shareAvailable && tripInPeriod != null
+    ? Math.round((tripInPeriod / monthPeriod.spending.minor_units) * 100)
+    : null;
   const tripSelect = !!trips?.length && (
     <select value={effectiveTripId ?? ''} onChange={e => setTripId(Number(e.target.value))} className="select-field text-xs" aria-label="Trip">
       {trips.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
@@ -254,8 +265,16 @@ function HowDidThisTripAffectTheMonth() {
       {tripsError && !trips ? <div role="alert"><LoadFailed onRetry={() => void refetchTrips()} /></div> : !trips ? <p role="status" className="text-muted">Loading…</p> : !trips.length && <p className="text-muted">No trips recorded yet.</p>}
       {isError && !summary && <div role="alert"><LoadFailed onRetry={() => void refetch()} /></div>}
       {summary && selectedTrip && <>
-        <p>{formatMoney(summary.total as Money)} over {summary.days} days ({formatMoney(summary.daily_average as Money)}/day).</p>
-        {tripShare != null && <p className="text-sm text-muted">About {tripShare}% of {selectedTrip.name}'s month so far.</p>}
+        <p>Whole trip: {formatMoney(summary.total as Money)} over {summary.days} days ({formatMoney(summary.daily_average as Money)}/day).</p>
+        {monthPeriod && tripInPeriod != null && (tripShare != null ? (
+          <p className="text-sm text-muted">
+            {formatMoney({ minor_units: tripInPeriod, currency: 'SGD' })} of it is dated {monthPeriod.start}–{monthPeriod.end}: about {tripShare}% of all recorded spending in that period
+            {monthPeriod.status === 'indicative' ? ' (includes indicative conversions)' : ''}.
+            {tripOutsidePeriod && ' Trip spending outside those dates is not part of this share.'}
+          </p>
+        ) : (
+          <p className="text-sm text-muted">A share of {monthPeriod.start}–{monthPeriod.end} spending is unavailable while some records in that period need review.</p>
+        ))}
         <Link to={`/transactions?trip=${effectiveTripId}`} className="text-teal underline min-h-11 inline-flex items-center">See trip transactions</Link>
       </>}
     </PageCard>

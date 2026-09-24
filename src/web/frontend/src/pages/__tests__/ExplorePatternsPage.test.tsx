@@ -153,6 +153,51 @@ test('shows how a selected trip affected the month, with a link to its transacti
   expect(link.getAttribute('href')).toBe('/transactions?trip=5');
 });
 
+const baliTrip = { id: 5, name: 'Bali', destination: null, start_date: '2026-08-30', end_date: '2026-09-05' as string | null, primary_currency: 'SGD', status: 'inactive', created_at: '', updated_at: '' };
+function tripSummary(trip = baliTrip) {
+  return {
+    trip, total: { minor_units: 40000, currency: 'SGD' as const }, daily_average: { minor_units: 5714, currency: 'SGD' as const },
+    days: 7, transaction_count: 2, currencies_used: ['SGD'], by_category: [],
+    by_day: [
+      { date: '2026-08-30', amount: { minor_units: 10000, currency: 'SGD' as const } },
+      { date: '2026-09-02', amount: { minor_units: 30000, currency: 'SGD' as const } },
+    ],
+  };
+}
+const septemberToTripEnd: SpendingPeriod = { ...period, start: '2026-09-01', end: '2026-09-05', spending: { minor_units: 100000, currency: 'SGD' } };
+
+test('a cross-month trip is compared with the month only for spending dated inside that month', async () => {
+  vi.mocked(api.getTrips).mockResolvedValue([baliTrip]);
+  vi.mocked(api.getTripSummaryV2).mockResolvedValue(tripSummary());
+  vi.mocked(briefingApi.month).mockResolvedValue({ ...monthFacts, current: septemberToTripEnd });
+  show();
+  expect(await screen.findByText(/Whole trip: \$400\.00 over 7 days/)).toBeTruthy();
+  const share = await screen.findByText(/of it is dated 2026-09-01–2026-09-05/);
+  expect(share.textContent).toContain('$300.00');
+  expect(share.textContent).toContain('about 30%');
+  expect(share.textContent).toContain('outside those dates is not part of this share');
+  expect(briefingApi.month).toHaveBeenCalledWith('2026-09-05');
+});
+
+test('an ongoing trip is compared with month-to-date today, not as of its start date', async () => {
+  const ongoing = { ...baliTrip, start_date: '2026-09-01', end_date: null, status: 'active' };
+  vi.mocked(api.getTrips).mockResolvedValue([ongoing]);
+  vi.mocked(api.getTripSummaryV2).mockResolvedValue(tripSummary(ongoing));
+  vi.mocked(briefingApi.month).mockResolvedValue({ ...monthFacts, current: septemberToTripEnd });
+  show();
+  await screen.findByText(/of it is dated/);
+  expect(briefingApi.month).toHaveBeenCalledWith(undefined);
+});
+
+test('no share is claimed while the month has records needing review', async () => {
+  vi.mocked(api.getTrips).mockResolvedValue([baliTrip]);
+  vi.mocked(api.getTripSummaryV2).mockResolvedValue(tripSummary());
+  vi.mocked(briefingApi.month).mockResolvedValue({ ...monthFacts, current: { ...septemberToTripEnd, status: 'partial', unresolved_count: 2 } });
+  show();
+  expect(await screen.findByText(/share of 2026-09-01–2026-09-05 spending is unavailable/)).toBeTruthy();
+  expect(screen.queryByText(/about \d+%/)).toBeNull();
+});
+
 test('shows an empty state when there are no trips', async () => {
   show();
   expect(await screen.findByText('No trips recorded yet.')).toBeTruthy();
