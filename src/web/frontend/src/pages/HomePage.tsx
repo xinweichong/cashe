@@ -78,13 +78,16 @@ export function HomePage() {
   const unresolved = facts.current.unresolved_count + facts.undated_count;
   const netFlowNegative = !!facts.current.recorded_net_flow && facts.current.recorded_net_flow.minor_units < 0;
   const driver = facts.top_category_driver;
+  // Home's queries refetch together after a correction but settle
+  // separately; say so rather than silently mixing old and new snapshots.
+  const refreshing = [query, breakdownQuery, trendQuery, merchantsQuery].some((q) => q.isFetching && q.data !== undefined);
   const categoryTotals = breakdownQuery.data
     ? Object.entries(breakdownQuery.data.by_category).map(([category, amount]) => ({ category, total: amount.minor_units / 100 }))
     : [];
   const trendPoints = trendQuery.data?.map((day) => ({ date: day.date, amount: day.spending.minor_units / 100 })) ?? [];
   return (
     <div className="max-w-5xl mx-auto p-4 md:p-8 space-y-6 text-base">
-      {header(<p className="text-muted">Through {facts.as_of} · {facts.timezone}</p>)}
+      {header(<p className="text-muted">Through {facts.as_of} · {facts.timezone}{refreshing && <span role="status"> · Updating…</span>}</p>)}
       {query.isError && <p role="alert" className="text-warning">Couldn’t refresh. This briefing may be out of date. <Button type="button" variant="link" size="sm" className="h-auto min-h-11 p-0 align-baseline" onClick={() => void query.refetch()}>Retry</Button></p>}
       <HeroCard title="Month spending" action={<Link className="min-h-11 inline-flex items-center text-teal" to={evidenceLink(facts.current)}>See spending <ArrowRight className="ml-2" size={16} /></Link>}>
         <HeroAmount value={facts.current.spending} />

@@ -283,6 +283,21 @@ test('a stale daily trend keeps rendering while a background refresh fails', asy
   expect(document.querySelector('.recharts-responsive-container') ?? document.querySelector('svg')).toBeTruthy();
 });
 
+test('while Home queries settle after a correction, the briefing says it is updating', async () => {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  vi.mocked(briefingApi.home).mockResolvedValue(home);
+  render(<QueryClientProvider client={queryClient}><MemoryRouter><HomePage /></MemoryRouter></QueryClientProvider>);
+  await screen.findByText(/^Through 2026-09-06/);
+  await waitFor(() => expect(screen.queryByText(/Updating…/)).toBeNull());
+  let release!: (v: Awaited<ReturnType<typeof api.getCategoryBreakdownV2>>) => void;
+  vi.mocked(api.getCategoryBreakdownV2).mockReturnValue(new Promise((r) => { release = r; }));
+  await act(async () => { void queryClient.invalidateQueries({ queryKey: ['home-category-breakdown'] }); });
+  expect(await screen.findByText(/Updating…/)).toBeTruthy();
+  expect(screen.getByText('Recorded spending this month')).toBeTruthy();
+  await act(async () => { release({ start: period.start, end: period.end, by_category: {}, unresolved_count: 0, indicative_count: 0, status: 'complete' }); });
+  await waitFor(() => expect(screen.queryByText(/Updating…/)).toBeNull());
+});
+
 test('capture review queues a deliberate retry and refreshes', async () => {
   vi.mocked(briefingApi.captureIssues).mockResolvedValue([{ id: 1, source: 'wallet_request', status: 'unrecognized', attempts: 1, error_code: 'WalletPayloadError' }]);
   vi.mocked(briefingApi.followups).mockResolvedValue([]);
