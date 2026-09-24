@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
-import { api } from '@/api/client';
+import { api, type Trip } from '@/api/client';
 import { briefingApi, type SpendingFacts, type SpendingPeriod } from '@/api/briefing';
 import { ExplorePatternsPage } from '../ExplorePatternsPage';
 
@@ -153,8 +153,8 @@ test('shows how a selected trip affected the month, with a link to its transacti
   expect(link.getAttribute('href')).toBe('/transactions?trip=5');
 });
 
-const baliTrip = { id: 5, name: 'Bali', destination: null, start_date: '2026-08-30', end_date: '2026-09-05' as string | null, primary_currency: 'SGD', status: 'inactive', created_at: '', updated_at: '' };
-function tripSummary(trip = baliTrip) {
+const baliTrip: Trip = { id: 5, name: 'Bali', destination: null, start_date: '2026-08-30', end_date: '2026-09-05', primary_currency: 'SGD', status: 'inactive', created_at: '', updated_at: '' };
+function tripSummary(trip: Trip = baliTrip) {
   return {
     trip, total: { minor_units: 40000, currency: 'SGD' as const }, daily_average: { minor_units: 5714, currency: 'SGD' as const },
     days: 7, transaction_count: 2, currencies_used: ['SGD'], by_category: [],
@@ -180,7 +180,7 @@ test('a cross-month trip is compared with the month only for spending dated insi
 });
 
 test('an ongoing trip is compared with month-to-date today, not as of its start date', async () => {
-  const ongoing = { ...baliTrip, start_date: '2026-09-01', end_date: null, status: 'active' };
+  const ongoing: Trip = { ...baliTrip, start_date: '2026-09-01', end_date: null, status: 'active' };
   vi.mocked(api.getTrips).mockResolvedValue([ongoing]);
   vi.mocked(api.getTripSummaryV2).mockResolvedValue(tripSummary(ongoing));
   vi.mocked(briefingApi.month).mockResolvedValue({ ...monthFacts, current: septemberToTripEnd });
