@@ -10,6 +10,8 @@ import { Badge } from '@/components/ui/badge';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
@@ -159,17 +161,23 @@ export function SettingsPage() {
     );
   };
 
-  const handleDeleteCategory = (name: string) => {
-    if (confirm(`Delete category "${name}"? Transactions will be moved to "Other".`)) {
-      deleteCat.mutate(name, { onSuccess: () => qc.invalidateQueries({ queryKey: ['merchant-overrides'] }) });
-    }
-  };
+  const [pendingConfirm, setPendingConfirm] = useState<{
+    title: string; description: string; confirmLabel: string; run: () => void;
+  } | null>(null);
 
-  const handleDeleteOverride = (merchant: string) => {
-    if (confirm(`Remove learned override for "${merchant}"?`)) {
-      deleteOverride.mutate(merchant);
-    }
-  };
+  const handleDeleteCategory = (name: string) => setPendingConfirm({
+    title: `Delete category "${name}"?`,
+    description: 'Its transactions will be moved to "Other".',
+    confirmLabel: 'Delete category',
+    run: () => deleteCat.mutate(name, { onSuccess: () => qc.invalidateQueries({ queryKey: ['merchant-overrides'] }) }),
+  });
+
+  const handleDeleteOverride = (merchant: string) => setPendingConfirm({
+    title: `Remove learned override for "${merchant}"?`,
+    description: 'Future transactions from this merchant will be categorized by keywords again.',
+    confirmLabel: 'Remove override',
+    run: () => deleteOverride.mutate(merchant),
+  });
 
   // ── Settings (feature toggles + alert thresholds) ───────────────────────────
   const [anomalyMultiplier, setAnomalyMultiplier] = useState<string>('');
@@ -262,8 +270,14 @@ export function SettingsPage() {
   const [disconnectingGmail, setDisconnectingGmail] = useState(false);
   const [disconnectingTelegram, setDisconnectingTelegram] = useState(false);
 
-  const handleDisconnectGmail = async () => {
-    if (!confirm('Disconnect Gmail? This stops email ingestion — it\'s gone for good.')) return;
+  const handleDisconnectGmail = () => setPendingConfirm({
+    title: 'Disconnect Gmail?',
+    description: 'This stops email ingestion — it\'s gone for good.',
+    confirmLabel: 'Disconnect Gmail',
+    run: () => void disconnectGmail(),
+  });
+
+  const disconnectGmail = async () => {
     setDisconnectingGmail(true);
     try {
       await api.disconnectGmail();
@@ -273,8 +287,14 @@ export function SettingsPage() {
     }
   };
 
-  const handleDisconnectTelegram = async () => {
-    if (!confirm('Unlink Telegram? You will no longer receive transaction notifications.')) return;
+  const handleDisconnectTelegram = () => setPendingConfirm({
+    title: 'Unlink Telegram?',
+    description: 'You will no longer receive transaction notifications.',
+    confirmLabel: 'Unlink Telegram',
+    run: () => void disconnectTelegram(),
+  });
+
+  const disconnectTelegram = async () => {
     setDisconnectingTelegram(true);
     try {
       await api.disconnectTelegram();
@@ -850,6 +870,25 @@ export function SettingsPage() {
               <Button onClick={handleAddCategory} disabled={!newCatName.trim() || createCat.isPending}>Add</Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!pendingConfirm} onOpenChange={(open) => { if (!open) setPendingConfirm(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{pendingConfirm?.title}</DialogTitle>
+            <DialogDescription>{pendingConfirm?.description}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setPendingConfirm(null)}>Cancel</Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => { pendingConfirm?.run(); setPendingConfirm(null); }}
+            >
+              {pendingConfirm?.confirmLabel}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { api, type BudgetProgressV2, type Category, type GoalProgress, type GoalProgressV2, type Trip, type RecurringTransaction } from '@/api/client';
 import { PageCard, HeroCard, HighlightCard } from '@/components/ui/cards';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn, getBudgetTone, getGoalTone, getCategoryColor } from '@/lib/utils';
 import { springs, staggerContainerVariants, staggerItemVariants, slideInRightVariants } from '@/lib/motionPresets';
@@ -290,6 +291,7 @@ function GoalCard({ g, onContribute, onEdit, onDelete }: {
   const [editContribAmount, setEditContribAmount] = useState('');
   const [editContribDate, setEditContribDate] = useState('');
   const [editContribNote, setEditContribNote] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const qc = useQueryClient();
 
@@ -579,15 +581,23 @@ function GoalCard({ g, onContribute, onEdit, onDelete }: {
           size="sm"
           variant="outline"
           className="text-destructive hover:text-destructive"
-          onClick={() => {
-            if (window.confirm(`Delete goal "${g.name}"? This will also remove all contribution history.`)) {
-              onDelete(g.id);
-            }
-          }}
+          onClick={() => setConfirmDelete(true)}
         >
           <Trash2 className="w-3.5 h-3.5" />
           Delete
         </Button>
+        <Dialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Delete goal "{g.name}"?</DialogTitle>
+              <DialogDescription>This also removes all of its contribution history.</DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setConfirmDelete(false)}>Cancel</Button>
+              <Button type="button" variant="destructive" onClick={() => { onDelete(g.id); setConfirmDelete(false); }}>Delete goal</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
 
       {contributing && (
@@ -818,6 +828,7 @@ function TripRow({ trip }: { trip: Trip }) {
   const qc = useQueryClient();
   const [expanded, setExpanded] = useState(false);
   const [txPage, setTxPage] = useState(1);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [delistingId, setDelistingId] = useState<number | null>(null);
 
   const { data: summary } = useQuery({
@@ -886,6 +897,8 @@ function TripRow({ trip }: { trip: Trip }) {
           variant="ghost"
           size="icon"
           className="shrink-0"
+          aria-label={expanded ? `Collapse ${trip.name}` : `Expand ${trip.name}`}
+          aria-expanded={expanded}
           onClick={() => { setExpanded((v) => !v); if (expanded) setTxPage(1); }}
         >
           {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
@@ -920,11 +933,24 @@ function TripRow({ trip }: { trip: Trip }) {
           variant="ghost"
           size="icon"
           className="text-destructive shrink-0"
-          onClick={() => { if (confirm(`Delete trip "${trip.name}"?`)) deleteMutation.mutate(); }}
+          aria-label={`Delete trip ${trip.name}`}
+          onClick={() => setConfirmDelete(true)}
           disabled={deleteMutation.isPending}
         >
           <Trash2 className="w-3.5 h-3.5" />
         </Button>
+        <Dialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Delete trip "{trip.name}"?</DialogTitle>
+              <DialogDescription>Its transactions stay in Activity; only the trip grouping is removed.</DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setConfirmDelete(false)}>Cancel</Button>
+              <Button type="button" variant="destructive" onClick={() => { deleteMutation.mutate(); setConfirmDelete(false); }}>Delete trip</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
 
       {expanded && (

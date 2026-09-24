@@ -1,11 +1,14 @@
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { api } from '@/api/client';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 export function ActiveTripCard({ showEndButton = false }: { showEndButton?: boolean }) {
   const qc = useQueryClient();
+  const [confirmEnd, setConfirmEnd] = useState(false);
 
   const { data: settings } = useQuery({
     queryKey: ['settings'],
@@ -74,9 +77,7 @@ export function ActiveTripCard({ showEndButton = false }: { showEndButton?: bool
                 variant="outline"
                 size="sm"
                 className="mt-2"
-                onClick={() => {
-                  if (confirm('End this trip?')) deactivateMutation.mutate();
-                }}
+                onClick={() => setConfirmEnd(true)}
                 disabled={deactivateMutation.isPending}
               >
                 {deactivateMutation.isPending ? 'Ending…' : 'End Trip'}
@@ -103,6 +104,18 @@ export function ActiveTripCard({ showEndButton = false }: { showEndButton?: bool
           </div>
         )}
       </CardContent>
+      <Dialog open={confirmEnd} onOpenChange={setConfirmEnd}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>End {activeTrip.name}?</DialogTitle>
+            <DialogDescription>New transactions will stop joining this trip automatically. Its existing transactions stay on it.</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setConfirmEnd(false)}>Keep trip active</Button>
+            <Button type="button" onClick={() => { deactivateMutation.mutate(); setConfirmEnd(false); }}>End trip</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
