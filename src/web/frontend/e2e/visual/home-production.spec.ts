@@ -100,6 +100,8 @@ test('production Home hero glow is static, never an infinite pulse', async ({ pa
   // glow unconditionally static, not just reduced-motion-safe.
   await mockAuthenticatedHome(page);
   await page.goto('/');
+  // The loading skeleton also renders a HeroCard; measure the loaded one.
+  await expect(page.getByText(/^Through 2026-09-10/)).toBeVisible();
   const glow = page.locator('.hero-glow-warm, .hero-glow-teal, .hero-glow-coral').first();
   await expect(glow).toBeVisible();
   const animationName = await glow.evaluate((el) => getComputedStyle(el, '::after').animationName);
@@ -107,6 +109,7 @@ test('production Home hero glow is static, never an infinite pulse', async ({ pa
 
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.reload();
+  await expect(page.getByText(/^Through 2026-09-10/)).toBeVisible();
   const glowReduced = page.locator('.hero-glow-warm, .hero-glow-teal, .hero-glow-coral').first();
   await expect(glowReduced).toBeVisible();
   const animationNameReduced = await glowReduced.evaluate((el) => getComputedStyle(el, '::after').animationName);
@@ -125,4 +128,22 @@ test('initial Home load renders visible shape-matched skeletons in light theme',
   const bg = await status.locator('.skeleton-pulse').first().evaluate((el) => getComputedStyle(el).backgroundImage);
   expect(bg).not.toContain('255, 255, 255');
   await page.screenshot({ path: 'e2e/screenshots/home-initial-skeleton-light.png' });
+});
+
+test('Home category selection survives the evidence round trip', async ({ page }) => {
+  await mockAuthenticatedHome(page);
+  await page.route('**/api/v2/spending/evidence**', (route) => route.fulfill({ json: {
+    items: [{ id: 1, merchant: 'FairPrice', category: 'Food', type: 'expense', date: '2026-09-05', amount: { minor_units: 1580, currency: 'SGD' }, conversion_status: 'native' }],
+    total: 1, limit: 50, offset: 0,
+  } }));
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  await page.getByTestId('category-donut-legend').getByRole('button', { name: /^Food/ }).click();
+  await expect(page).toHaveURL(/category=Food/);
+  await page.getByRole('link', { name: /View transactions/ }).click();
+  await expect(page).toHaveURL(/\/evidence\?/);
+  await expect(page.getByText('FairPrice')).toBeVisible();
+  await page.getByRole('link', { name: 'Back to briefing' }).click();
+  await expect(page).toHaveURL(/category=Food/);
+  await expect(page.getByRole('button', { name: 'Clear selection' })).toBeVisible();
 });

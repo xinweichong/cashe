@@ -298,6 +298,42 @@ test('while Home queries settle after a correction, the briefing says it is upda
   await waitFor(() => expect(screen.queryByText(/Updating…/)).toBeNull());
 });
 
+test('a category selection restores from the URL and its evidence link returns to it', async () => {
+  vi.mocked(briefingApi.home).mockResolvedValue(home);
+  vi.mocked(api.getCategoryBreakdownV2).mockResolvedValue({
+    start: period.start, end: period.end,
+    by_category: { Food: { minor_units: 3000, currency: 'SGD' } },
+    unresolved_count: 0, indicative_count: 0, status: 'complete',
+  });
+  render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <MemoryRouter initialEntries={['/home?category=Food']}><Routes><Route path="/home" element={<HomePage />} /></Routes></MemoryRouter>
+    </QueryClientProvider>
+  );
+  expect(await screen.findByRole('button', { name: 'Clear selection' })).toBeTruthy();
+  await waitFor(() => expect(api.getMerchantRankingFactsV2).toHaveBeenCalledWith(period.start, period.end, 'Food', 5));
+  const href = screen.getByRole('link', { name: /View transactions/ }).getAttribute('href')!;
+  const returnTo = new URL(href, 'http://localhost').searchParams.get('returnTo');
+  expect(returnTo).toBe('/home?category=Food');
+});
+
+test('a category no longer in the breakdown is not presented as selected', async () => {
+  vi.mocked(briefingApi.home).mockResolvedValue(home);
+  vi.mocked(api.getCategoryBreakdownV2).mockResolvedValue({
+    start: period.start, end: period.end,
+    by_category: { Food: { minor_units: 3000, currency: 'SGD' } },
+    unresolved_count: 0, indicative_count: 0, status: 'complete',
+  });
+  render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <MemoryRouter initialEntries={['/home?category=Travel']}><Routes><Route path="/home" element={<HomePage />} /></Routes></MemoryRouter>
+    </QueryClientProvider>
+  );
+  await screen.findByTestId('category-donut-legend');
+  expect(screen.queryByRole('button', { name: 'Clear selection' })).toBeNull();
+  expect(api.getMerchantRankingFactsV2).not.toHaveBeenCalled();
+});
+
 test('capture review queues a deliberate retry and refreshes', async () => {
   vi.mocked(briefingApi.captureIssues).mockResolvedValue([{ id: 1, source: 'wallet_request', status: 'unrecognized', attempts: 1, error_code: 'WalletPayloadError' }]);
   vi.mocked(briefingApi.followups).mockResolvedValue([]);

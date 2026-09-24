@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowRight, Plus } from 'lucide-react';
 import { briefingApi, evidenceLink, formatMoney } from '@/api/briefing';
@@ -17,8 +17,18 @@ import { CategoryChangeBarRow } from '@/components/charts/CategoryChangeBars';
 
 export function HomePage() {
   const navigate = useNavigate();
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const location = useLocation();
+  const [search, setSearch] = useSearchParams();
+  // Category and day selections live in the URL (replace-history) so the
+  // evidence → correction → Back journey returns to the same selection.
+  const setParam = (key: 'category' | 'day', value: string | null) => {
+    const next = new URLSearchParams(search);
+    if (value) next.set(key, value); else next.delete(key);
+    setSearch(next, { replace: true });
+  };
+  const setSelectedCategory = (value: string | null) => setParam('category', value);
+  const setSelectedDate = (value: string | null) => setParam('day', value);
+  const withReturn = (href: string) => `${href}&returnTo=${encodeURIComponent(location.pathname + location.search)}`;
   const [selectedChangeCategory, setSelectedChangeCategory] = useState<string | null>(null);
   const query = useQuery({ queryKey: ['home-briefing'], queryFn: briefingApi.home });
   const currentStart = query.data?.facts.current.start;
@@ -38,6 +48,10 @@ export function HomePage() {
     queryFn: () => api.getDailyTotalsV2(currentStart!, currentEnd!),
     enabled: !!currentStart && !!currentEnd,
   });
+  const categoryParam = search.get('category');
+  const selectedCategory = categoryParam && breakdownQuery.data && categoryParam in breakdownQuery.data.by_category ? categoryParam : null;
+  const dayParam = search.get('day');
+  const selectedDate = dayParam && trendQuery.data?.some((d) => d.date === dayParam) ? dayParam : null;
   const merchantsQuery = useQuery({
     queryKey: ['home-merchants', currentStart, currentEnd, selectedCategory],
     queryFn: () => api.getMerchantRankingFactsV2(currentStart!, currentEnd!, selectedCategory ?? undefined, 5),
@@ -89,12 +103,12 @@ export function HomePage() {
     <div className="max-w-5xl mx-auto p-4 md:p-8 space-y-6 text-base">
       {header(<p className="text-muted">Through {facts.as_of} · {facts.timezone}{refreshing && <span role="status"> · Updating…</span>}</p>)}
       {query.isError && <p role="alert" className="text-warning">Couldn’t refresh. This briefing may be out of date. <Button type="button" variant="link" size="sm" className="h-auto min-h-11 p-0 align-baseline" onClick={() => void query.refetch()}>Retry</Button></p>}
-      <HeroCard title="Month spending" action={<Link className="min-h-11 inline-flex items-center text-teal" to={evidenceLink(facts.current)}>See spending <ArrowRight className="ml-2" size={16} /></Link>}>
+      <HeroCard title="Month spending" action={<Link className="min-h-11 inline-flex items-center text-teal" to={withReturn(evidenceLink(facts.current))}>See spending <ArrowRight className="ml-2" size={16} /></Link>}>
         <HeroAmount value={facts.current.spending} />
         <p className="mt-2 text-muted">{facts.current.status === 'partial' ? 'Known spending subtotal · some amounts or dates need review.' : facts.current.status === 'indicative' ? 'Recorded spending · includes indicative currency conversions.' : 'Recorded spending this month'}</p>
         <p className="mt-4">{facts.change ? `${formatMoney({ ...facts.change, minor_units: Math.abs(facts.change.minor_units) })} ${facts.change.minor_units >= 0 ? 'more' : 'less'} than the comparable period last month.` : 'A comparison is unavailable while some records need review.'}</p>
         <p className="text-sm text-muted">Comparing {facts.comparison_current.start}–{facts.comparison_current.end} with {facts.previous.start}–{facts.previous.end}.</p>
-        {facts.current.income && <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2"><Link className="text-teal min-h-11 inline-flex items-center" to={evidenceLink(facts.current, undefined, 'income')}>Recorded income {formatMoney(facts.current.income)}</Link>{facts.current.recorded_net_flow && <p className={`py-2 ${netFlowNegative ? 'text-warning' : ''}`}>Recorded net {netFlowNegative ? 'outflow' : 'flow'} {formatMoney(facts.current.recorded_net_flow)}</p>}</div>}
+        {facts.current.income && <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2"><Link className="text-teal min-h-11 inline-flex items-center" to={withReturn(evidenceLink(facts.current, undefined, 'income'))}>Recorded income {formatMoney(facts.current.income)}</Link>{facts.current.recorded_net_flow && <p className={`py-2 ${netFlowNegative ? 'text-warning' : ''}`}>Recorded net {netFlowNegative ? 'outflow' : 'flow'} {formatMoney(facts.current.recorded_net_flow)}</p>}</div>}
         {spending_target && <p className={`mt-4 pt-4 border-t border-border ${overTarget ? 'text-warning' : ''}`}>{overTarget
           ? `${formatMoney({ ...spending_target.remaining, minor_units: Math.abs(spending_target.remaining.minor_units) })} over your ${formatMoney(spending_target.target)} monthly target.`
           : `${formatMoney(spending_target.remaining)} remaining of your ${formatMoney(spending_target.target)} monthly target.`}</p>}
@@ -103,7 +117,7 @@ export function HomePage() {
             <>
               {trendQuery.isError && <p className="text-xs text-warning mb-1">Couldn't refresh the daily trend — showing the last loaded data. <Button type="button" variant="link" size="sm" className="h-auto min-h-11 p-0 align-baseline" onClick={() => void trendQuery.refetch()}>Retry</Button></p>}
               <TrendLine data={trendPoints} selectedDate={selectedDate} onSelectDate={setSelectedDate} />
-              {selectedDate && <Link className="text-sm text-teal min-h-11 inline-flex items-center mt-1" to={`/evidence?start=${selectedDate}&end=${selectedDate}&measure=spending`}>View this day's records</Link>}
+              {selectedDate && <Link className="text-sm text-teal min-h-11 inline-flex items-center mt-1" to={withReturn(`/evidence?start=${selectedDate}&end=${selectedDate}&measure=spending`)}>View this day's records</Link>}
             </>
           ) : trendQuery.isLoading ? (
             <Skeleton className="h-[160px] w-full" />
@@ -120,7 +134,7 @@ export function HomePage() {
               data={categoryTotals}
               selected={selectedCategory}
               onSelect={setSelectedCategory}
-              onViewTransactions={(category) => navigate(evidenceLink(facts.current, category))}
+              onViewTransactions={(category) => navigate(withReturn(evidenceLink(facts.current, category)))}
               showLegend
             />
             {selectedCategory && (
@@ -155,7 +169,7 @@ export function HomePage() {
                 )}
                 <Link
                   className="text-sm text-teal min-h-11 inline-flex items-center gap-1"
-                  to={evidenceLink(facts.current, selectedCategory)}
+                  to={withReturn(evidenceLink(facts.current, selectedCategory))}
                 >
                   View transactions <ArrowRight size={14} />
                 </Link>
@@ -180,14 +194,14 @@ export function HomePage() {
                 selected={selectedChangeCategory === item.category}
                 onSelect={setSelectedChangeCategory}
               />
-              <div className="flex gap-6 pl-2 pb-2"><Link className="text-teal min-h-11 inline-flex items-center" to={evidenceLink(facts.comparison_current, item.category)}>This period</Link><Link className="text-teal min-h-11 inline-flex items-center" to={evidenceLink(facts.previous, item.category)}>Previous period</Link></div>
+              <div className="flex gap-6 pl-2 pb-2"><Link className="text-teal min-h-11 inline-flex items-center" to={withReturn(evidenceLink(facts.comparison_current, item.category))}>This period</Link><Link className="text-teal min-h-11 inline-flex items-center" to={withReturn(evidenceLink(facts.previous, item.category))}>Previous period</Link></div>
             </div>);
           })()}
         </div>}
         {!facts.category_changes.length && <p className="text-muted">{facts.change ? 'No category spending changes in these periods.' : 'Resolve the records needing attention to compare categories.'}</p>}
         {driver && <div className="mt-4 pt-4 border-t border-border space-y-3">
           <p className="text-sm text-muted">{driver.overlap_note}</p>
-          {driver.merchant_driver && <p>Biggest contributor in {driver.category}: <Link className="text-teal underline" to={evidenceLink(facts.comparison_current, driver.category, 'spending', driver.merchant_driver.merchant)}>{driver.merchant_driver.merchant}</Link> (<strong>{formatMoney(driver.merchant_driver.change)}</strong> change)</p>}
+          {driver.merchant_driver && <p>Biggest contributor in {driver.category}: <Link className="text-teal underline" to={withReturn(evidenceLink(facts.comparison_current, driver.category, 'spending', driver.merchant_driver.merchant))}>{driver.merchant_driver.merchant}</Link> (<strong>{formatMoney(driver.merchant_driver.change)}</strong> change)</p>}
           {driver.frequency_driver && driver.frequency_driver.classification !== 'none' && <p>
             {driver.frequency_driver.classification === 'frequency' && `Driven mostly by more purchases: ${driver.frequency_driver.current_count} this period vs ${driver.frequency_driver.previous_count} previously, at a similar average.`}
             {driver.frequency_driver.classification === 'size' && `Driven mostly by bigger purchases: average ${formatMoney(driver.frequency_driver.current_avg)} this period vs ${formatMoney(driver.frequency_driver.previous_avg)} previously, at a similar count.`}
@@ -212,7 +226,7 @@ export function HomePage() {
         </PageCard>
         <PageCard title="Needs attention">
           <Link to="/review" className="block text-teal py-3 min-h-11">{capture_issue_count + followup_issue_count} capture or follow-up items</Link>
-          {!!unresolved && <Link to={evidenceLink(facts.current, undefined, 'unresolved')} className="block text-warning py-3 min-h-11">Review {unresolved} spending records with unresolved amounts or dates</Link>}
+          {!!unresolved && <Link to={withReturn(evidenceLink(facts.current, undefined, 'unresolved'))} className="block text-warning py-3 min-h-11">Review {unresolved} spending records with unresolved amounts or dates</Link>}
           {!!review_count && <Link to="/review" className="block text-teal py-3 min-h-11">{review_count} spending records need review</Link>}
           {!!recurring_suggestion_count && <Link to="/review" className="block text-teal py-3 min-h-11">{recurring_suggestion_count} recurring suggestions</Link>}
           <p className="mt-4 text-muted">{freshness.gmail_needs_reconnection ? 'Gmail needs reconnection.' : freshness.gmail_connected ? `Gmail last checked: ${freshness.gmail_last_checked ?? 'not checked in this session'}.` : 'Gmail is not connected in this session.'}</p>
