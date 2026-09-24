@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/api/client';
 import { briefingApi, evidenceLink, formatMoney, type Money } from '@/api/briefing';
+import { Button } from '@/components/ui/button';
 import { PageCard } from '@/components/ui/cards';
 import { LoadFailed } from '@/components/ui/LoadFailed';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -70,10 +71,11 @@ function WhereDidTheIncreaseComeFrom() {
         {top?.one_off_driver && <p className="text-sm text-muted">Largely one purchase: <Link className="underline" to={`/transactions/${top.one_off_driver.transaction_id}`}>{top.one_off_driver.merchant || 'Unnamed transaction'}</Link></p>}
         {data?.trip_drivers.map(t => <p key={t.trip_id} className="text-sm text-muted">Trip <Link className="underline" to={`/transactions?trip=${t.trip_id}`}>{t.name}</Link>: {formatMoney(t.change)} vs. last period — {t.overlap_note}</p>)}
       </QuestionCard>
-      <PageCard title={selectedDriver ? selectedDriver.category : 'Selected category'}>
-        {!data ? <p role="status" className="text-muted text-sm">Loading…</p> : !selectedDriver ? (
-          <p className="text-muted text-sm">Select a bar in "What changed" to see its evidence links.</p>
-        ) : (
+      {data && selectedDriver && (
+        <PageCard
+          title={selectedDriver.category}
+          action={<Button type="button" variant="ghost" size="sm" onClick={() => setSelected(null)}>Clear selection</Button>}
+        >
           <div className="space-y-3">
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full shrink-0" style={{ background: getCategoryColor(selectedDriver.category) }} aria-hidden />
@@ -84,8 +86,8 @@ function WhereDidTheIncreaseComeFrom() {
               <Link className="text-teal underline min-h-11 inline-flex items-center" to={evidenceLink(data.previous, selectedDriver.category)}>Previous period</Link>
             </div>
           </div>
-        )}
-      </PageCard>
+        </PageCard>
+      )}
     </>
   );
 }
@@ -280,16 +282,18 @@ export function ExplorePatternsPage() {
         </TabsList>
       </Tabs>
 
-      {/* Main visual + contextual inspection: side by side on wide layouts,
-          stacked on phone/portrait tablet. Modes without a natural
-          selection→detail split (By merchant, Recurring) just leave the
-          second column empty at lg+. */}
-      <div className="grid gap-6 lg:grid-cols-[1fr_320px] items-start">
-        {mode === 'over-time' && <><SpendingOverTime /><WhatDoesANormalWeekLookLike /></>}
-        {mode === 'by-category' && <WhereDidTheIncreaseComeFrom />}
-        {mode === 'by-merchant' && <WhichMerchantsAccountForMostOfThisCategory />}
-        {mode === 'recurring' && <WhichRecurringCostsChanged />}
-      </div>
+      {/* Only Over time has a standing companion panel. Other modes use the
+          full width; By category reveals its selection detail beneath the
+          chart so the plot never resizes when a bar is selected. */}
+      {mode === 'over-time' && (
+        <div className="grid gap-6 lg:grid-cols-[1fr_320px] items-start">
+          <SpendingOverTime />
+          <WhatDoesANormalWeekLookLike />
+        </div>
+      )}
+      {mode === 'by-category' && <div className="space-y-6"><WhereDidTheIncreaseComeFrom /></div>}
+      {mode === 'by-merchant' && <WhichMerchantsAccountForMostOfThisCategory />}
+      {mode === 'recurring' && <WhichRecurringCostsChanged />}
 
       <HowDidThisTripAffectTheMonth />
     </div>

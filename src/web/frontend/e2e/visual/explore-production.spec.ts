@@ -86,25 +86,28 @@ test('Over time mode charts the default top-mover categories', async ({ page }) 
   await page.screenshot({ path: 'e2e/screenshots/explore-over-time-production.png', fullPage: true });
 });
 
-test('By category shows main visual and inspection panel side by side on desktop, stacked on phone', async ({ page }) => {
-  await mockAuthenticatedExplore(page);
-  await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto('/explore');
-  await page.getByRole('tab', { name: 'By category' }).click();
-  await expect(page.getByRole('tab', { name: 'By category' })).toHaveAttribute('aria-selected', 'true');
-  const mainCard = page.getByText('What changed', { exact: true }).locator('xpath=ancestor::div[contains(@class, "rounded-md")][1]');
-  const inspectionCard = page.getByText('Select a bar in "What changed"').locator('xpath=ancestor::div[contains(@class, "rounded-md")][1]');
-  await expect(inspectionCard).toBeVisible();
-  const mainBox = (await mainCard.boundingBox())!;
-  const inspectionBox = (await inspectionCard.boundingBox())!;
-  expect(inspectionBox.x).toBeGreaterThan(mainBox.x + mainBox.width - 10); // side by side, not stacked
-  await page.screenshot({ path: 'e2e/screenshots/explore-by-category-desktop.png', fullPage: true });
+test('By category reserves no empty panel and reveals selection detail beneath a stable chart', async ({ page }) => {
+  for (const viewport of [{ width: 1440, height: 900, name: 'desktop' }, { width: 390, height: 844, name: 'phone' }]) {
+    await mockAuthenticatedExplore(page);
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    await page.goto('/explore?mode=by-category');
+    await expect(page.getByRole('tab', { name: 'By category' })).toHaveAttribute('aria-selected', 'true');
+    const mainCard = page.getByText('What changed', { exact: true }).locator('xpath=ancestor::div[contains(@class, "rounded-md")][1]');
+    await expect(mainCard).toBeVisible();
+    await expect(page.getByText(/Select a bar/)).toHaveCount(0);
+    const before = (await mainCard.boundingBox())!;
+    const content = (await page.getByRole('tablist').locator('xpath=ancestor::div[contains(@class, "max-w-4xl")][1]').boundingBox())!;
+    expect(before.width).toBeGreaterThan(content.width - 80); // full width: no reserved column
 
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.reload();
-  await page.getByRole('tab', { name: 'By category' }).click();
-  await expect(page.getByText('Select a bar in "What changed"')).toBeVisible();
-  await page.screenshot({ path: 'e2e/screenshots/explore-by-category-phone.png', fullPage: true });
+    await mainCard.getByRole('button').first().click();
+    const detail = page.getByRole('button', { name: 'Clear selection' }).locator('xpath=ancestor::div[contains(@class, "rounded-md")][1]');
+    await expect(detail).toBeVisible();
+    const after = (await mainCard.boundingBox())!;
+    const detailBox = (await detail.boundingBox())!;
+    expect(Math.abs(after.width - before.width)).toBeLessThan(1); // chart does not resize
+    expect(detailBox.y).toBeGreaterThan(after.y + after.height - 1); // beneath, not beside
+    await page.screenshot({ path: `e2e/screenshots/explore-by-category-${viewport.name}.png`, fullPage: true });
+  }
 });
 
 test('mode tabs scroll within their own bounds on phone instead of overflowing the page', async ({ page }) => {

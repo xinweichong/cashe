@@ -54,13 +54,15 @@ afterEach(cleanup);
 test('shows the ranked category change, selectable to its evidence links in the inspection panel', async () => {
   show();
   await selectMode('By category');
-  expect(await screen.findByText('Select a bar in "What changed" to see its evidence links.')).toBeTruthy();
-  const bar = screen.getByRole('button', { name: /Food & Drink/ });
+  const bar = await screen.findByRole('button', { name: /Food & Drink/ });
+  expect(screen.queryByRole('link', { name: 'This period' })).toBeNull();
   fireEvent.click(bar);
   const link = await screen.findByRole('link', { name: 'This period' });
   const params = new URL(link.getAttribute('href')!, 'http://localhost').searchParams;
   expect(params.get('category')).toBe('Food & Drink');
   expect(params.get('start')).toBe(period.start);
+  fireEvent.click(screen.getByRole('button', { name: 'Clear selection' }));
+  expect(screen.queryByRole('link', { name: 'This period' })).toBeNull();
 });
 
 test('the top category merchant driver links to the merchant profile as a drill-down, with exact evidence as a secondary link', async () => {
