@@ -29,7 +29,7 @@ export function BulkActionBar({ count, categories, onCategorize, onSetType, onCa
           if (e.target.value) onCategorize(e.target.value);
           e.target.value = '';
         }}
-        className="input-field text-sm"
+        className="select-field text-sm"
       >
         <option value="" disabled>Set category…</option>
         {categories.map((c) => (

@@ -223,7 +223,7 @@ export function MerchantProfile({
           onChange={(e) => setDisplayName(e.target.value)}
           onBlur={() => setAliasMutation.mutate(displayName)}
           placeholder={profile.merchant}
-          className="w-full px-3 py-2 text-sm bg-background border border-border rounded-md text-foreground placeholder:text-muted focus:outline-none focus:ring-1 focus:ring-border"
+          className="input-field w-full placeholder:text-muted focus:outline-none focus:border-foreground focus:ring-1 focus:ring-foreground/20"
         />
         {aliasSaved && (
           <p className="text-xs text-success mt-1">Saved</p>
@@ -265,7 +265,7 @@ export function MerchantProfile({
           onChange={(e) => setNotes(e.target.value)}
           onBlur={() => setNotesMutation.mutate(notes)}
           placeholder="Add notes about this merchant…"
-          className="w-full h-20 px-3 py-2 text-sm bg-background border border-border rounded-md text-foreground placeholder:text-muted resize-none focus:outline-none focus:ring-1 focus:ring-border"
+          className="input-field w-full h-20 placeholder:text-muted resize-none focus:outline-none focus:border-foreground focus:ring-1 focus:ring-foreground/20"
         />
         {notesSaved && (
           <p className="text-xs text-success mt-1">Saved</p>

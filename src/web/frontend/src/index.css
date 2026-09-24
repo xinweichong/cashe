@@ -115,14 +115,14 @@ body {
 
 @layer components {
   .input-field {
-    @apply px-3 py-1.5 text-sm bg-background border border-border rounded-md text-foreground;
+    @apply px-3 py-1.5 text-sm bg-background border border-border rounded-sm text-foreground;
   }
   .btn-action {
     @apply px-4 py-1.5 text-sm bg-foreground text-background rounded-md hover:opacity-90;
   }
   /* Native <select> with a themed chevron arrow — use instead of unstyled <select> */
   .select-field {
-    @apply px-3 py-1.5 text-sm bg-background border border-border rounded-md text-foreground appearance-none pr-8;
+    @apply px-3 py-1.5 text-sm bg-background border border-border rounded-sm text-foreground appearance-none pr-8;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23E8E8ED' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: right 0.5rem center;

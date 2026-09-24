@@ -296,7 +296,7 @@ export function TransactionDetail({
             </div>
             <div>
               <label htmlFor={`type-${tx.id}`} className="text-xs text-muted mb-1 block">Transaction type</label>
-              <select id={`type-${tx.id}`} className="input-field min-h-11 w-full" value={type} onChange={e => setType(e.target.value)}>
+              <select id={`type-${tx.id}`} className="select-field min-h-11 w-full" value={type} onChange={e => setType(e.target.value)}>
                 {!['expense', 'income', 'refund', 'transfer'].includes(type) && <option value={type} disabled>Choose a classification</option>}
                 <option value="expense">Spending</option>
                 <option value="income">Income</option>
