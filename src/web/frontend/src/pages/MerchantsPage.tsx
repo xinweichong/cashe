@@ -121,7 +121,7 @@ export function MerchantsPage() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search merchants…"
-              className="w-full pl-9 pr-3 py-2 text-sm bg-background border border-border rounded-md text-foreground placeholder:text-muted"
+              className="input-field w-full pl-9"
             />
           </div>
 

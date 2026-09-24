@@ -428,12 +428,14 @@ Provide at least 44px effective touch targets in the new experience without inve
 
 ### 7.2 Form fields
 
-The consolidation target is `.input-field` with `Input` as a thin wrapper over the same contract. Today the wrapper still has separate sizing/focus/placeholder classes; migrate it and its callers together rather than claiming it is retired. Native checkbox/radio/date behaviour remains intact.
+`.input-field` (in `index.css`) is the single text-field contract; `Input` is a thin wrapper that adds only its fixed 40px height and file-input styling. Native checkbox/radio/date behaviour remains intact.
 
-- **Resting target:** `bg-background border border-border rounded-sm px-3 py-1.5 text-sm text-foreground` — the 6px control radius from §5, now the shared owner's actual radius.
-- **Focus:** `border-foreground ring-1 ring-foreground/20` — subtle but visible
-- **Error:** `border-destructive/40` — combined with `text-destructive` helper text below the field
-- **Disabled:** `opacity-50 cursor-not-allowed`
+- **Resting:** `bg-background border border-border rounded-sm px-3 py-1.5 text-foreground`, placeholder `text-muted`. Text is 16px below `md` (avoids iOS Safari zoom-on-focus) and 14px from `md` up.
+- **Focus:** the global §15 treatment, `focus-visible:ring-2 ring-ring ring-offset-2`. An earlier subtler `border-foreground ring-1` target conflicted with §15; §15 wins.
+- **Error:** set `aria-invalid="true"` for `border-destructive/40`, with `text-destructive` helper text below the field.
+- **Disabled:** `opacity-50 cursor-not-allowed`.
+
+`.select-field` shares the same states.
 
 `.select-field` keeps the existing theme-aware SVG chevron. Use it for native selects rather than `.input-field`. Custom Radix Select remains appropriate where needed; do not replace native selects solely for appearance. Field focus must meet §15 and the current global focus treatment.
 

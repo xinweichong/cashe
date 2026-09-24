@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 
-// Rendered checks for the shared overlay owners (dialog.tsx, dropdown-menu.tsx):
+// Rendered checks for shared overlay and field owners (dialog, dropdown-menu, .input-field):
 // surfaces must resolve through theme tokens rather than currentColor borders
 // or the Radix `accent` compat token (which equals foreground, so a focused
 // menu item used to render near-white text on a near-white fill).
@@ -84,5 +84,27 @@ for (const theme of ['dark', 'light'] as const) {
     expect(border).toBe(await cssVar(page, '--color-border'));
 
     await page.screenshot({ path: `e2e/screenshots/overlay-profile-menu-${theme}.png` });
+  });
+}
+
+for (const viewport of [{ width: 390, height: 844, size: '16px' }, { width: 1440, height: 900, size: '14px' }]) {
+  test(`Input and native .input-field share one focus/size contract at ${viewport.width}px`, async ({ page }) => {
+    await mockAuthenticatedSettings(page);
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    await page.goto('/settings');
+    const wrapped = page.getByPlaceholder('Current password');
+    const native = page.locator('input[type="number"]').first();
+    await expect(wrapped).toBeVisible();
+    for (const field of [wrapped, native]) {
+      await field.scrollIntoViewIfNeeded();
+      await field.focus();
+      const s = await field.evaluate((el) => {
+        const c = getComputedStyle(el);
+        return { size: c.fontSize, shadow: c.boxShadow, radius: c.borderRadius };
+      });
+      expect(s.size).toBe(viewport.size);
+      expect(s.radius).toBe('6px');
+      expect(s.shadow).not.toBe('none');
+    }
   });
 }

@@ -125,12 +125,14 @@ body {
 }
 
 @layer components {
+  /* Shared text-field contract (§7.2/§15); components/ui/input.tsx wraps it.
+     16px on phones avoids iOS Safari's zoom-on-focus for smaller text. */
   .input-field {
-    @apply px-3 py-1.5 text-sm bg-background border border-border rounded-sm text-foreground;
+    @apply px-3 py-1.5 text-base md:text-sm bg-background border border-border rounded-sm text-foreground placeholder:text-muted ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 aria-[invalid=true]:border-destructive/40;
   }
   /* Native <select> with a themed chevron arrow — use instead of unstyled <select> */
   .select-field {
-    @apply px-3 py-1.5 text-sm bg-background border border-border rounded-sm text-foreground appearance-none pr-8;
+    @apply px-3 py-1.5 text-base md:text-sm bg-background border border-border rounded-sm text-foreground appearance-none pr-8 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 aria-[invalid=true]:border-destructive/40;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23E8E8ED' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: right 0.5rem center;

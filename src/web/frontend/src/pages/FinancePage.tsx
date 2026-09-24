@@ -202,7 +202,7 @@ function AddBudgetForm({ categories, onAdd }: { categories: Category[]; onAdd: (
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
           placeholder="Amount"
-          className={cn('input-field', 'w-28 placeholder:text-muted')}
+          className="input-field w-28"
         />
         <Button
           type="button"
