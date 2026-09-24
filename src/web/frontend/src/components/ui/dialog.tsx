@@ -44,7 +44,7 @@ const DialogContent = React.forwardRef<
     >
       {children}
       <DialogPrimitive.Close asChild>
-        <Button variant="ghost" size="icon" className="absolute right-4 top-4 h-8 w-8 opacity-70 hover:opacity-100">
+        <Button variant="ghost" size="icon" className="absolute right-4 top-4 opacity-70 hover:opacity-100">
           <X className="h-4 w-4" />
           <span className="sr-only">Close</span>
         </Button>

@@ -579,21 +579,23 @@ export function OverviewPage() {
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-6 w-6"
+                      className="min-h-11 min-w-11"
+                      aria-label="Previous page"
                       onClick={() => setTxPage(p => Math.max(1, p - 1))}
                       disabled={txPage === 1}
                     >
-                      <ChevronLeft className="h-3 w-3" />
+                      <ChevronLeft className="h-4 w-4" />
                     </Button>
                     <span className="text-xs text-muted">{txPage}/{totalTxPages}</span>
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-6 w-6"
+                      className="min-h-11 min-w-11"
+                      aria-label="Next page"
                       onClick={() => setTxPage(p => Math.min(totalTxPages, p + 1))}
                       disabled={txPage === totalTxPages}
                     >
-                      <ChevronRight className="h-3 w-3" />
+                      <ChevronRight className="h-4 w-4" />
                     </Button>
                   </div>
                 </>

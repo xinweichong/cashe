@@ -73,7 +73,7 @@ export function ActiveTripCard({ showEndButton = false }: { showEndButton?: bool
               <Button
                 variant="outline"
                 size="sm"
-                className="mt-2 text-xs h-7"
+                className="mt-2"
                 onClick={() => {
                   if (confirm('End this trip?')) deactivateMutation.mutate();
                 }}

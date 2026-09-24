@@ -86,7 +86,6 @@ export function SubscriptionsSection({ selectedSubId, onSelectSub }: Subscriptio
             <Button
               variant="ghost"
               size="icon"
-              className="h-7 w-7"
               onClick={() => setShowForm(true)}
               aria-label="Add subscription"
             >

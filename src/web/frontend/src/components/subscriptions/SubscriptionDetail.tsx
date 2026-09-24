@@ -247,7 +247,6 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-7 w-7"
                   onClick={() => setShowEdit(true)}
                   aria-label="Edit"
                 >
@@ -257,7 +256,7 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-7 w-7 text-warning"
+                    className="text-warning"
                     onClick={() => setConfirmCancel(true)}
                     aria-label="Cancel subscription"
                   >
@@ -267,7 +266,7 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-7 w-7 text-destructive"
+                  className="text-destructive"
                   onClick={() => setConfirmDelete(true)}
                   aria-label="Delete"
                 >

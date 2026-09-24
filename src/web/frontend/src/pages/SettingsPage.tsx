@@ -385,7 +385,7 @@ export function SettingsPage() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-7 w-7 text-destructive shrink-0"
+                          className="text-destructive shrink-0"
                           onClick={() => removeSession.mutate(s.token)}
                           disabled={removeSession.isPending}
                         >
@@ -647,11 +647,11 @@ export function SettingsPage() {
                           <span className="text-sm font-medium truncate">{cat.name}</span>
                         </div>
                         <div className="flex gap-1">
-                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => startEdit(cat)}>
+                          <Button variant="ghost" size="icon" onClick={() => startEdit(cat)}>
                             <Pencil className="w-3.5 h-3.5" />
                           </Button>
                           <Button
-                            variant="ghost" size="icon" className="h-7 w-7 text-destructive"
+                            variant="ghost" size="icon" className="text-destructive"
                             onClick={() => handleDeleteCategory(cat.name)}
                             disabled={deleteCat.isPending}
                           >

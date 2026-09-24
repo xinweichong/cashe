@@ -521,19 +521,18 @@ function GoalCard({ g, onContribute, onEdit, onDelete }: {
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-6 w-6 text-teal disabled:opacity-40"
+                    className="text-teal"
                     onClick={handleSaveContrib}
                     disabled={updateContribMutation.isPending}
-                    title="Save"
+                    aria-label="Save contribution"
                   >
                     <Check className="w-3.5 h-3.5" />
                   </Button>
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-6 w-6"
                     onClick={() => setEditingContribId(null)}
-                    title="Cancel"
+                    aria-label="Cancel editing contribution"
                   >
                     <X className="w-3.5 h-3.5" />
                   </Button>
@@ -548,11 +547,11 @@ function GoalCard({ g, onContribute, onEdit, onDelete }: {
                   </div>
                   <div className="flex items-center gap-1">
                     <span className="font-medium text-foreground mr-1">${c.amount.toFixed(0)}</span>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 md:h-5 md:w-5" onClick={() => startEditContrib(c)} title="Edit">
-                      <Pencil className="w-2.5 h-2.5" />
+                    <Button variant="ghost" size="icon" onClick={() => startEditContrib(c)} aria-label="Edit contribution">
+                      <Pencil className="w-3.5 h-3.5" />
                     </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 md:h-5 md:w-5 text-destructive" onClick={() => deleteContribMutation.mutate(c.id)} disabled={deleteContribMutation.isPending} title="Delete">
-                      <Trash2 className="w-2.5 h-2.5" />
+                    <Button variant="ghost" size="icon" className="text-destructive" onClick={() => deleteContribMutation.mutate(c.id)} disabled={deleteContribMutation.isPending} aria-label="Delete contribution">
+                      <Trash2 className="w-3.5 h-3.5" />
                     </Button>
                   </div>
                 </div>
@@ -678,7 +677,7 @@ function GoalsSection() {
     <PageCard
       title="Goals"
       action={
-        <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setShowAddForm(!showAddForm)}>
+        <Button variant="ghost" size="sm" onClick={() => setShowAddForm(!showAddForm)}>
           {showAddForm ? 'Cancel' : '+ Add Goal'}
         </Button>
       }
@@ -886,7 +885,7 @@ function TripRow({ trip }: { trip: Trip }) {
         <Button
           variant="ghost"
           size="icon"
-          className="h-7 w-7 shrink-0"
+          className="shrink-0"
           onClick={() => { setExpanded((v) => !v); if (expanded) setTxPage(1); }}
         >
           {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
@@ -920,7 +919,7 @@ function TripRow({ trip }: { trip: Trip }) {
         <Button
           variant="ghost"
           size="icon"
-          className="h-7 w-7 text-destructive shrink-0"
+          className="text-destructive shrink-0"
           onClick={() => { if (confirm(`Delete trip "${trip.name}"?`)) deleteMutation.mutate(); }}
           disabled={deleteMutation.isPending}
         >
@@ -941,14 +940,14 @@ function TripRow({ trip }: { trip: Trip }) {
               <p className="text-xs font-semibold font-mono uppercase tracking-[0.22em] text-muted">Transactions</p>
               {totalTxPages > 1 && (
                 <div className="flex items-center gap-1">
-                  <Button variant="ghost" size="icon" className="h-6 w-6"
+                  <Button variant="ghost" size="icon" className="min-h-11 min-w-11" aria-label="Previous page"
                     onClick={() => setTxPage((p) => Math.max(1, p - 1))} disabled={txPage === 1}>
-                    <ChevronLeft className="h-3 w-3" />
+                    <ChevronLeft className="h-4 w-4" />
                   </Button>
                   <span className="text-xs text-muted">{txPage}/{totalTxPages}</span>
-                  <Button variant="ghost" size="icon" className="h-6 w-6"
+                  <Button variant="ghost" size="icon" className="min-h-11 min-w-11" aria-label="Next page"
                     onClick={() => setTxPage((p) => Math.min(totalTxPages, p + 1))} disabled={txPage === totalTxPages}>
-                    <ChevronRight className="h-3 w-3" />
+                    <ChevronRight className="h-4 w-4" />
                   </Button>
                 </div>
               )}
@@ -1023,7 +1022,6 @@ function TripsSection() {
           <Button
             variant="ghost"
             size="sm"
-            className="h-7 text-xs"
             onClick={() => setShowCreateForm((v) => !v)}
           >
             {showCreateForm ? 'Cancel' : '+ New Trip'}
@@ -1189,7 +1187,7 @@ export function FinancePage() {
             <PageCard
               title="Budgets"
               action={
-                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setShowAddForm(!showAddForm)}>
+                <Button variant="ghost" size="sm" onClick={() => setShowAddForm(!showAddForm)}>
                   {showAddForm ? 'Cancel' : '+ Add Budget'}
                 </Button>
               }

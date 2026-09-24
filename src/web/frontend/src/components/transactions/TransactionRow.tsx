@@ -54,7 +54,7 @@ export function TransactionRow({
         <Button
           variant="ghost"
           size="icon"
-          className="h-7 w-7 shrink-0 text-destructive"
+          className="shrink-0 text-destructive"
           onClick={(e) => { e.stopPropagation(); onRemove(); }}
           disabled={removeDisabled}
         >
