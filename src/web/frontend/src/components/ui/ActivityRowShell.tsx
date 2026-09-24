@@ -4,6 +4,8 @@ import { cn, getCategoryColor } from '@/lib/utils';
 import { CategoryAvatar } from '@/components/ui/CategoryAvatar';
 
 interface ActivityRowShellProps {
+  /** DOM id for the row element — lets a caller return focus to it. */
+  id?: string;
   category: string | null | undefined;
   isIncome?: boolean;
   selected?: boolean;
@@ -32,7 +34,7 @@ interface ActivityRowShellProps {
  * treatment, the avatar, and the category pill.
  */
 export function ActivityRowShell({
-  category, isIncome = false, selected = false, href, onClick,
+  id, category, isIncome = false, selected = false, href, onClick,
   avatarSlot, title, metaPrimary, amount, amountSub, trailing, className,
 }: ActivityRowShellProps) {
   const categoryColor = getCategoryColor(category ?? 'Other');
@@ -84,13 +86,14 @@ export function ActivityRowShell({
 
   if (href) {
     return (
-      <Link to={href} className={rowClassName} style={rowStyle} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
+      <Link id={id} to={href} className={rowClassName} style={rowStyle} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
         {content}
       </Link>
     );
   }
   return (
     <div
+      id={id}
       className={rowClassName}
       style={rowStyle}
       onMouseEnter={onMouseEnter}

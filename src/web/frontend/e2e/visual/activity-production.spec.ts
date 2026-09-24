@@ -64,3 +64,19 @@ test('production Activity shows filters expanded by default on desktop, with no 
   await expect(page.getByRole('button', { name: 'Expense', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: /Filters/ })).toBeHidden();
 });
+
+test('closing a transaction detail returns focus to the row that opened it, keeping filters', async ({ page }) => {
+  await mockAuthenticatedActivity(page);
+  // Registered after the catch-all, so these win for the detail's own reads.
+  await page.route('**/api/v2/transactions/2', (route) => route.fulfill({ json: TRANSACTIONS[1] }));
+  await page.route('**/api/v2/transactions/2/provenance', (route) => route.fulfill({ json: { transaction_id: 2, sources: [] } }));
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/activity?category=Food');
+  const row = page.locator('#tx-row-2');
+  await expect(row).toBeVisible();
+  await row.click();
+  await expect(page).toHaveURL(/\/activity\/2\?category=Food/);
+  await page.getByRole('button', { name: 'Close transaction' }).click();
+  await expect(page).toHaveURL(/\/activity\?category=Food$/);
+  await expect(row).toBeFocused();
+});

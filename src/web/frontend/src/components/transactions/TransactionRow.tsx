@@ -31,6 +31,7 @@ export function TransactionRow({
 
   return (
     <ActivityRowShell
+      id={`tx-row-${tx.id}`}
       category={tx.category}
       isIncome={isIncome}
       selected={selected}

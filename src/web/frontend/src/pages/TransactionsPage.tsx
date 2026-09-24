@@ -75,7 +75,21 @@ export function TransactionsPage() {
   });
 
   const returnTo = searchParams.get('returnTo');
-  const closeDetail = () => navigate(returnTo?.startsWith('/evidence?') || returnTo === '/review' || returnTo?.startsWith('/review?') ? returnTo : `${activityPath}${location.search}`);
+  const listRef = useRef<HTMLDivElement>(null);
+  const closeDetail = () => {
+    if (returnTo?.startsWith('/evidence?') || returnTo === '/review' || returnTo?.startsWith('/review?')) {
+      navigate(returnTo);
+      return;
+    }
+    const closedId = selectedId;
+    navigate(`${activityPath}${location.search}`);
+    // Return focus to the row that opened the detail, or the list if that
+    // row no longer exists (deleted or filtered out).
+    requestAnimationFrame(() => {
+      const row = closedId !== undefined ? document.getElementById(`tx-row-${closedId}`) : null;
+      (row ?? listRef.current)?.focus();
+    });
+  };
   // Consumes a one-time "open the add form" signal from a deep link, then
   // strips it from the URL — the URL mutation itself requires an effect
   // (it updates the router, an external system), and opening the form is
@@ -432,7 +446,12 @@ export function TransactionsPage() {
           </AnimatePresence>
         )}
 
-        <Card className="overflow-hidden">
+        <Card
+          ref={listRef}
+          tabIndex={-1}
+          aria-label="Transactions"
+          className="overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
           {isError ? (
             <LoadFailed onRetry={() => refetch()} />
           ) : (
