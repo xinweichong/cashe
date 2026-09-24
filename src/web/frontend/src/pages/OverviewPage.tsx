@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { usePeriod, type Period } from '@/hooks/usePeriod';
 import { useSummaryV2, useTrendV2, useTrendByCategoryV2, useBalanceV2 } from '@/hooks/useCategories';
 import { useTransactions } from '@/hooks/useTransactions';
@@ -287,32 +288,6 @@ export function OverviewPage() {
     txPage * TX_PAGE_SIZE,
   );
 
-  const trendToggle = (
-    <div className="flex rounded-md border border-border overflow-hidden">
-      <button
-        onClick={() => setTrendMode('total')}
-        className={cn(
-          'flex-1 px-2.5 py-1 text-xs transition-colors',
-          trendMode === 'total'
-            ? 'bg-foreground/10 text-foreground font-medium'
-            : 'text-muted hover:text-foreground',
-        )}
-      >
-        Total
-      </button>
-      <button
-        onClick={() => setTrendMode('category')}
-        className={cn(
-          'flex-1 px-2.5 py-1 text-xs transition-colors border-l border-border',
-          trendMode === 'category'
-            ? 'bg-foreground/10 text-foreground font-medium'
-            : 'text-muted hover:text-foreground',
-        )}
-      >
-        By Category
-      </button>
-    </div>
-  );
 
   return (
     <div className="p-4 space-y-4 md:h-full md:overflow-hidden md:grid md:gap-4 md:p-6 md:space-y-0 page-grid-overview">
@@ -540,13 +515,22 @@ export function OverviewPage() {
               className="flex flex-col"
               contentClassName="flex-1 flex flex-col gap-3 min-h-0"
             >
-              {trendToggle}
-              <div className="flex-1 min-h-0">
-                {trendMode === 'total'
-                  ? <TrendLine data={trendData} />
-                  : <CategoryTrendLine data={trendByCategoryData} />
-                }
-              </div>
+              <Tabs
+                value={trendMode}
+                onValueChange={(v) => setTrendMode(v as 'total' | 'category')}
+                className="flex-1 flex flex-col gap-3 min-h-0"
+              >
+                <TabsList aria-label="Trend view" className="self-start">
+                  <TabsTrigger value="total">Total</TabsTrigger>
+                  <TabsTrigger value="category">By category</TabsTrigger>
+                </TabsList>
+                <TabsContent value={trendMode} className="mt-0 flex-1 min-h-0">
+                  {trendMode === 'total'
+                    ? <TrendLine data={trendData} />
+                    : <CategoryTrendLine data={trendByCategoryData} />
+                  }
+                </TabsContent>
+              </Tabs>
             </PageCard>
           </div>
         </motion.div>

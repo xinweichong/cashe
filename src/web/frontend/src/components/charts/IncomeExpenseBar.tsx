@@ -5,6 +5,7 @@ import {
 } from 'recharts';
 import { api } from '@/api/client';
 import { ChartCard } from '@/components/ui/cards';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { COLOR_CORAL, useChartTheme, CHART_Y_DOMAIN } from '@/lib/chartTheme';
 
 type Mode = '6mo' | '12mo' | 'yoy';
@@ -36,24 +37,20 @@ export function IncomeExpenseBar() {
 
   const isLoading = isYoY ? yoyLoading : standardLoading;
 
-  const toggle = (
-    <div className="flex rounded-md border border-border overflow-hidden">
-      {(['6mo', '12mo', 'yoy'] as Mode[]).map((m, i) => (
-        <button
-          key={m}
-          onClick={() => setMode(m)}
-          className={`px-2.5 py-1 text-xs transition-colors ${
-            i > 0 ? 'border-l border-border' : ''
-          } ${
-            mode === m
-              ? 'bg-foreground/10 text-foreground font-medium'
-              : 'text-muted hover:text-foreground'
-          }`}
-        >
-          {m === '6mo' ? '6M' : m === '12mo' ? '12M' : 'YoY'}
-        </button>
-      ))}
-    </div>
+  const labels: Record<Mode, string> = { '6mo': '6M', '12mo': '12M', yoy: 'YoY' };
+  const card = (body: React.ReactNode) => (
+    <Tabs value={mode} onValueChange={(v) => setMode(v as Mode)}>
+      <ChartCard
+        title={title}
+        action={
+          <TabsList aria-label="Comparison range">
+            {(['6mo', '12mo', 'yoy'] as Mode[]).map((m) => <TabsTrigger key={m} value={m}>{labels[m]}</TabsTrigger>)}
+          </TabsList>
+        }
+      >
+        <TabsContent value={mode} className="mt-0">{body}</TabsContent>
+      </ChartCard>
+    </Tabs>
   );
 
   const title = isYoY
@@ -61,11 +58,7 @@ export function IncomeExpenseBar() {
     : `Income vs Expenses — Last ${months === 6 ? '6' : '12'} Months`;
 
   if (isLoading) {
-    return (
-      <ChartCard title={title} action={toggle}>
-        <div className="p-4 h-64 flex items-center justify-center text-muted text-sm">Catching up…</div>
-      </ChartCard>
-    );
+    return card(<div className="p-4 h-64 flex items-center justify-center text-muted text-sm">Catching up…</div>);
   }
 
   let chartData: object[] = [];
@@ -84,15 +77,10 @@ export function IncomeExpenseBar() {
   }
 
   if (!chartData.length) {
-    return (
-      <ChartCard title={title} action={toggle}>
-        <div className="p-4 h-64 flex items-center justify-center text-muted text-sm">No data for this period.</div>
-      </ChartCard>
-    );
+    return card(<div className="p-4 h-64 flex items-center justify-center text-muted text-sm">No data for this period.</div>);
   }
 
-  return (
-    <ChartCard title={title} action={toggle}>
+  return card(
       <div className="p-4 w-full h-64">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={chartData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
@@ -126,6 +114,5 @@ export function IncomeExpenseBar() {
           </BarChart>
         </ResponsiveContainer>
       </div>
-    </ChartCard>
   );
 }

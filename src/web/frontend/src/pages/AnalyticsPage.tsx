@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Card } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PageCard, ChartCard, HighlightCard } from '@/components/ui/cards';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LoadFailed } from '@/components/ui/LoadFailed';
@@ -94,31 +95,23 @@ function AIInsightsCard() {
 
   const activeTab = tabs.find(t => t.key === tab)!;
 
-  const tabSelector = (
-    <div className="flex rounded-md border border-border overflow-hidden">
-      {tabs.map((t, i) => (
-        <button
-          key={t.key}
-          onClick={() => setTab(t.key)}
-          className={`px-2.5 py-1 text-xs transition-colors ${
-            i > 0 ? 'border-l border-border' : ''
-          } ${
-            tab === t.key
-              ? 'bg-foreground/10 text-foreground font-medium'
-              : 'text-muted hover:text-foreground'
-          }`}
-        >
-          {t.label}
-        </button>
-      ))}
-    </div>
-  );
 
   return (
-    <PageCard title="AI Insights" action={tabSelector}>
-      {tab !== 'daily' && <p className="text-sm text-muted mb-3">Archived AI text; no longer refreshed. Current spending facts are available in Home and Telegram summaries.</p>}
-      <InsightCard period={tab} queryFn={activeTab.queryFn} emptyLabel={activeTab.emptyLabel} />
-    </PageCard>
+    <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)}>
+      <PageCard
+        title="AI Insights"
+        action={
+          <TabsList aria-label="Insight period">
+            {tabs.map((t) => <TabsTrigger key={t.key} value={t.key}>{t.label}</TabsTrigger>)}
+          </TabsList>
+        }
+      >
+        <TabsContent value={tab} className="mt-0">
+          {tab !== 'daily' && <p className="text-sm text-muted mb-3">Archived AI text; no longer refreshed. Current spending facts are available in Home and Telegram summaries.</p>}
+          <InsightCard period={tab} queryFn={activeTab.queryFn} emptyLabel={activeTab.emptyLabel} />
+        </TabsContent>
+      </PageCard>
+    </Tabs>
   );
 }
 
