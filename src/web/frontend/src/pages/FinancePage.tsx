@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { api, type BudgetProgressV2, type Category, type GoalProgress, type GoalProgressV2, type Trip, type RecurringTransaction } from '@/api/client';
 import { PageCard, HeroCard, HighlightCard } from '@/components/ui/cards';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn, getBudgetTone, getGoalTone, getCategoryColor } from '@/lib/utils';
@@ -773,12 +774,6 @@ function RecurringSection() {
     staleTime: 5 * 60 * 1000,
   });
 
-  const frequencyBadgeClass = (frequency: string) => {
-    if (frequency === 'monthly') return 'bg-teal/10 text-teal';
-    if (frequency === 'weekly') return 'bg-info/10 text-info';
-    return 'bg-foreground/10 text-muted';
-  };
-
   return (
     <PageCard title="Recurring Transactions">
       {isLoading ? (
@@ -802,9 +797,9 @@ function RecurringSection() {
               <span className="flex-1 min-w-0 text-sm font-medium text-foreground truncate">
                 {r.merchant}
               </span>
-              <span className={cn('inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium shrink-0', frequencyBadgeClass(r.frequency))}>
+              <Badge variant="outline" className="shrink-0 capitalize text-muted">
                 {r.frequency}
-              </span>
+              </Badge>
               <span className="text-sm font-mono text-foreground shrink-0">
                 ~${r.avg_amount.toFixed(0)}/{r.frequency === 'weekly' ? 'wk' : r.frequency === 'biweekly' ? '2wk' : 'mo'}
               </span>

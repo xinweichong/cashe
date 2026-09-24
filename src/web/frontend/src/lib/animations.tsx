@@ -2,7 +2,7 @@
 import { useEffect } from 'react'
 import { animate, useMotionValue, useTransform, motion } from 'framer-motion'
 import { formatCurrency } from './utils'
-import { springs } from './motionPresets'
+import { Badge } from '@/components/ui/badge'
 
 // ─── Animated currency number ─────────────────────────────────────────────────
 // Counts from 0 to `value` on mount and whenever `value` changes.
@@ -34,18 +34,11 @@ interface DeltaBadgeProps {
 export function DeltaBadge({ value, label, invert = false }: DeltaBadgeProps) {
   const isUp = value >= 0
   const isBad = invert ? !isUp : isUp
-  const color = isBad ? '#FF6B6B' : '#34D399'
   const arrow = isUp ? '▲' : '▼'
   return (
-    <motion.span
-      initial={{ scale: 0.8, opacity: 0 }}
-      animate={{ scale: 1, opacity: 1 }}
-      transition={springs.bouncy}
-      className="inline-flex items-center gap-0.5 text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-full"
-      style={{ color, background: `${color}1A` }}
-    >
+    <Badge tone={isBad ? 'warm' : 'calm'} className="gap-0.5 font-mono">
       {arrow}{Math.abs(value).toFixed(1)}%{label ? ` ${label}` : ''}
-    </motion.span>
+    </Badge>
   )
 }
 

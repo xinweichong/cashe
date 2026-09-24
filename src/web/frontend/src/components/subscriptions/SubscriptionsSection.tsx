@@ -3,6 +3,7 @@ import { Plus } from 'lucide-react';
 import { api, type Subscription } from '@/api/client';
 import { PageCard } from '@/components/ui/cards';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { formatCurrency } from '@/lib/utils';
 import { useState } from 'react';
 import { SubscriptionForm } from './SubscriptionForm';
@@ -114,9 +115,9 @@ export function SubscriptionsSection({ selectedSubId, onSelectSub }: Subscriptio
                   {sub.label ?? sub.merchant}
                 </span>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-xs border border-border rounded-full px-2 py-0.5 text-muted">
+                  <Badge variant="outline" className="text-muted">
                     {FREQUENCY_LABELS[sub.frequency]}
-                  </span>
+                  </Badge>
                   {sub.status === 'possibly_cancelled' && (
                     <span className="text-xs text-warning">
                       ⚠ Check

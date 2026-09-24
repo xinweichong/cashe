@@ -694,7 +694,7 @@ export function SettingsPage() {
                       {cat.keywords?.trim() && (
                         <div className="flex flex-wrap gap-1 mt-1.5 ml-7">
                           {cat.keywords.split(',').map((kw) => (
-                            <Badge key={kw.trim()} variant="outline" className="text-xs border-border">
+                            <Badge key={kw.trim()} variant="outline">
                               {kw.trim()}
                             </Badge>
                           ))}

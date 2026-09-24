@@ -144,7 +144,7 @@ export function MerchantProfile({
             <p className="text-xs text-muted mt-0.5">Recorded as “{profile.merchant}”</p>
           )}
           {profile.category && (
-            <Badge variant="outline" className="mt-1 text-xs">{profile.category}</Badge>
+            <Badge variant="outline" className="mt-1">{profile.category}</Badge>
           )}
         </div>
         <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close">

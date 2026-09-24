@@ -136,7 +136,7 @@ export function TransactionDetail({
               {tx.merchant || tx.description || 'Transaction'}
             </p>
             {tx.category && (
-              <Badge variant="outline" className="text-xs mt-0.5 border-border">
+              <Badge variant="outline" className="mt-0.5">
                 {tx.category}
               </Badge>
             )}

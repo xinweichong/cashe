@@ -52,6 +52,24 @@ for (const theme of ['dark', 'light'] as const) {
       expect(colors.size).toBe(tones.length);
     });
 
+    test(`outline badge border resolves to the border token, not currentColor (${theme})`, async ({ page }) => {
+      const badge = page.getByTestId('badge-variants').getByText('outline', { exact: true });
+      const { border, text } = await badge.evaluate((n) => {
+        const s = getComputedStyle(n);
+        return { border: s.borderTopColor, text: s.color };
+      });
+      const token = await page.evaluate(() => {
+        const probe = document.createElement('div');
+        probe.style.color = 'var(--color-border)';
+        document.body.appendChild(probe);
+        const v = getComputedStyle(probe).color;
+        probe.remove();
+        return v;
+      });
+      expect(border).toBe(token);
+      expect(border).not.toBe(text);
+    });
+
     test(`screenshot: full preview page (${theme})`, async ({ page }) => {
       await page.screenshot({ path: `e2e/screenshots/preview-${theme}.png`, fullPage: true });
     });

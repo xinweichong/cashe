@@ -71,12 +71,9 @@ function InsightCard({ period, queryFn, emptyLabel }: { period: string; queryFn:
       {data.content.nudges?.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {data.content.nudges.map((nudge: string, i: number) => (
-            <span
-              key={i}
-              className="px-2.5 py-1 text-xs rounded-full border border-teal/40 text-teal bg-teal/5"
-            >
+            <Badge key={i} variant="outline" className="font-medium">
               {nudge}
-            </span>
+            </Badge>
           ))}
         </div>
       )}
@@ -273,7 +270,7 @@ export function AnalyticsPage() {
   const hasAlerts = (alerts?.anomalies?.length ?? 0) > 0 || (alerts?.new_merchants?.length ?? 0) > 0;
 
   const comparisonBadge = comparison?.overall && (
-    <Badge variant="outline" className="border-border text-xs">
+    <Badge variant="outline">
       <TrendingUp className="w-3 h-3 mr-1" />
       {comparison.overall.change_percent != null
         ? `${comparison.overall.change_percent > 0 ? '+' : ''}${comparison.overall.change_percent}%`
@@ -327,7 +324,7 @@ export function AnalyticsPage() {
                 ))}
                 {alerts?.new_merchants?.slice(0, 3).map((m) => (
                   <p key={m.merchant} className="text-sm flex items-center gap-2">
-                    <Badge variant="default" className="text-[10px] px-1.5 py-0">New</Badge>
+                    <Badge variant="default">New</Badge>
                     <span className="font-medium">{m.merchant}</span>
                   </p>
                 ))}
