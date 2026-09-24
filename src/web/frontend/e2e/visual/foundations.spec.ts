@@ -37,6 +37,8 @@ for (const theme of ['dark', 'light'] as const) {
       const card = page.getByTestId('ordinary-card');
       const radius = await card.evaluate((n) => getComputedStyle(n).borderRadius);
       expect(radius).toBe('8px');
+      const shadow = await card.evaluate((n) => getComputedStyle(n).boxShadow);
+      expect(shadow).toBe('none');
     });
 
     test(`badge tones render distinct, theme-resolved colours (${theme})`, async ({ page }) => {

@@ -40,7 +40,7 @@ export function DevPreviewPage() {
       </section>
 
       <section data-testid="section-card">
-        <h2 className="font-display text-lg font-semibold mb-4">Card (ordinary, rounded-md/shadow-elev-xs)</h2>
+        <h2 className="font-display text-lg font-semibold mb-4">Card (ordinary, rounded-md, border-only)</h2>
         <Card className="max-w-sm" data-testid="ordinary-card">
           <CardHeader>
             <CardTitle>Where it went</CardTitle>
