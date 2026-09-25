@@ -13,6 +13,9 @@ export interface Lens<T extends string> {
   value: T;
   label: string;
   panel: ReactNode;
+  /** The panel brings its own card(s), so the lens frame drops its border
+   * and fill rather than nesting a card in a card. */
+  bare?: boolean;
 }
 
 interface PhoneScreenProps<T extends string> {
@@ -23,6 +26,8 @@ interface PhoneScreenProps<T extends string> {
   onLensChange: (lens: T) => void;
   /** Names the lens group for assistive tech, e.g. "Home views". */
   label: string;
+  /** Optional thumb-band control under the lenses, e.g. Activity's search. */
+  dock?: ReactNode;
   className?: string;
 }
 
@@ -31,7 +36,7 @@ interface PhoneScreenProps<T extends string> {
 // 4rem bottom padding for the tab bar. dvh tracks Safari's toolbars.
 export const PHONE_SCREEN_HEIGHT = 'h-[calc(100dvh-7rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))]';
 
-export function PhoneScreen<T extends string>({ glance, lenses, lens, onLensChange, label, className }: PhoneScreenProps<T>) {
+export function PhoneScreen<T extends string>({ glance, lenses, lens, onLensChange, label, dock, className }: PhoneScreenProps<T>) {
   const reduceMotion = useReducedMotion();
   return (
     <Tabs
@@ -49,7 +54,7 @@ export function PhoneScreen<T extends string>({ glance, lenses, lens, onLensChan
                 animate={{ opacity: 1, y: 0 }}
                 exit={reduceMotion ? undefined : { opacity: 0, transition: { duration: 0.08 } }}
                 transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-                className="absolute inset-0 overflow-y-auto overscroll-contain rounded-lg border border-border bg-card"
+                className={cn('absolute inset-0 overflow-y-auto overscroll-contain rounded-lg', l.bare ? 'flex flex-col gap-2 [&>*]:shrink-0 [&>*:last-child]:flex-1' : 'border border-border bg-card')}
               >
                 {l.panel}
               </motion.div>
@@ -64,6 +69,7 @@ export function PhoneScreen<T extends string>({ glance, lenses, lens, onLensChan
           </TabsTrigger>
         ))}
       </TabsList>
+      {dock && <div className="shrink-0">{dock}</div>}
     </Tabs>
   );
 }

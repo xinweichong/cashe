@@ -21,11 +21,13 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
     await mockAuthenticatedHome(page);
     await page.setViewportSize(viewport);
     await page.goto('/');
-    await expect(page.getByText('Where the dollars go.')).toBeVisible();
+    const phone = viewport.width < 768;
+    // Phone Home leads with the compact 112px ring beside its legend.
+    await expect(phone ? page.getByRole('tablist', { name: 'Home views' }) : page.getByText('Where the dollars go.')).toBeVisible();
 
     const sectors = page.locator('.recharts-pie-sector');
     await expect(sectors.first()).toBeVisible();
-    const container = page.locator('div.relative.w-full.max-w-\\[220px\\]').first();
+    const container = page.locator(phone ? 'div.relative.w-\\[112px\\]' : 'div.relative.w-full.max-w-\\[220px\\]').first();
     const containerBox = (await container.boundingBox())!;
 
     // A complete ring's sectors collectively span the chart's outer diameter
@@ -80,7 +82,8 @@ test('initial Home load renders visible shape-matched skeletons in light theme',
   await page.goto('/');
   const status = page.getByRole('status', { name: 'Preparing your briefing' });
   await expect(status).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Where the dollars go.' })).toBeVisible();
+  // Phone Home keeps its page heading for assistive tech only.
+  await expect(page.getByRole('heading', { name: 'Home' })).toBeAttached();
   const bg = await status.locator('.skeleton-pulse').first().evaluate((el) => getComputedStyle(el).backgroundImage);
   expect(bg).not.toContain('255, 255, 255');
   await page.screenshot({ path: 'e2e/screenshots/home-initial-skeleton-light.png' });

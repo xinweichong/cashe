@@ -21,6 +21,12 @@ import { WorthALookSummary } from '@/components/explore/WorthALookCard';
 import { HealthScoreSummary } from '@/components/explore/HealthScoreCard';
 import { formatChange, formatRange } from '@/components/explore/format';
 import { datesInRange, formatShortDate, getCategoryColor } from '@/lib/utils';
+import { ArrowDown, ArrowUp, ChevronRight } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { HeroCard } from '@/components/ui/cards';
+import { HeroAmount } from '@/components/ui/HeroAmount';
+import { PhoneScreen, type Lens } from '@/components/layout/PhoneScreen';
+import { useIsPhone } from '@/hooks/useIsPhone';
 
 const WEEKDAY_LABELS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
@@ -269,7 +275,7 @@ function SpendingOverTime() {
       ) : isLoading || !trend ? (
         <div role="status"><span className="sr-only">Loading…</span><Skeleton className="h-20 w-full" /></div>
       ) : (
-        <div className="h-[296px]">
+        <div className="h-[220px] md:h-[296px]">
           <CategoryTrendLine
             data={chartData}
             selectedDate={selectedDay}
@@ -495,6 +501,44 @@ function TripImpact({ trips }: { trips: { id: number; name: string; end_date: st
   );
 }
 
+type ExploreLens = 'time' | 'category' | 'merchant' | 'recurring' | 'week';
+const EXPLORE_LENSES: readonly ExploreLens[] = ['time', 'category', 'merchant', 'recurring', 'week'];
+const LENS_FOR_MODE: Record<Mode, ExploreLens> = { 'over-time': 'time', 'by-category': 'category', 'by-merchant': 'merchant', recurring: 'recurring' };
+
+// The phone glance: month-to-date spend against last month, with the two
+// summaries the desktop band shows (signals, health) as one-tap links.
+function ExploreGlance({ facts }: { facts: SpendingFacts | undefined }) {
+  const health = useQuery({ queryKey: ['health-score-v2', 1], queryFn: () => briefingApi.healthScore(1), staleTime: 60_000 });
+  const signals = useQuery({ queryKey: ['explore-signals'], queryFn: () => briefingApi.signals() });
+  const signalCount = signals.data ? signals.data.unusual.length + signals.data.new_merchants.length : undefined;
+  const change = facts?.change;
+  const month = facts ? new Date(`${facts.current.start}T00:00:00`).toLocaleDateString('en-SG', { month: 'short' }) : '';
+  const link = 'flex min-h-12 flex-1 items-center gap-2 px-1 text-sm active:bg-foreground/5 rounded-md transition-colors';
+  return (
+    <HeroCard title={facts ? `Spent · ${month}` : 'Spent'} className="p-4">
+      {!facts ? <Skeleton className="h-10 w-40" /> : <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <HeroAmount value={facts.current.spending} className="text-4xl" />
+        {change && <Badge tone={change.minor_units >= 0 ? 'warm' : 'calm'} className="font-mono gap-1">
+          {change.minor_units >= 0 ? <ArrowUp size={12} aria-label="up" /> : <ArrowDown size={12} aria-label="down" />}{formatMoney({ ...change, minor_units: Math.abs(change.minor_units) })} vs last month
+        </Badge>}
+      </div>}
+      <div className="mt-3 flex divide-x divide-border border-t border-border pt-1">
+        <Link to="/explore/signals" className={link}>
+          <StatusDot tone={signalCount ? 'notable' : 'calm'} />
+          <span className="flex-1">Worth a look</span>
+          <span className="font-mono tabular-nums">{signalCount ?? '–'}</span>
+          <ChevronRight size={16} className="text-muted" aria-hidden />
+        </Link>
+        <Link to="/explore/health" className={`${link} pl-3`}>
+          <span className="flex-1">Health</span>
+          <span className="font-display font-bold tabular-nums">{health.data ? (health.data.has_income_data ? health.data.score : '—') : '–'}</span>
+          <ChevronRight size={16} className="text-muted" aria-hidden />
+        </Link>
+      </div>
+    </HeroCard>
+  );
+}
+
 export function ExplorePatternsPage() {
   const [search, setSearch] = useSearchParams();
   const modeParam = search.get('mode');
@@ -506,12 +550,34 @@ export function ExplorePatternsPage() {
   }
   const { data: facts } = useMonthFacts();
   const { data: trips } = useQuery({ queryKey: ['trips'], queryFn: () => api.getTrips() });
+  const isPhone = useIsPhone();
   const location = useLocation();
   const patternsRef = useRef<HTMLElement>(null);
   useEffect(() => {
     // "vs. last month" opens By category and lands on the patterns.
     if (location.hash === '#explore-patterns') patternsRef.current?.scrollIntoView({ block: 'start' });
   }, [location.hash, location.search]);
+
+  if (isPhone) {
+    // A desktop mode link (e.g. "vs. last month" → by-category) lands on the
+    // matching lens; the phone's own choice is held separately in ?lens=.
+    const lensParam = search.get('lens') as ExploreLens | null;
+    const lens: ExploreLens = lensParam && EXPLORE_LENSES.includes(lensParam) ? lensParam : modeParam ? LENS_FOR_MODE[mode] : 'time';
+    const setLens = (next: ExploreLens) => {
+      const params = new URLSearchParams(search);
+      params.delete('mode');
+      if (next === 'time') params.delete('lens'); else params.set('lens', next);
+      setSearch(params, { replace: true });
+    };
+    const lenses: Lens<ExploreLens>[] = [
+      { value: 'time', label: 'Time', bare: true, panel: <><SpendingOverTime /><DailyReadCard /><IncomeExpenseBar /></> },
+      { value: 'category', label: 'Category', bare: true, panel: <><WhereItWent facts={facts} /><WhatChanged /><WhatDroveIt /></> },
+      { value: 'merchant', label: 'Merchant', bare: true, panel: <><MerchantRanking facts={facts} /><MostVisited facts={facts} /></> },
+      { value: 'recurring', label: 'Recurring', bare: true, panel: <RecurringCharges /> },
+      { value: 'week', label: 'Week', bare: true, panel: <><WhatDoesANormalWeekLookLike />{!!trips?.length && <TripImpact trips={trips} />}</> },
+    ];
+    return <PhoneScreen glance={<ExploreGlance facts={facts} />} lenses={lenses} lens={lens} onLensChange={setLens} label="Explore views" />;
+  }
 
   return (
     <div className="p-4 md:p-6 space-y-4 md:space-y-5 max-w-[1600px]">

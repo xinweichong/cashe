@@ -31,6 +31,7 @@ interface TransactionFiltersProps {
   onTripChange: (v: string) => void;
   needsReview: boolean;
   onNeedsReviewChange: (v: boolean) => void;
+  variant?: 'default' | 'sheet';
 }
 
 export function TransactionFilters({
@@ -50,7 +51,11 @@ export function TransactionFilters({
   onTripChange,
   needsReview,
   onNeedsReviewChange,
+  variant = 'default',
 }: TransactionFiltersProps) {
+  // 'sheet' is the phone's Filters DrillSheet: search already lives in the
+  // thumb dock, so the sheet shows every control, expanded, without it.
+  const inSheet = variant === 'sheet';
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   // Filter chips/date range default collapsed on phone — a search you can
   // always see, with everything else a tap away, beats eight rows of chrome
@@ -106,7 +111,7 @@ export function TransactionFilters({
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="relative">
+      {!inSheet && <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted" />
         <Input
           placeholder="Search merchant, alias, description, category, or amount..."
@@ -114,7 +119,7 @@ export function TransactionFilters({
           onChange={(e) => onSearchChange(e.target.value)}
           className="pl-9"
         />
-      </div>
+      </div>}
       <div className="flex flex-wrap gap-2">
         {trips.length > 0 && (
           <select
@@ -131,7 +136,7 @@ export function TransactionFilters({
         )}
         <Button
           variant="outline"
-          className="min-h-11 relative md:hidden"
+          className={cn('min-h-11 relative md:hidden', inSheet && 'hidden')}
           onClick={() => setMobileFiltersOpen((v) => !v)}
           aria-expanded={mobileFiltersOpen}
           aria-controls="transaction-filter-controls"
@@ -147,7 +152,7 @@ export function TransactionFilters({
         {hasFilters && (
           <Button
             variant="ghost"
-            size="icon"
+            size={inSheet ? 'default' : 'icon'}
             className="min-h-11"
             aria-label="Clear all filters"
             onClick={() => {
@@ -160,12 +165,13 @@ export function TransactionFilters({
               onNeedsReviewChange(false);
             }}
           >
-            <X className="w-4 h-4" />
+            <X className="w-4 h-4" />{inSheet && 'Clear all'}
           </Button>
         )}
       </div>
 
-      <div id="transaction-filter-controls" className={cn(mobileFiltersOpen ? 'flex' : 'hidden', 'md:flex flex-col gap-2')}>
+      <div id="transaction-filter-controls" className={cn(mobileFiltersOpen || inSheet ? 'flex' : 'hidden', 'md:flex flex-col gap-2')}>
+        {inSheet && <h3 className="mt-3 text-2xs uppercase tracking-[0.22em] text-muted font-mono font-semibold">Type</h3>}
         <div className="overflow-x-auto">
           <div className="flex flex-wrap gap-1.5">
             {TYPE_OPTIONS.map((opt) => (
@@ -179,6 +185,7 @@ export function TransactionFilters({
           </div>
         </div>
 
+        {inSheet && <h3 className="mt-3 text-2xs uppercase tracking-[0.22em] text-muted font-mono font-semibold">Category</h3>}
         <div className="overflow-x-auto">
           <div className="flex flex-wrap gap-1.5">
             <ChoiceChip selected={category === 'all'} onClick={() => onCategoryChange('all')}>
@@ -201,6 +208,7 @@ export function TransactionFilters({
           </div>
         </div>
 
+        {inSheet && <h3 className="mt-3 text-2xs uppercase tracking-[0.22em] text-muted font-mono font-semibold">Dates</h3>}
         <div className="flex flex-wrap items-center gap-2">
           <input
             type="date"

@@ -37,9 +37,16 @@ test('merged Explore dashboard: pulse band, signals and health above the pattern
       await page.setViewportSize({ width: viewport.width, height: viewport.height });
       await page.goto('/explore');
       await expect(page.getByRole('link', { name: 'Insights' })).toHaveCount(0);
-      await expect(page.getByText('Spent this month')).toBeVisible();
-      await expect(page.getByText('Worth a look')).toBeVisible();
-      await expect(page.getByText('Financial health')).toBeVisible();
+      if (viewport.name === 'desktop') {
+        await expect(page.getByText('Spent this month')).toBeVisible();
+        await expect(page.getByText('Worth a look')).toBeVisible();
+        await expect(page.getByText('Financial health')).toBeVisible();
+      } else {
+        // Phone: the glance carries spend, and signals/health as links.
+        await expect(page.getByText(/^Spent · /)).toBeVisible();
+        await expect(page.getByRole('link', { name: /Worth a look/ })).toBeVisible();
+        await expect(page.getByRole('link', { name: /Health/ })).toBeVisible();
+      }
       if (viewport.name === 'desktop') {
         // The first Patterns chart card starts inside a 1440×900 first screen.
         const chart = page.getByText('Spending over time', { exact: true });
@@ -52,7 +59,7 @@ test('merged Explore dashboard: pulse band, signals and health above the pattern
       expect(overflow).toBeLessThanOrEqual(0);
       await page.waitForTimeout(600);
       await page.screenshot({ path: `e2e/screenshots/explore-${viewport.name}-${theme}.png`, fullPage: true });
-      if (theme === 'dark') await page.screenshot({ path: `../../../.impeccable/review/${viewport.name}.png`, fullPage: true });
+      if (theme === 'dark' && viewport.name === 'desktop') await page.screenshot({ path: '../../../.impeccable/review/explore-desktop.png', fullPage: true });
     }
   }
 });
@@ -75,6 +82,7 @@ test('Worth a look and Financial health open their full views, with a way back',
 
 test('/explore/insights redirects to the merged dashboard', async ({ page }) => {
   await mockAuthenticatedExplore(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/explore/insights');
   await expect(page).toHaveURL(/\/explore$/);
   await expect(page.getByText('Spent this month')).toBeVisible();
@@ -91,7 +99,8 @@ test('Over time mode charts the default top-mover categories', async ({ page }) 
 });
 
 test('By category keeps the chart stable and reveals selection detail beneath it', async ({ page }) => {
-  for (const viewport of [{ width: 1440, height: 900, name: 'desktop' }, { width: 390, height: 844, name: 'phone' }]) {
+  // Phone shows By category as a lens; see explore-phone.spec.ts.
+  for (const viewport of [{ width: 1440, height: 900, name: 'desktop' }]) {
     await mockAuthenticatedExplore(page);
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
@@ -113,21 +122,18 @@ test('By category keeps the chart stable and reveals selection detail beneath it
   }
 });
 
-test('mode tabs scroll within their own bounds on phone instead of overflowing the page', async ({ page }) => {
-  // Regression: the four mode tabs (Over time/By category/By merchant/
-  // Recurring) used to have no overflow handling at all on a narrow
-  // viewport, so the row spilled past the page's content width. It now
-  // scrolls horizontally within its own container — every tab stays
-  // reachable, and the list's own right edge never exceeds the viewport.
+test('phone pattern lenses stay inside the viewport and every lens is reachable', async ({ page }) => {
+  // Regression: the four desktop mode tabs used to spill past a narrow
+  // viewport. On phone they are now the thumb-band lens bar, which divides
+  // the full width, so every lens is reachable without horizontal scroll.
   await mockAuthenticatedExplore(page);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/explore');
-  const tabList = page.getByRole('tablist', { name: 'Explore patterns' });
+  const tabList = page.getByRole('tablist', { name: 'Explore views' });
   const listBox = (await tabList.boundingBox())!;
   expect(listBox.x + listBox.width).toBeLessThanOrEqual(390);
 
   const recurringTab = page.getByRole('tab', { name: 'Recurring' });
-  await recurringTab.scrollIntoViewIfNeeded();
   await recurringTab.click();
   await expect(recurringTab).toHaveAttribute('aria-selected', 'true');
 });

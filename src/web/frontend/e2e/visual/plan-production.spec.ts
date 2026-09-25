@@ -37,10 +37,12 @@ test('production Plan pairs the month calendar with the agenda on desktop and ke
   await expect(page.getByText(/^Charges on/)).toHaveCount(0);
 });
 
-test('production Plan uses a week strip with an explicit calendar toggle on phone', async ({ page }) => {
+test('production Plan keeps a week strip with an explicit calendar toggle in the phone timeline', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await mockAuthenticatedPlan(page);
   await page.goto('/plan');
+  // On phone the calendar lives in the Timeline drill-in, not the glance.
+  await page.getByRole('button', { name: /^Timeline and calendar/ }).click();
   await expect(page.getByTestId('week-strip')).toBeVisible();
   await expect(page.getByTestId('month-calendar')).toHaveCount(0);
   await page.getByRole('button', { name: 'View calendar' }).click();

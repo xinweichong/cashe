@@ -7,28 +7,26 @@ import { test, expect } from '@playwright/test';
 // Regression for a real mobile-density complaint: on phone, the filter chrome
 // (search, trip select, six type chips, category chips, date range, four
 // quick-date chips, Export CSV) used to occupy the full first screen with no
-// transaction visible at all. Filters now default collapsed on phone behind
-// a "Filters" toggle with an active-filter-count badge; tablet/desktop keep
+// transaction visible at all. On phone the filters now open in a sheet from
+// the thumb-band dock, with an active-filter-count badge; tablet/desktop keep
 // them always visible since there's room.
 
 import { TRANSACTIONS, mockAuthenticatedActivity } from '../fixtures/mocks';
 
-test('production Activity keeps filters collapsed on phone until opened, with an active-count badge', async ({ page }) => {
+test('production Activity puts filters one tap away on phone, with an active-count badge', async ({ page }) => {
   await mockAuthenticatedActivity(page);
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto('/activity?type=refund');
+  await page.goto('/activity?category=Food');
 
-  const filtersButton = page.getByRole('button', { name: /Filters/ });
+  // The filter controls live in a sheet, not above the list.
+  const filtersButton = page.getByRole('button', { name: 'Filters, 1 active' });
   await expect(filtersButton).toBeVisible();
-  await expect(filtersButton).toHaveAttribute('aria-expanded', 'false');
-  await expect(page.getByText('1', { exact: true })).toBeVisible(); // active-filter badge
   await expect(page.getByRole('button', { name: 'Expense', exact: true })).toBeHidden();
   // The transaction list is reachable without opening filters first.
   await expect(page.getByText('NUS The Deck')).toBeVisible();
 
   await filtersButton.click();
-  await expect(filtersButton).toHaveAttribute('aria-expanded', 'true');
-  await expect(page.getByRole('button', { name: 'Expense', exact: true })).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'Filters' }).getByRole('button', { name: 'Expense', exact: true })).toBeVisible();
 });
 
 test('production Activity shows filters expanded by default on desktop, with no Filters toggle', async ({ page }) => {

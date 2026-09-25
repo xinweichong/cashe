@@ -2,7 +2,7 @@
 version: 1
 slug: "src-web-frontend-src-pages-explorepatternspage-tsx"
 primary_target: "src/web/frontend/src/pages/ExplorePatternsPage.tsx"
-related_targets: ["src/web/frontend/src/pages/ExplorePage.tsx"]
+related_targets: []
 ---
 
 # Explore surface brief
@@ -22,3 +22,17 @@ FIRST VIEWPORT: Desktop, full content width. Row 1 on 4 cols: a double-width war
 FORM: Pulse band + bento modes, dealt structure #3 of 7 (THE ROLL), seed key 9112bef3. Signature interaction: mode tabs swap full-width bento groups in place (URL-held), and every tile, pattern row, bar and signal links to its evidence (whole-card CardLink approved by the user 2026-09-25).
 
 FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance
+
+## Phone direction contract (< 768px only; md+ unchanged)
+
+THESIS: One screen that never scrolls. The glance sits on top, one lens panel fills the middle, and the lens bar sits above BottomTabs, following the Home phone contract.
+
+OWN-WORLD: The Spectrum Instrument, with the shared owners PhoneScreen, LensBar and DrillSheet.
+
+STORY: Glance first, lens for depth, and a drill-in for any row, with back returning to the overview.
+
+FIRST VIEWPORT: Glance: ExploreGlance (month-to-date spend, change vs last month, Worth a look and Health as one-tap links to /explore/signals and /explore/health). Lenses: Time (Spending over time first at 220px, then Today's read, then income vs expense), Category (Where it went, What changed, What drove it), Merchant, Recurring, Week (usual week and trip impact). A desktop ?mode= link lands on its lens. The page header is sr-only on the phone index.
+
+FORM: exp-lens (user pick, decision page 2026-09-26). Mirrors the Home phone pattern (seed 568c139f).
+
+FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance.
