@@ -2,6 +2,7 @@ import { useEffect, useId, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { SegmentedChoice } from '@/components/ui/segmented-choice';
 import { Input } from '@/components/ui/input';
 import {
   Select,
@@ -109,24 +110,7 @@ export function TransactionForm({ categories, onClose }: TransactionFormProps) {
   return (
     <Card className="p-4">
       <form onSubmit={handleSubmit} className="space-y-3">
-        <div className="flex rounded-md border border-border overflow-hidden">
-          {TX_TYPES.map((t, i) => (
-            <Button
-              key={t.value}
-              type="button"
-              variant="ghost"
-              size="sm"
-              className={`flex-1 rounded-none ${i > 0 ? 'border-l border-border' : ''} ${
-                type === t.value
-                  ? 'bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground'
-                  : 'text-muted hover:text-foreground'
-              }`}
-              onClick={() => setType(t.value)}
-            >
-              {t.label}
-            </Button>
-          ))}
-        </div>
+        <SegmentedChoice name="transaction-type" aria-label="Transaction type" value={type} onValueChange={setType} options={TX_TYPES} />
 
         {/* Primary fields — amount and merchant are all it takes to capture something */}
         <div className="grid grid-cols-2 gap-3">
