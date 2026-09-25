@@ -310,17 +310,18 @@ export function TransactionDetail({
               </p>
             </div>
             <div>
-              <label className="text-xs text-muted mb-1 block">Merchant</label>
+              <label htmlFor={`merchant-${tx.id}`} className="text-xs text-muted mb-1 block">Merchant</label>
               <Input
+                id={`merchant-${tx.id}`}
                 value={merchant}
                 onChange={(e) => setMerchant(e.target.value)}
                 className="text-sm"
               />
             </div>
             <div>
-              <label className="text-xs text-muted mb-1 block">Category</label>
+              <label htmlFor={`category-${tx.id}`} className="text-xs text-muted mb-1 block">Category</label>
               <Select value={category} onValueChange={setCategory}>
-                <SelectTrigger>
+                <SelectTrigger id={`category-${tx.id}`}>
                   <SelectValue placeholder="Category" />
                 </SelectTrigger>
                 <SelectContent>
@@ -344,9 +345,9 @@ export function TransactionDetail({
             </fieldset>
             {isAppleWallet && appleWalletCards && appleWalletCards.length > 0 && (
               <div>
-                <label className="text-xs text-muted mb-1 block">Card</label>
+                <label htmlFor={`card-${tx.id}`} className="text-xs text-muted mb-1 block">Card</label>
                 <Select value={description} onValueChange={setDescription}>
-                  <SelectTrigger>
+                  <SelectTrigger id={`card-${tx.id}`}>
                     <SelectValue placeholder="Card (Apple Wallet)" />
                   </SelectTrigger>
                   <SelectContent>

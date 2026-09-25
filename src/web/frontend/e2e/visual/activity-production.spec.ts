@@ -67,3 +67,25 @@ for (const theme of ['light', 'dark'] as const) {
     await page.locator('#transaction-filter-controls').screenshot({ path: `e2e/screenshots/activity-chips-${theme}.png` });
   });
 }
+
+test('an in-progress edit survives resizing to phone and switching theme', async ({ page }) => {
+  await mockAuthenticatedActivity(page);
+  await page.route('**/api/v2/transactions/2', (route) => route.fulfill({ json: TRANSACTIONS[1] }));
+  await page.route('**/api/v2/transactions/2/provenance', (route) => route.fulfill({ json: { transaction_id: 2, sources: [] } }));
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/activity/2');
+  await page.getByRole('button', { name: 'Edit', exact: true }).click();
+  const merchant = page.getByLabel('Merchant');
+  await merchant.fill('Draft merchant name');
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.getByLabel('Merchant')).toHaveValue('Draft merchant name');
+  await expect(page.getByLabel('Merchant')).toHaveCount(1); // no duplicate responsive form
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const before = await page.evaluate(() => document.documentElement.dataset.theme);
+  await page.getByRole('button', { name: 'Profile menu' }).click();
+  await page.getByRole('menuitemradio', { name: before === 'dark' ? 'Light' : 'Dark' }).click();
+  await expect.poll(() => page.evaluate(() => document.documentElement.dataset.theme)).not.toBe(before);
+  await expect(page.getByLabel('Merchant')).toHaveValue('Draft merchant name');
+});
