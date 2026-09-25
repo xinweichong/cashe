@@ -15,17 +15,19 @@ export function AppShell() {
   // Keep list filters and drafts mounted when opening a detail route.
   const pageKey = location.pathname.replace(/^(\/(?:activity|transactions|merchants|explore\/merchants))(?:\/.*)?$/, '$1');
 
+  // body already pads for the status bar and home indicator (index.css), so
+  // the shell fills the rest rather than a full extra screen height.
   return (
-    <div className="min-h-screen flex experience-next shell-wash">
+    <div className="min-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom))] flex experience-next shell-wash">
       <CommandPalette />
       <Sidebar />
       <div className="flex-1 min-w-0 flex flex-col">
         {/* Mobile-only top bar — hidden on md+ where sidebar provides branding */}
-        <header className="md:hidden sticky top-0 z-40 h-[calc(3rem+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] shrink-0 bg-card/80 backdrop-blur-sm border-b border-border flex items-center px-4 gap-2">
+        <header className="md:hidden sticky top-0 z-40 h-12 shrink-0 bg-card/80 backdrop-blur-sm border-b border-border flex items-center px-4 gap-2">
           <CasheWordmark size={22} />
           <div className="ml-auto"><ProfileMenu /></div>
         </header>
-        <main className="flex-1 min-w-0 pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0 overflow-hidden">
+        <main className="flex-1 min-w-0 pb-16 md:pb-0 overflow-hidden">
           <AnimatePresence mode="wait" initial={false}>
             <motion.div
               key={pageKey}

@@ -26,9 +26,9 @@ interface PhoneScreenProps<T extends string> {
   className?: string;
 }
 
-// AppShell's phone chrome: the 3rem top bar under the status-bar inset and
-// the 4rem tab bar over the home-indicator inset. dvh tracks Safari's
-// collapsing toolbars.
+// Everything else in the phone's document height: body's status-bar and
+// home-indicator padding (index.css), AppShell's 3rem top bar, and main's
+// 4rem bottom padding for the tab bar. dvh tracks Safari's toolbars.
 export const PHONE_SCREEN_HEIGHT = 'h-[calc(100dvh-7rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))]';
 
 export function PhoneScreen<T extends string>({ glance, lenses, lens, onLensChange, label, className }: PhoneScreenProps<T>) {
