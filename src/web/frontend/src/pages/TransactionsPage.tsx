@@ -77,7 +77,7 @@ export function TransactionsPage() {
   const returnTo = searchParams.get('returnTo');
   const listRef = useRef<HTMLDivElement>(null);
   const closeDetail = () => {
-    if (returnTo && /^\/(evidence\?|review(\?|$)|home(\?|$)|\?|$)/.test(returnTo)) {
+    if (returnTo && /^\/(evidence\?|review(\?|$)|home(\?|$)|explore(\/signals)?(\?|$)|\?|$)/.test(returnTo)) {
       navigate(returnTo);
       return;
     }

@@ -116,6 +116,17 @@ class Storage:
         return category_daily_trend(self._conn, start, end, timezone, categories)
 
     @_locked
+    def get_spending_signals(self, as_of=None, timezone="Asia/Singapore") -> dict:
+        from src.spending_facts import spending_signals
+        multiplier = float(self.get_setting("anomaly_multiplier", "2.0"))
+        return spending_signals(self._conn, as_of, timezone, multiplier)
+
+    @_locked
+    def get_monthly_flows(self, months: int = 6, as_of=None, timezone="Asia/Singapore") -> list[dict]:
+        from src.spending_facts import monthly_flows
+        return monthly_flows(self._conn, months, as_of, timezone)
+
+    @_locked
     def get_transactions_v2(
         self,
         start_date: Optional[str] = None,
@@ -2410,187 +2421,10 @@ class Storage:
     # ── Financial Health Score ──────────────────────────────────────────────
 
     @_locked
-    def get_health_score(self, months: int = 1) -> dict:
-        """Compute 0-100 financial health score using the 50/30/20 rule.
-
-        Components (max pts):
-          savings_rate      40  — min(savings_rate / 0.20, 1.0) × 40
-          needs_ratio       20  — max(0, 1 − (needs_ratio − 0.50) / 0.50) × 20
-          wants_ratio       20  — max(0, 1 − (wants_ratio − 0.30) / 0.30) × 20
-          budget_adherence  10  — (budgets_within_limit / total_budgets) × 10
-          anomaly_frequency 10  — max(0, 1 − anomaly_count / 5) × 10
-        """
-        from src.config import local_now
-
-        now = local_now()
-        period = now.strftime("%Y-%m")
-
-        # Compute start date: first day N months back (months=1 → start of current month)
-        year, month = now.year, now.month
-        month -= months - 1
-        while month <= 0:
-            month += 12
-            year -= 1
-        start = f"{year}-{month:02d}-01"
-        end = now.strftime("%Y-%m-%d")
-
-        # ── Income ──────────────────────────────────────────────────────────
-        income = self._conn.execute(
-            """SELECT COALESCE(SUM((CASE WHEN reporting_minor_units IS NOT NULL THEN reporting_minor_units / 100.0 WHEN currency = 'SGD' OR currency IS NULL THEN amount WHEN exchange_rate IS NOT NULL AND exchange_rate > 0 AND exchange_rate != 1 THEN amount * exchange_rate ELSE NULL END)), 0.0)
-               FROM transactions WHERE type = 'income'
-               AND DATE(transaction_date) BETWEEN ? AND ?""",
-            (start, end),
-        ).fetchone()[0]
-
-        if income == 0:
-            return {
-                "has_income_data": False,
-                "score": None,
-                "grade": None,
-                "components": {},
-                "period": period,
-            }
-
-        # ── Total expenses (nets refunds in their own period/category) ───────
-        total_expense = self._conn.execute(
-            """SELECT COALESCE(SUM((CASE WHEN type = 'refund' THEN -1 ELSE 1 END) * (CASE WHEN reporting_minor_units IS NOT NULL THEN reporting_minor_units / 100.0 WHEN currency = 'SGD' OR currency IS NULL THEN amount WHEN exchange_rate IS NOT NULL AND exchange_rate > 0 AND exchange_rate != 1 THEN amount * exchange_rate ELSE NULL END)), 0.0)
-               FROM transactions WHERE (type IS NULL OR type = 'expense' OR type = 'refund')
-               AND DATE(transaction_date) BETWEEN ? AND ?""",
-            (start, end),
-        ).fetchone()[0]
-
-        # ── Needs (expenses in categories with type='needs') ─────────────────
-        needs = self._conn.execute(
-            """SELECT COALESCE(SUM((CASE WHEN t.type = 'refund' THEN -1 ELSE 1 END) * (CASE WHEN t.reporting_minor_units IS NOT NULL THEN t.reporting_minor_units / 100.0 WHEN t.currency = 'SGD' OR t.currency IS NULL THEN t.amount WHEN t.exchange_rate IS NOT NULL AND t.exchange_rate > 0 AND t.exchange_rate != 1 THEN t.amount * t.exchange_rate ELSE NULL END)), 0.0)
-               FROM transactions t
-               LEFT JOIN categories c ON t.category = c.name
-               WHERE (t.type IS NULL OR t.type = 'expense' OR t.type = 'refund')
-               AND COALESCE(c.type, 'neutral') = 'needs'
-               AND DATE(t.transaction_date) BETWEEN ? AND ?""",
-            (start, end),
-        ).fetchone()[0]
-
-        # ── Wants (expenses in categories with type='wants') ─────────────────
-        wants = self._conn.execute(
-            """SELECT COALESCE(SUM((CASE WHEN t.type = 'refund' THEN -1 ELSE 1 END) * (CASE WHEN t.reporting_minor_units IS NOT NULL THEN t.reporting_minor_units / 100.0 WHEN t.currency = 'SGD' OR t.currency IS NULL THEN t.amount WHEN t.exchange_rate IS NOT NULL AND t.exchange_rate > 0 AND t.exchange_rate != 1 THEN t.amount * t.exchange_rate ELSE NULL END)), 0.0)
-               FROM transactions t
-               LEFT JOIN categories c ON t.category = c.name
-               WHERE (t.type IS NULL OR t.type = 'expense' OR t.type = 'refund')
-               AND COALESCE(c.type, 'neutral') = 'wants'
-               AND DATE(t.transaction_date) BETWEEN ? AND ?""",
-            (start, end),
-        ).fetchone()[0]
-
-        savings = income - total_expense
-        savings_rate = savings / income
-        needs_ratio = needs / income
-        wants_ratio = wants / income
-
-        # ── Component scores ────────────────────────────────────────────────
-        savings_score = round(min(max(savings_rate, 0.0) / 0.20, 1.0) * 40, 1)
-        needs_score = round(max(0.0, 1.0 - max(0.0, needs_ratio - 0.50) / 0.50) * 20, 1)
-        wants_score = round(max(0.0, 1.0 - max(0.0, wants_ratio - 0.30) / 0.30) * 20, 1)
-
-        # ── Budget adherence ────────────────────────────────────────────────
-        budgets = self.get_budget_progress()
-        if budgets:
-            within = sum(1 for b in budgets if b["percent"] <= 100)
-            budget_score = round((within / len(budgets)) * 10, 1)
-            budget_adherence_value = round(within / len(budgets), 2)
-        else:
-            budget_score = 0.0
-            budget_adherence_value = 0.0
-
-        # ── Anomaly frequency ───────────────────────────────────────────────
+    def get_health_score(self, months: int = 1, timezone="Asia/Singapore") -> dict:
+        from src.spending_facts import health_score
         multiplier = float(self.get_setting("anomaly_multiplier", "2.0"))
-
-        # Historical average per merchant (excluding current scoring period)
-        merchant_avgs = {
-            row["merchant"]: row["avg_amt"]
-            for row in self._conn.execute(
-                """SELECT merchant, AVG((CASE WHEN reporting_minor_units IS NOT NULL THEN reporting_minor_units / 100.0 WHEN currency = 'SGD' OR currency IS NULL THEN amount WHEN exchange_rate IS NOT NULL AND exchange_rate > 0 AND exchange_rate != 1 THEN amount * exchange_rate ELSE NULL END)) as avg_amt
-                   FROM transactions WHERE (type IS NULL OR type = 'expense') AND merchant IS NOT NULL
-                   AND DATE(transaction_date) < ?
-                   GROUP BY merchant""",
-                (start,),
-            ).fetchall()
-        }
-
-        # Period transactions
-        period_txs = self._conn.execute(
-            """SELECT merchant, (CASE WHEN reporting_minor_units IS NOT NULL THEN reporting_minor_units / 100.0 WHEN currency = 'SGD' OR currency IS NULL THEN amount WHEN exchange_rate IS NOT NULL AND exchange_rate > 0 AND exchange_rate != 1 THEN amount * exchange_rate ELSE NULL END) as amt_sgd
-               FROM transactions WHERE (type IS NULL OR type = 'expense') AND merchant IS NOT NULL
-               AND DATE(transaction_date) BETWEEN ? AND ?""",
-            (start, end),
-        ).fetchall()
-
-        anomaly_count = sum(
-            1
-            for r in period_txs
-            if r["amt_sgd"] is not None
-            and merchant_avgs.get(r["merchant"]) is not None
-            and merchant_avgs[r["merchant"]] > 0
-            and r["amt_sgd"] > multiplier * merchant_avgs[r["merchant"]]
-        )
-        anomaly_score = round(max(0.0, 1.0 - anomaly_count / 5.0) * 10, 1)
-
-        # ── Total and grade ─────────────────────────────────────────────────
-        total_score = round(
-            savings_score + needs_score + wants_score + budget_score + anomaly_score
-        )
-        grade = (
-            "Excellent"       if total_score >= 80 else
-            "Good"            if total_score >= 60 else
-            "Fair"            if total_score >= 40 else
-            "Needs Attention"
-        )
-
-        return {
-            "score": total_score,
-            "grade": grade,
-            "has_income_data": True,
-            "period": period,
-            "components": {
-                "savings_rate": {
-                    "score": savings_score,
-                    "max": 40,
-                    "value": round(savings_rate, 3),
-                    "benchmark": 0.20,
-                    "label": "Savings Rate",
-                    "description": "Percentage of income saved after all expenses",
-                },
-                "needs_ratio": {
-                    "score": needs_score,
-                    "max": 20,
-                    "value": round(needs_ratio, 3),
-                    "benchmark": 0.50,
-                    "label": "Needs Ratio",
-                    "description": "Essential spending (transport, groceries, bills) as % of income",
-                },
-                "wants_ratio": {
-                    "score": wants_score,
-                    "max": 20,
-                    "value": round(wants_ratio, 3),
-                    "benchmark": 0.30,
-                    "label": "Wants Ratio",
-                    "description": "Discretionary spending (dining, entertainment, shopping) as % of income",
-                },
-                "budget_adherence": {
-                    "score": budget_score,
-                    "max": 10,
-                    "value": budget_adherence_value,
-                    "label": "Budget Adherence",
-                    "description": "Fraction of active budgets that are within their limit",
-                },
-                "anomaly_frequency": {
-                    "score": anomaly_score,
-                    "max": 10,
-                    "value": anomaly_count,
-                    "label": "Spending Anomalies",
-                    "description": "Transactions significantly above your typical spend for that merchant",
-                },
-            },
-        }
+        return health_score(self._conn, months, None, timezone, multiplier)
 
     # ── Trips ───────────────────────────────────────────────────────────────
 

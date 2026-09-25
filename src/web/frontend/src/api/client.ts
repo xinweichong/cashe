@@ -12,10 +12,6 @@ export type TrendPointV2 = components['schemas']['TrendPoint'];
 export type MerchantRankingV2 = components['schemas']['MerchantRanking'];
 export type BudgetProgressV2 = components['schemas']['BudgetProgress'];
 export type MerchantSummaryV2 = components['schemas']['MerchantSummary'];
-export type SpendingComparisonV2 = components['schemas']['SpendingComparison'];
-export type SpendingVelocityV2 = components['schemas']['SpendingVelocity'];
-export type TopMerchantsResultV2 = components['schemas']['TopMerchantsResult'];
-export type SpendingAlertsV2 = components['schemas']['SpendingAlerts'];
 export type HealthScoreV2 = components['schemas']['HealthScore'];
 export type BalanceV2 = components['schemas']['Balance'];
 export type CategoryTrendPointV2 = components['schemas']['CategoryTrendPoint'];
@@ -389,15 +385,6 @@ export interface AnalyticsSummaries {
   weekly: Record<string, unknown> | null;
 }
 
-export interface YoyComparisonPoint {
-  month_label: string;
-  month: string;
-  this_year_expenses: number;
-  last_year_expenses: number;
-  this_year_income: number;
-  last_year_income: number;
-}
-
 export const api = {
   // Auth
   login: (username: string, password: string) =>
@@ -581,11 +568,6 @@ export const api = {
   getMerchants: (start_date: string, end_date: string) =>
     request<string[]>(`/api/merchants?start_date=${start_date}&end_date=${end_date}`),
 
-  getIncomeVsExpense: (months = 6) =>
-    request<Array<{ month: string; income: number; expenses: number }>>(
-      `/api/income-vs-expense?months=${months}`
-    ),
-
   // Categories
   getCategories: () =>
     request<Category[]>('/api/categories'),
@@ -627,47 +609,24 @@ export const api = {
     return request<AnalyticsComparison>(`/api/analytics/comparison?${params}`);
   },
 
-  getAnalyticsComparisonV2: (period: string, date?: string) => {
-    const params = new URLSearchParams({ period });
-    if (date) params.set('date', date);
-    return request<SpendingComparisonV2>(`/api/v2/analytics/comparison?${params}`);
-  },
-
   getAnalyticsMerchants: (limit = 10, merchant?: string) => {
     const params = new URLSearchParams({ limit: String(limit) });
     if (merchant) params.set('merchant', merchant);
     return request<AnalyticsMerchants>(`/api/analytics/merchants?${params}`);
   },
 
-  getAnalyticsMerchantsV2: (limit = 10, merchant?: string) => {
-    const params = new URLSearchParams({ limit: String(limit) });
-    if (merchant) params.set('merchant', merchant);
-    return request<TopMerchantsResultV2>(`/api/v2/analytics/merchants?${params}`);
-  },
-
   getAnalyticsVelocity: () =>
     request<SpendingVelocity>('/api/analytics/velocity'),
-
-  getAnalyticsVelocityV2: () =>
-    request<SpendingVelocityV2>('/api/v2/analytics/velocity'),
 
   getAnalyticsAlerts: () =>
     request<AnalyticsAlerts>('/api/analytics/alerts'),
 
-  getAnalyticsAlertsV2: () =>
-    request<SpendingAlertsV2>('/api/v2/analytics/alerts'),
-
   getAnalyticsSummaries: () =>
     request<AnalyticsSummaries>('/api/analytics/summaries'),
-
-  getAnalyticsYoY: (months = 12) =>
-    request<YoyComparisonPoint[]>(`/api/analytics/yoy?months=${months}`),
 
   getAnalyticsInsight: () =>
     request<LLMInsight>('/api/analytics/insight'),
 
-  getWeeklyInsight: () => request<LLMInsight>('/api/analytics/insight/weekly'),
-  getMonthlyInsight: () => request<LLMInsight>('/api/analytics/insight/monthly'),
   getRecurring: () => request<RecurringTransaction[]>('/api/recurring'),
 
   // Merchant Intelligence

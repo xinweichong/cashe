@@ -1,4 +1,6 @@
 import type { CSSProperties, ReactNode } from 'react';
+import { Link } from 'react-router-dom';
+import { ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Card, CardContent } from '@/components/ui/card';
 
@@ -107,5 +109,36 @@ export function HighlightCard({ title, action, children, className }: HighlightC
       </div>
       {children}
     </div>
+  );
+}
+
+// ── CardLink ──────────────────────────────────────────────────────────────────
+// Approved shared owner (2026-09-25, Explore dashboard): makes a whole card a
+// navigation target — chevron top-right, hover lift, focus ring. Wrap exactly
+// one card surface (StatCard via its `href`, PageCard, HighlightCard). The
+// wrapped card must not contain other links or controls.
+interface CardLinkProps {
+  to: string;
+  children: ReactNode;
+  className?: string;
+  'aria-label'?: string;
+}
+
+export function CardLink({ to, children, className, ...props }: CardLinkProps) {
+  return (
+    <Link
+      to={to}
+      aria-label={props['aria-label']}
+      className={cn(
+        'card-link group relative block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+        className,
+      )}
+    >
+      {children}
+      <ChevronRight
+        aria-hidden="true"
+        className="absolute top-4 right-4 w-4 h-4 text-muted transition-transform duration-150 group-hover:translate-x-0.5 group-hover:text-foreground"
+      />
+    </Link>
   );
 }

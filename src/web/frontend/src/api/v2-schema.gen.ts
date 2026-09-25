@@ -712,6 +712,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v2/spending/monthly": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Spending Monthly */
+        get: operations["spending_monthly_api_v2_spending_monthly_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v2/spending/review": {
         parameters: {
             query?: never;
@@ -721,6 +738,23 @@ export interface paths {
         };
         /** Spending Review */
         get: operations["spending_review_api_v2_spending_review_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v2/spending/signals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Spending Signals */
+        get: operations["spending_signals_api_v2_spending_signals_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1304,6 +1338,18 @@ export interface components {
             /** Source */
             source: string;
         };
+        /** FirstSeenMerchant */
+        FirstSeenMerchant: {
+            amount: components["schemas"]["Money"] | null;
+            /** Category */
+            category: string;
+            /** First Date */
+            first_date: string;
+            /** Merchant */
+            merchant: string;
+            /** Transaction Id */
+            transaction_id: number;
+        };
         /** ForecastWindow */
         ForecastWindow: {
             /** End */
@@ -1391,14 +1437,27 @@ export interface components {
             components: {
                 [key: string]: components["schemas"]["HealthScoreComponent"];
             };
+            /** End */
+            end: string;
             /** Grade */
             grade: string | null;
             /** Has Income Data */
             has_income_data: boolean;
+            income: components["schemas"]["Money"] | null;
             /** Period */
             period: string;
             /** Score */
             score: number | null;
+            spending: components["schemas"]["Money"];
+            /** Start */
+            start: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "complete" | "indicative" | "partial";
+            /** Unresolved Count */
+            unresolved_count: number;
         };
         /** HealthScoreComponent */
         HealthScoreComponent: {
@@ -1539,6 +1598,29 @@ export interface components {
             unpriced_commitment_count: number;
             /** Weekday Medians */
             weekday_medians: components["schemas"]["WeekdayMedian"][];
+        };
+        /** MonthlyFlow */
+        MonthlyFlow: {
+            /** End */
+            end: string;
+            income: components["schemas"]["Money"] | null;
+            /** Indicative Count */
+            indicative_count: number;
+            /** Month */
+            month: string;
+            recorded_net_flow: components["schemas"]["Money"] | null;
+            spending: components["schemas"]["Money"];
+            /** Start */
+            start: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "complete" | "indicative" | "partial";
+            /** Transaction Count */
+            transaction_count: number;
+            /** Unresolved Count */
+            unresolved_count: number;
         };
         /** NewMerchant */
         NewMerchant: {
@@ -1921,6 +2003,19 @@ export interface components {
             /** Reasons */
             reasons: ("missing_date" | "unresolved_money" | "unknown_type" | "missing_merchant" | "missing_category")[];
         };
+        /** SpendingSignals */
+        SpendingSignals: {
+            /** End */
+            end: string;
+            /** Multiplier */
+            multiplier: number;
+            /** New Merchants */
+            new_merchants: components["schemas"]["FirstSeenMerchant"][];
+            /** Start */
+            start: string;
+            /** Unusual */
+            unusual: components["schemas"]["UnusualPurchase"][];
+        };
         /**
          * SpendingTarget
          * @description R13: one overall monthly spending target — target and remaining
@@ -2269,6 +2364,21 @@ export interface components {
             /** Transaction Count */
             transaction_count: number;
             trip: components["schemas"]["TripInfo"];
+        };
+        /** UnusualPurchase */
+        UnusualPurchase: {
+            amount: components["schemas"]["Money"];
+            /** Category */
+            category: string;
+            /** Date */
+            date: string;
+            /** Merchant */
+            merchant: string;
+            /** Ratio */
+            ratio: number;
+            /** Transaction Id */
+            transaction_id: number;
+            typical: components["schemas"]["Money"];
         };
         /** UpcomingCalendar */
         UpcomingCalendar: {
@@ -3652,6 +3762,37 @@ export interface operations {
             };
         };
     };
+    spending_monthly_api_v2_spending_monthly_get: {
+        parameters: {
+            query?: {
+                months?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MonthlyFlow"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     spending_review_api_v2_spending_review_get: {
         parameters: {
             query?: {
@@ -3671,6 +3812,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SpendingReview"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    spending_signals_api_v2_spending_signals_get: {
+        parameters: {
+            query?: {
+                as_of?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpendingSignals"];
                 };
             };
             /** @description Validation Error */

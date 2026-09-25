@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/api/client';
-import { briefingApi, evidenceLink, formatMoney, type Money } from '@/api/briefing';
+import { briefingApi, evidenceLink, formatMoney, type Money, type SpendingFacts } from '@/api/briefing';
 import { Button } from '@/components/ui/button';
 import { StatusDot } from '@/components/ui/StatusDot';
 import { ChoiceChip } from '@/components/ui/choice-chip';
@@ -12,7 +12,14 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { LoadFailed } from '@/components/ui/LoadFailed';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CategoryChangeBars } from '@/components/charts/CategoryChangeBars';
+import { CategoryDonut } from '@/components/charts/CategoryDonut';
 import { CategoryTrendLine } from '@/components/charts/CategoryTrendLine';
+import { IncomeExpenseBar } from '@/components/charts/IncomeExpenseBar';
+import { BiggestMoverTile, PulseBand } from '@/components/explore/PulseBand';
+import { DailyReadCard } from '@/components/explore/DailyReadCard';
+import { WorthALookSummary } from '@/components/explore/WorthALookCard';
+import { HealthScoreSummary } from '@/components/explore/HealthScoreCard';
+import { formatChange, formatRange } from '@/components/explore/format';
 import { datesInRange, formatShortDate, getCategoryColor } from '@/lib/utils';
 
 const WEEKDAY_LABELS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -31,49 +38,56 @@ function merchantProfileLink(merchant: string): string {
   return `/explore/merchants/${encodeURIComponent(merchant)}`;
 }
 
-function RankedBar({ label, value, max, href, secondaryHref, secondaryLabel }: {
+function useMonthFacts() {
+  return useQuery({ queryKey: ['explore-month-facts'], queryFn: () => briefingApi.month() });
+}
+
+function RankedBar({ label, value, max, href, secondaryHref, secondaryLabel, color, display }: {
   label: string; value: number; max: number; href?: string; secondaryHref?: string; secondaryLabel?: string;
+  /** Bar fill; defaults to the brand teal. Pass a category colour when the row is a category. */
+  color?: string;
+  /** Right-hand figure; defaults to the value as SGD money. */
+  display?: string;
 }) {
   const pct = max > 0 ? Math.min(100, Math.round((Math.abs(value) / max) * 100)) : 0;
   return (
     <div className="py-1">
       <div className="flex justify-between gap-4 text-sm items-center">
-        <span className="flex flex-wrap items-center gap-x-3">
+        <span className="flex flex-wrap items-center gap-x-3 min-w-0">
           {href ? <Link to={href} className="hover:underline inline-flex items-center min-h-11">{label}</Link> : <span className="inline-flex items-center min-h-11">{label}</span>}
           {secondaryHref && <Link to={secondaryHref} className="text-xs text-teal underline inline-flex items-center min-h-11">{secondaryLabel ?? 'Profile'}</Link>}
         </span>
-        <span className="tabular-nums">{formatMoney({ minor_units: value, currency: 'SGD' })}</span>
+        <span className="tabular-nums font-mono">{display ?? formatMoney({ minor_units: value, currency: 'SGD' })}</span>
       </div>
-      <div className="h-2 rounded bg-foreground/10 mt-1 overflow-hidden"><div className="h-full bg-teal" style={{ width: `${pct}%` }} /></div>
+      <div className="h-2 rounded bg-foreground/10 mt-1 overflow-hidden">
+        <div className={color ? 'h-full' : 'h-full bg-teal'} style={{ width: `${pct}%`, ...(color ? { backgroundColor: color } : {}) }} />
+      </div>
     </div>
   );
 }
 
-function QuestionCard({ title, isError, onRetry, isReady, children }: { title: string; isError: boolean; onRetry: () => void; isReady: boolean; children: React.ReactNode }) {
+function QuestionCard({ title, isError, onRetry, isReady, children, action }: { title: string; isError: boolean; onRetry: () => void; isReady: boolean; children: React.ReactNode; action?: React.ReactNode }) {
   // A background refetch failure must not hide already-known-good data behind
   // an error screen — only show LoadFailed when there is nothing to show yet.
   return (
-    <PageCard title={title}>
+    <PageCard title={title} action={action}>
       {isError && !isReady ? <div role="alert"><LoadFailed onRetry={onRetry} /></div> : !isReady ? <div role="status"><span className="sr-only">Loading…</span><Skeleton className="h-20 w-full" /></div> : children}
     </PageCard>
   );
 }
 
-function WhereDidTheIncreaseComeFrom() {
+function WhatChanged() {
   const [selected, setSelected] = useState<string | null>(null);
-  const { data, isError, refetch } = useQuery({ queryKey: ['explore-month-facts'], queryFn: () => briefingApi.month() });
+  const { data, isError, refetch } = useMonthFacts();
   const drivers = data?.category_changes ?? [];
-  const top = data?.top_category_driver;
   const selectedDriver = drivers.find(d => d.category === selected);
   return (
     <>
       <QuestionCard title="What changed" isError={isError} onRetry={() => void refetch()} isReady={!!data}>
-        <p className="text-sm text-muted mb-3">Signed change vs. the comparable period, centred on zero.</p>
+        <p className="text-sm text-muted mb-3">Change by category against the same days last month. Select a bar for its transactions.</p>
         {!drivers.length && <p className="text-muted">{data?.change ? 'No category spending changes this period.' : 'Resolve records needing attention to compare categories.'}</p>}
-        {data && !!drivers.length && <CategoryChangeBars data={drivers.slice(0, 5)} selected={selected} onSelect={(c) => setSelected(selected === c ? null : c)} />}
-        {top?.merchant_driver && data && <p className="text-sm text-muted mt-2">Biggest mover in {top.category}: <Link className="underline" to={merchantProfileLink(top.merchant_driver.merchant)}>{top.merchant_driver.merchant}</Link> ({formatMoney(top.merchant_driver.change)}) — <Link className="underline" to={evidenceLink(data.comparison_current, top.category, 'spending', top.merchant_driver.merchant)}>view transactions</Link></p>}
-        {top?.one_off_driver && <p className="text-sm text-muted">Largely one purchase: <Link className="underline" to={`/transactions/${top.one_off_driver.transaction_id}`}>{top.one_off_driver.merchant || 'Unnamed transaction'}</Link></p>}
-        {data?.trip_drivers.map(t => <p key={t.trip_id} className="text-sm text-muted">Trip <Link className="underline" to={`/transactions?trip=${t.trip_id}`}>{t.name}</Link>: {formatMoney(t.change)} vs. last period — {t.overlap_note}</p>)}
+        {data && !!drivers.length && <CategoryChangeBars data={drivers.slice(0, 6)} selected={selected} onSelect={(c) => setSelected(selected === c ? null : c)} />}
+        {data?.trip_drivers.map(t => <p key={t.trip_id} className="text-sm text-muted mt-2">Trip <Link className="underline" to={`/transactions?trip=${t.trip_id}`}>{t.name}</Link>: {formatChange(t.change)} vs. last period. {t.overlap_note}</p>)}
       </QuestionCard>
       {data && selectedDriver && (
         <PageCard
@@ -83,7 +97,7 @@ function WhereDidTheIncreaseComeFrom() {
           <div className="space-y-3">
             <div className="flex items-center gap-2">
               <StatusDot color={getCategoryColor(selectedDriver.category)} />
-              <span className="text-sm font-medium">{formatMoney(selectedDriver.change)} change</span>
+              <span className="text-sm font-medium">{formatChange(selectedDriver.change)} change</span>
             </div>
             <div className="flex gap-6">
               <Link className="text-teal underline min-h-11 inline-flex items-center" to={evidenceLink(data.comparison_current, selectedDriver.category)}>This period</Link>
@@ -96,22 +110,74 @@ function WhereDidTheIncreaseComeFrom() {
   );
 }
 
-function WhichRecurringCostsChanged() {
-  const { data, isError, refetch } = useQuery({ queryKey: ['explore-subscription-review'], queryFn: () => api.getSubscriptionReviewV2() });
-  const max = Math.max(1, ...(data?.price_changes ?? []).map(c => Math.abs(c.change.minor_units)));
-  const empty = data && !data.price_changes.length && !data.overdue.length && !data.annual_renewals.length;
+const FREQUENCY_SENTENCE: Record<string, string> = {
+  frequency: 'You bought more often; the typical purchase stayed about the same.',
+  size: 'Purchases were bigger; you bought about as often.',
+  mixed: 'You bought more often and the typical purchase changed too.',
+  none: 'Visits and typical purchase size were steady.',
+};
+
+function WhatDroveIt() {
+  const { data, isError, refetch } = useMonthFacts();
+  const top = data?.top_category_driver;
+  const freq = top?.frequency_driver;
   return (
-    <QuestionCard title="Recurring charges" isError={isError} onRetry={() => void refetch()} isReady={!!data}>
-      {empty && <p className="text-muted">No recurring cost changes to review.</p>}
-      {data?.price_changes.map(c => <RankedBar key={c.subscription_id} label={c.label} value={c.change.minor_units} max={max} href={`/plan/manage?subscription=${c.subscription_id}`} />)}
-      {!!data?.overdue.length && <div className="mt-3 space-y-1">
-        <p className="text-sm font-medium">Possibly stopped</p>
-        {data.overdue.map(o => <Link key={o.subscription_id} to={`/plan/manage?subscription=${o.subscription_id}`} className="block text-sm text-teal underline min-h-11">{o.label}: {o.days_since_last_charge} days since last charge</Link>)}
-      </div>}
-      {!!data?.annual_renewals.length && <div className="mt-3 space-y-1">
-        <p className="text-sm font-medium">Renewing soon</p>
-        {data.annual_renewals.map(r => <Link key={r.subscription_id} to={`/plan/manage?subscription=${r.subscription_id}`} className="block text-sm text-teal underline min-h-11">{r.label}: in {r.days_until_renewal} days</Link>)}
-      </div>}
+    <QuestionCard title={top ? `What drove ${top.category}` : 'What drove the change'} isError={isError} onRetry={() => void refetch()} isReady={!!data}>
+      {!top ? (
+        <p className="text-sm text-muted">Nothing moved enough to explain yet. Once a category changes against last month, its main cause appears here.</p>
+      ) : (
+        <div className="space-y-4">
+          <div className="flex items-baseline gap-2">
+            <StatusDot color={getCategoryColor(top.category)} />
+            <span className="text-2xl font-bold font-display tabular-nums">{formatChange(top.change)}</span>
+            <span className="text-sm text-muted">vs. last month</span>
+          </div>
+          {freq && (
+            <dl className="grid grid-cols-2 gap-3">
+              <div>
+                <dt className="text-xs text-muted">Purchases</dt>
+                <dd className="font-mono tabular-nums text-sm mt-1">{freq.current_count} <span className="text-muted">vs. {freq.previous_count}</span></dd>
+              </div>
+              <div>
+                <dt className="text-xs text-muted">Typical purchase</dt>
+                <dd className="font-mono tabular-nums text-sm mt-1">{formatMoney(freq.current_avg)} <span className="text-muted">vs. {formatMoney(freq.previous_avg)}</span></dd>
+              </div>
+            </dl>
+          )}
+          {freq && <p className="text-sm">{FREQUENCY_SENTENCE[freq.classification]}</p>}
+          {top.merchant_driver && data && (
+            <p className="text-sm text-muted">
+              Biggest mover: <Link className="text-foreground underline" to={merchantProfileLink(top.merchant_driver.merchant)}>{top.merchant_driver.merchant}</Link> ({formatChange(top.merchant_driver.change)}). <Link className="text-teal underline" to={evidenceLink(data.comparison_current, top.category, 'spending', top.merchant_driver.merchant)}>View transactions</Link>
+            </p>
+          )}
+          {top.one_off_driver && (
+            <p className="text-sm text-muted">Largely one purchase: <Link className="text-foreground underline" to={`/transactions/${top.one_off_driver.transaction_id}`}>{top.one_off_driver.merchant || 'Unnamed transaction'}</Link>, {formatMoney(top.one_off_driver.amount)} on {formatShortDate(top.one_off_driver.date)}.</p>
+          )}
+        </div>
+      )}
+    </QuestionCard>
+  );
+}
+
+function WhereItWent({ facts }: { facts: SpendingFacts | undefined }) {
+  const navigate = useNavigate();
+  const [selected, setSelected] = useState<string | null>(null);
+  const period = facts?.current;
+  const { data, isError, refetch } = useQuery({
+    queryKey: ['explore-breakdown', period?.start, period?.end],
+    queryFn: () => api.getCategoryBreakdownV2(period!.start, period!.end),
+    enabled: !!period,
+  });
+  const totals = data ? Object.entries(data.by_category).map(([category, amount]) => ({ category, total: amount.minor_units / 100 })) : [];
+  return (
+    <QuestionCard title="Where it went" isError={isError} onRetry={() => void refetch()} isReady={!!data}>
+      <CategoryDonut
+        data={totals}
+        selected={selected}
+        onSelect={setSelected}
+        onViewTransactions={(category) => period && navigate(evidenceLink(period, category))}
+        showLegend
+      />
     </QuestionCard>
   );
 }
@@ -263,55 +329,113 @@ function SpendingOverTime() {
 function WhatDoesANormalWeekLookLike() {
   const { data, isError, refetch } = useQuery({ queryKey: ['explore-weekday-pattern'], queryFn: () => briefingApi.weekdayPattern(8) });
   const max = Math.max(1, ...(data?.pattern ?? []).map(p => p.average.minor_units));
+  const busiest = data?.pattern.reduce((top, p) => (p.average.minor_units > top.average.minor_units ? p : top), data.pattern[0]);
   return (
     <QuestionCard title="Your usual week" isError={isError} onRetry={() => void refetch()} isReady={!!data}>
       {data && <>
-        <p className="text-sm text-muted mb-2">Average per weekday over the last {data.weeks} complete weeks ({data.start}–{data.end}).</p>
-        {data.pattern.map(p => <RankedBar key={p.weekday} label={WEEKDAY_LABELS[p.weekday]} value={p.average.minor_units} max={max}
-          href={`/evidence?${new URLSearchParams({ start: data.start, end: data.end, weekday: String(p.weekday) })}`} />)}
+        <p className="text-sm text-muted">Average spend per weekday over the last {data.weeks} complete weeks, {formatRange(data.start, data.end)}.</p>
+        {busiest && busiest.average.minor_units > 0 && (
+          <p className="text-sm mt-1">Busiest: <span className="font-semibold">{WEEKDAY_LABELS[busiest.weekday]}</span>, {formatMoney(busiest.average)} on average.</p>
+        )}
+        <div className="mt-3">
+          {data.pattern.map(p => <RankedBar key={p.weekday} label={WEEKDAY_LABELS[p.weekday]} value={p.average.minor_units} max={max}
+            color={p.weekday === busiest?.weekday && p.average.minor_units > 0 ? 'var(--color-tangerine)' : undefined}
+            href={`/evidence?${new URLSearchParams({ start: data.start, end: data.end, weekday: String(p.weekday) })}`} />)}
+        </div>
       </>}
     </QuestionCard>
   );
 }
 
-function WhichMerchantsAccountForMostOfThisCategory() {
+function MerchantRanking({ facts }: { facts: SpendingFacts | undefined }) {
   const [category, setCategory] = useState('');
   const { data: categories } = useQuery({ queryKey: ['categories'], queryFn: () => api.getCategories() });
-  const { data: monthFacts } = useQuery({ queryKey: ['explore-month-facts'], queryFn: () => briefingApi.month() });
-  const effectiveCategory = category || monthFacts?.category_changes[0]?.category || '';
+  const period = facts?.current;
   const { data, isError, refetch } = useQuery({
     // Shared-facts merchant_ranking (spending_facts.py), not the legacy
     // getMerchantRankingV2 SQL aggregate — see the increment-3 finding in
     // docs/plans/2026-09-16-cashe-design-language-restoration.md.
-    queryKey: ['explore-merchants-by-category', effectiveCategory, monthFacts?.current.start, monthFacts?.current.end],
-    queryFn: () => api.getMerchantRankingFactsV2(monthFacts!.current.start, monthFacts!.current.end, effectiveCategory || undefined, 10),
-    enabled: !!monthFacts,
+    queryKey: ['explore-merchants-by-category', category, period?.start, period?.end],
+    queryFn: () => api.getMerchantRankingFactsV2(period!.start, period!.end, category || undefined, 10),
+    enabled: !!period,
   });
   const max = Math.max(1, ...(data ?? []).map(m => m.total.minor_units));
-  const categorySelect = <select value={effectiveCategory} onChange={e => setCategory(e.target.value)} className="select-field text-xs" aria-label="Category">
-    {(categories ?? []).map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
-  </select>;
+  const categorySelect = (
+    <select value={category} onChange={e => setCategory(e.target.value)} className="select-field text-xs" aria-label="Category">
+      <option value="">All categories</option>
+      {(categories ?? []).map(c => <option key={c.name} value={c.name}>{c.name}</option>)}
+    </select>
+  );
   return (
-    <PageCard title="Merchant ranking" action={!!categories?.length && categorySelect}>
-      {effectiveCategory && (
-        <p className="text-sm text-muted mb-3 flex items-center gap-2">
-          <StatusDot color={getCategoryColor(effectiveCategory)} />
-          Ranked by total this period in {effectiveCategory}.
-        </p>
-      )}
-      {isError && !data ? <div role="alert"><LoadFailed onRetry={() => void refetch()} /></div> : !data ? <div role="status"><span className="sr-only">Loading…</span><Skeleton className="h-20 w-full" /></div> : !data.length ? <p className="text-muted">No spending in this category yet.</p> :
+    <PageCard title="Top merchants" action={categorySelect}>
+      <p className="text-sm text-muted mb-3 flex items-center gap-2">
+        {category && <StatusDot color={getCategoryColor(category)} />}
+        Ranked by spending this month{category ? ` in ${category}` : ''}.
+      </p>
+      {isError && !data ? <div role="alert"><LoadFailed onRetry={() => void refetch()} /></div> : !data ? <div role="status"><span className="sr-only">Loading…</span><Skeleton className="h-20 w-full" /></div> : !data.length ? <p className="text-muted">{category ? `No ${category} spending this month yet.` : 'No spending this month yet.'}</p> :
         data.map(m => <RankedBar key={m.merchant} label={m.merchant} value={m.total.minor_units} max={max}
-          href={monthFacts ? evidenceLink(monthFacts.current, effectiveCategory, 'spending', m.merchant) : undefined}
+          color={category ? getCategoryColor(category) : undefined}
+          href={period ? evidenceLink(period, category || undefined, 'spending', m.merchant) : undefined}
           secondaryHref={merchantProfileLink(m.merchant)} />)}
     </PageCard>
   );
 }
 
-function HowDidThisTripAffectTheMonth() {
+function MostVisited({ facts }: { facts: SpendingFacts | undefined }) {
+  const period = facts?.current;
+  const { data, isError, refetch } = useQuery({
+    queryKey: ['explore-merchants-visits', period?.start, period?.end],
+    queryFn: () => api.getMerchantRankingFactsV2(period!.start, period!.end, undefined, 50),
+    enabled: !!period,
+  });
+  const ranked = (data ?? []).filter(m => m.visits > 0).sort((a, b) => b.visits - a.visits || b.total.minor_units - a.total.minor_units).slice(0, 6);
+  const max = Math.max(1, ...ranked.map(m => m.visits));
+  return (
+    <QuestionCard title="Most visited" isError={isError} onRetry={() => void refetch()} isReady={!!data}>
+      <p className="text-sm text-muted mb-3">Where you pay most often this month, among your top 50 merchants by spend.</p>
+      {!ranked.length ? <p className="text-muted">No purchases this month yet.</p> : ranked.map(m => (
+        <RankedBar key={m.merchant} label={m.merchant} value={m.visits} max={max}
+          display={`${m.visits} ${m.visits === 1 ? 'visit' : 'visits'} · ${formatMoney(m.total)}`}
+          href={merchantProfileLink(m.merchant)} />
+      ))}
+    </QuestionCard>
+  );
+}
+
+function RecurringCharges() {
+  const { data, isError, refetch } = useQuery({ queryKey: ['explore-subscription-review'], queryFn: () => api.getSubscriptionReviewV2() });
+  const max = Math.max(1, ...(data?.price_changes ?? []).map(c => Math.abs(c.change.minor_units)));
+  const empty = data && !data.price_changes.length && !data.overdue.length && !data.annual_renewals.length;
+  const column = (heading: string, children: React.ReactNode) => (
+    <section className="space-y-1 min-w-0">
+      <h3 className="text-sm font-semibold pb-1">{heading}</h3>
+      {children}
+    </section>
+  );
+  return (
+    <QuestionCard title="Recurring charges" isError={isError} onRetry={() => void refetch()} isReady={!!data}
+      action={<Link to="/plan" className="text-sm text-teal min-h-11 inline-flex items-center">Upcoming in Plan</Link>}>
+      {empty ? <p className="text-muted">No recurring cost changes to review. Price changes, schedules that may have stopped, and annual renewals appear here.</p> : data && (
+        <div className="grid gap-6 md:grid-cols-3">
+          {column('Price changes', data.price_changes.length
+            ? data.price_changes.map(c => <RankedBar key={c.subscription_id} label={c.label} value={c.change.minor_units} max={max} display={formatChange(c.change as Money)} href={`/plan/manage?subscription=${c.subscription_id}`} />)
+            : <p className="text-sm text-muted">No price changes.</p>)}
+          {column('Possibly stopped', data.overdue.length
+            ? data.overdue.map(o => <Link key={o.subscription_id} to={`/plan/manage?subscription=${o.subscription_id}`} className="flex justify-between gap-3 text-sm min-h-11 items-center hover:underline"><span className="truncate">{o.label}</span><span className="text-muted font-mono tabular-nums shrink-0">{o.days_since_last_charge}d ago</span></Link>)
+            : <p className="text-sm text-muted">Every schedule charged on time.</p>)}
+          {column('Renewing soon', data.annual_renewals.length
+            ? data.annual_renewals.map(r => <Link key={r.subscription_id} to={`/plan/manage?subscription=${r.subscription_id}`} className="flex justify-between gap-3 text-sm min-h-11 items-center hover:underline"><span className="truncate">{r.label}</span><span className="text-muted font-mono tabular-nums shrink-0">in {r.days_until_renewal}d</span></Link>)
+            : <p className="text-sm text-muted">No annual renewals coming up.</p>)}
+        </div>
+      )}
+    </QuestionCard>
+  );
+}
+
+function TripImpact({ trips }: { trips: { id: number; name: string; end_date: string | null }[] }) {
   const [tripId, setTripId] = useState<number | null>(null);
-  const { data: trips, isError: tripsError, refetch: refetchTrips } = useQuery({ queryKey: ['trips'], queryFn: () => api.getTrips() });
-  const effectiveTripId = tripId ?? trips?.[0]?.id ?? null;
-  const selectedTrip = trips?.find(t => t.id === effectiveTripId);
+  const effectiveTripId = tripId ?? trips[0]?.id ?? null;
+  const selectedTrip = trips.find(t => t.id === effectiveTripId);
   const { data: summary, isError, refetch } = useQuery({
     queryKey: ['explore-trip-summary', effectiveTripId],
     queryFn: () => api.getTripSummaryV2(effectiveTripId!),
@@ -335,28 +459,38 @@ function HowDidThisTripAffectTheMonth() {
   const tripShare = shareAvailable && tripInPeriod != null
     ? Math.round((tripInPeriod / monthPeriod.spending.minor_units) * 100)
     : null;
-  const tripSelect = !!trips?.length && (
+  const tripSelect = trips.length > 1 && (
     <select value={effectiveTripId ?? ''} onChange={e => setTripId(Number(e.target.value))} className="select-field text-xs" aria-label="Trip">
       {trips.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
     </select>
   );
   return (
     <PageCard title="How did this trip affect the month?" action={tripSelect}>
-      {tripsError && !trips ? <div role="alert"><LoadFailed onRetry={() => void refetchTrips()} /></div> : !trips ? <div role="status"><span className="sr-only">Loading…</span><Skeleton className="h-20 w-full" /></div> : !trips.length && <p className="text-muted">No trips recorded yet.</p>}
       {isError && !summary && <div role="alert"><LoadFailed onRetry={() => void refetch()} /></div>}
-      {summary && selectedTrip && <>
-        <p>Whole trip: {formatMoney(summary.total as Money)} over {summary.days} days ({formatMoney(summary.daily_average as Money)}/day).</p>
-        {monthPeriod && tripInPeriod != null && (tripShare != null ? (
-          <p className="text-sm text-muted">
-            {formatMoney({ minor_units: tripInPeriod, currency: 'SGD' })} of it is dated {monthPeriod.start}–{monthPeriod.end}: about {tripShare}% of all recorded spending in that period
-            {monthPeriod.status === 'indicative' ? ' (includes indicative conversions)' : ''}.
-            {tripOutsidePeriod && ' Trip spending outside those dates is not part of this share.'}
-          </p>
-        ) : (
-          <p className="text-sm text-muted">A share of {monthPeriod.start}–{monthPeriod.end} spending is unavailable while some records in that period need review.</p>
-        ))}
-        <Link to={`/transactions?trip=${effectiveTripId}`} className="text-teal underline min-h-11 inline-flex items-center">See trip transactions</Link>
-      </>}
+      {!summary && !isError && <div role="status"><span className="sr-only">Loading…</span><Skeleton className="h-16 w-full" /></div>}
+      {summary && selectedTrip && (
+        <div className="grid gap-4 md:grid-cols-[auto_1fr] md:items-center">
+          <div>
+            <p className="text-2xl font-bold font-display tabular-nums">{formatMoney(summary.total as Money)}</p>
+            <p className="text-sm text-muted">{selectedTrip.name} · {summary.days} days · {formatMoney(summary.daily_average as Money)}/day</p>
+          </div>
+          <div className="space-y-1">
+            {monthPeriod && tripInPeriod != null && (tripShare != null ? (
+              <>
+                <div className="h-2 rounded bg-foreground/10 overflow-hidden" aria-hidden="true"><div className="h-full bg-honey" style={{ width: `${Math.min(100, tripShare)}%` }} /></div>
+                <p className="text-sm text-muted">
+                  {formatMoney({ minor_units: tripInPeriod, currency: 'SGD' })} of it is dated {formatShortDate(monthPeriod.start)} – {formatShortDate(monthPeriod.end)}: about {tripShare}% of all recorded spending in that period
+                  {monthPeriod.status === 'indicative' ? ' (includes indicative conversions)' : ''}.
+                  {tripOutsidePeriod && ' Trip spending outside those dates is not part of this share.'}
+                </p>
+              </>
+            ) : (
+              <p className="text-sm text-muted">A share of {formatShortDate(monthPeriod.start)} – {formatShortDate(monthPeriod.end)} spending is unavailable while some records in that period need review.</p>
+            ))}
+            <Link to={`/transactions?trip=${effectiveTripId}`} className="text-teal underline min-h-11 inline-flex items-center">See trip transactions</Link>
+          </div>
+        </div>
+      )}
     </PageCard>
   );
 }
@@ -370,31 +504,67 @@ export function ExplorePatternsPage() {
     if (next === 'over-time') params.delete('mode'); else params.set('mode', next);
     setSearch(params, { replace: true });
   }
+  const { data: facts } = useMonthFacts();
+  const { data: trips } = useQuery({ queryKey: ['trips'], queryFn: () => api.getTrips() });
+  const location = useLocation();
+  const patternsRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    // "vs. last month" opens By category and lands on the patterns.
+    if (location.hash === '#explore-patterns') patternsRef.current?.scrollIntoView({ block: 'start' });
+  }, [location.hash, location.search]);
 
   return (
-    <div className="p-4 md:p-6 space-y-6 max-w-4xl mx-auto">
-      <Tabs value={mode} onValueChange={(v) => setMode(v as Mode)} className="flex justify-center">
-        <TabsList>
-          {MODES.map((m) => (
-            <TabsTrigger key={m.value} value={m.value}>{m.label}</TabsTrigger>
-          ))}
-        </TabsList>
-      </Tabs>
+    <div className="p-4 md:p-6 space-y-4 md:space-y-5 max-w-[1600px]">
+      <PulseBand facts={facts} />
 
-      {/* Only Over time has a standing companion panel. Other modes use the
-          full width; By category reveals its selection detail beneath the
-          chart so the plot never resizes when a bar is selected. */}
-      {mode === 'over-time' && (
-        <div className="grid gap-6 lg:grid-cols-[1fr_320px] items-start">
-          <SpendingOverTime />
-          <WhatDoesANormalWeekLookLike />
+      {/* Both columns stretch to the taller one, so the pair reads as one band. */}
+      <div className="grid gap-4 md:gap-5 lg:grid-cols-12 lg:items-stretch">
+        <div className="lg:col-span-7 flex flex-col gap-4 md:gap-5">
+          <DailyReadCard />
+          <WorthALookSummary className="flex-1" />
         </div>
-      )}
-      {mode === 'by-category' && <div className="space-y-6"><WhereDidTheIncreaseComeFrom /></div>}
-      {mode === 'by-merchant' && <WhichMerchantsAccountForMostOfThisCategory />}
-      {mode === 'recurring' && <WhichRecurringCostsChanged />}
+        <div className="lg:col-span-5 flex flex-col gap-4 md:gap-5">
+          <BiggestMoverTile facts={facts} />
+          <HealthScoreSummary className="flex-1" />
+        </div>
+      </div>
 
-      <HowDidThisTripAffectTheMonth />
+      <section id="explore-patterns" ref={patternsRef} aria-labelledby="explore-patterns-heading" className="space-y-4 pt-2 scroll-mt-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 id="explore-patterns-heading" className="text-lg font-semibold font-display">Patterns</h2>
+          <Tabs value={mode} onValueChange={(v) => setMode(v as Mode)} className="max-w-full">
+            <TabsList aria-label="Explore patterns">
+              {MODES.map((m) => (
+                <TabsTrigger key={m.value} value={m.value}>{m.label}</TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+        </div>
+
+        {mode === 'over-time' && (
+          <div className="grid gap-4 md:gap-6 lg:grid-cols-12 items-start">
+            <div className="lg:col-span-8 space-y-4 md:space-y-6"><SpendingOverTime /><IncomeExpenseBar /></div>
+            <div className="lg:col-span-4"><WhatDoesANormalWeekLookLike /></div>
+          </div>
+        )}
+        {mode === 'by-category' && (
+          // The selection detail opens beneath the chart, inside its column,
+          // so the chart never resizes when a bar is selected.
+          <div className="grid gap-4 md:gap-6 lg:grid-cols-12 items-start">
+            <div className="lg:col-span-7 space-y-4 md:space-y-6"><WhatChanged /><WhatDroveIt /></div>
+            <div className="lg:col-span-5"><WhereItWent facts={facts} /></div>
+          </div>
+        )}
+        {mode === 'by-merchant' && (
+          <div className="grid gap-4 md:gap-6 lg:grid-cols-12 items-start">
+            <div className="lg:col-span-7"><MerchantRanking facts={facts} /></div>
+            <div className="lg:col-span-5"><MostVisited facts={facts} /></div>
+          </div>
+        )}
+        {mode === 'recurring' && <RecurringCharges />}
+      </section>
+
+      {!!trips?.length && <TripImpact trips={trips} />}
     </div>
   );
 }

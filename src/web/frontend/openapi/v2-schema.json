@@ -897,6 +897,45 @@
         "title": "DuplicateSide",
         "type": "object"
       },
+      "FirstSeenMerchant": {
+        "properties": {
+          "amount": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Money"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "first_date": {
+            "title": "First Date",
+            "type": "string"
+          },
+          "merchant": {
+            "title": "Merchant",
+            "type": "string"
+          },
+          "transaction_id": {
+            "title": "Transaction Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "merchant",
+          "first_date",
+          "category",
+          "amount",
+          "transaction_id"
+        ],
+        "title": "FirstSeenMerchant",
+        "type": "object"
+      },
       "ForecastWindow": {
         "properties": {
           "end": {
@@ -1152,6 +1191,10 @@
             "title": "Components",
             "type": "object"
           },
+          "end": {
+            "title": "End",
+            "type": "string"
+          },
           "grade": {
             "anyOf": [
               {
@@ -1167,6 +1210,16 @@
             "title": "Has Income Data",
             "type": "boolean"
           },
+          "income": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Money"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "period": {
             "title": "Period",
             "type": "string"
@@ -1181,6 +1234,26 @@
               }
             ],
             "title": "Score"
+          },
+          "spending": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "start": {
+            "title": "Start",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "complete",
+              "indicative",
+              "partial"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "unresolved_count": {
+            "title": "Unresolved Count",
+            "type": "integer"
           }
         },
         "required": [
@@ -1188,6 +1261,12 @@
           "grade",
           "has_income_data",
           "period",
+          "start",
+          "end",
+          "status",
+          "unresolved_count",
+          "income",
+          "spending",
           "components"
         ],
         "title": "HealthScore",
@@ -1641,6 +1720,80 @@
           "assumptions"
         ],
         "title": "MonthForecast",
+        "type": "object"
+      },
+      "MonthlyFlow": {
+        "properties": {
+          "end": {
+            "title": "End",
+            "type": "string"
+          },
+          "income": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Money"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "indicative_count": {
+            "title": "Indicative Count",
+            "type": "integer"
+          },
+          "month": {
+            "title": "Month",
+            "type": "string"
+          },
+          "recorded_net_flow": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Money"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "spending": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "start": {
+            "title": "Start",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "complete",
+              "indicative",
+              "partial"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "transaction_count": {
+            "title": "Transaction Count",
+            "type": "integer"
+          },
+          "unresolved_count": {
+            "title": "Unresolved Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "start",
+          "end",
+          "spending",
+          "income",
+          "recorded_net_flow",
+          "transaction_count",
+          "unresolved_count",
+          "indicative_count",
+          "status",
+          "month"
+        ],
+        "title": "MonthlyFlow",
         "type": "object"
       },
       "NewMerchant": {
@@ -2831,6 +2984,45 @@
         "title": "SpendingReviewItem",
         "type": "object"
       },
+      "SpendingSignals": {
+        "properties": {
+          "end": {
+            "title": "End",
+            "type": "string"
+          },
+          "multiplier": {
+            "title": "Multiplier",
+            "type": "number"
+          },
+          "new_merchants": {
+            "items": {
+              "$ref": "#/components/schemas/FirstSeenMerchant"
+            },
+            "title": "New Merchants",
+            "type": "array"
+          },
+          "start": {
+            "title": "Start",
+            "type": "string"
+          },
+          "unusual": {
+            "items": {
+              "$ref": "#/components/schemas/UnusualPurchase"
+            },
+            "title": "Unusual",
+            "type": "array"
+          }
+        },
+        "required": [
+          "start",
+          "end",
+          "multiplier",
+          "unusual",
+          "new_merchants"
+        ],
+        "title": "SpendingSignals",
+        "type": "object"
+      },
       "SpendingTarget": {
         "description": "R13: one overall monthly spending target \u2014 target and remaining\n(which may be negative, meaning over target), never framed as\nsafe-to-spend or a bank balance.",
         "properties": {
@@ -3907,6 +4099,47 @@
           "by_day"
         ],
         "title": "TripSummary",
+        "type": "object"
+      },
+      "UnusualPurchase": {
+        "properties": {
+          "amount": {
+            "$ref": "#/components/schemas/Money"
+          },
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "date": {
+            "title": "Date",
+            "type": "string"
+          },
+          "merchant": {
+            "title": "Merchant",
+            "type": "string"
+          },
+          "ratio": {
+            "title": "Ratio",
+            "type": "number"
+          },
+          "transaction_id": {
+            "title": "Transaction Id",
+            "type": "integer"
+          },
+          "typical": {
+            "$ref": "#/components/schemas/Money"
+          }
+        },
+        "required": [
+          "transaction_id",
+          "merchant",
+          "category",
+          "date",
+          "amount",
+          "typical",
+          "ratio"
+        ],
+        "title": "UnusualPurchase",
         "type": "object"
       },
       "UpcomingCalendar": {
@@ -6364,6 +6597,52 @@
         "summary": "Month Spending"
       }
     },
+    "/api/v2/spending/monthly": {
+      "get": {
+        "operationId": "spending_monthly_api_v2_spending_monthly_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "months",
+            "required": false,
+            "schema": {
+              "default": 6,
+              "maximum": 36,
+              "minimum": 1,
+              "title": "Months",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/MonthlyFlow"
+                  },
+                  "title": "Response Spending Monthly Api V2 Spending Monthly Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Spending Monthly"
+      }
+    },
     "/api/v2/spending/review": {
       "get": {
         "operationId": "spending_review_api_v2_spending_review_get",
@@ -6415,6 +6694,53 @@
           }
         },
         "summary": "Spending Review"
+      }
+    },
+    "/api/v2/spending/signals": {
+      "get": {
+        "operationId": "spending_signals_api_v2_spending_signals_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "as_of",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "As Of"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpendingSignals"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Spending Signals"
       }
     },
     "/api/v2/spending/trend-by-category": {

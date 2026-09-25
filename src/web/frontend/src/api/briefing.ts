@@ -5,6 +5,9 @@ import { request } from './client';
 export type SubscriptionPriceChange = components['schemas']['SubscriptionPriceChange'];
 export type WeekdayPattern = components['schemas']['WeekdayPattern'];
 export type MonthForecast = components['schemas']['MonthForecast'];
+export type SpendingSignals = components['schemas']['SpendingSignals'];
+export type MonthlyFlow = components['schemas']['MonthlyFlow'];
+export type HealthScore = components['schemas']['HealthScore'];
 
 export interface Money { minor_units: number; currency: 'SGD' }
 export interface SpendingPeriod {
@@ -113,6 +116,9 @@ export const briefingApi = {
   upcomingCalendar: (start: string, end: string) => request<UpcomingCalendar>(`/api/v2/plan/upcoming/calendar?start=${start}&end=${end}`),
   home: () => request<HomeBriefing>('/api/v2/home'),
   month: (as_of?: string) => request<SpendingFacts>(`/api/v2/spending/month${as_of ? `?as_of=${as_of}` : ''}`),
+  signals: () => request<SpendingSignals>('/api/v2/spending/signals'),
+  monthly: (months = 6) => request<MonthlyFlow[]>(`/api/v2/spending/monthly?months=${months}`),
+  healthScore: (months = 1) => request<HealthScore>(`/api/v2/analytics/health-score?months=${months}`),
   weekdayPattern: (weeks = 8) => request<WeekdayPattern>(`/api/v2/spending/weekday-pattern?weeks=${weeks}`),
   monthForecast: (as_of?: string) => request<MonthForecast>(`/api/v2/forecast/month${as_of ? `?as_of=${as_of}` : ''}`),
   spendingReview: (offset = 0) => request<SpendingReview>(`/api/v2/spending/review?limit=50&offset=${offset}`),

@@ -16,11 +16,13 @@ vi.mock('@/api/client', async importOriginal => ({
     getCategoryBreakdownV2: vi.fn(),
     getTrips: vi.fn(),
     getTripSummaryV2: vi.fn(),
+    getDailyTotalsV2: vi.fn(),
+    getAnalyticsInsight: vi.fn(),
   },
 }));
 vi.mock('@/api/briefing', async importOriginal => ({
   ...await importOriginal<typeof import('@/api/briefing')>(),
-  briefingApi: { month: vi.fn(), weekdayPattern: vi.fn() },
+  briefingApi: { month: vi.fn(), weekdayPattern: vi.fn(), signals: vi.fn(), healthScore: vi.fn(), monthly: vi.fn() },
 }));
 
 async function selectMode(name: string) {
@@ -49,6 +51,11 @@ beforeEach(() => {
   vi.mocked(api.getMerchantRankingFactsV2).mockResolvedValue([]);
   vi.mocked(api.getCategoryDailyTrendV2).mockResolvedValue([]);
   vi.mocked(api.getTrips).mockResolvedValue([]);
+  vi.mocked(api.getDailyTotalsV2).mockResolvedValue([]);
+  vi.mocked(api.getAnalyticsInsight).mockResolvedValue({ content: null, generated_at: null, is_stale: true });
+  vi.mocked(briefingApi.signals).mockResolvedValue({ start: '2026-09-01', end: '2026-09-06', multiplier: 2, unusual: [], new_merchants: [] });
+  vi.mocked(briefingApi.healthScore).mockResolvedValue({ score: null, grade: null, has_income_data: false, period: '2026-09', start: '2026-09-01', end: '2026-09-06', status: 'complete', unresolved_count: 0, income: null, spending: { minor_units: 1250, currency: 'SGD' }, components: {} });
+  vi.mocked(briefingApi.monthly).mockResolvedValue([]);
 });
 afterEach(cleanup);
 
@@ -79,7 +86,7 @@ test('the top category merchant driver links to the merchant profile as a drill-
   await selectMode('By category');
   const profileLink = await screen.findByRole('link', { name: 'Fancy Bistro' });
   expect(profileLink.getAttribute('href')).toBe('/explore/merchants/Fancy%20Bistro');
-  const evidenceLinkEl = screen.getByRole('link', { name: 'view transactions' });
+  const evidenceLinkEl = screen.getByRole('link', { name: 'View transactions' });
   const params = new URL(evidenceLinkEl.getAttribute('href')!, 'http://localhost').searchParams;
   expect(params.get('merchant')).toBe('Fancy Bistro');
   expect(params.get('category')).toBe('Food & Drink');
@@ -130,15 +137,30 @@ test('shows a weekday pattern bar with weekday-scoped evidence (default mode)', 
   expect(params.get('weekday')).toBe('1');
 });
 
-test('shows merchants ranked within the selected category, via the shared-facts endpoint', async () => {
+test('ranks merchants across all categories by default, then within a chosen category, via the shared-facts endpoint', async () => {
   vi.mocked(api.getCategories).mockResolvedValue([{ name: 'Food & Drink', keywords: null, icon: null, color: null, type: 'wants' }]);
   vi.mocked(api.getMerchantRankingFactsV2).mockResolvedValue([{ merchant: 'Fancy Bistro', visits: 2, total: { minor_units: 4000, currency: 'SGD' } }]);
   show();
   await selectMode('By merchant');
-  expect(await screen.findByText('Fancy Bistro')).toBeTruthy();
-  expect(api.getMerchantRankingFactsV2).toHaveBeenCalledWith(period.start, period.end, 'Food & Drink', 10);
+  expect((await screen.findAllByText('Fancy Bistro')).length).toBeGreaterThan(0);
+  expect(api.getMerchantRankingFactsV2).toHaveBeenCalledWith(period.start, period.end, undefined, 10);
   const profileLink = screen.getByRole('link', { name: 'Profile' });
   expect(profileLink.getAttribute('href')).toBe('/explore/merchants/Fancy%20Bistro');
+  fireEvent.change(await screen.findByRole('combobox', { name: 'Category' }), { target: { value: 'Food & Drink' } });
+  await waitFor(() => expect(api.getMerchantRankingFactsV2).toHaveBeenCalledWith(period.start, period.end, 'Food & Drink', 10));
+});
+
+test('most visited ranks merchants by visit count', async () => {
+  vi.mocked(api.getMerchantRankingFactsV2).mockResolvedValue([
+    { merchant: 'Big Once', visits: 1, total: { minor_units: 9000, currency: 'SGD' } },
+    { merchant: 'Daily Kopi', visits: 9, total: { minor_units: 1800, currency: 'SGD' } },
+  ]);
+  show();
+  await selectMode('By merchant');
+  expect(await screen.findByText('9 visits · $18.00')).toBeTruthy();
+  const card = screen.getByText('Most visited').closest('.rounded-md')! as HTMLElement;
+  const names = within(card).getAllByRole('link').map(link => link.textContent);
+  expect(names.slice(0, 2)).toEqual(['Daily Kopi', 'Big Once']);
 });
 
 test('shows how a selected trip affected the month, with a link to its transactions', async () => {
@@ -149,7 +171,8 @@ test('shows how a selected trip affected the month, with a link to its transacti
     days: 5, transaction_count: 4, currencies_used: ['SGD'], by_category: [], by_day: [],
   });
   show();
-  expect(await screen.findByText(/\$400\.00 over 5 days/)).toBeTruthy();
+  expect(await screen.findByText(/Bali · 5 days/)).toBeTruthy();
+  expect(screen.getByText('$400.00')).toBeTruthy();
   const link = screen.getByRole('link', { name: 'See trip transactions' });
   expect(link.getAttribute('href')).toBe('/transactions?trip=5');
 });
@@ -172,8 +195,8 @@ test('a cross-month trip is compared with the month only for spending dated insi
   vi.mocked(api.getTripSummaryV2).mockResolvedValue(tripSummary());
   vi.mocked(briefingApi.month).mockResolvedValue({ ...monthFacts, current: septemberToTripEnd });
   show();
-  expect(await screen.findByText(/Whole trip: \$400\.00 over 7 days/)).toBeTruthy();
-  const share = await screen.findByText(/of it is dated 2026-09-01–2026-09-05/);
+  expect(await screen.findByText(/Bali · 7 days/)).toBeTruthy();
+  const share = await screen.findByText(/of it is dated/);
   expect(share.textContent).toContain('$300.00');
   expect(share.textContent).toContain('about 30%');
   expect(share.textContent).toContain('outside those dates is not part of this share');
@@ -195,13 +218,15 @@ test('no share is claimed while the month has records needing review', async () 
   vi.mocked(api.getTripSummaryV2).mockResolvedValue(tripSummary());
   vi.mocked(briefingApi.month).mockResolvedValue({ ...monthFacts, current: { ...septemberToTripEnd, status: 'partial', unresolved_count: 2 } });
   show();
-  expect(await screen.findByText(/share of 2026-09-01–2026-09-05 spending is unavailable/)).toBeTruthy();
+  expect(await screen.findByText(/spending is unavailable while some records/)).toBeTruthy();
   expect(screen.queryByText(/about \d+%/)).toBeNull();
 });
 
-test('shows an empty state when there are no trips', async () => {
+test('hides the trip card entirely when there are no trips', async () => {
   show();
-  expect(await screen.findByText('No trips recorded yet.')).toBeTruthy();
+  await screen.findByText('Spending over time');
+  await waitFor(() => expect(api.getTrips).toHaveBeenCalled());
+  expect(screen.queryByText('How did this trip affect the month?')).toBeNull();
 });
 
 test('a failed card announces itself as an alert for screen readers', async () => {
@@ -226,15 +251,71 @@ test('a background refetch failure does not hide already-loaded data behind an e
   expect(screen.queryByRole('alert')).toBeNull();
 });
 
-test('the trip card shows loading, not a premature empty state, while trips are still fetching', async () => {
-  let resolveTrips!: (trips: []) => void;
+test('the trip card appears once trips load, never as a premature empty state', async () => {
+  let resolveTrips!: (trips: Trip[]) => void;
   vi.mocked(api.getTrips).mockReturnValue(new Promise(resolve => { resolveTrips = resolve; }));
+  vi.mocked(api.getTripSummaryV2).mockResolvedValue(tripSummary());
   show();
+  await screen.findByText('Spending over time');
+  expect(screen.queryByText('How did this trip affect the month?')).toBeNull();
+  resolveTrips([baliTrip]);
   expect(await screen.findByText('How did this trip affect the month?')).toBeTruthy();
-  expect(screen.getAllByRole('status').length).toBeGreaterThan(0);
-  expect(screen.queryByText('No trips recorded yet.')).toBeNull();
-  resolveTrips([]);
-  expect(await screen.findByText('No trips recorded yet.')).toBeTruthy();
+});
+
+test('the dashboard opens with the month pulse, worth-a-look signals and financial health', async () => {
+  vi.mocked(briefingApi.signals).mockResolvedValue({
+    start: '2026-09-01', end: '2026-09-06', multiplier: 2,
+    unusual: [{ transaction_id: 7, merchant: 'Grocer', category: 'Food & Drink', date: '2026-09-03', amount: { minor_units: 5000, currency: 'SGD' }, typical: { minor_units: 1100, currency: 'SGD' }, ratio: 4.5 }],
+    new_merchants: [{ merchant: 'Bookshop', first_date: '2026-09-04', category: 'Shopping', amount: { minor_units: 2500, currency: 'SGD' }, transaction_id: 8 }],
+  });
+  vi.mocked(briefingApi.healthScore).mockResolvedValue({
+    score: 64, grade: 'Good', has_income_data: true, period: '2026-09', start: '2026-09-01', end: '2026-09-06',
+    status: 'partial', unresolved_count: 2, income: { minor_units: 300000, currency: 'SGD' }, spending: { minor_units: 1250, currency: 'SGD' },
+    components: { savings_rate: { score: 40, max: 40, value: 0.99, benchmark: 0.2, label: 'Savings Rate', description: 'Share of income left after all spending' } },
+  });
+  show();
+  expect(await screen.findByText('Spent this month')).toBeTruthy();
+  expect(screen.getAllByText('$12.50').length).toBeGreaterThan(0);
+  expect(await screen.findByText('+$5.00')).toBeTruthy();
+  // Worth a look is a summary card: rows are not separate links; the card opens the full list.
+  const signals = await screen.findByRole('link', { name: /Worth a look: 2 items/ });
+  expect(signals.getAttribute('href')).toBe('/explore/signals');
+  expect(within(signals).getByText('Grocer')).toBeTruthy();
+  expect(within(signals).getByText('4.5× usual')).toBeTruthy();
+  expect(within(signals).queryAllByRole('link')).toHaveLength(0);
+  // Health shows only the score; the card opens the full breakdown.
+  const health = await screen.findByRole('link', { name: /Financial health 64 out of 100, Good/ });
+  expect(health.getAttribute('href')).toBe('/explore/health');
+  expect(screen.queryByText('Savings Rate')).toBeNull();
+  expect(briefingApi.healthScore).toHaveBeenCalledWith(1);
+  // Headline tiles open their evidence.
+  const spent = screen.getByText('Spent this month').closest('a')!;
+  expect(spent.getAttribute('href')).toMatch(/^\/evidence\?start=2026-09-01&end=2026-09-06&measure=spending/);
+  const mover = screen.getByText('Biggest mover').closest('a')!;
+  expect(new URL(mover.getAttribute('href')!, 'http://x').searchParams.get('category')).toBe('Food & Drink');
+});
+
+test('the AI read appears only when the model layer has written one', async () => {
+  vi.mocked(api.getAnalyticsInsight).mockResolvedValue({ content: { narrative: 'Food is running ahead of August.', nudges: ['Cook twice this week'] }, generated_at: new Date().toISOString(), is_stale: false });
+  show();
+  expect(await screen.findByText('Food is running ahead of August.')).toBeTruthy();
+  expect(screen.getByText("Today's read")).toBeTruthy();
+});
+
+test('worth a look caps the dashboard summary at three rows', async () => {
+  const merchant = (i: number) => ({ merchant: `Place ${i}`, first_date: '2026-09-04', category: 'Shopping', amount: { minor_units: 1000, currency: 'SGD' as const }, transaction_id: 100 + i });
+  vi.mocked(briefingApi.signals).mockResolvedValue({ start: '2026-09-01', end: '2026-09-06', multiplier: 2, unusual: [], new_merchants: [1, 2, 3, 4, 5].map(merchant) });
+  show();
+  const card = await screen.findByRole('link', { name: /Worth a look: 5 items/ });
+  expect(within(card).getByText('Place 3')).toBeTruthy();
+  expect(within(card).queryByText('Place 4')).toBeNull();
+  expect(within(card).getByText('2 more this month')).toBeTruthy();
+});
+
+test('nothing stands out: worth a look explains what it watches for', async () => {
+  show();
+  expect(await screen.findByText(/Nothing stands out so far this month/)).toBeTruthy();
+  expect(screen.queryByText("Today's read")).toBeNull();
 });
 
 test('Over time investigates a day by category and merchant, with evidence scoped to that day', async () => {

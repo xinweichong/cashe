@@ -24,7 +24,7 @@ from src.money import to_minor_units, from_minor_units
 from src.spending_facts import resolve_money
 from src.config import local_now
 from src.web.auth import verify_password, create_session, verify_session, destroy_session
-from src.web.contracts import Balance, BudgetProgress, BulkTransactionRequest, BulkTransactionResultItem, BulkUndoRequest, CaptureFollowup, CaptureIssue, CaptureResolution, CategoryBreakdown, CategoryTrendPoint, DailyTotal, GoalProgress, HealthScore, HomeBriefing, MerchantRanking, MerchantSummary, OverviewSummary, QueuedResponse, SpendingAlerts, SpendingComparison, SpendingEvidence, SpendingFacts, SpendingReview, SpendingVelocity, TopMerchantsResult, TransactionCorrection, TransactionCreate, TransactionDeletion, TransactionProvenance, TransactionUndo, TransactionV2, TrendPoint, TripSummary, UpcomingPlan, UpcomingCalendar, PlanMutationResponse, RecurringReview, RecurringResolution, RefundMatchReview, RefundMatchResolution, DuplicateReview, DuplicateDismissal, DuplicateMergeRequest, DuplicateMergeResult, DuplicateMergeUndoResult, SubscriptionReview, WeekdayPattern, MonthForecast, ScenarioRequest, ScenarioResponse
+from src.web.contracts import Balance, BudgetProgress, BulkTransactionRequest, BulkTransactionResultItem, BulkUndoRequest, CaptureFollowup, CaptureIssue, CaptureResolution, CategoryBreakdown, CategoryTrendPoint, DailyTotal, GoalProgress, HealthScore, HomeBriefing, MerchantRanking, MerchantSummary, OverviewSummary, QueuedResponse, SpendingAlerts, SpendingComparison, SpendingEvidence, SpendingFacts, SpendingReview, SpendingVelocity, TopMerchantsResult, TransactionCorrection, TransactionCreate, TransactionDeletion, TransactionProvenance, TransactionUndo, TransactionV2, TrendPoint, TripSummary, UpcomingPlan, UpcomingCalendar, PlanMutationResponse, RecurringReview, RecurringResolution, RefundMatchReview, RefundMatchResolution, DuplicateReview, DuplicateDismissal, DuplicateMergeRequest, DuplicateMergeResult, DuplicateMergeUndoResult, SubscriptionReview, WeekdayPattern, MonthForecast, ScenarioRequest, ScenarioResponse, SpendingSignals, MonthlyFlow
 from src.analytics import (
     load_summary,
     get_yoy_comparison,
@@ -383,6 +383,14 @@ def create_dashboard_app(
             raise HTTPException(status_code=422, detail="End must not precede start")
         return await _db(storage.get_spending_evidence, start, end, timezone=timezone,
                          category=category, merchant=merchant, weekday=weekday, measure=measure, limit=limit, offset=offset)
+
+    @app.get("/api/v2/spending/signals", response_model=SpendingSignals)
+    async def spending_signals(as_of: date | None = None, storage=Depends(_get_storage)):
+        return await _db(storage.get_spending_signals, as_of, timezone)
+
+    @app.get("/api/v2/spending/monthly", response_model=list[MonthlyFlow])
+    async def spending_monthly(months: int = Query(6, ge=1, le=36), storage=Depends(_get_storage)):
+        return await _db(storage.get_monthly_flows, months, None, timezone)
 
     @app.get("/api/v2/spending/weekday-pattern", response_model=WeekdayPattern)
     async def weekday_pattern(weeks: int = Query(8, ge=1, le=52), storage=Depends(_get_storage)):
@@ -1121,13 +1129,13 @@ def create_dashboard_app(
     async def health_score(months: int = 1, storage=Depends(_get_storage)):
         if months < 1 or months > 12:
             raise HTTPException(status_code=400, detail="months must be between 1 and 12")
-        return await _db(storage.get_health_score, months=months)
+        return await _db(storage.get_health_score, months, timezone)
 
     @app.get("/api/v2/analytics/health-score", response_model=HealthScore)
     async def health_score_v2(months: int = 1, storage=Depends(_get_storage)):
         if months < 1 or months > 12:
             raise HTTPException(status_code=400, detail="months must be between 1 and 12")
-        return await _db(storage.get_health_score, months=months)
+        return await _db(storage.get_health_score, months, timezone)
 
     @app.get("/api/income-vs-expense")
     async def income_vs_expense(months: int = 6, storage=Depends(_get_storage)):

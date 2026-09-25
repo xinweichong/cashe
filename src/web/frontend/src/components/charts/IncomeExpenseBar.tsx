@@ -3,116 +3,94 @@ import { useQuery } from '@tanstack/react-query';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts';
-import { api } from '@/api/client';
+import { briefingApi, formatMoney } from '@/api/briefing';
 import { ChartCard } from '@/components/ui/cards';
+import { LoadFailed } from '@/components/ui/LoadFailed';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { COLOR_CORAL, useChartTheme, CHART_Y_DOMAIN } from '@/lib/chartTheme';
+import { COLOR_CORAL, useChartTheme } from '@/lib/chartTheme';
 
 type Mode = '6mo' | '12mo' | 'yoy';
+const LABELS: Record<Mode, string> = { '6mo': '6M', '12mo': '12M', yoy: 'YoY' };
 
-function formatMonth(month: string): string {
-  const [year, m] = month.split('-');
-  return new Date(Number(year), Number(m) - 1, 1).toLocaleString('default', { month: 'short' });
+function monthLabel(month: string): string {
+  const [year, m] = month.split('-').map(Number);
+  return new Date(year, m - 1, 1).toLocaleString('en-SG', { month: 'short' });
 }
 
+/**
+ * Monthly spending against income (or against the same month a year
+ * earlier), from the shared spending facts. A month without income records
+ * shows no income bar rather than a fabricated zero.
+ */
 export function IncomeExpenseBar() {
   const { CHART_AXIS_PROPS, CHART_TOOLTIP_STYLE, CHART_CURSOR_BAR, CHART_LEGEND_STYLE, COLOR_TEAL, COLOR_MUTED_BAR } = useChartTheme();
   const [mode, setMode] = useState<Mode>('6mo');
+  const months = mode === '6mo' ? 6 : mode === '12mo' ? 12 : 24;
+  const { data, isError, refetch } = useQuery({
+    queryKey: ['spending-monthly', months],
+    queryFn: () => briefingApi.monthly(months),
+    staleTime: 60_000,
+  });
+
   const isYoY = mode === 'yoy';
-  const months = mode === '6mo' ? 6 : 12;
+  const shown = data ? (isYoY ? data.slice(-12) : data) : [];
+  const chartData = shown.map((flow, i) => isYoY
+    ? { month: monthLabel(flow.month), 'This year': flow.spending.minor_units / 100, 'Year before': data![i].spending.minor_units / 100 }
+    : { month: monthLabel(flow.month), Income: flow.income ? flow.income.minor_units / 100 : null, Spending: flow.spending.minor_units / 100 });
+  const partial = (isYoY ? data ?? [] : shown).filter((flow) => flow.status === 'partial');
+  const current = data?.[data.length - 1];
 
-  const { data: standardData, isLoading: standardLoading } = useQuery({
-    queryKey: ['income-vs-expense', months],
-    queryFn: () => api.getIncomeVsExpense(months),
-    enabled: !isYoY,
-    staleTime: 60_000,
-  });
+  const body = isError && !data ? (
+    <div role="alert" className="p-4 pt-0"><LoadFailed onRetry={() => void refetch()} /></div>
+  ) : !data ? (
+    <div role="status" className="p-4 pt-0"><span className="sr-only">Loading…</span><Skeleton className="h-64 w-full" /></div>
+  ) : (
+    <div className="px-4 pb-4">
+      <div className="w-full h-64">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={chartData} margin={{ top: 4, right: 4, left: -12, bottom: 0 }}>
+            <XAxis dataKey="month" {...CHART_AXIS_PROPS} />
+            <YAxis {...CHART_AXIS_PROPS} domain={[0, 'auto']} tickCount={5} allowDecimals={false} tickFormatter={(v: number) => (v >= 1000 ? `$${v / 1000}k` : `$${v}`)} />
+            <Tooltip
+              cursor={CHART_CURSOR_BAR}
+              contentStyle={CHART_TOOLTIP_STYLE}
+              formatter={(value) => value != null ? formatMoney({ minor_units: Math.round(Number(value) * 100), currency: 'SGD' }) : 'None recorded'}
+            />
+            <Legend wrapperStyle={CHART_LEGEND_STYLE} />
+            {isYoY ? (
+              <>
+                <Bar dataKey="This year" fill={COLOR_CORAL} radius={[4, 4, 0, 0]} />
+                <Bar dataKey="Year before" fill={COLOR_MUTED_BAR} radius={[4, 4, 0, 0]} />
+              </>
+            ) : (
+              <>
+                <Bar dataKey="Income" fill={COLOR_TEAL} radius={[4, 4, 0, 0]} />
+                <Bar dataKey="Spending" fill={COLOR_CORAL} radius={[4, 4, 0, 0]} />
+              </>
+            )}
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+      <p className="text-xs text-muted mt-2">
+        {current && `${monthLabel(current.month)} runs to date.`}
+        {!!partial.length && ` ${partial.map((flow) => monthLabel(flow.month)).join(', ')} ${partial.length === 1 ? 'has' : 'have'} records left out until their amounts are resolved.`}
+      </p>
+    </div>
+  );
 
-  const { data: yoyData, isLoading: yoyLoading } = useQuery({
-    queryKey: ['analytics-yoy', 12],
-    queryFn: () => api.getAnalyticsYoY(12),
-    enabled: isYoY,
-    staleTime: 60_000,
-  });
-
-  const isLoading = isYoY ? yoyLoading : standardLoading;
-
-  const labels: Record<Mode, string> = { '6mo': '6M', '12mo': '12M', yoy: 'YoY' };
-  const card = (body: React.ReactNode) => (
+  return (
     <Tabs value={mode} onValueChange={(v) => setMode(v as Mode)}>
       <ChartCard
-        title={title}
+        title={isYoY ? 'Spending, year over year' : 'Income vs. spending'}
         action={
           <TabsList aria-label="Comparison range">
-            {(['6mo', '12mo', 'yoy'] as Mode[]).map((m) => <TabsTrigger key={m} value={m}>{labels[m]}</TabsTrigger>)}
+            {(['6mo', '12mo', 'yoy'] as Mode[]).map((m) => <TabsTrigger key={m} value={m}>{LABELS[m]}</TabsTrigger>)}
           </TabsList>
         }
       >
         <TabsContent value={mode} className="mt-0">{body}</TabsContent>
       </ChartCard>
     </Tabs>
-  );
-
-  const title = isYoY
-    ? 'Income vs Expenses — Year over Year'
-    : `Income vs Expenses — Last ${months === 6 ? '6' : '12'} Months`;
-
-  if (isLoading) {
-    return card(<div className="p-4 h-64 flex items-center justify-center text-muted text-sm">Catching up…</div>);
-  }
-
-  let chartData: object[] = [];
-  if (isYoY && yoyData) {
-    chartData = yoyData.map((d) => ({
-      month: d.month_label.split(' ')[0],
-      'This Year': d.this_year_expenses,
-      'Last Year': d.last_year_expenses,
-    }));
-  } else if (standardData) {
-    chartData = standardData.map((d) => ({
-      month: formatMonth(d.month),
-      Income: d.income,
-      Expenses: d.expenses,
-    }));
-  }
-
-  if (!chartData.length) {
-    return card(<div className="p-4 h-64 flex items-center justify-center text-muted text-sm">No data for this period.</div>);
-  }
-
-  return card(
-      <div className="p-4 w-full h-64">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={chartData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
-            <XAxis dataKey="month" {...CHART_AXIS_PROPS} />
-            <YAxis
-              {...CHART_AXIS_PROPS}
-              domain={CHART_Y_DOMAIN}
-              tickFormatter={(v: number) => `$${v}`}
-            />
-            <Tooltip
-              cursor={CHART_CURSOR_BAR}
-              contentStyle={CHART_TOOLTIP_STYLE}
-              formatter={(value) =>
-                value != null
-                  ? `$${Number(value).toLocaleString('en-SG', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
-                  : ''
-              }
-            />
-            <Legend wrapperStyle={CHART_LEGEND_STYLE} />
-            {isYoY ? (
-              <>
-                <Bar dataKey="This Year" fill={COLOR_TEAL} radius={[4, 4, 0, 0]} />
-                <Bar dataKey="Last Year" fill={COLOR_MUTED_BAR} radius={[4, 4, 0, 0]} />
-              </>
-            ) : (
-              <>
-                <Bar dataKey="Income" fill={COLOR_TEAL} radius={[4, 4, 0, 0]} />
-                <Bar dataKey="Expenses" fill={COLOR_CORAL} radius={[4, 4, 0, 0]} />
-              </>
-            )}
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
   );
 }

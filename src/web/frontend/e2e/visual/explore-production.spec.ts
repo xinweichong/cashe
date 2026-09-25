@@ -11,29 +11,73 @@ test('production Explore switches modes and preserves selection in the URL', asy
   await mockAuthenticatedExplore(page);
   await page.goto('/explore');
   await expect(page.getByRole('tab', { name: 'Over time' })).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByText(/Average per weekday/)).toBeVisible();
+  await expect(page.getByText(/Average spend per weekday/)).toBeVisible();
 
   await page.getByRole('tab', { name: 'By category' }).click();
   await expect(page).toHaveURL(/mode=by-category/);
-  const foodBar = page.getByRole('button', { name: /^Food/ });
+  const foodBar = page.getByRole('button', { name: /^Food \+/ });
   await expect(foodBar).toBeVisible();
   await foodBar.click();
   await expect(page.getByRole('link', { name: 'This period' })).toBeVisible();
 
   await page.getByRole('tab', { name: 'By merchant' }).click();
   await expect(page).toHaveURL(/mode=by-merchant/);
-  await expect(page.getByText('No spending in this category yet.')).toBeVisible();
+  await expect(page.getByText('Top merchants')).toBeVisible();
+  await expect(page.getByText('Most visited')).toBeVisible();
 
   await page.reload();
   await expect(page.getByRole('tab', { name: 'By merchant' })).toHaveAttribute('aria-selected', 'true');
 });
 
-test('production Explore top-level nav shows the teal active accent', async ({ page }) => {
+test('merged Explore dashboard: pulse band, signals and health above the patterns, at every viewport', async ({ page }) => {
+  for (const theme of ['dark', 'light'] as const) {
+    for (const viewport of [{ width: 1440, height: 900, name: 'desktop' }, { width: 390, height: 844, name: 'mobile' }]) {
+      await mockAuthenticatedExplore(page);
+      await page.emulateMedia({ colorScheme: theme, reducedMotion: 'reduce' });
+      await page.setViewportSize({ width: viewport.width, height: viewport.height });
+      await page.goto('/explore');
+      await expect(page.getByRole('link', { name: 'Insights' })).toHaveCount(0);
+      await expect(page.getByText('Spent this month')).toBeVisible();
+      await expect(page.getByText('Worth a look')).toBeVisible();
+      await expect(page.getByText('Financial health')).toBeVisible();
+      if (viewport.name === 'desktop') {
+        // The first Patterns chart card starts inside a 1440×900 first screen.
+        const chart = page.getByText('Spending over time', { exact: true });
+        expect((await chart.boundingBox())!.y).toBeLessThan(900);
+        await page.screenshot({ path: `e2e/screenshots/explore-first-screen-${theme}.png` });
+      }
+      await expect(page.locator('.recharts-line').first()).toBeVisible();
+      await expect(page.locator('.recharts-bar-rectangle').first()).toBeVisible();
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+      expect(overflow).toBeLessThanOrEqual(0);
+      await page.waitForTimeout(600);
+      await page.screenshot({ path: `e2e/screenshots/explore-${viewport.name}-${theme}.png`, fullPage: true });
+      if (theme === 'dark') await page.screenshot({ path: `../../../.impeccable/review/${viewport.name}.png`, fullPage: true });
+    }
+  }
+});
+
+test('Worth a look and Financial health open their full views, with a way back', async ({ page }) => {
   await mockAuthenticatedExplore(page);
+  await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' });
+  await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/explore');
-  const spendingPatternsLink = page.getByRole('link', { name: 'Spending patterns' });
-  await expect(spendingPatternsLink).toHaveAttribute('aria-current', 'page');
-  await page.screenshot({ path: 'e2e/screenshots/explore-production.png', fullPage: true });
+  await page.getByRole('link', { name: /Worth a look: 3 items/ }).click();
+  await expect(page).toHaveURL(/\/explore\/signals$/);
+  await expect(page.getByRole('link', { name: /Kinokuniya/ })).toBeVisible();
+  await page.screenshot({ path: 'e2e/screenshots/explore-signals-desktop.png', fullPage: true });
+  await page.getByRole('link', { name: 'Back to Explore' }).click();
+  await page.getByRole('link', { name: /Financial health 91 out of 100/ }).click();
+  await expect(page).toHaveURL(/\/explore\/health$/);
+  await expect(page.getByText('Savings Rate')).toBeVisible();
+  await page.screenshot({ path: 'e2e/screenshots/explore-health-desktop.png', fullPage: true });
+});
+
+test('/explore/insights redirects to the merged dashboard', async ({ page }) => {
+  await mockAuthenticatedExplore(page);
+  await page.goto('/explore/insights');
+  await expect(page).toHaveURL(/\/explore$/);
+  await expect(page.getByText('Spent this month')).toBeVisible();
 });
 
 test('Over time mode charts the default top-mover categories', async ({ page }) => {
@@ -46,18 +90,17 @@ test('Over time mode charts the default top-mover categories', async ({ page }) 
   await page.screenshot({ path: 'e2e/screenshots/explore-over-time-production.png', fullPage: true });
 });
 
-test('By category reserves no empty panel and reveals selection detail beneath a stable chart', async ({ page }) => {
+test('By category keeps the chart stable and reveals selection detail beneath it', async ({ page }) => {
   for (const viewport of [{ width: 1440, height: 900, name: 'desktop' }, { width: 390, height: 844, name: 'phone' }]) {
     await mockAuthenticatedExplore(page);
+    await page.emulateMedia({ reducedMotion: 'reduce' });
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
     await page.goto('/explore?mode=by-category');
     await expect(page.getByRole('tab', { name: 'By category' })).toHaveAttribute('aria-selected', 'true');
     const mainCard = page.getByText('What changed', { exact: true }).locator('xpath=ancestor::div[contains(@class, "rounded-md")][1]');
     await expect(mainCard).toBeVisible();
-    await expect(page.getByText(/Select a bar/)).toHaveCount(0);
+    await expect(page.getByText('Where it went')).toBeVisible();
     const before = (await mainCard.boundingBox())!;
-    const content = (await page.getByRole('tablist').locator('xpath=ancestor::div[contains(@class, "max-w-4xl")][1]').boundingBox())!;
-    expect(before.width).toBeGreaterThan(content.width - 80); // full width: no reserved column
 
     await mainCard.getByRole('button').first().click();
     const detail = page.getByRole('button', { name: 'Clear selection' }).locator('xpath=ancestor::div[contains(@class, "rounded-md")][1]');
@@ -79,7 +122,7 @@ test('mode tabs scroll within their own bounds on phone instead of overflowing t
   await mockAuthenticatedExplore(page);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/explore');
-  const tabList = page.getByRole('tablist');
+  const tabList = page.getByRole('tablist', { name: 'Explore patterns' });
   const listBox = (await tabList.boundingBox())!;
   expect(listBox.x + listBox.width).toBeLessThanOrEqual(390);
 

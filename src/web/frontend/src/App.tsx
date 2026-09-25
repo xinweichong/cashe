@@ -42,8 +42,9 @@ const EvidencePage = lazyRoute(() => import('@/pages/EvidencePage').then(m => m.
 const ReviewPage = lazyRoute(() => import('@/pages/ReviewPage').then(m => m.ReviewPage));
 const OverviewPage = lazyRoute(() => import('@/pages/OverviewPage').then(m => m.OverviewPage));
 const TransactionsPage = lazyRoute(() => import('@/pages/TransactionsPage').then(m => m.TransactionsPage));
-const AnalyticsPage = lazyRoute(() => import('@/pages/AnalyticsPage').then(m => m.AnalyticsPage));
 const ExplorePatternsPage = lazyRoute(() => import('@/pages/ExplorePatternsPage').then(m => m.ExplorePatternsPage));
+const ExploreSignalsPage = lazyRoute(() => import('@/pages/ExploreDetailPages').then(m => m.ExploreSignalsPage));
+const ExploreHealthPage = lazyRoute(() => import('@/pages/ExploreDetailPages').then(m => m.ExploreHealthPage));
 const SettingsPage = lazyRoute(() => import('@/pages/SettingsPage').then(m => m.SettingsPage));
 const MerchantsPage = lazyRoute(() => import('@/pages/MerchantsPage').then(m => m.MerchantsPage));
 const FinancePage = lazyRoute(() => import('@/pages/FinancePage').then(m => m.FinancePage));
@@ -71,14 +72,15 @@ const ROUTE_PRELOADS: [RegExp, Array<{ preload: () => Promise<void> }>][] = [
   [/^\/(activity|transactions)(\/|$)/, [TransactionsPage]],
   [/^\/plan\/manage(\/|$)/, [FinancePage]],
   [/^\/plan\/?$/, [PlanPage]],
-  [/^\/explore\/insights(\/|$)/, [AnalyticsPage]],
   [/^\/explore\/merchants(\/|$)/, [MerchantsPage]],
   [/^\/explore\/?$/, [ExplorePatternsPage]],
+  [/^\/explore\/signals\/?$/, [ExploreSignalsPage]],
+  [/^\/explore\/health\/?$/, [ExploreHealthPage]],
   [/^\/evidence(\/|$)/, [EvidencePage]],
   [/^\/review(\/|$)/, [ReviewPage]],
   [/^\/settings(\/|$)/, [SettingsPage]],
   [/^\/overview(\/|$)/, [OverviewPage]],
-  [/^\/analytics(\/|$)/, [AnalyticsPage]],
+  [/^\/analytics(\/|$)/, [ExplorePatternsPage]],
   [/^\/merchants(\/|$)/, [MerchantsPage]],
   [/^\/finance(\/|$)/, [FinancePage]],
 ];
@@ -193,7 +195,9 @@ function AppContent() {
           <Route path="plan/manage" element={<FinancePage />} />
           <Route path="explore" element={<ExplorePage />}>
             <Route index element={<ExplorePatternsPage />} />
-            <Route path="insights" element={<AnalyticsPage />} />
+            <Route path="insights" element={<LegacyRedirect from="/explore/insights" to="/explore" />} />
+            <Route path="signals" element={<ExploreSignalsPage />} />
+            <Route path="health" element={<ExploreHealthPage />} />
             <Route path="merchants" element={<MerchantsPage />} />
             <Route path="merchants/:merchantName" element={<MerchantsPage />} />
           </Route>

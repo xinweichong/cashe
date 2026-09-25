@@ -540,3 +540,177 @@ def spending_evidence(conn, start: date, end: date, *, timezone: str = DEFAULT_T
             "conversion_status": row["conversion_status"],
         })
     return {"items": items, "total": len(rows), "limit": limit, "offset": offset}
+
+
+def _history_rows(conn, end: date, timezone: str) -> list[dict]:
+    """Every dated, money-resolved expense/refund row up to `end`, for the
+    baselines behind unusual-spending and first-seen checks."""
+    return [row for row in _rows(conn, date.min, end, timezone)
+            if row["day"] is not None and row["day"] <= end]
+
+
+def _unusual(rows: list[dict], start: date, end: date, multiplier: float, excluded_ids: set[int]) -> list[dict]:
+    """A purchase in [start, end] above `multiplier` times the same
+    merchant's average purchase before `start`. Needs at least two prior
+    resolved purchases so a single earlier visit is not treated as typical."""
+    history: dict[str, list[int]] = {}
+    for row in rows:
+        if (row["day"] < start and row["type"] == "expense" and row["minor"] is not None
+                and row["merchant"] and row["id"] not in excluded_ids):
+            history.setdefault(row["merchant"], []).append(row["minor"])
+    found = []
+    for row in rows:
+        if not (start <= row["day"] <= end and row["type"] == "expense" and row["minor"] is not None and row["merchant"]):
+            continue
+        prior = history.get(row["merchant"], [])
+        if len(prior) < 2:
+            continue
+        typical = round(sum(prior) / len(prior))
+        if typical > 0 and row["minor"] > multiplier * typical:
+            found.append({
+                "transaction_id": row["id"], "merchant": row["merchant"], "category": row["category"],
+                "date": row["day"].isoformat(), "amount": money(row["minor"]), "typical": money(typical),
+                "ratio": round(row["minor"] / typical, 1),
+            })
+    found.sort(key=lambda item: (-item["ratio"], item["date"]))
+    return found
+
+
+def _excluded_ids(conn) -> set[int]:
+    return {row[0] for row in conn.execute("SELECT id FROM transactions WHERE excluded_from_baseline = 1")}
+
+
+def _new_merchants(rows: list[dict], start: date, end: date) -> list[dict]:
+    first: dict[str, dict] = {}
+    for row in rows:
+        if row["type"] != "expense" or not row["merchant"]:
+            continue
+        seen = first.get(row["merchant"])
+        if seen is None or (row["day"], row["id"]) < (seen["day"], seen["id"]):
+            first[row["merchant"]] = row
+    found = [
+        {"merchant": merchant, "first_date": row["day"].isoformat(), "category": row["category"],
+         "amount": money(row["minor"]) if row["minor"] is not None else None, "transaction_id": row["id"]}
+        for merchant, row in first.items() if start <= row["day"] <= end
+    ]
+    found.sort(key=lambda item: (item["first_date"], item["merchant"]), reverse=True)
+    return found
+
+
+def spending_signals(conn, as_of: date | None = None, timezone: str = DEFAULT_TIMEZONE,
+                     multiplier: float = 2.0) -> dict:
+    """Month-to-date purchases worth a second look: unusually large charges
+    for a merchant, and merchants recorded for the first time. Same
+    conversion rules as every other shared fact; unresolved amounts are
+    never compared."""
+    as_of = as_of or local_now(timezone).date()
+    start = as_of.replace(day=1)
+    rows = _history_rows(conn, as_of, timezone)
+    return {
+        "start": start.isoformat(), "end": as_of.isoformat(), "multiplier": multiplier,
+        "unusual": _unusual(rows, start, as_of, multiplier, _excluded_ids(conn)),
+        "new_merchants": _new_merchants(rows, start, as_of),
+    }
+
+
+def monthly_flows(conn, months: int = 6, as_of: date | None = None, timezone: str = DEFAULT_TIMEZONE) -> list[dict]:
+    """Spending and income per calendar month, oldest first; the current
+    month runs to `as_of`. Income stays absent (None) for a month with no
+    income records rather than a fabricated zero."""
+    if not 1 <= months <= 36:
+        raise ValueError("months must be between 1 and 36")
+    as_of = as_of or local_now(timezone).date()
+    starts = []
+    year, month = as_of.year, as_of.month
+    for _ in range(months):
+        starts.append(date(year, month, 1))
+        year, month = (year - 1, 12) if month == 1 else (year, month - 1)
+    starts.reverse()
+    rows = _rows(conn, starts[0], as_of, timezone)
+    result = []
+    for start in starts:
+        end = min(as_of, start.replace(day=calendar.monthrange(start.year, start.month)[1]))
+        period = _period(rows, start, end)
+        del period["categories"]
+        result.append({"month": start.strftime("%Y-%m"), **period})
+    return result
+
+
+_GRADES = ((80, "Excellent"), (60, "Good"), (40, "Fair"))
+
+
+def health_score(conn, months: int = 1, as_of: date | None = None, timezone: str = DEFAULT_TIMEZONE,
+                 multiplier: float = 2.0) -> dict:
+    """0-100 financial health score on the 50/30/20 rule, over the last
+    `months` calendar months to date:
+
+      savings_rate      40  min(savings_rate / 0.20, 1) x 40
+      needs_ratio       20  max(0, 1 - (needs_ratio - 0.50) / 0.50) x 20
+      wants_ratio       20  max(0, 1 - (wants_ratio - 0.30) / 0.30) x 20
+      budget_adherence  10  budgets within limit / budgets x 10
+      anomaly_frequency 10  max(0, 1 - unusual purchases / 5) x 10
+
+    Built on the same rows, conversion and refund netting as the other
+    shared facts. Unresolved amounts are left out of every ratio and the
+    result is marked partial, never guessed."""
+    if not 1 <= months <= 12:
+        raise ValueError("months must be between 1 and 12")
+    as_of = as_of or local_now(timezone).date()
+    year, month = as_of.year, as_of.month - (months - 1)
+    while month <= 0:
+        month += 12
+        year -= 1
+    start = date(year, month, 1)
+    rows = _history_rows(conn, as_of, timezone)
+    period = _period(rows, start, as_of)
+    income = period["income"]["minor_units"] if period["income"] else 0
+    base = {"period": as_of.strftime("%Y-%m"), "start": start.isoformat(), "end": as_of.isoformat(),
+            "status": period["status"], "unresolved_count": period["unresolved_count"],
+            "income": period["income"], "spending": period["spending"]}
+    if income <= 0:
+        return {**base, "has_income_data": False, "score": None, "grade": None, "components": {}}
+
+    category_types = {row[0]: row[1] for row in conn.execute("SELECT name, type FROM categories")}
+    by_type = {"needs": 0, "wants": 0}
+    for category, amount in period["categories"].items():
+        kind = category_types.get(category) or "neutral"
+        if kind in by_type:
+            by_type[kind] += amount
+    spending = period["spending"]["minor_units"]
+    savings_rate = (income - spending) / income
+    needs_ratio = by_type["needs"] / income
+    wants_ratio = by_type["wants"] / income
+    savings_score = round(min(max(savings_rate, 0.0) / 0.20, 1.0) * 40, 1)
+    needs_score = round(max(0.0, 1.0 - max(0.0, needs_ratio - 0.50) / 0.50) * 20, 1)
+    wants_score = round(max(0.0, 1.0 - max(0.0, wants_ratio - 0.30) / 0.30) * 20, 1)
+
+    budgets = conn.execute("SELECT category, period, amount FROM budgets").fetchall()
+    within = 0
+    for category, budget_period, amount in budgets:
+        budget_start = as_of.replace(day=1) if budget_period == "monthly" else as_of - timedelta(days=as_of.weekday())
+        spent = sum(_signed(row) for row in _spending_rows(rows, budget_start, as_of)
+                    if category is None or row["category"] == category)
+        within += Decimal(spent) <= Decimal(str(amount)) * 100
+    budget_value = round(within / len(budgets), 2) if budgets else 0.0
+    budget_score = round(within / len(budgets) * 10, 1) if budgets else 0.0
+
+    unusual = _unusual(rows, start, as_of, multiplier, _excluded_ids(conn))
+    anomaly_score = round(max(0.0, 1.0 - len(unusual) / 5.0) * 10, 1)
+
+    total = round(savings_score + needs_score + wants_score + budget_score + anomaly_score)
+    grade = next((label for floor, label in _GRADES if total >= floor), "Needs Attention")
+    return {
+        **base, "has_income_data": True, "score": total, "grade": grade,
+        "components": {
+            "savings_rate": {"score": savings_score, "max": 40, "value": round(savings_rate, 3), "benchmark": 0.20,
+                             "label": "Savings Rate", "description": "Income left after all spending"},
+            "needs_ratio": {"score": needs_score, "max": 20, "value": round(needs_ratio, 3), "benchmark": 0.50,
+                            "label": "Needs Ratio", "description": "Essentials: transport, groceries, bills"},
+            "wants_ratio": {"score": wants_score, "max": 20, "value": round(wants_ratio, 3), "benchmark": 0.30,
+                            "label": "Wants Ratio", "description": "Extras: dining, entertainment, shopping"},
+            "budget_adherence": {"score": budget_score, "max": 10, "value": budget_value,
+                                 "label": "Budget Adherence", "description": "Budgets within their limit this period"},
+            "anomaly_frequency": {"score": anomaly_score, "max": 10, "value": len(unusual),
+                                  "label": "Unusual Purchases", "description": "Over twice your usual at that merchant"},
+        },
+    }

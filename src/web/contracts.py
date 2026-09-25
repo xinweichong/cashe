@@ -781,12 +781,10 @@ class SpendingAlerts(BaseModel):
     new_merchants: list[NewMerchant]
 
 
-# Typed wrapper over Storage.get_health_score. Every field here is a ratio
-# or a score, never Money — the underlying computation already reads
-# reporting_minor_units (R04-correct), so there's no currency-display
-# concern, just a shape to validate. `components` is a dict (not a fixed
-# five-field model) because it's genuinely `{}` when has_income_data is
-# False — the frontend never dereferences it in that case.
+# Typed wrapper over Storage.get_health_score (spending_facts.health_score).
+# `components` is a dict (not a fixed five-field model) because it's
+# genuinely `{}` when has_income_data is False. `status`/`unresolved_count`
+# say whether any amounts in the period were left out as unresolved.
 class HealthScoreComponent(BaseModel):
     score: float
     max: float
@@ -801,7 +799,43 @@ class HealthScore(BaseModel):
     grade: str | None
     has_income_data: bool
     period: str
+    start: str
+    end: str
+    status: Literal["complete", "indicative", "partial"]
+    unresolved_count: int
+    income: Money | None
+    spending: Money
     components: dict[str, HealthScoreComponent]
+
+
+class UnusualPurchase(BaseModel):
+    transaction_id: int
+    merchant: str
+    category: str
+    date: str
+    amount: Money
+    typical: Money
+    ratio: float
+
+
+class FirstSeenMerchant(BaseModel):
+    merchant: str
+    first_date: str
+    category: str
+    amount: Money | None
+    transaction_id: int
+
+
+class SpendingSignals(BaseModel):
+    start: str
+    end: str
+    multiplier: float
+    unusual: list[UnusualPurchase]
+    new_merchants: list[FirstSeenMerchant]
+
+
+class MonthlyFlow(SpendingPeriod):
+    month: str
 
 
 # Typed wrapper over Storage.get_balance, which delegates to

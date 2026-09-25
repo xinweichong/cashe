@@ -123,6 +123,20 @@ body {
 }
 
 @layer components {
+  /* CardLink (components/ui/cards.tsx): whole-card navigation. The wrapped
+     card lifts on hover; plain cards also take the hover fill, glow cards
+     keep their own wash. */
+  .card-link > :first-child {
+    transition: transform 150ms ease-out, box-shadow 150ms ease-out, background-color 150ms ease-out;
+  }
+  .card-link:hover > :first-child {
+    transform: translateY(-1px);
+    box-shadow: 0 0 0 1px var(--color-border), 0 2px 6px rgb(0 0 0 / 0.3);
+  }
+  .card-link:hover > .bg-card:not([class*="hero-glow"]) {
+    background-color: var(--color-card-hover);
+  }
+
   /* Shared text-field contract (§7.2/§15); components/ui/input.tsx wraps it.
      16px on phones avoids iOS Safari's zoom-on-focus for smaller text. */
   .input-field {
@@ -191,7 +205,6 @@ body {
   .area-left    { grid-area: left;    }
   .area-right   { grid-area: right;   }
   .area-top     { grid-area: top;     }
-  .area-insight { grid-area: insight; }
 
   /* Per-page grid templates -------------------------------------------------- */
 
@@ -207,23 +220,6 @@ body {
       grid-template-areas: "header header" "left right";
       grid-template-columns: 1fr 1.2fr;
       grid-template-rows: auto 1fr;
-    }
-  }
-
-  /* Analytics: header | insight (full-width) | left=health+alerts | right=charts */
-  .page-grid-analytics {
-    grid-template-areas: "header" "insight" "left" "right";
-    grid-template-columns: 1fr;
-    grid-template-rows: auto auto auto auto;
-  }
-  @media (min-width: 768px) {
-    .page-grid-analytics {
-      grid-template-areas:
-        "header  header"
-        "insight insight"
-        "left    right";
-      grid-template-columns: 1fr 1fr;
-      grid-template-rows: auto auto 1fr;
     }
   }
 
@@ -406,12 +402,6 @@ body {
 }
 
 /* Home and Explore scroll naturally; Activity keeps its list/detail panels. */
-.explore-page .page-grid-analytics {
-  height: auto;
-  overflow: visible;
-  display: block;
-}
-.explore-page .page-grid-analytics > * + * { margin-top: 1rem; }
 .explore-page .grid-scroll-panel { overflow: visible; }
 
 :root { color-scheme: dark; }
