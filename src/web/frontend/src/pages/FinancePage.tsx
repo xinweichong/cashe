@@ -10,7 +10,7 @@ import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
-import { cn, getBudgetTone, getGoalTone, getCategoryColor } from '@/lib/utils';
+import { cn, getBudgetTone, getGoalTone, getCategoryColor, formatCurrency, formatCurrencyWhole } from '@/lib/utils';
 import { springs, staggerContainerVariants, staggerItemVariants, slideInRightVariants } from '@/lib/motionPresets';
 import { Pencil, Trash2, X, Check, ChevronDown, ChevronUp, ChevronLeft, ChevronRight } from 'lucide-react';
 import { ActiveTripCard } from '@/components/trips/ActiveTripCard';
@@ -34,17 +34,17 @@ function SavingsOverviewCard() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 py-1">
         <div>
           <p className="text-xs font-semibold font-mono uppercase tracking-[0.22em] text-muted mb-0.5">Saved</p>
-          <p className="text-lg font-semibold text-success">${overview.savings.toFixed(0)}</p>
+          <p className="text-lg font-semibold text-success">{formatCurrencyWhole(overview.savings)}</p>
           <p className="text-xs text-muted font-mono">income − expenses</p>
         </div>
         <div>
           <p className="text-xs font-semibold font-mono uppercase tracking-[0.22em] text-muted mb-0.5">Toward Goals</p>
-          <p className="text-lg font-semibold text-teal">${overview.allocated_to_goals.toFixed(0)}</p>
+          <p className="text-lg font-semibold text-teal">{formatCurrencyWhole(overview.allocated_to_goals)}</p>
           <p className="text-xs text-muted font-mono">manually added</p>
         </div>
         <div>
           <p className="text-xs font-semibold font-mono uppercase tracking-[0.22em] text-muted mb-0.5">Unallocated</p>
-          <p className="text-lg font-semibold text-foreground">${overview.unallocated.toFixed(0)}</p>
+          <p className="text-lg font-semibold text-foreground">{formatCurrencyWhole(overview.unallocated)}</p>
           <p className="text-xs text-muted font-mono">free to allocate</p>
         </div>
       </div>
@@ -62,6 +62,7 @@ function BudgetRow({
   onEdit: (id: number, amount: number) => void;
 }) {
   const [editing, setEditing] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const budgetAmount = b.budget_amount.minor_units / 100;
   const spent = b.spent.minor_units / 100;
   const remaining = b.remaining.minor_units / 100;
@@ -100,7 +101,7 @@ function BudgetRow({
           ) : (
             <>
               <Button type="button" size="sm" variant="ghost" onClick={() => setEditing(true)}>Edit</Button>
-              <Button type="button" size="sm" variant="destructive" onClick={() => onDelete(b.id)}>Delete</Button>
+              <Button type="button" size="sm" variant="destructive" onClick={() => setConfirmDelete(true)}>Delete</Button>
             </>
           )}
         </div>
@@ -108,15 +109,27 @@ function BudgetRow({
       <ProgressBar percent={b.percent} label={`${b.label} budget used`} tone={toneName === 'warn' ? 'warm' : toneName} />
       <div className="flex justify-between text-xs text-muted font-mono">
         <span>
-          <span style={{ color }} className="font-medium">${spent.toFixed(2)}</span>
-          {' '}spent of ${budgetAmount.toFixed(2)}
+          <span style={{ color }} className="font-medium">{formatCurrency(spent)}</span>
+          {' '}spent of {formatCurrency(budgetAmount)}
         </span>
         <span>
           {b.status === 'over_budget'
-            ? `$${(spent - budgetAmount).toFixed(2)} over`
-            : `$${remaining.toFixed(2)} left · proj $${projected.toFixed(2)}`}
+            ? `${formatCurrency(spent - budgetAmount)} over`
+            : `${formatCurrency(remaining)} left · proj ${formatCurrency(projected)}`}
         </span>
       </div>
+      <Dialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete budget "{b.label}"?</DialogTitle>
+            <DialogDescription>This removes the budget limit for this category. Past spending isn't affected.</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setConfirmDelete(false)}>Cancel</Button>
+            <Button type="button" variant="destructive" onClick={() => { onDelete(b.id); setConfirmDelete(false); }}>Delete budget</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -416,11 +429,11 @@ function GoalCard({ g, onContribute, onEdit, onDelete }: {
             )}
           </div>
           <p className="text-sm text-foreground mt-1">
-            ${g.saved_amount.toFixed(0)} saved of ${g.target_amount.toFixed(0)}
+            {formatCurrencyWhole(g.saved_amount)} saved of {formatCurrencyWhole(g.target_amount)}
           </p>
           {g.monthly_rate != null && g.monthly_rate > 0 ? (
             <p className="text-xs text-muted font-mono mt-0.5">
-              ~${g.monthly_rate.toFixed(0)}/mo
+              ~{formatCurrencyWhole(g.monthly_rate)}/mo
               {g.months_to_target != null && ` · ${g.months_to_target.toFixed(0)} months to target`}
             </p>
           ) : g.contributions.length > 0 && (
@@ -441,7 +454,7 @@ function GoalCard({ g, onContribute, onEdit, onDelete }: {
                 return (
                   <div key={month} className="flex-1 flex flex-col items-center gap-0.5">
                     <div
-                      title={`${label}: $${total.toFixed(0)}`}
+                      title={`${label}: ${formatCurrencyWhole(total)}`}
                       className="w-full rounded-sm transition-colors"
                       style={{
                         height: `${h}px`,
@@ -521,7 +534,7 @@ function GoalCard({ g, onContribute, onEdit, onDelete }: {
                     {c.note && <span className="text-muted italic truncate max-w-28">{c.note}</span>}
                   </div>
                   <div className="flex items-center gap-1">
-                    <span className="font-medium text-foreground mr-1">${c.amount.toFixed(0)}</span>
+                    <span className="font-medium text-foreground mr-1">{formatCurrencyWhole(c.amount)}</span>
                     <Button variant="ghost" size="icon" onClick={() => startEditContrib(c)} aria-label="Edit contribution">
                       <Pencil className="w-3.5 h-3.5" />
                     </Button>
@@ -773,7 +786,7 @@ function RecurringSection() {
                 {r.frequency}
               </Badge>
               <span className="text-sm font-mono text-foreground shrink-0">
-                ~${r.avg_amount.toFixed(0)}/{r.frequency === 'weekly' ? 'wk' : r.frequency === 'biweekly' ? '2wk' : 'mo'}
+                ~{formatCurrencyWhole(r.avg_amount)}/{r.frequency === 'weekly' ? 'wk' : r.frequency === 'biweekly' ? '2wk' : 'mo'}
               </span>
               <span className="text-xs text-muted font-mono shrink-0 hidden sm:block">
                 {r.last_seen}
@@ -917,20 +930,20 @@ function TripRow({ trip }: { trip: Trip }) {
           <div className="mt-3 ml-9 space-y-3">
             {summary && (
               <p className="text-xs text-muted font-mono">
-                S${(summary.total.minor_units / 100).toFixed(2)} · {summary.transaction_count} transactions ·
-                S${(summary.daily_average.minor_units / 100).toFixed(2)}/day
+                {formatCurrency(summary.total.minor_units / 100)} · {summary.transaction_count} transactions ·
+                {formatCurrency(summary.daily_average.minor_units / 100)}/day
               </p>
             )}
             <div className="flex items-center justify-between">
               <p className="text-xs font-semibold font-mono uppercase tracking-[0.22em] text-muted">Transactions</p>
               {totalTxPages > 1 && (
                 <div className="flex items-center gap-1">
-                  <Button variant="ghost" size="icon" className="min-h-11 min-w-11" aria-label="Previous page"
+                  <Button variant="ghost" size="icon" aria-label="Previous page"
                     onClick={() => setTxPage((p) => Math.max(1, p - 1))} disabled={txPage === 1}>
                     <ChevronLeft className="h-4 w-4" />
                   </Button>
                   <span className="text-xs text-muted">{txPage}/{totalTxPages}</span>
-                  <Button variant="ghost" size="icon" className="min-h-11 min-w-11" aria-label="Next page"
+                  <Button variant="ghost" size="icon" aria-label="Next page"
                     onClick={() => setTxPage((p) => Math.min(totalTxPages, p + 1))} disabled={txPage === totalTxPages}>
                     <ChevronRight className="h-4 w-4" />
                   </Button>

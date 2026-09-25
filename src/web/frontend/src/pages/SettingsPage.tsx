@@ -400,6 +400,7 @@ export function SettingsPage() {
                           variant="ghost"
                           size="icon"
                           className="text-destructive shrink-0"
+                          aria-label="Remove session"
                           onClick={() => removeSession.mutate(s.token)}
                           disabled={removeSession.isPending}
                         >
@@ -636,11 +637,12 @@ export function SettingsPage() {
                           <span className="text-sm font-medium truncate">{cat.name}</span>
                         </div>
                         <div className="flex gap-1">
-                          <Button variant="ghost" size="icon" onClick={() => startEdit(cat)}>
+                          <Button variant="ghost" size="icon" aria-label={`Edit ${cat.name}`} onClick={() => startEdit(cat)}>
                             <Pencil className="w-3.5 h-3.5" />
                           </Button>
                           <Button
                             variant="ghost" size="icon" className="text-destructive"
+                            aria-label={`Delete ${cat.name}`}
                             onClick={() => handleDeleteCategory(cat.name)}
                             disabled={deleteCat.isPending}
                           >

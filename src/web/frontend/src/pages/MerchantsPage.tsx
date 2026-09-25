@@ -100,7 +100,7 @@ export function MerchantsPage() {
             />
             <StatCard
               label="Total Spend"
-              value={`$${merchants.reduce((sum, m) => sum + m.total.minor_units / 100, 0).toFixed(0)}`}
+              value={formatSGD(merchants.reduce((sum, m) => sum + m.total.minor_units / 100, 0))}
               color="warm"
             />
             {merchants.length > 0 && (

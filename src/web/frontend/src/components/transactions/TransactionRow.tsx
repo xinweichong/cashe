@@ -56,6 +56,7 @@ export function TransactionRow({
           variant="ghost"
           size="icon"
           className="shrink-0 text-destructive"
+          aria-label="Remove transaction"
           onClick={(e) => { e.stopPropagation(); onRemove(); }}
           disabled={removeDisabled}
         >

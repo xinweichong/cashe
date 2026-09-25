@@ -11,7 +11,7 @@ import { usePeriod, type Period } from '@/hooks/usePeriod';
 import { useSummaryV2, useTrendV2, useTrendByCategoryV2, useBalanceV2 } from '@/hooks/useCategories';
 import { useTransactions } from '@/hooks/useTransactions';
 import { api, type Transaction, type BudgetProgressV2, type GoalProgressV2 } from '@/api/client';
-import { formatCurrency, formatCurrencyWhole, formatDate, getCategoryColor, cn } from '@/lib/utils';
+import { formatCurrency, formatCurrencyWhole, formatDate, getCategoryColor, getGoalTone, cn } from '@/lib/utils';
 import { CategoryDonut } from '@/components/charts/CategoryDonut';
 import { TrendLine } from '@/components/charts/TrendLine';
 import { CategoryTrendLine } from '@/components/charts/CategoryTrendLine';
@@ -110,11 +110,7 @@ function HealthScoreCard() {
   }
 
   const score = data.score ?? 0;
-  const ringColor =
-    score >= 80 ? '#30D158' :
-    score >= 60 ? '#64D2FF' :
-    score >= 40 ? '#FFD60A' :
-    '#FF453A';
+  const ringColor = getGoalTone(score).color;
 
   const r = 22;
   const circ = 2 * Math.PI * r;
@@ -305,14 +301,14 @@ export function OverviewPage() {
         </div>
         <div className="flex flex-row items-center gap-2 flex-wrap shrink-0">
           <div className="flex items-center gap-1">
-            <Button variant="ghost" size="icon" onClick={goBack}>
+            <Button variant="ghost" size="icon" aria-label="Previous period" onClick={goBack}>
               <ChevronLeft className="h-4 w-4" />
             </Button>
             <Button variant="ghost" size="sm" onClick={goToToday} className="gap-1.5 text-sm">
               <CalendarDays className="h-3.5 w-3.5" />
               Today
             </Button>
-            <Button variant="ghost" size="icon" onClick={goForward}>
+            <Button variant="ghost" size="icon" aria-label="Next period" onClick={goForward}>
               <ChevronRight className="h-4 w-4" />
             </Button>
             <span className="text-sm text-muted min-w-[120px] text-center">{getRangeLabel(date, period)}</span>

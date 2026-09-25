@@ -12,7 +12,7 @@ import { VelocityRing } from '@/components/charts/VelocityRing';
 import { api } from '@/api/client';
 import type { LLMInsight } from '@/api/client';
 import { useQuery } from '@tanstack/react-query';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, getGoalTone } from '@/lib/utils';
 import { AlertTriangle, TrendingUp } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { springs } from '@/lib/motionPresets';
@@ -123,12 +123,7 @@ function HealthScoreBreakdown() {
 
   const score = data?.score ?? null;
   const isHighlighted = score != null && score >= 70;
-  const ringColor =
-    !score ? COLOR_TRACK :
-    score >= 80 ? '#30D158' :
-    score >= 60 ? '#64D2FF' :
-    score >= 40 ? '#FFD60A' :
-    '#FF453A';
+  const ringColor = !score ? COLOR_TRACK : getGoalTone(score).color;
 
   const r = 40;
   const circ = 2 * Math.PI * r;
@@ -190,11 +185,7 @@ function HealthScoreBreakdown() {
           const comp = data.components[key];
           if (!comp) return null;
           const pct = comp.score / comp.max;
-          const barColor =
-            pct >= 0.8  ? '#30D158' :
-            pct >= 0.5  ? '#64D2FF' :
-            pct >= 0.25 ? '#FFD60A' :
-            '#FF453A';
+          const barColor = getGoalTone(pct * 100).color;
 
           // Format the value label
           let valueLabel = '';

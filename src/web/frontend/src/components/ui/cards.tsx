@@ -16,7 +16,7 @@ export function PageCard({ title, action, children, className, contentClassName,
   return (
     <Card className={cn(className)}>
       <div className={cn('flex flex-row items-center justify-between p-4 gap-2', headerClassName)}>
-        <span className="min-w-0 text-base font-semibold text-foreground font-display">{title}</span>
+        <h2 className="min-w-0 text-base font-semibold text-foreground font-display">{title}</h2>
         {action && <div className="shrink-0 ml-2">{action}</div>}
       </div>
       <CardContent className={cn('p-4 pt-0', contentClassName)}>{children}</CardContent>
@@ -36,7 +36,7 @@ export function ChartCard({ title, action, children, className }: ChartCardProps
   return (
     <Card className={cn(className)}>
       <div className="flex flex-row items-center justify-between p-4 gap-2">
-        <span className="min-w-0 text-base font-semibold text-foreground font-display">{title}</span>
+        <h2 className="min-w-0 text-base font-semibold text-foreground font-display">{title}</h2>
         {action && <div className="shrink-0 ml-2">{action}</div>}
       </div>
       <CardContent className="p-0">{children}</CardContent>
@@ -68,9 +68,9 @@ export function HeroCard({ title, action, children, className, glowColor = 'warm
         <div className="hero-hairline" />
       </div>
       <div className="flex flex-row items-center justify-between gap-2 mb-3">
-        <span className="text-xs uppercase tracking-[0.22em] text-muted font-semibold font-mono">
+        <h2 className="text-xs uppercase tracking-[0.22em] text-muted font-semibold font-mono">
           {title}
-        </span>
+        </h2>
         {action && <div className="shrink-0">{action}</div>}
       </div>
       {children}
@@ -100,9 +100,9 @@ export function HighlightCard({ title, action, children, className }: HighlightC
   return (
     <div style={HIGHLIGHT_CARD_STYLE} className={cn(className)}>
       <div className="flex flex-row items-center justify-between gap-2 mb-3">
-        <span className="text-xs uppercase tracking-[0.22em] font-semibold font-mono" style={{ color: 'var(--color-teal)' }}>
+        <h2 className="text-xs uppercase tracking-[0.22em] font-semibold font-mono" style={{ color: 'var(--color-teal)' }}>
           {title}
-        </span>
+        </h2>
         {action && <div className="shrink-0">{action}</div>}
       </div>
       {children}
