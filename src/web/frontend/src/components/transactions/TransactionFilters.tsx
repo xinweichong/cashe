@@ -171,6 +171,7 @@ export function TransactionFilters({
               <button
                 key={opt.value}
                 type="button"
+                aria-pressed={type === opt.value}
                 onClick={() => onTypeChange(opt.value)}
                 className="px-3 py-1 rounded-full text-xs font-semibold font-mono uppercase tracking-[0.08em] transition-all duration-[150ms] whitespace-nowrap"
                 style={
@@ -184,6 +185,7 @@ export function TransactionFilters({
             ))}
             <button
               type="button"
+              aria-pressed={needsReview}
               onClick={() => onNeedsReviewChange(!needsReview)}
               className="px-3 py-1 rounded-full text-xs font-semibold font-mono uppercase tracking-[0.08em] transition-all duration-[150ms] whitespace-nowrap"
               style={
@@ -201,6 +203,7 @@ export function TransactionFilters({
           <div className="flex flex-wrap gap-1.5">
             <button
               type="button"
+              aria-pressed={category === 'all'}
               onClick={() => onCategoryChange('all')}
               className="px-3 py-1 rounded-full text-xs font-semibold font-mono uppercase tracking-[0.08em] transition-all duration-[150ms] whitespace-nowrap"
               style={
@@ -218,6 +221,7 @@ export function TransactionFilters({
                 <button
                   key={cat.name}
                   type="button"
+                  aria-pressed={isActive}
                   onClick={() => onCategoryChange(isActive ? 'all' : cat.name)}
                   className="px-3 py-1 rounded-full text-xs font-semibold font-mono uppercase tracking-[0.08em] transition-all duration-[150ms] whitespace-nowrap max-w-[20ch] truncate"
                   style={{
@@ -258,6 +262,7 @@ export function TransactionFilters({
               <button
                 key={q.label}
                 type="button"
+                aria-pressed={isActive}
                 onClick={() => { setStartDate(q.start); setEndDate(q.end); }}
                 className={`px-2.5 py-2 md:py-1 text-xs rounded-full border transition-colors ${
                   isActive
@@ -272,13 +277,9 @@ export function TransactionFilters({
         </div>
 
         <div className="flex justify-end">
-          <button
-            type="button"
-            onClick={handleExport}
-            className="px-3 py-1.5 text-xs border border-border rounded-md text-muted hover:text-foreground hover:border-foreground/40 transition-colors"
-          >
+          <Button type="button" variant="outline" size="sm" onClick={handleExport}>
             Export CSV
-          </button>
+          </Button>
         </div>
       </div>
     </div>

@@ -196,8 +196,10 @@ export function MerchantProfile({
             return (
               <button
                 key={tag}
+                type="button"
+                aria-pressed={active}
                 onClick={() => toggleTag(tag)}
-                className="cursor-pointer"
+                className="cursor-pointer rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <Badge
                   variant={active ? 'default' : 'outline'}

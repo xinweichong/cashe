@@ -139,8 +139,10 @@ export function MerchantsPage() {
             {ALL_TAGS.map((tag) => (
               <button
                 key={tag}
+                type="button"
+                aria-pressed={tagFilter === tag}
                 onClick={() => setTagFilter(tagFilter === tag ? '' : tag)}
-                className="focus:outline-none"
+                className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <Badge
                   variant="outline"

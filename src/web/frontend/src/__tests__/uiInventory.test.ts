@@ -15,7 +15,7 @@ const UI_OWNERS = /\/components\/ui\//;
 
 // file → reviewed native <button> count and the owner/approval that covers it
 const NATIVE_BUTTONS: Record<string, [number, string]> = {
-  'components/transactions/TransactionFilters.tsx': [6, 'U04 category/type filter pills (approval-gated)'],
+  'components/transactions/TransactionFilters.tsx': [5, 'U04 type/review/category/quick-date filter pills (approval-gated)'],
   'pages/SettingsPage.tsx': [4, 'U07 switch, U19 icon/colour pickers, override chip remove (approval-gated)'],
   'components/subscriptions/SubscriptionsSection.tsx': [3, 'U13 selectable subscription rows (approval-gated)'],
   'components/charts/CategoryDonut.tsx': [3, 'U13 legend rows (approval-gated)'],

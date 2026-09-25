@@ -403,6 +403,7 @@ function QuickCategoryPicker({ tx, categories }: { tx: Transaction; categories: 
               key={cat.name}
               type="button"
               disabled={updateTx.isPending}
+              aria-pressed={isActive}
               onClick={() => { if (!isActive) updateTx.mutate({ id: tx.id, data: { category: cat.name } }); }}
               className="px-3 py-1.5 min-h-11 rounded-full text-xs font-semibold font-mono uppercase tracking-[0.08em] transition-all duration-[150ms] whitespace-nowrap disabled:opacity-50"
               style={{
