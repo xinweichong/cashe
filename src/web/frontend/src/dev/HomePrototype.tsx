@@ -6,6 +6,8 @@ import { TrendLine } from '@/components/charts/TrendLine';
 import { CategoryDonut } from '@/components/charts/CategoryDonut';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
+import { SelectableRow } from '@/components/ui/selectable-row';
+import { StatusDot } from '@/components/ui/StatusDot';
 import { getCategoryColor, formatCurrency, formatDate } from '@/lib/utils';
 import {
   FIXTURE_TRANSACTIONS, FIXTURE_CATEGORIES, categoryTotals, dailyTotals, monthTotal,
@@ -80,7 +82,7 @@ export function HomePrototype() {
           {selectedCategory ? (
             <div className="space-y-3">
               <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full" style={{ background: getCategoryColor(selectedCategory) }} aria-hidden />
+                <StatusDot color={getCategoryColor(selectedCategory)} />
                 <span className="font-display text-lg font-semibold">{selectedCategory}</span>
               </div>
               <ul className="space-y-2">
@@ -117,17 +119,13 @@ export function HomePrototype() {
               <ul className="mt-4 space-y-1">
                 {evidenceItems.map((t) => (
                   <li key={t.id}>
-                    <button
-                      type="button"
-                      onClick={() => setEditingId(t.id)}
-                      className="flex w-full items-center justify-between gap-2 rounded-md px-2 py-2 min-h-11 text-left hover:bg-card-hover"
-                    >
+                    <SelectableRow onClick={() => setEditingId(t.id)} className="justify-between">
                       <span>
                         {t.merchant}
                         <span className="block text-xs text-muted">{formatDate(t.date)}</span>
                       </span>
                       <span className="font-mono tabular-nums">{formatCurrency(t.minorUnits / 100)}</span>
-                    </button>
+                    </SelectableRow>
                   </li>
                 ))}
               </ul>

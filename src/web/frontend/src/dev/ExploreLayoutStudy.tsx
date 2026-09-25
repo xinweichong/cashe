@@ -3,9 +3,12 @@ import { ArrowRight } from 'lucide-react';
 import { PageCard } from '@/components/ui/cards';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { SelectableRow } from '@/components/ui/selectable-row';
+import { StatusDot } from '@/components/ui/StatusDot';
 import { CategoryTrendLine } from '@/components/charts/CategoryTrendLine';
 import { CategoryChangeBars } from '@/components/charts/CategoryChangeBars';
-import { getCategoryColor, formatCurrency, cn } from '@/lib/utils';
+import { getCategoryColor, formatCurrency } from '@/lib/utils';
 import { OVER_TIME_TREND, CATEGORY_CHANGES, MERCHANT_RANKING, RECURRING_CHANGES } from './exploreFixtures';
 
 // Explore layout study (increment 2): spatial composition of "main visual +
@@ -93,13 +96,13 @@ export function ExploreLayoutStudy() {
           {selectedCategory ? (
             <div className="space-y-3">
               <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full" style={{ background: getCategoryColor(selectedCategory) }} aria-hidden />
+                <StatusDot color={getCategoryColor(selectedCategory)} />
                 <span className="text-sm font-medium">{selectedCategory}</span>
               </div>
               <p className="text-sm text-muted">Explanation and supporting facts for the selected item appear here, scoped to the same period as the main visual.</p>
-              <button type="button" className="text-sm text-teal min-h-11 inline-flex items-center gap-1">
+              <Button type="button" variant="link" size="sm" className="h-auto min-h-11 p-0">
                 View transactions <ArrowRight size={14} />
-              </button>
+              </Button>
             </div>
           ) : (
             <p className="text-sm text-muted">Select a bar or line to see its exact values and evidence here.</p>
@@ -122,18 +125,13 @@ function MerchantBars({
     <ul className="space-y-2" data-testid="merchant-bars">
       {data.map((d) => (
         <li key={d.merchant}>
-          <button
-            type="button"
-            onClick={() => onSelect(d.category)}
-            aria-pressed={selected === d.category}
-            className={cn('flex w-full items-center gap-2 min-h-11 px-2 py-1 rounded-md', selected === d.category ? 'bg-card-hover' : 'hover:bg-card-hover')}
-          >
+          <SelectableRow onClick={() => onSelect(d.category)} selected={selected === d.category}>
             <span className="w-28 shrink-0 text-sm text-left truncate">{d.merchant}</span>
             <span className="relative flex-1 h-3 bg-card-hover rounded-sm overflow-hidden">
               <span className="absolute inset-y-0 left-0 rounded-sm" style={{ background: getCategoryColor(d.category), width: `${(d.total / max) * 100}%` }} aria-hidden />
             </span>
             <span className="w-16 shrink-0 text-sm font-mono tabular-nums text-right">{formatCurrency(d.total)}</span>
-          </button>
+          </SelectableRow>
         </li>
       ))}
     </ul>

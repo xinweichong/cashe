@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { HeroCard, PageCard } from '@/components/ui/cards';
 import { Button } from '@/components/ui/button';
+import { StatusDot } from '@/components/ui/StatusDot';
 import { formatCurrency, formatShortDate, cn } from '@/lib/utils';
 import { PROJECTION, PENDING_CHARGES, MONTH_LABEL, MONTH_DAYS, MONTH_START_WEEKDAY } from './planFixtures';
 import { useIsDesktop } from '@/hooks/useIsDesktop';
@@ -45,9 +46,9 @@ export function PlanLayoutStudy() {
           />
         </div>
         <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-2xs font-mono uppercase tracking-[0.1em] text-muted">
-          <span><span className="inline-block w-2 h-2 rounded-full bg-teal mr-1" aria-hidden />Recorded {formatCurrency(PROJECTION.recorded)}</span>
-          <span><span className="inline-block w-2 h-2 rounded-full bg-honey mr-1" aria-hidden />Scheduled (est.) {formatCurrency(PROJECTION.committed)}</span>
-          <span><span className="inline-block w-2 h-2 rounded-full bg-tangerine mr-1" aria-hidden />Remaining (est.) {formatCurrency(PROJECTION.estimatedRemaining)}</span>
+          <span className="inline-flex items-center gap-1.5"><StatusDot tone="saved" />Recorded {formatCurrency(PROJECTION.recorded)}</span>
+          <span className="inline-flex items-center gap-1.5"><StatusDot tone="active" />Scheduled (est.) {formatCurrency(PROJECTION.committed)}</span>
+          <span className="inline-flex items-center gap-1.5"><StatusDot tone="notable" />Remaining (est.) {formatCurrency(PROJECTION.estimatedRemaining)}</span>
         </div>
 
         <div className="mt-6">
