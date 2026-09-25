@@ -1,10 +1,10 @@
 import { useId, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowRight, ChevronRight, Plus } from 'lucide-react';
+import { ArrowDown, ArrowRight, ArrowUp, ChevronRight, Plus } from 'lucide-react';
 import { briefingApi, evidenceLink, formatMoney } from '@/api/briefing';
 import { api } from '@/api/client';
-import { datesInRange, getCategoryColor } from '@/lib/utils';
+import { datesInRange, formatShortDate, getCategoryColor } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { StatusDot } from '@/components/ui/StatusDot';
@@ -14,6 +14,7 @@ import { StatCard } from '@/components/ui/StatCard';
 import { ActivityRowShell } from '@/components/ui/ActivityRowShell';
 import { LoadFailed } from '@/components/ui/LoadFailed';
 import { Skeleton } from '@/components/ui/skeleton';
+import { SelectableRow } from '@/components/ui/selectable-row';
 import { TrendLine } from '@/components/charts/TrendLine';
 import { CategoryDonut } from '@/components/charts/CategoryDonut';
 import { CategoryChangeBarRow } from '@/components/charts/CategoryChangeBars';
@@ -309,6 +310,7 @@ export function HomePage() {
         {label}<ChevronRight size={16} aria-hidden />
       </Link>
     );
+    const changeAbs = facts.change && formatMoney({ ...facts.change, minor_units: Math.abs(facts.change.minor_units) });
     const changes = facts.category_changes.slice(0, 3);
     const maxChange = Math.max(...changes.map((c) => Math.abs(c.change.minor_units)), 1);
     const lenses: Lens<HomeLens>[] = [
@@ -320,7 +322,18 @@ export function HomePage() {
             ? <MetricRow label={overTarget ? 'Over target' : 'Target left'} value={targetAbs} tone={overTarget ? 'coral' : 'teal'} sub={`of your ${formatMoney(spending_target.target)} monthly target`} href="/plan" />
             : <MetricRow label="Target" value="Not set" sub="Set one in Plan to track pace" href="/plan" />}
         </div>
-        <p className="mt-auto px-4 py-3 text-xs text-muted">Through {facts.as_of} · {facts.change ? `${formatMoney({ ...facts.change, minor_units: Math.abs(facts.change.minor_units) })} ${facts.change.minor_units >= 0 ? 'more' : 'less'} than the same days last month.` : 'No comparison while records need review.'}{refreshing && <span role="status"> Updating…</span>}</p>
+        <div className="divide-y divide-border border-t border-border">
+          <MetricRow label="Vs last month" value={facts.change ? <span className="inline-flex items-center gap-1">{facts.change.minor_units >= 0 ? <ArrowUp size={16} aria-label="more" /> : <ArrowDown size={16} aria-label="less" />}{changeAbs}</span> : '—'} tone={!facts.change ? undefined : facts.change.minor_units >= 0 ? 'coral' : 'teal'} sub={facts.change ? `${facts.previous.start}–${facts.previous.end}` : 'No comparison while records need review'} />
+          <SelectableRow onClick={() => openDrill('attention')} className="min-h-12 gap-3 rounded-none px-4 py-1.5">
+            <div className="min-w-0 flex-1">
+              <p className="text-2xs uppercase tracking-[0.22em] text-muted font-mono font-semibold">Capture</p>
+              <p className="text-xs text-muted truncate">{freshness.gmail_needs_reconnection ? 'Gmail needs reconnection' : freshness.gmail_connected ? `Gmail checked ${freshness.gmail_last_checked ?? 'recently'}` : 'Gmail not connected'}</p>
+            </div>
+            <StatusDot tone={attentionCount ? 'notable' : sourcesNeedCare ? 'warm' : 'calm'} label={attentionCount ? `${attentionCount} to check` : sourcesNeedCare ? 'Check sources' : 'Nothing to check'} />
+            <ChevronRight size={16} className="text-muted shrink-0" aria-hidden />
+          </SelectableRow>
+        </div>
+        {refreshing && <p role="status" className="px-4 py-2 text-xs text-muted">Updating…</p>}
       </div> },
       { value: 'trend', label: 'Trend', panel: <div className="p-3">
         {trendQuery.data ? <>
@@ -341,7 +354,8 @@ export function HomePage() {
       { value: 'soon', label: 'Soon', panel: <div className="flex h-full flex-col">
         <div className="flex-1 px-4 pt-3">
           <p className="text-sm"><span className="font-display text-lg font-bold tabular-nums">{formatMoney(upcoming_total)}</span> <span className="text-muted">due in the next 14 days</span></p>
-          {upcoming.slice(0, 3).map(item => <div key={item.id} className="flex justify-between gap-4 py-2.5 border-b border-border last:border-0 text-sm"><div className="min-w-0 truncate">{item.label}<p className="text-xs text-muted font-mono">{item.date}</p></div><span className="font-mono tabular-nums">{item.amount ? formatMoney(item.amount) : 'Unknown'}</span></div>)}
+          {!!upcoming_unknown_count && <p className="text-xs text-warning">Plus {upcoming_unknown_count} expected {upcoming_unknown_count === 1 ? 'charge' : 'charges'} with no amount yet.</p>}
+          {upcoming.slice(0, 3).map(item => <SelectableRow key={item.id} onClick={() => openDrill('soon')} className="min-h-12 justify-between gap-4 rounded-none border-b border-border px-0 last:border-0"><span className="min-w-0 truncate">{item.label}<span className="block text-xs text-muted font-mono">{formatShortDate(item.date)}</span></span><span className="font-mono tabular-nums">{item.amount ? formatMoney(item.amount) : 'Unknown'}</span></SelectableRow>)}
           {!upcoming.length && <p className="mt-2 text-sm text-muted">No pending charges are recorded for these dates.</p>}
         </div>
         {upcoming.length > 3 || upcoming_unknown_count || increased_commitments.length
@@ -369,11 +383,11 @@ export function HomePage() {
     ];
     const glance = (
       <HeroCard
-        title="Where it went"
+        title={`${formatShortDate(facts.current.start).split(' ')[0]}–${formatShortDate(facts.as_of)}`}
         className="p-4"
         glowColor={overTarget ? 'coral' : 'warm'}
         action={<div className="flex items-center gap-1">
-          <Button type="button" variant="ghost" size="sm" className="gap-1.5 px-2" onClick={() => openDrill('attention')}>
+          <Button type="button" variant="ghost" size="lg" className="gap-1.5 px-2" onClick={() => openDrill('attention')}>
             <StatusDot tone={attentionCount ? 'notable' : sourcesNeedCare ? 'warm' : 'calm'} />
             {attentionCount ? `${attentionCount} to check` : sourcesNeedCare ? 'Sources' : 'Captured'}
           </Button>
@@ -386,7 +400,10 @@ export function HomePage() {
           <Link to={withReturn(evidenceLink(facts.current))} aria-label={`See all spending, ${formatMoney(facts.current.spending)}`} className="rounded-sm active:scale-[0.98] transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
             <HeroAmount value={facts.current.spending} className="text-4xl" />
           </Link>
-          {changeBadges}
+          {facts.change && <Badge tone={facts.change.minor_units >= 0 ? 'warm' : 'calm'} className="font-mono gap-1">
+            {facts.change.minor_units >= 0 ? <ArrowUp size={12} aria-label="up" /> : <ArrowDown size={12} aria-label="down" />}{changeAbs}
+          </Badge>}
+          {spending_target && <Badge tone={overTarget ? 'warm' : 'saved'} className="font-mono">{overTarget ? 'over target' : 'under target'}</Badge>}
         </div>
         {facts.current.status !== 'complete' && <p className="mt-1 text-xs text-muted">{facts.current.status === 'partial' ? 'Known subtotal · some records need review.' : 'Includes indicative currency conversions.'}</p>}
         {query.isError && <p role="alert" className="mt-1 text-xs text-warning">Couldn’t refresh. <Button type="button" variant="link" size="sm" className="h-auto min-h-11 p-0 align-baseline" onClick={() => void query.refetch()}>Retry</Button></p>}
@@ -409,11 +426,41 @@ export function HomePage() {
           onOpenChange={(open) => !open && closeDrill()}
           backLabel="Home"
           title={<span className="inline-flex items-center gap-2">{selectedCategory && <StatusDot color={getCategoryColor(selectedCategory)} />}{selectedCategory}</span>}
-          description={categoryTotal !== undefined && `${formatMoney({ ...facts.current.spending, minor_units: Math.round(categoryTotal * 100) })} of ${formatMoney(facts.current.spending)} this month`}
           footer={selectedCategory && <Button asChild className="w-full min-h-12"><Link to={withReturn(evidenceLink(facts.current, selectedCategory))}>View {selectedCategory} transactions</Link></Button>}
         >
-          <h3 className="mb-2 text-2xs uppercase tracking-[0.22em] text-muted font-mono font-semibold">Top merchants</h3>
-          {merchantList}
+          {selectedCategory && categoryTotal !== undefined && (() => {
+            const spendingTotal = facts.current.spending.minor_units / 100;
+            const share = spendingTotal > 0 ? Math.round((categoryTotal / spendingTotal) * 100) : 0;
+            const change = facts.category_changes.find((c) => c.category === selectedCategory)?.change;
+            const merchants = merchantsQuery.data ?? [];
+            const top = Math.max(...merchants.map((m) => m.total.minor_units), 1);
+            const color = getCategoryColor(selectedCategory);
+            return <>
+              <HeroAmount value={{ ...facts.current.spending, minor_units: Math.round(categoryTotal * 100) }} className="text-5xl" />
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-muted">
+                <span>{share}% of {formatMoney(facts.current.spending)}</span>
+                {change && <Badge tone={change.minor_units >= 0 ? 'warm' : 'calm'} className="font-mono gap-1">
+                  {change.minor_units >= 0 ? <ArrowUp size={12} aria-label="up" /> : <ArrowDown size={12} aria-label="down" />}{formatMoney({ ...change, minor_units: Math.abs(change.minor_units) })} vs last month
+                </Badge>}
+              </div>
+              <div className="mt-4 h-2 rounded-full bg-foreground/10 overflow-hidden" aria-hidden>
+                <div className="h-full rounded-full" style={{ width: `${share}%`, background: color }} />
+              </div>
+              <h3 className="mt-8 mb-1 text-2xs uppercase tracking-[0.22em] text-muted font-mono font-semibold">Where in {selectedCategory}</h3>
+              {merchantsQuery.data && merchants.length ? (
+                <ul className="divide-y divide-border">
+                  {merchants.map((m) => (
+                    <li key={m.merchant}>
+                      <Link to={withReturn(evidenceLink(facts.current, selectedCategory, 'spending', m.merchant))} className="flex min-h-14 flex-col justify-center gap-1.5 py-2 active:bg-foreground/5">
+                        <span className="flex justify-between text-sm"><span className="truncate">{m.merchant}</span><span className="font-mono tabular-nums">{formatMoney(m.total)}</span></span>
+                        <span className="h-1.5 rounded-full" style={{ width: `${Math.max(4, (m.total.minor_units / top) * 100)}%`, background: `color-mix(in srgb, ${color} 70%, transparent)` }} aria-hidden />
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              ) : merchantList}
+            </>;
+          })()}
         </DrillSheet>
         <DrillSheet open={drill === 'changed'} onOpenChange={(open) => !open && closeDrill()} backLabel="Home" title="What changed" description={`${facts.comparison_current.start}–${facts.comparison_current.end} against ${facts.previous.start}–${facts.previous.end}`}>
           {renderChanged(true)}

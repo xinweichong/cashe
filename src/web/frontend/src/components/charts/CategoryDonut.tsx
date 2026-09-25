@@ -145,7 +145,7 @@ export function CategoryDonut({ data, selected, onSelect, onViewTransactions, sh
                   onClick={() => handleSelect(item.category)}
                   selected={isSelected}
                   aria-expanded={isRemaining ? remainingExpanded : undefined}
-                  className={compact ? 'min-h-10 px-2 py-1.5' : undefined}
+                  className={compact ? 'px-2 py-1.5' : undefined}
                 >
                   <span
                     className="w-1.5 h-1.5 rounded-full shrink-0"

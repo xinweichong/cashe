@@ -47,7 +47,7 @@ for (const [name, size] of [['mobile', { width: 390, height: 844 }], ['mobile-se
     await page.goto('/');
     const lenses = page.getByRole('tablist', { name: 'Home views' });
     await expect(lenses).toBeVisible();
-    await expect(page.getByText('Where it went')).toBeVisible();
+    await expect(page.getByText(/^1–10 Sept$/)).toBeVisible();
     await page.waitForTimeout(1800);
     const { scroll, inner } = await page.evaluate(() => ({ scroll: document.documentElement.scrollHeight, inner: window.innerHeight }));
     expect(scroll).toBeLessThanOrEqual(inner);

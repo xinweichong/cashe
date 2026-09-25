@@ -27,7 +27,7 @@ OWN-WORLD: The Spectrum Instrument unchanged. The new shared owners are PhoneScr
 
 STORY: The visitor sees the month's spend, its change and the category mix at once. Lenses (Month, Trend, Changed, Soon, Recent) swap one panel in place. Any row, category or "more" opens a DrillSheet, and a back swipe returns to the glance.
 
-FIRST VIEWPORT: 390x844 phone. A slim header row (as-of date, attention pill, Add icon). A compact warm HeroCard (amount, badges, 112px donut beside a top-4 legend). The flex-1 lens panel. The LensBar just above BottomTabs. The lens is held in the URL (?lens=).
+FIRST VIEWPORT: 390x844 phone. A slim header row (as-of date, attention pill, Add icon). A compact warm HeroCard (amount, badges, 112px donut beside a top-4 legend). The flex-1 lens panel. The LensBar just above BottomTabs. The lens is held in the URL (?lens=). As built: the header row's attention pill and Add icon live in the HeroCard's action slot, and the period goes in the hero title ("1–10 Sept"), so the phone keeps AppShell's own top bar and gains no extra row. The legend shows the top 3 because 4 rows at 44px would outgrow the 112px ring and leave the lens panel under 200px on a 667px phone.
 
 FORM: "Glance + thumb lenses", dealt structure #4 (THE ROLL), seed key 568c139f, locked by the user on the decision page, code-led. Signature interaction: the lens swap is an in-place crossfade and slide, and the DrillSheet uses an edge-drag back.
 
