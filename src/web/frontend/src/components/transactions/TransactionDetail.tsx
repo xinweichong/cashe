@@ -11,6 +11,7 @@ import { ChoiceChip } from '@/components/ui/choice-chip';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { CategoryAvatar } from '@/components/ui/CategoryAvatar';
+import { SelectableRow } from '@/components/ui/selectable-row';
 import {
   Select,
   SelectContent,
@@ -472,15 +473,15 @@ function RefundEvidenceSection({ tx }: { tx: Transaction }) {
                 {purchaseCandidates.length === 0 ? (
                   <p className="text-xs text-muted py-1">No matching purchases.</p>
                 ) : purchaseCandidates.map((c) => (
-                  <button
+                  <SelectableRow
                     key={c.id}
                     onClick={() => link(c.id)}
                     disabled={updateTx.isPending}
-                    className="w-full text-left text-xs bg-background hover:bg-foreground/5 rounded-md border border-border p-2 transition-colors"
+                    className="flex-col items-start gap-0 border border-border text-xs"
                   >
                     <span className="text-foreground">{c.merchant ?? 'Unknown merchant'} — {formatCurrency(c.amount, c.currency)}</span>
-                    <span className="text-muted block">{formatDateTime(c.transaction_date)}</span>
-                  </button>
+                    <span className="text-muted">{formatDateTime(c.transaction_date)}</span>
+                  </SelectableRow>
                 ))}
               </div>
             )}

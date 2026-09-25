@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { useReducedMotion } from 'framer-motion';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
-import { getCategoryColor, formatCurrency, cn } from '@/lib/utils';
+import { getCategoryColor, formatCurrency } from '@/lib/utils';
+import { SelectableRow } from '@/components/ui/selectable-row';
+import { Button } from '@/components/ui/button';
 import { useChartTheme } from '@/lib/chartTheme';
 
 interface CategoryData {
@@ -123,15 +125,10 @@ export function CategoryDonut({ data, selected, onSelect, onViewTransactions, sh
             const isSelected = selected === item.category;
             return (
               <li key={item.category}>
-                <button
-                  type="button"
+                <SelectableRow
                   onClick={() => handleSelect(item.category)}
-                  aria-pressed={isRemaining ? undefined : isSelected}
+                  selected={isSelected}
                   aria-expanded={isRemaining ? remainingExpanded : undefined}
-                  className={cn(
-                    'flex w-full items-center gap-2 rounded-md px-2 py-2 min-h-11 text-left transition-colors',
-                    isSelected ? 'bg-card-hover' : 'hover:bg-card-hover'
-                  )}
                 >
                   <span
                     className="w-1.5 h-1.5 rounded-full shrink-0"
@@ -140,24 +137,16 @@ export function CategoryDonut({ data, selected, onSelect, onViewTransactions, sh
                   />
                   <span className="flex-1 min-w-0 truncate text-sm">{item.category}</span>
                   <span className="text-sm font-mono tabular-nums text-muted">{formatCurrency(item.total)}</span>
-                </button>
+                </SelectableRow>
                 {isRemaining && remainingExpanded && (
                   <ul className="pl-6 space-y-1 mt-1">
                     {rest.map((member) => (
                       <li key={member.category}>
-                        <button
-                          type="button"
-                          onClick={() => handleSelect(member.category)}
-                          aria-pressed={selected === member.category}
-                          className={cn(
-                            'flex w-full items-center gap-2 rounded-md px-2 py-2 min-h-11 text-left transition-colors',
-                            selected === member.category ? 'bg-card-hover' : 'hover:bg-card-hover'
-                          )}
-                        >
+                        <SelectableRow onClick={() => handleSelect(member.category)} selected={selected === member.category}>
                           <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: getCategoryColor(member.category) }} aria-hidden />
                           <span className="flex-1 min-w-0 truncate text-sm">{member.category}</span>
                           <span className="text-sm font-mono tabular-nums text-muted">{formatCurrency(member.total)}</span>
-                        </button>
+                        </SelectableRow>
                       </li>
                     ))}
                   </ul>
@@ -169,13 +158,9 @@ export function CategoryDonut({ data, selected, onSelect, onViewTransactions, sh
       )}
 
       {selectedDatum && onViewTransactions && (
-        <button
-          type="button"
-          onClick={() => onViewTransactions(selectedDatum.category)}
-          className="text-sm text-teal min-h-11 inline-flex items-center gap-1 self-start"
-        >
+        <Button type="button" variant="link" size="sm" className="h-auto min-h-11 self-start p-0" onClick={() => onViewTransactions(selectedDatum.category)}>
           View transactions
-        </button>
+        </Button>
       )}
     </div>
   );

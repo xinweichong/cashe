@@ -4,6 +4,7 @@ import { api, type Subscription } from '@/api/client';
 import { PageCard } from '@/components/ui/cards';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { SelectableRow } from '@/components/ui/selectable-row';
 import { StatusDot } from '@/components/ui/StatusDot';
 import { formatCurrency } from '@/lib/utils';
 import { useState } from 'react';
@@ -46,10 +47,10 @@ export function SubscriptionsSection({ selectedSubId, onSelectSub }: Subscriptio
         <PageCard title="Needs attention">
           <div className="space-y-3">
             {review!.price_changes.map((change) => (
-              <button
+              <SelectableRow
                 key={`price-${change.subscription_id}`}
                 onClick={() => onSelectSub(change.subscription_id)}
-                className="w-full text-left text-sm"
+                className="flex-col items-start gap-0.5"
               >
                 <p className="font-medium text-foreground">{change.label} price changed</p>
                 <p className="text-xs text-muted">
@@ -59,19 +60,19 @@ export function SubscriptionsSection({ selectedSubId, onSelectSub }: Subscriptio
                   {change.annualized_impact.minor_units >= 0 ? '+' : '−'}
                   {formatCurrency(Math.abs(change.annualized_impact.minor_units) / 100, change.annualized_impact.currency)}/year
                 </p>
-              </button>
+              </SelectableRow>
             ))}
             {review!.annual_renewals.map((renewal) => (
-              <button
+              <SelectableRow
                 key={`renewal-${renewal.subscription_id}`}
                 onClick={() => onSelectSub(renewal.subscription_id)}
-                className="w-full text-left text-sm"
+                className="flex-col items-start gap-0.5"
               >
                 <p className="font-medium text-foreground">{renewal.label} renews soon</p>
                 <p className="text-xs text-muted">
                   {renewal.renewal_date} · in {renewal.days_until_renewal} day{renewal.days_until_renewal === 1 ? '' : 's'}
                 </p>
-              </button>
+              </SelectableRow>
             ))}
           </div>
         </PageCard>
@@ -104,12 +105,11 @@ export function SubscriptionsSection({ selectedSubId, onSelectSub }: Subscriptio
         )}
         <div className="divide-y divide-border">
           {subs.map((sub) => (
-            <button
+            <SelectableRow
               key={sub.id}
               onClick={() => onSelectSub(sub.id)}
-              className={`w-full flex items-center justify-between py-3 text-left hover:bg-foreground/5 transition-colors -mx-4 px-4 ${
-                selectedSubId === sub.id ? 'bg-foreground/10' : ''
-              }`}
+              selected={selectedSubId === sub.id}
+              className="justify-between rounded-none"
             >
               <div className="flex flex-col gap-0.5 min-w-0">
                 <span className="text-sm font-medium text-foreground truncate">
@@ -142,7 +142,7 @@ export function SubscriptionsSection({ selectedSubId, onSelectSub }: Subscriptio
               <span className="text-sm tabular-nums text-foreground shrink-0 ml-2">
                 {sub.last_amount != null ? `S$${sub.last_amount.toFixed(2)}` : '—'}
               </span>
-            </button>
+            </SelectableRow>
           ))}
           {subs.length === 0 && (
             <p className="text-sm text-muted py-4 text-center">No subscriptions yet</p>
