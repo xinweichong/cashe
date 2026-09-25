@@ -37,7 +37,7 @@ export interface SpendingFacts {
 }
 export interface EvidenceItem {
   id: number; merchant: string | null; category: string; type: string; date: string | null;
-  amount: Money | null; conversion_status: 'native' | 'indicative' | 'unresolved';
+  amount: Money | null; conversion_status: 'native' | 'resolved' | 'indicative' | 'unresolved';
 }
 export interface SpendingTarget { target: Money; remaining: Money }
 export interface HomeBriefing {

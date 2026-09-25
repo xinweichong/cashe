@@ -455,6 +455,20 @@ async def test_spending_facts_evidence_omits_internal_columns(authed_client, in_
 
 
 @pytest.mark.asyncio
+async def test_spending_evidence_accepts_resolved_conversion(authed_client, in_memory_db):
+    # Foreign transactions converted at a live API rate are stored as 'resolved'.
+    storage = Storage(in_memory_db)
+    tx_id = storage.insert_transaction(source='manual', source_id='usd-live-rate', amount=10.0, currency='USD',
+                                       exchange_rate=1.35, transaction_date='2026-09-05T12:00:00')
+    in_memory_db.execute("UPDATE transactions SET conversion_status='resolved', reporting_minor_units=1350 WHERE id=?",
+                         (tx_id,))
+    response = await authed_client.get('/api/v2/spending/evidence?start=2026-09-01&end=2026-09-06')
+    assert response.status_code == 200
+    assert response.json()['items'][0]['conversion_status'] == 'resolved'
+    assert response.json()['items'][0]['amount'] == {'minor_units': 1350, 'currency': 'SGD'}
+
+
+@pytest.mark.asyncio
 async def test_weekly_spending_api_auth_validation_and_periods(client, authed_client):
     assert (await client.get('/api/v2/spending/week')).status_code == 401
     assert (await authed_client.get('/api/v2/spending/week?as_of=invalid')).status_code == 422

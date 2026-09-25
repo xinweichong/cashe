@@ -231,7 +231,7 @@ class SpendingEvidenceItem(BaseModel):
     type: str
     date: str | None
     amount: Money | None
-    conversion_status: Literal["native", "indicative", "unresolved"]
+    conversion_status: Literal["native", "resolved", "indicative", "unresolved"]
 
 
 class SpendingEvidence(BaseModel):
