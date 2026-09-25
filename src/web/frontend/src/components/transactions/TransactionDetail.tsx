@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { ChoiceChip } from '@/components/ui/choice-chip';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { CategoryAvatar } from '@/components/ui/CategoryAvatar';
 import {
   Select,
   SelectContent,
@@ -42,7 +43,6 @@ export function TransactionDetail({
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   const isAppleWallet = tx.source === 'apple_wallet';
-  const categoryColor = getCategoryColor(tx.category ?? '');
 
   const resetFields = useCallback(() => {
     setMerchant(tx.merchant ?? '');
@@ -126,12 +126,7 @@ export function TransactionDetail({
       {/* Header */}
       <div className="flex items-start justify-between p-4 border-b border-border">
         <div className="flex items-center gap-3 min-w-0">
-          <div
-            className="w-10 h-10 rounded-xl shrink-0 flex items-center justify-center text-lg"
-            style={{ backgroundColor: `${categoryColor}33` }}
-          >
-            {categoryIcon}
-          </div>
+          <CategoryAvatar category={tx.category} isIncome={tx.type === 'income'} size="detail" glyph={categoryIcon} />
           <div className="min-w-0">
             <p className="text-base font-semibold truncate">
               {tx.merchant || tx.description || 'Transaction'}

@@ -6,6 +6,7 @@ import { briefingApi, evidenceLink, formatMoney } from '@/api/briefing';
 import { api } from '@/api/client';
 import { getCategoryColor } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { StatusDot } from '@/components/ui/StatusDot';
 import { HeroCard, PageCard } from '@/components/ui/cards';
 import { HeroAmount } from '@/components/ui/HeroAmount';
 import { ActivityRowShell } from '@/components/ui/ActivityRowShell';
@@ -155,7 +156,7 @@ export function HomePage() {
               <div className="mt-6 pt-4 border-t border-border space-y-3">
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full" style={{ background: getCategoryColor(selectedCategory) }} aria-hidden />
+                    <StatusDot color={getCategoryColor(selectedCategory)} />
                     <span className="font-display text-lg font-semibold">{selectedCategory}</span>
                   </div>
                   <Button type="button" variant="ghost" size="sm" onClick={() => setSelectedCategory(null)}>Clear selection</Button>

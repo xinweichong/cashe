@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { briefingApi, formatMoney, type MonthForecast, type UpcomingPlan } from '@/api/briefing';
 import { HeroCard, PageCard } from '@/components/ui/cards';
 import { Button } from '@/components/ui/button';
+import { StatusDot } from '@/components/ui/StatusDot';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LoadFailed } from '@/components/ui/LoadFailed';
 import { useIsDesktop } from '@/hooks/useIsDesktop';
@@ -64,9 +65,9 @@ function ProjectionComposition({ data }: { data: MonthForecast }) {
         />
       </div>
       <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-2xs font-mono uppercase tracking-[0.1em] text-muted">
-        <span><span className="inline-block w-2 h-2 rounded-full bg-teal mr-1" aria-hidden />Recorded {formatMoney(data.recorded_actual)}</span>
-        <span><span className="inline-block w-2 h-2 rounded-full bg-honey mr-1" aria-hidden />Scheduled (est.) {formatMoney(data.confirmed_commitments)}</span>
-        <span><span className="inline-block w-2 h-2 rounded-full bg-tangerine mr-1" aria-hidden />Remaining (est.) {formatMoney(data.remaining_variable_estimate)}</span>
+        <span className="inline-flex items-center gap-1.5"><StatusDot tone="saved" />Recorded {formatMoney(data.recorded_actual)}</span>
+        <span className="inline-flex items-center gap-1.5"><StatusDot tone="active" />Scheduled (est.) {formatMoney(data.confirmed_commitments)}</span>
+        <span className="inline-flex items-center gap-1.5"><StatusDot tone="notable" />Remaining (est.) {formatMoney(data.remaining_variable_estimate)}</span>
       </div>
     </div>
   );

@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '@/api/client';
 import { briefingApi, evidenceLink, formatMoney, type Money } from '@/api/briefing';
 import { Button } from '@/components/ui/button';
+import { StatusDot } from '@/components/ui/StatusDot';
 import { ChoiceChip } from '@/components/ui/choice-chip';
 import { PageCard } from '@/components/ui/cards';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -80,7 +81,7 @@ function WhereDidTheIncreaseComeFrom() {
         >
           <div className="space-y-3">
             <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full shrink-0" style={{ background: getCategoryColor(selectedDriver.category) }} aria-hidden />
+              <StatusDot color={getCategoryColor(selectedDriver.category)} />
               <span className="text-sm font-medium">{formatMoney(selectedDriver.change)} change</span>
             </div>
             <div className="flex gap-6">
@@ -211,7 +212,7 @@ function WhichMerchantsAccountForMostOfThisCategory() {
     <PageCard title="Merchant ranking" action={!!categories?.length && categorySelect}>
       {effectiveCategory && (
         <p className="text-sm text-muted mb-3 flex items-center gap-2">
-          <span className="w-2 h-2 rounded-full shrink-0" style={{ background: getCategoryColor(effectiveCategory) }} aria-hidden />
+          <StatusDot color={getCategoryColor(effectiveCategory)} />
           Ranked by total this period in {effectiveCategory}.
         </p>
       )}

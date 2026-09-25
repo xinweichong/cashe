@@ -3,6 +3,10 @@ import { cn, getCategoryColor } from '@/lib/utils';
 interface CategoryAvatarProps {
   category: string | null | undefined;
   isIncome?: boolean;
+  /** "detail" is the 40px header size (approved P4/U09, 2026-09-25). */
+  size?: 'row' | 'detail';
+  /** Replaces the initial, e.g. the category's chosen icon in detail headers. */
+  glyph?: string;
   className?: string;
 }
 
@@ -12,15 +16,19 @@ interface CategoryAvatarProps {
  * shows the category name as visible adjacent text, so this is aria-hidden
  * rather than duplicating an accessible name.
  */
-export function CategoryAvatar({ category, isIncome = false, className }: CategoryAvatarProps) {
+export function CategoryAvatar({ category, isIncome = false, size = 'row', glyph, className }: CategoryAvatarProps) {
   const color = getCategoryColor(category ?? 'Other');
   return (
     <div
       aria-hidden
-      className={cn('w-8 h-8 rounded-md flex items-center justify-center text-sm font-bold shrink-0', className)}
+      className={cn(
+        'rounded-md flex items-center justify-center font-bold shrink-0',
+        size === 'detail' ? 'w-10 h-10 text-lg' : 'w-8 h-8 text-sm',
+        className,
+      )}
       style={{ background: `${color}33`, color }}
     >
-      {isIncome ? '+' : category?.charAt(0) ?? '·'}
+      {isIncome ? '+' : glyph ?? category?.charAt(0) ?? '·'}
     </div>
   );
 }

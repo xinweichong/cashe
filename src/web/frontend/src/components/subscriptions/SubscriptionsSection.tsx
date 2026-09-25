@@ -4,6 +4,7 @@ import { api, type Subscription } from '@/api/client';
 import { PageCard } from '@/components/ui/cards';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { StatusDot } from '@/components/ui/StatusDot';
 import { formatCurrency } from '@/lib/utils';
 import { useState } from 'react';
 import { SubscriptionForm } from './SubscriptionForm';
@@ -119,13 +120,13 @@ export function SubscriptionsSection({ selectedSubId, onSelectSub }: Subscriptio
                     {FREQUENCY_LABELS[sub.frequency]}
                   </Badge>
                   {sub.status === 'possibly_cancelled' && (
-                    <span className="text-xs text-warning">
-                      ⚠ Check
-                      {(() => {
+                    <StatusDot
+                      tone="active"
+                      label={`Check${(() => {
                         const overdue = review?.overdue.find((o) => o.subscription_id === sub.id);
                         return overdue ? ` · ${overdue.days_since_last_charge}d since last charge` : '';
-                      })()}
-                    </span>
+                      })()}`}
+                    />
                   )}
                   {sub.status === 'paused' && <span className="text-xs text-muted">Paused in Cashe</span>}
                   {sub.status === 'cancelled' && (
