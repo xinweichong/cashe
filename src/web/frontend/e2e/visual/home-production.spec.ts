@@ -25,25 +25,25 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
 
     const sectors = page.locator('.recharts-pie-sector');
     await expect(sectors.first()).toBeVisible();
-    await page.waitForTimeout(1000); // let the entrance sweep finish
-
     const container = page.locator('div.relative.w-full.max-w-\\[220px\\]').first();
     const containerBox = (await container.boundingBox())!;
 
     // A complete ring's sectors collectively span the chart's outer diameter
     // (outerRadius 85% of container/2, so ~85% of container height here). A
     // donut caught mid-sweep (or genuinely broken into a half-circle) would
-    // only cover roughly half that — 0.7 sits safely between the two.
-    const sectorCount = await sectors.count();
-    let unionTop = Infinity, unionBottom = -Infinity;
-    for (let i = 0; i < sectorCount; i++) {
-      const box = await sectors.nth(i).boundingBox();
-      if (!box) continue;
-      unionTop = Math.min(unionTop, box.y);
-      unionBottom = Math.max(unionBottom, box.y + box.height);
-    }
-    const sweptHeight = unionBottom - unionTop;
-    expect(sweptHeight).toBeGreaterThan(containerBox.height * 0.7);
+    // only cover roughly half that — 0.7 sits safely between the two. Poll
+    // rather than sleep: the entrance sweep runs on Recharts' own timer and
+    // takes longer when the suite loads the machine.
+    const sweptHeight = async () => {
+      let top = Infinity, bottom = -Infinity;
+      for (const box of await Promise.all((await sectors.all()).map((s) => s.boundingBox()))) {
+        if (!box) continue;
+        top = Math.min(top, box.y);
+        bottom = Math.max(bottom, box.y + box.height);
+      }
+      return bottom - top;
+    };
+    await expect.poll(sweptHeight, { timeout: 5000 }).toBeGreaterThan(containerBox.height * 0.7);
   });
 }
 
