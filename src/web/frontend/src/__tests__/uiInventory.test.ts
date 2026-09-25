@@ -15,16 +15,12 @@ const UI_OWNERS = /\/components\/ui\//;
 
 // file → reviewed native <button> count and the owner/approval that covers it
 const NATIVE_BUTTONS: Record<string, [number, string]> = {
-  'components/transactions/TransactionFilters.tsx': [5, 'U04 type/review/category/quick-date filter pills (approval-gated)'],
   'pages/SettingsPage.tsx': [3, 'U19 icon/colour pickers, override chip remove (approval-gated)'],
   'components/subscriptions/SubscriptionsSection.tsx': [3, 'U13 selectable subscription rows (approval-gated)'],
   'components/charts/CategoryDonut.tsx': [3, 'U13 legend rows (approval-gated)'],
   'pages/PlanPage.tsx': [2, 'U19 calendar and week-strip day cells (retained role)'],
-  'components/transactions/TransactionDetail.tsx': [2, 'U04 quick category pills, U13 purchase candidates (approval-gated)'],
+  'components/transactions/TransactionDetail.tsx': [1, 'U13 purchase candidates (approved SelectableRow, pending migration)'],
   'pages/OverviewPage.tsx': [1, 'period chips (classic, retained)'],
-  'pages/MerchantsPage.tsx': [1, 'U04 tag filter (approval-gated)'],
-  'pages/ExplorePatternsPage.tsx': [1, 'U04 category choice pills (approval-gated)'],
-  'components/merchants/MerchantProfile.tsx': [1, 'U04 tag toggles (approval-gated)'],
   'components/charts/CategoryChangeBars.tsx': [1, 'CategoryChangeBarRow owner (approved row)'],
 };
 

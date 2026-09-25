@@ -7,6 +7,7 @@ import { useUpdateTransaction, useDeleteTransaction, useTransactions } from '@/h
 import { useCategories } from '@/hooks/useCategories';
 import { useIconMap } from '@/hooks/useIconMap';
 import { Button } from '@/components/ui/button';
+import { ChoiceChip } from '@/components/ui/choice-chip';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -399,21 +400,15 @@ function QuickCategoryPicker({ tx, categories }: { tx: Transaction; categories: 
           const catColor = getCategoryColor(cat.name);
           const isActive = tx.category === cat.name;
           return (
-            <button
+            <ChoiceChip
               key={cat.name}
-              type="button"
+              selected={isActive}
+              categoryColor={catColor}
               disabled={updateTx.isPending}
-              aria-pressed={isActive}
               onClick={() => { if (!isActive) updateTx.mutate({ id: tx.id, data: { category: cat.name } }); }}
-              className="px-3 py-1.5 min-h-11 rounded-full text-xs font-semibold font-mono uppercase tracking-[0.08em] transition-all duration-[150ms] whitespace-nowrap disabled:opacity-50"
-              style={{
-                color: catColor,
-                background: isActive ? `${catColor}33` : `${catColor}12`,
-                border: `1px solid ${catColor}${isActive ? '60' : '25'}`,
-              }}
             >
               {cat.name}
-            </button>
+            </ChoiceChip>
           );
         })}
       </div>

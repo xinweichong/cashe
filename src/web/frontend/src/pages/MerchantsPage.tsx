@@ -5,13 +5,14 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { api, type MerchantSummaryV2 } from '@/api/client';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { ChoiceChip } from '@/components/ui/choice-chip';
 import { Skeleton } from '@/components/ui/skeleton';
 import { StatCard } from '@/components/ui/StatCard';
 import { MerchantProfile } from '@/components/merchants/MerchantProfile';
 import { slideInRightVariants } from '@/lib/motionPresets';
 import { Search } from 'lucide-react';
 import { LoadFailed } from '@/components/ui/LoadFailed';
-import { TAG_COLORS, ALL_TAGS, formatSGD } from '@/lib/merchants';
+import { ALL_TAGS, formatSGD } from '@/lib/merchants';
 import { SPECTRUM_PALETTE } from '@/lib/chartTheme';
 import { getCategoryColor } from '@/lib/utils';
 
@@ -137,24 +138,9 @@ export function MerchantsPage() {
             </select>
 
             {ALL_TAGS.map((tag) => (
-              <button
-                key={tag}
-                type="button"
-                aria-pressed={tagFilter === tag}
-                onClick={() => setTagFilter(tagFilter === tag ? '' : tag)}
-                className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <Badge
-                  variant="outline"
-                  className={`cursor-pointer transition-colors ${
-                    tagFilter === tag
-                      ? `${TAG_COLORS[tag]} border-current`
-                      : 'border-border text-muted hover:text-foreground'
-                  }`}
-                >
-                  {tag}
-                </Badge>
-              </button>
+              <ChoiceChip key={tag} selected={tagFilter === tag} onClick={() => setTagFilter(tagFilter === tag ? '' : tag)}>
+                {tag}
+              </ChoiceChip>
             ))}
           </div>
         </div>
@@ -238,11 +224,7 @@ export function MerchantsPage() {
                       <td className="px-4 py-3 hidden md:table-cell">
                         <div className="flex flex-wrap gap-1">
                           {(m.tags ?? []).map((tag) => (
-                            <Badge
-                              key={tag}
-                              variant="outline"
-                              className={`text-[10px] px-1.5 py-0 ${TAG_COLORS[tag] ?? 'text-muted'}`}
-                            >
+                            <Badge key={tag} variant="outline" className="text-muted">
                               {tag}
                             </Badge>
                           ))}

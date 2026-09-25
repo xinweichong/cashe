@@ -4,13 +4,14 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '@/api/client';
 import { briefingApi, evidenceLink, formatMoney, type Money } from '@/api/briefing';
 import { Button } from '@/components/ui/button';
+import { ChoiceChip } from '@/components/ui/choice-chip';
 import { PageCard } from '@/components/ui/cards';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LoadFailed } from '@/components/ui/LoadFailed';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CategoryChangeBars } from '@/components/charts/CategoryChangeBars';
 import { CategoryTrendLine } from '@/components/charts/CategoryTrendLine';
-import { getCategoryColor, cn } from '@/lib/utils';
+import { getCategoryColor } from '@/lib/utils';
 
 const WEEKDAY_LABELS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
@@ -151,20 +152,14 @@ function SpendingOverTime() {
       {!!categories?.length && (
         <div className="flex flex-wrap gap-2 mb-3" role="group" aria-label="Categories to chart">
           {categories.map((c) => (
-            <button
+            <ChoiceChip
               key={c.name}
-              type="button"
+              selected={selected.includes(c.name)}
+              categoryColor={getCategoryColor(c.name)}
               onClick={() => toggle(c.name)}
-              aria-pressed={selected.includes(c.name)}
-              className={cn(
-                'inline-flex items-center gap-1.5 min-h-9 px-2.5 rounded-pill text-sm border',
-                selected.includes(c.name) ? 'border-transparent text-foreground' : 'border-border text-muted hover:text-foreground'
-              )}
-              style={selected.includes(c.name) ? { background: `color-mix(in srgb, ${getCategoryColor(c.name)} 16%, transparent)` } : undefined}
             >
-              <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: getCategoryColor(c.name) }} aria-hidden />
               {c.name}
-            </button>
+            </ChoiceChip>
           ))}
         </div>
       )}

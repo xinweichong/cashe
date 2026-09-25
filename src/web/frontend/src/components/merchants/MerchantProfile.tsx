@@ -7,12 +7,13 @@ import { Link } from 'react-router-dom';
 import { api } from '@/api/client';
 import type { Transaction } from '@/api/client';
 import { Badge } from '@/components/ui/badge';
+import { ChoiceChip } from '@/components/ui/choice-chip';
 import { Button } from '@/components/ui/button';
 import { ChartCard } from '@/components/ui/cards';
 import { useChartTheme } from '@/lib/chartTheme';
 import { X } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
-import { TAG_COLORS, ALL_TAGS, formatSGD } from '@/lib/merchants';
+import { ALL_TAGS, formatSGD } from '@/lib/merchants';
 
 export function MerchantProfile({
   merchant,
@@ -194,24 +195,9 @@ export function MerchantProfile({
           {ALL_TAGS.map((tag) => {
             const active = (profile.tags ?? []).includes(tag);
             return (
-              <button
-                key={tag}
-                type="button"
-                aria-pressed={active}
-                onClick={() => toggleTag(tag)}
-                className="cursor-pointer rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <Badge
-                  variant={active ? 'default' : 'outline'}
-                  className={`transition-colors ${
-                    active
-                      ? TAG_COLORS[tag]
-                      : 'border-border text-muted hover:text-foreground'
-                  }`}
-                >
-                  {tag}
-                </Badge>
-              </button>
+              <ChoiceChip key={tag} selected={active} onClick={() => toggleTag(tag)}>
+                {tag}
+              </ChoiceChip>
             );
           })}
         </div>

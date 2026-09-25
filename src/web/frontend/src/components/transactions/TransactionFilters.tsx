@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { ChoiceChip } from '@/components/ui/choice-chip';
 import { Input } from '@/components/ui/input';
 import { Search, SlidersHorizontal, X } from 'lucide-react';
 import { cn, getCategoryColor } from '@/lib/utils';
@@ -168,70 +169,33 @@ export function TransactionFilters({
         <div className="overflow-x-auto">
           <div className="flex flex-wrap gap-1.5">
             {TYPE_OPTIONS.map((opt) => (
-              <button
-                key={opt.value}
-                type="button"
-                aria-pressed={type === opt.value}
-                onClick={() => onTypeChange(opt.value)}
-                className="px-3 py-1 rounded-full text-xs font-semibold font-mono uppercase tracking-[0.08em] transition-all duration-[150ms] whitespace-nowrap"
-                style={
-                  type === opt.value
-                    ? { color: 'var(--color-foreground)', background: 'var(--color-card-hover)', border: '1px solid var(--color-muted)' }
-                    : { color: 'var(--color-muted)', background: 'transparent', border: '1px solid var(--color-border)' }
-                }
-              >
+              <ChoiceChip key={opt.value} selected={type === opt.value} onClick={() => onTypeChange(opt.value)}>
                 {opt.label}
-              </button>
+              </ChoiceChip>
             ))}
-            <button
-              type="button"
-              aria-pressed={needsReview}
-              onClick={() => onNeedsReviewChange(!needsReview)}
-              className="px-3 py-1 rounded-full text-xs font-semibold font-mono uppercase tracking-[0.08em] transition-all duration-[150ms] whitespace-nowrap"
-              style={
-                needsReview
-                  ? { color: 'var(--color-warning, #FBBF24)', background: 'var(--color-warning, #FBBF24)22', border: '1px solid var(--color-warning, #FBBF24)60' }
-                  : { color: 'var(--color-muted)', background: 'transparent', border: '1px solid var(--color-border)' }
-              }
-            >
+            <ChoiceChip tone="warning" selected={needsReview} onSelectedChange={onNeedsReviewChange}>
               Needs review
-            </button>
+            </ChoiceChip>
           </div>
         </div>
 
         <div className="overflow-x-auto">
           <div className="flex flex-wrap gap-1.5">
-            <button
-              type="button"
-              aria-pressed={category === 'all'}
-              onClick={() => onCategoryChange('all')}
-              className="px-3 py-1 rounded-full text-xs font-semibold font-mono uppercase tracking-[0.08em] transition-all duration-[150ms] whitespace-nowrap"
-              style={
-                category === 'all'
-                  ? { color: 'var(--color-foreground)', background: 'var(--color-card-hover)', border: '1px solid var(--color-muted)' }
-                  : { color: 'var(--color-muted)', background: 'transparent', border: '1px solid var(--color-border)' }
-              }
-            >
+            <ChoiceChip selected={category === 'all'} onClick={() => onCategoryChange('all')}>
               All
-            </button>
+            </ChoiceChip>
             {categories.map((cat) => {
-              const catColor = getCategoryColor(cat.name);
               const isActive = category === cat.name;
               return (
-                <button
+                <ChoiceChip
                   key={cat.name}
-                  type="button"
-                  aria-pressed={isActive}
+                  selected={isActive}
+                  categoryColor={getCategoryColor(cat.name)}
+                  className="max-w-[20ch]"
                   onClick={() => onCategoryChange(isActive ? 'all' : cat.name)}
-                  className="px-3 py-1 rounded-full text-xs font-semibold font-mono uppercase tracking-[0.08em] transition-all duration-[150ms] whitespace-nowrap max-w-[20ch] truncate"
-                  style={{
-                    color: catColor,
-                    background: isActive ? `${catColor}33` : `${catColor}12`,
-                    border: `1px solid ${catColor}${isActive ? '60' : '25'}`,
-                  }}
                 >
-                  {cat.name}
-                </button>
+                  <span className="truncate">{cat.name}</span>
+                </ChoiceChip>
               );
             })}
           </div>
@@ -259,19 +223,9 @@ export function TransactionFilters({
           {quickSelects.map((q) => {
             const isActive = q.label !== 'All time' && startDate === q.start && endDate === q.end;
             return (
-              <button
-                key={q.label}
-                type="button"
-                aria-pressed={isActive}
-                onClick={() => { setStartDate(q.start); setEndDate(q.end); }}
-                className={`px-2.5 py-2 md:py-1 text-xs rounded-full border transition-colors ${
-                  isActive
-                    ? 'border-foreground text-foreground bg-foreground/10'
-                    : 'border-border text-muted hover:text-foreground'
-                }`}
-              >
+              <ChoiceChip key={q.label} selected={isActive} onClick={() => { setStartDate(q.start); setEndDate(q.end); }}>
                 {q.label}
-              </button>
+              </ChoiceChip>
             );
           })}
         </div>

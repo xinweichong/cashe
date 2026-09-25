@@ -54,3 +54,16 @@ test('closing a transaction detail returns focus to the row that opened it, keep
   await expect(page).toHaveURL(/\/activity\?category=Food$/);
   await expect(row).toBeFocused();
 });
+
+for (const theme of ['light', 'dark'] as const) {
+  test(`Activity filter chips use the shared ChoiceChip owner (${theme})`, async ({ page }) => {
+    await page.addInitScript((t) => window.localStorage.setItem('cashe-appearance', t), theme);
+    await mockAuthenticatedActivity(page);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/activity?category=Food');
+    const food = page.getByRole('button', { name: 'Food', pressed: true });
+    await expect(food).toBeVisible();
+    await expect(page.getByRole('button', { name: 'All', exact: true, pressed: false })).toBeVisible();
+    await page.locator('#transaction-filter-controls').screenshot({ path: `e2e/screenshots/activity-chips-${theme}.png` });
+  });
+}
