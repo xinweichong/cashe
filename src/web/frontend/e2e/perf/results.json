@@ -4,31 +4,31 @@
   "results": {
     "home": {
       "runs": 5,
-      "ready": 495,
-      "lcp": 428,
-      "tbt": 20,
-      "jsKB": 323
+      "ready": 585,
+      "lcp": 432,
+      "tbt": 87,
+      "jsKB": 328
     },
     "activity": {
       "runs": 5,
-      "ready": 448,
-      "lcp": 336,
-      "tbt": 30,
-      "jsKB": 209
+      "ready": 447,
+      "lcp": 324,
+      "tbt": 23,
+      "jsKB": 211
     },
     "explore": {
       "runs": 5,
-      "ready": 555,
-      "lcp": 340,
-      "tbt": 94,
-      "jsKB": 304
+      "ready": 582,
+      "lcp": 344,
+      "tbt": 107,
+      "jsKB": 310
     },
     "plan": {
       "runs": 5,
-      "ready": 408,
-      "lcp": 416,
-      "tbt": 11,
-      "jsKB": 197
+      "ready": 415,
+      "lcp": 400,
+      "tbt": 12,
+      "jsKB": 200
     }
   }
 }
