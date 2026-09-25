@@ -15,7 +15,7 @@ const UI_OWNERS = /\/components\/ui\//;
 
 // file → reviewed native <button> count and the owner/approval that covers it
 const NATIVE_BUTTONS: Record<string, [number, string]> = {
-  'pages/SettingsPage.tsx': [3, 'U19 icon/colour pickers, override chip remove (approval-gated)'],
+  'pages/SettingsPage.tsx': [1, 'learned-override chip remove control inside a tag (retained)'],
   'pages/PlanPage.tsx': [2, 'U19 calendar and week-strip day cells (retained role)'],
   'pages/OverviewPage.tsx': [1, 'period chips (classic, retained)'],
   'components/charts/CategoryChangeBars.tsx': [1, 'CategoryChangeBarRow owner (approved row)'],

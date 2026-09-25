@@ -3,6 +3,7 @@ import { useLocation } from 'react-router-dom';
 import { useQueryClient, useMutation, useQuery } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import { PageCard } from '@/components/ui/cards';
+import { CategoryColorPicker, CategoryIconPicker } from '@/components/categories/CategoryPickers';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';
@@ -26,19 +27,14 @@ import {
 import { useCurrentUser, useInvalidateCurrentUser } from '@/hooks/useCurrentUser';
 import { useAuth } from '@/hooks/useAuthContext';
 import { api, type Category, type SessionInfo } from '@/api/client';
-import { setCategoryColors, PALETTE, getCategoryColor } from '@/lib/utils';
-import { springs, staggerContainerVariants, staggerItemVariants } from '@/lib/motionPresets';
+import { setCategoryColors, getCategoryColor } from '@/lib/utils';
+import { staggerContainerVariants, staggerItemVariants } from '@/lib/motionPresets';
 import {
   Pencil, Trash2, Plus, X, ChevronDown,
   CheckCircle2, Wifi, WifiOff, AlertTriangle,
 } from 'lucide-react';
 import { TelegramStep, GmailStep, AppleWalletStep } from '@/components/onboarding/steps';
 
-const ICON_OPTIONS = [
-  '🍜', '🚗', '🛒', '📄', '🎬', '📌', '💰', '🏥', '✈️', '🎓',
-  '🏠', '💎', '🎮', '📱', '🏋️', '🎨', '🐾', '🎁', '☕', '🍕',
-  '👕', '💊', '🔧', '🎵', '📖', '🌺', '⚡', '🎪', '🌊', '🍀',
-];
 
 const CAT_TYPES = [
   { value: 'needs',   label: 'Needs'   },
@@ -602,18 +598,7 @@ export function SettingsPage() {
                     <div className="space-y-3">
                       <div className="shrink-0">
                         <label className="text-xs text-muted block mb-1">Icon</label>
-                        <div className="flex flex-wrap gap-1 max-w-[200px]">
-                          {ICON_OPTIONS.map((ic) => (
-                            <button
-                              key={ic}
-                              type="button"
-                              className={`w-7 h-7 rounded text-sm flex items-center justify-center border transition-colors ${editIcon === ic ? 'border-primary bg-primary/10' : 'border-transparent hover:bg-foreground/5'}`}
-                              onClick={() => setEditIcon(ic)}
-                            >
-                              {ic}
-                            </button>
-                          ))}
-                        </div>
+                        <CategoryIconPicker value={editIcon} onChange={setEditIcon} />
                       </div>
                       <div>
                         <label className="text-xs text-muted">Keywords (comma-separated)</label>
@@ -627,25 +612,11 @@ export function SettingsPage() {
                       </div>
                       <div>
                         <label className="text-xs text-muted">Color</label>
-                        <div className="flex flex-wrap gap-2 mt-1">
-                          {PALETTE.map((c) => {
-                            const taken = usedColors.includes(c.toLowerCase()) && (cat.color?.toLowerCase() !== c.toLowerCase());
-                            return (
-                              <motion.button
-                                key={c}
-                                type="button"
-                                disabled={taken}
-                                title={taken ? 'Already in use' : c}
-                                className={`w-7 h-7 rounded-full border-2 transition-colors ${editColor === c ? 'border-white' : 'border-transparent'} ${taken ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer'}`}
-                                style={{ backgroundColor: c }}
-                                onClick={() => setEditColor(c)}
-                                animate={{ scale: editColor === c ? 1.1 : 1 }}
-                                whileHover={taken ? {} : { scale: editColor === c ? 1.1 : 1.05 }}
-                                transition={springs.snappy}
-                              />
-                            );
-                          })}
-                        </div>
+                        <CategoryColorPicker
+                          value={editColor}
+                          onChange={setEditColor}
+                          taken={(c) => usedColors.includes(c.toLowerCase()) && cat.color?.toLowerCase() !== c.toLowerCase()}
+                        />
                       </div>
                       {catError && <p className="text-xs text-destructive">{catError}</p>}
                       <div className="flex gap-2">
@@ -821,18 +792,7 @@ export function SettingsPage() {
             </div>
             <div>
               <label className="text-xs text-muted">Icon</label>
-              <div className="flex flex-wrap gap-1 mt-1">
-                {ICON_OPTIONS.map((ic) => (
-                  <button
-                    key={ic}
-                    type="button"
-                    className={`w-7 h-7 rounded text-sm flex items-center justify-center border transition-colors ${newCatIcon === ic ? 'border-primary bg-primary/10' : 'border-transparent hover:bg-foreground/5'}`}
-                    onClick={() => setNewCatIcon(ic)}
-                  >
-                    {ic}
-                  </button>
-                ))}
-              </div>
+              <div className="mt-1"><CategoryIconPicker value={newCatIcon} onChange={setNewCatIcon} /></div>
             </div>
             <div>
               <label className="text-xs text-muted">Keywords (comma-separated)</label>
@@ -844,25 +804,7 @@ export function SettingsPage() {
             </div>
             <div>
               <label className="text-xs text-muted">Color</label>
-              <div className="flex flex-wrap gap-2 mt-1">
-                {PALETTE.map((c) => {
-                  const taken = usedColors.includes(c.toLowerCase());
-                  return (
-                    <motion.button
-                      key={c}
-                      type="button"
-                      disabled={taken}
-                      title={taken ? 'Already in use' : c}
-                      className={`w-7 h-7 rounded-full border-2 transition-colors ${newCatColor === c ? 'border-white' : 'border-transparent'} ${taken ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer'}`}
-                      style={{ backgroundColor: c }}
-                      onClick={() => setNewCatColor(c)}
-                      animate={{ scale: newCatColor === c ? 1.1 : 1 }}
-                      whileHover={taken ? {} : { scale: newCatColor === c ? 1.1 : 1.05 }}
-                      transition={springs.snappy}
-                    />
-                  );
-                })}
-              </div>
+              <div className="mt-1"><CategoryColorPicker value={newCatColor} onChange={setNewCatColor} taken={(c) => usedColors.includes(c.toLowerCase())} /></div>
             </div>
             {catError && <p className="text-xs text-destructive">{catError}</p>}
             <Separator />
