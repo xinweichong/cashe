@@ -186,3 +186,20 @@ test('window, page and calendar view restore from the URL; invalid values fall b
   showAt('/plan?days=7&offset=13');
   await waitFor(() => expect(briefingApi.upcoming).toHaveBeenCalledWith(30, 0));
 });
+
+test('cancelling an estimate edit returns focus to the button that opened it', async () => {
+  show();
+  fireEvent.click(await screen.findByRole('button', { name: 'Edit estimate' }));
+  expect(document.activeElement?.getAttribute('type')).toBe('date');
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+  await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Edit estimate' })));
+});
+
+test('dismissing a charge that then leaves the timeline moves focus to the agenda', async () => {
+  vi.mocked(briefingApi.dismissPlannedCharge).mockResolvedValue({ status: 'ok' });
+  show();
+  fireEvent.click(await screen.findByRole('button', { name: 'Dismiss prediction' }));
+  vi.mocked(briefingApi.upcoming).mockResolvedValue({ ...report, items: [], total: 0 });
+  fireEvent.click(screen.getByRole('button', { name: 'Dismiss charge' }));
+  await waitFor(() => expect(document.activeElement?.id).toBe('upcoming-agenda'));
+});

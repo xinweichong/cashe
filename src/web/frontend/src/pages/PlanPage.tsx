@@ -1,5 +1,5 @@
 import { subscriptionConfirmationLabels } from '@/lib/subscriptionConfirmation';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, Navigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { briefingApi, formatMoney, type MonthForecast, type UpcomingPlan } from '@/api/briefing';
@@ -256,6 +256,16 @@ export function PlanPage() {
     refetchOnMount: 'always',
   });
   const report = query.data;
+  // After a dismissal removes a charge, its controls unmount and focus is
+  // lost; once the refreshed report renders, move focus to the agenda.
+  const agendaFocusPending = useRef(false);
+  useEffect(() => {
+    if (!agendaFocusPending.current) return;
+    const active = document.activeElement;
+    if (active && active !== document.body && active.isConnected) return;
+    agendaFocusPending.current = false;
+    document.getElementById('upcoming-agenda')?.focus();
+  }, [report]);
   const grouped = useMemo(() => {
     const groups: { date: string; items: UpcomingPlan['items'] }[] = [];
     for (const item of report?.items ?? []) {
@@ -329,7 +339,7 @@ export function PlanPage() {
             <p className="text-muted">{report.status === 'partial' ? 'Known estimated subtotal' : 'Estimated charges'} · {report.start} to {report.end} · {report.timezone}</p>
             {!!report.unknown_count && <p className="text-warning">{report.unknown_count} charges have unknown amounts and are excluded from this subtotal.</p>}
             <p className="text-sm text-muted mt-3">Dates and amounts are estimates, not confirmed charges. Only recorded pending schedules appear; this is not a complete forecast. Matched or dismissed charges are excluded.</p>
-            <div className="mt-4">
+            <div id="upcoming-agenda" tabIndex={-1} aria-label="Upcoming charges" className="mt-4 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
               {grouped.map(group => <div key={group.date} id={`agenda-date-${group.date}`} className={cn('scroll-mt-24 rounded-md', selectedDate === group.date && '-mx-2 px-2 bg-card-hover/60')}>
                 <h3 className="text-2xs font-mono uppercase tracking-[0.1em] text-muted pt-4 pb-1 first:pt-0">{formatShortDate(group.date)}</h3>
                 <ol>
@@ -339,7 +349,7 @@ export function PlanPage() {
                     <p className="text-sm text-muted">{amountBasisLabels[item.amount_basis]}</p>
                     <p className="text-sm text-muted">{subscriptionConfirmationLabels[item.confirmation_source]}</p>
                     {item.schedule_status === 'possibly_cancelled' && <p className="text-warning">Schedule needs review: a previous charge may be overdue.</p>}
-                    <ChargeActions item={item} />
+                    <ChargeActions item={item} onDismissed={() => { agendaFocusPending.current = true; }} />
                     <Link to={`/plan/manage?subscription=${item.subscription_id}`} className="text-teal min-h-11 inline-flex items-center">Review or match schedule for {item.label}</Link>
                   </li>)}
                 </ol>
@@ -360,12 +370,23 @@ export function PlanPage() {
 }
 
 
-function ChargeActions({ item }: { item: UpcomingPlan['items'][number] }) {
+function ChargeActions({ item, onDismissed }: { item: UpcomingPlan['items'][number]; onDismissed: () => void }) {
   const client = useQueryClient();
   const [mode, setMode] = useState<'edit' | 'dismiss' | null>(null);
   const [expectedDate, setExpectedDate] = useState('');
   const [expectedAmount, setExpectedAmount] = useState('');
   const [original, setOriginal] = useState({ date: '', amount: '' });
+  const editRef = useRef<HTMLButtonElement>(null);
+  const dismissRef = useRef<HTMLButtonElement>(null);
+  // Which opener to refocus once the panel closes (§5 Plan: return focus to
+  // the initiating control); if the charge is gone, the agenda region.
+  const focusAfterClose = useRef<'edit' | 'dismiss' | null>(null);
+  useEffect(() => {
+    if (mode || !focusAfterClose.current) return;
+    const target = (focusAfterClose.current === 'edit' ? editRef : dismissRef).current;
+    focusAfterClose.current = null;
+    target?.focus();
+  }, [mode]);
   const mutation = useMutation({
     mutationFn: (action: 'save' | 'dismiss') => {
       if (action === 'dismiss') return briefingApi.dismissPlannedCharge(item.id);
@@ -374,7 +395,8 @@ function ChargeActions({ item }: { item: UpcomingPlan['items'][number] }) {
       if (expectedAmount !== original.amount) fields.expected_amount = expectedAmount.trim() || null;
       return briefingApi.updatePlannedCharge(item.id, fields);
     },
-    onSuccess: async () => {
+    onSuccess: async (_data, action) => {
+      if (action === 'dismiss') onDismissed();
       setMode(null);
       await Promise.all(['plan-upcoming', 'home-briefing', 'subscriptions', 'subscription-upcoming', 'plan-upcoming-calendar', 'plan-upcoming-day'].map(key =>
         client.invalidateQueries({ queryKey: [key] })));
@@ -382,21 +404,22 @@ function ChargeActions({ item }: { item: UpcomingPlan['items'][number] }) {
   });
   const openEdit = () => {
     const values = { date: item.date.slice(0, 10), amount: item.amount ? (item.amount.minor_units / 100).toFixed(2) : '' };
-    setOriginal(values); setExpectedDate(values.date); setExpectedAmount(values.amount); mutation.reset(); setMode('edit');
+    setOriginal(values); setExpectedDate(values.date); setExpectedAmount(values.amount); mutation.reset();
+    focusAfterClose.current = 'edit'; setMode('edit');
   };
   return <div className="space-y-2">
     {!mode ? <div className="flex flex-wrap gap-2">
-      <Button variant="outline" className="min-h-11" disabled={mutation.isPending} onClick={openEdit}>Edit estimate</Button>
-      <Button variant="ghost" className="min-h-11" disabled={mutation.isPending} onClick={() => { mutation.reset(); setMode('dismiss'); }}>Dismiss prediction</Button>
+      <Button ref={editRef} variant="outline" className="min-h-11" disabled={mutation.isPending} onClick={openEdit}>Edit estimate</Button>
+      <Button ref={dismissRef} variant="ghost" className="min-h-11" disabled={mutation.isPending} onClick={() => { mutation.reset(); focusAfterClose.current = 'dismiss'; setMode('dismiss'); }}>Dismiss prediction</Button>
     </div> : <div className="border border-border rounded-lg p-3 space-y-3">
       {mode === 'edit' ? <form className="space-y-3" onSubmit={event => { event.preventDefault(); mutation.mutate('save'); }}>
         <p className="text-sm text-muted">Edit this prediction. Future dates may follow the revised date. Amounts are estimated SGD; leave blank if unknown.</p>
-        <label className="block">Expected date<input className="input-field min-h-11 block w-full" type="date" required value={expectedDate} onChange={event => setExpectedDate(event.target.value)} /></label>
+        <label className="block">Expected date<input autoFocus className="input-field min-h-11 block w-full" type="date" required value={expectedDate} onChange={event => setExpectedDate(event.target.value)} /></label>
         <label className="block">Estimated amount (SGD)<input className="input-field min-h-11 block w-full" type="number" min="0" step="0.01" value={expectedAmount} onChange={event => setExpectedAmount(event.target.value)} /></label>
         <Button type="submit" className="min-h-11" disabled={mutation.isPending || (expectedDate === original.date && expectedAmount === original.amount)}>Save estimate</Button>
       </form> : <>
         <p>Dismiss this prediction from upcoming totals? This does not cancel your subscription with the provider.</p>
-        <Button variant="outline" className="min-h-11" disabled={mutation.isPending} onClick={() => mutation.mutate('dismiss')}>Dismiss charge</Button>
+        <Button autoFocus variant="outline" className="min-h-11" disabled={mutation.isPending} onClick={() => mutation.mutate('dismiss')}>Dismiss charge</Button>
       </>}
       <Button variant="ghost" className="min-h-11" disabled={mutation.isPending} onClick={() => { setMode(null); mutation.reset(); }}>Cancel</Button>
       {mutation.isError && <div role="alert" className="text-destructive">
