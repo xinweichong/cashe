@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useReducedMotion } from 'framer-motion';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
-import { getCategoryColor, formatCurrency } from '@/lib/utils';
+import { cn, getCategoryColor, formatCurrency } from '@/lib/utils';
 import { SelectableRow } from '@/components/ui/selectable-row';
 import { Button } from '@/components/ui/button';
 import { useChartTheme } from '@/lib/chartTheme';
@@ -26,9 +26,11 @@ interface CategoryDonutProps {
    * so the legacy Overview donut (no legend caller today) is unaffected.
    */
   showLegend?: boolean;
+  /** 'row' sets the legend beside the chart from `sm` up (stacked below it on phones). */
+  layout?: 'stacked' | 'row';
 }
 
-export function CategoryDonut({ data, selected, onSelect, onViewTransactions, showLegend = false }: CategoryDonutProps) {
+export function CategoryDonut({ data, selected, onSelect, onViewTransactions, showLegend = false, layout = 'stacked' }: CategoryDonutProps) {
   const { CHART_TOOLTIP_STYLE } = useChartTheme();
   const [remainingExpanded, setRemainingExpanded] = useState(false);
   // Recharts' Pie animates its sweep on its own JS timer, independent of the
@@ -65,8 +67,8 @@ export function CategoryDonut({ data, selected, onSelect, onViewTransactions, sh
   }
 
   return (
-    <div className="flex flex-col items-center gap-6">
-      <div className="relative w-full max-w-[220px] h-[220px]">
+    <div className={cn('flex flex-col items-center gap-6', layout === 'row' && 'sm:flex-row sm:items-center')}>
+      <div className={cn('relative w-full max-w-[220px] h-[220px]', layout === 'row' && 'shrink-0')}>
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie
@@ -118,6 +120,7 @@ export function CategoryDonut({ data, selected, onSelect, onViewTransactions, sh
         </div>
       </div>
 
+      <div className="w-full min-w-0 flex flex-col gap-6">
       {showLegend && (
         <ul className="w-full space-y-1" data-testid="category-donut-legend">
           {sliceData.map((item) => {
@@ -162,6 +165,7 @@ export function CategoryDonut({ data, selected, onSelect, onViewTransactions, sh
           View transactions
         </Button>
       )}
+      </div>
     </div>
   );
 }

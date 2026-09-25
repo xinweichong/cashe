@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { StatusDot } from '@/components/ui/StatusDot';
 import { HeroCard, PageCard } from '@/components/ui/cards';
 import { HeroAmount } from '@/components/ui/HeroAmount';
+import { StatCard } from '@/components/ui/StatCard';
 import { ActivityRowShell } from '@/components/ui/ActivityRowShell';
 import { LoadFailed } from '@/components/ui/LoadFailed';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -17,9 +18,8 @@ import { TrendLine } from '@/components/charts/TrendLine';
 import { CategoryDonut } from '@/components/charts/CategoryDonut';
 import { CategoryChangeBarRow } from '@/components/charts/CategoryChangeBars';
 
-// Direction: .impeccable/surfaces/src-web-frontend-src-pages-homepage-tsx.md
-// ("Where It Went, led by the mix") — the category mix is the first-viewport
-// focal point; everything else is compact, supporting fact rows beside it.
+const PAGE = 'p-4 md:p-6 space-y-4 md:space-y-5 max-w-[1600px] text-base';
+const BAND = 'grid gap-4 md:gap-5 lg:grid-cols-12';
 
 export function HomePage() {
   const navigate = useNavigate();
@@ -79,23 +79,33 @@ export function HomePage() {
     </header>
   );
   if (!query.data && query.isError) return (
-    <div className="max-w-6xl mx-auto p-4 md:p-8 space-y-6 text-base">
+    <div className={PAGE}>
       {header(null)}
       <div role="alert"><LoadFailed onRetry={() => void query.refetch()} /></div>
     </div>
   );
   if (!query.data) return (
-    <div className="max-w-6xl mx-auto p-4 md:p-8 space-y-6 text-base">
+    <div className={PAGE}>
       {header(<Skeleton className="h-5 w-48" />)}
-      <div role="status" aria-label="Preparing your briefing" className="grid lg:grid-cols-[3fr_2fr] gap-6">
-        <HeroCard title="Where it went">
-          <Skeleton className="h-10 w-40" />
-          <Skeleton className="mt-3 h-4 w-64 max-w-full" />
-          <Skeleton className="mt-6 h-[220px] w-[220px] rounded-full mx-auto" />
-        </HeroCard>
-        <div className="space-y-6">
-          <PageCard title="Daily trend"><Skeleton className="h-[160px] w-full" /></PageCard>
-          <PageCard title="What changed"><Skeleton className="h-24 w-full" /></PageCard>
+      <div role="status" aria-label="Preparing your briefing" className="space-y-4 md:space-y-5">
+        <div className={BAND}>
+          <HeroCard title="Where it went" className="lg:col-span-8">
+            <Skeleton className="h-10 w-40" />
+            <Skeleton className="mt-3 h-4 w-64 max-w-full" />
+            <div className="mt-6 flex items-center gap-6">
+              <Skeleton className="h-[180px] w-[180px] shrink-0 rounded-full" />
+              <Skeleton className="h-32 flex-1" />
+            </div>
+          </HeroCard>
+          <div className="lg:col-span-4 grid gap-4 md:gap-5">
+            <Skeleton className="h-[108px] rounded-lg" />
+            <Skeleton className="h-[108px] rounded-lg" />
+            <Skeleton className="h-[108px] rounded-lg" />
+          </div>
+        </div>
+        <div className={BAND}>
+          <PageCard title="Daily trend" className="lg:col-span-8"><Skeleton className="h-[160px] w-full" /></PageCard>
+          <PageCard title="What changed" className="lg:col-span-4"><Skeleton className="h-24 w-full" /></PageCard>
         </div>
       </div>
     </div>
@@ -118,16 +128,14 @@ export function HomePage() {
     return { date, amount: day ? day.spending.minor_units / 100 : 0 };
   }) : [];
   return (
-    <div className="max-w-6xl mx-auto p-4 md:p-8 space-y-6 text-base">
+    <div className={PAGE}>
       {header(<p className="text-muted">Through {facts.as_of} · {facts.timezone}{refreshing && <span role="status"> · Updating…</span>}</p>)}
       {query.isError && <p role="alert" className="text-warning">Couldn’t refresh. This briefing may be out of date. <Button type="button" variant="link" size="sm" className="h-auto min-h-11 p-0 align-baseline" onClick={() => void query.refetch()}>Retry</Button></p>}
 
-      {/* First viewport: the category mix leads, with the hero amount and its
-          supporting facts as a compact stack beside/above it — not a report
-          of full-width paragraphs. */}
-      <div className="grid lg:grid-cols-[3fr_2fr] gap-6 items-start">
+      <div className={BAND}>
         <HeroCard
           title="Where it went"
+          className="lg:col-span-8"
           glowColor={overTarget ? 'coral' : 'warm'}
           action={<Button asChild variant="ghost" size="sm"><Link to={withReturn(evidenceLink(facts.current))}>See spending<ArrowRight size={14} aria-hidden /></Link></Button>}
         >
@@ -141,18 +149,10 @@ export function HomePage() {
             </Badge>}
           </div>
           <p className="mt-1.5 text-sm text-muted">{facts.current.status === 'partial' ? 'Known spending subtotal · some amounts or dates need review.' : facts.current.status === 'indicative' ? 'Recorded spending · includes indicative currency conversions.' : 'Recorded spending this month'}</p>
+          <p className="mt-1 text-sm">{facts.change ? `${formatMoney({ ...facts.change, minor_units: Math.abs(facts.change.minor_units) })} ${facts.change.minor_units >= 0 ? 'more' : 'less'} than the comparable period last month.` : 'A comparison is unavailable while some records need review.'}</p>
+          <p className="text-xs text-muted">Comparing {facts.comparison_current.start}–{facts.comparison_current.end} with {facts.previous.start}–{facts.previous.end}.</p>
 
-          <div className="mt-4 pt-4 border-t border-border space-y-1.5 text-sm">
-            <p>{facts.change ? `${formatMoney({ ...facts.change, minor_units: Math.abs(facts.change.minor_units) })} ${facts.change.minor_units >= 0 ? 'more' : 'less'} than the comparable period last month.` : 'A comparison is unavailable while some records need review.'}</p>
-            <p className="text-xs text-muted">Comparing {facts.comparison_current.start}–{facts.comparison_current.end} with {facts.previous.start}–{facts.previous.end}.</p>
-            {facts.current.income && <Link className="text-teal min-h-11 inline-flex items-center gap-1" to={withReturn(evidenceLink(facts.current, undefined, 'income'))}><StatusDot tone="calm" />Recorded income {formatMoney(facts.current.income)}</Link>}
-            {facts.current.recorded_net_flow && <p className={`flex items-center gap-1.5 ${netFlowNegative ? 'text-warning' : ''}`}><StatusDot tone={netFlowNegative ? 'warm' : 'saved'} />Recorded net {netFlowNegative ? 'outflow' : 'flow'} {formatMoney(facts.current.recorded_net_flow)}</p>}
-            {spending_target && <p className={`flex items-center gap-1.5 ${overTarget ? 'text-warning' : ''}`}><StatusDot tone={overTarget ? 'warm' : 'saved'} />{overTarget
-              ? `${formatMoney({ ...spending_target.remaining, minor_units: Math.abs(spending_target.remaining.minor_units) })} over your ${formatMoney(spending_target.target)} monthly target.`
-              : `${formatMoney(spending_target.remaining)} remaining of your ${formatMoney(spending_target.target)} monthly target.`}</p>}
-          </div>
-
-          <div className="mt-6 pt-4 border-t border-border">
+          <div className="mt-5 pt-5 border-t border-border">
             {breakdownQuery.data ? (
               <>
                 {breakdownQuery.isError && <p className="text-xs text-warning mb-2">Couldn't refresh the category mix — showing the last loaded data. <Button type="button" variant="link" size="sm" className="h-auto min-h-11 p-0 align-baseline" onClick={() => void breakdownQuery.refetch()}>Retry</Button></p>}
@@ -162,6 +162,7 @@ export function HomePage() {
                   onSelect={setSelectedCategory}
                   onViewTransactions={(category) => navigate(withReturn(evidenceLink(facts.current, category)))}
                   showLegend
+                  layout="row"
                 />
                 {selectedCategory && (
                   <div className="mt-6 pt-4 border-t border-border space-y-3">
@@ -210,8 +211,41 @@ export function HomePage() {
           </div>
         </HeroCard>
 
-        <div className="space-y-6">
-          <PageCard title="Daily trend">
+        {/* Stretched to the hero's height so the band has no trailing gap. */}
+        <div className="lg:col-span-4 grid gap-4 md:gap-5 sm:grid-cols-3 lg:grid-cols-1">
+          <StatCard
+            label="Income"
+            value={facts.current.income ? formatMoney(facts.current.income) : 'None yet'}
+            color={facts.current.income ? 'teal' : 'default'}
+            subtext={facts.current.income ? 'Recorded this month' : 'Captured income appears here'}
+            href={withReturn(evidenceLink(facts.current, undefined, 'income'))}
+          />
+          <StatCard
+            label="Net flow"
+            value={facts.current.recorded_net_flow ? formatMoney(facts.current.recorded_net_flow) : 'Unavailable'}
+            color={!facts.current.recorded_net_flow ? 'default' : netFlowNegative ? 'coral' : 'teal'}
+            subtext={facts.current.recorded_net_flow
+              ? `Recorded net ${netFlowNegative ? 'outflow' : 'flow'}`
+              : facts.current.income ? 'Hidden while records need review' : 'No income recorded this month'}
+          />
+          {spending_target ? (
+            <StatCard
+              label={overTarget ? 'Over target' : 'Target left'}
+              value={formatMoney({ ...spending_target.remaining, minor_units: Math.abs(spending_target.remaining.minor_units) })}
+              color={overTarget ? 'coral' : 'teal'}
+              subtext={overTarget
+                ? `${formatMoney({ ...spending_target.remaining, minor_units: Math.abs(spending_target.remaining.minor_units) })} over your ${formatMoney(spending_target.target)} monthly target.`
+                : `${formatMoney(spending_target.remaining)} remaining of your ${formatMoney(spending_target.target)} monthly target.`}
+              href="/plan/manage"
+            />
+          ) : (
+            <StatCard label="Overall budget" value="Not set" subtext="Set one in Plan to track pace." href="/plan/manage" />
+          )}
+        </div>
+      </div>
+
+      <div className={BAND}>
+          <PageCard title="Daily trend" className="lg:col-span-8">
             {trendQuery.data ? (
               <>
                 {trendQuery.isError && <p className="text-xs text-warning mb-1">Couldn't refresh the daily trend — showing the last loaded data. <Button type="button" variant="link" size="sm" className="h-auto min-h-11 p-0 align-baseline" onClick={() => void trendQuery.refetch()}>Retry</Button></p>}
@@ -224,7 +258,7 @@ export function HomePage() {
               <p className="text-sm text-muted">Couldn't load the daily trend. <Button type="button" variant="link" size="sm" className="h-auto min-h-11 p-0 align-baseline" onClick={() => void trendQuery.refetch()}>Retry</Button></p>
             )}
           </PageCard>
-          <PageCard title="What changed">
+          <PageCard title="What changed" className="lg:col-span-4">
             {(() => {
               // Lead with the strongest change and its evidence; the rest of the
               // explanation sits behind "More context". Bars share one scale so
@@ -275,10 +309,9 @@ export function HomePage() {
               </>;
             })()}
           </PageCard>
-        </div>
       </div>
 
-      <div className="grid md:grid-cols-2 gap-6">
+      <div className="grid gap-4 md:gap-5 md:grid-cols-2 xl:grid-cols-3">
         <PageCard title="Coming up" action={<Button asChild variant="ghost" size="sm"><Link to="/plan">Open plan<ArrowRight size={14} aria-hidden /></Link></Button>}>
           <p>{formatMoney(upcoming_total)} in estimated charges over the next 14 days.</p>
           {!!upcoming_unknown_count && <p className="text-warning">{upcoming_unknown_count} expected charges have no amount yet.</p>}
@@ -301,9 +334,8 @@ export function HomePage() {
           </div>
           <Button asChild variant="outline" size="sm" className="mt-4"><Link to="/settings">Manage connections</Link></Button>
         </PageCard>
-      </div>
 
-      <PageCard title="Recent activity" contentClassName="p-0" action={<Button asChild variant="ghost" size="sm"><Link to="/transactions">All activity<ArrowRight size={14} aria-hidden /></Link></Button>}>
+      <PageCard title="Recent activity" className="md:col-span-2 xl:col-span-1" contentClassName="p-0" action={<Button asChild variant="ghost" size="sm"><Link to="/transactions">All activity<ArrowRight size={14} aria-hidden /></Link></Button>}>
         {recent.map(item => (
           <ActivityRowShell
             key={item.id}
@@ -318,6 +350,7 @@ export function HomePage() {
         ))}
         {!recent.length && <p className="text-muted p-4">Your captured purchases will appear here. Add a transaction or connect a source to begin.</p>}
       </PageCard>
+      </div>
     </div>
   );
 }
