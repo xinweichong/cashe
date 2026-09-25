@@ -9,7 +9,7 @@ export function ExplorePage() {
         <div className="text-xs uppercase tracking-[0.22em] text-muted font-mono font-semibold">Explore</div>
         <h1 className="text-xl font-bold leading-tight tracking-tight text-foreground font-display">Every pattern, caught.</h1>
         <p className="text-muted mt-1">Understand spending patterns and the merchants behind them.</p>
-        <nav aria-label="Explore views" className="flex gap-2 mt-3 overflow-x-auto">
+        <nav aria-label="Explore views" className="flex gap-2 mt-3 overflow-x-auto scroll-strip">
           {[['/explore', 'Spending patterns'], ['/explore/insights', 'Insights']].map(([to, label]) => (
             <NavLink
               key={to}

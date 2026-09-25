@@ -152,6 +152,17 @@ body {
     background: linear-gradient(90deg, #00D4AA, #FB923C);
   }
 
+  /* Horizontally scrollable strip (tab/chip rows) that keeps touch/trackpad
+     scroll working but hides the native scrollbar track — the platform
+     convention for a swipeable nav strip, not a data table. */
+  .scroll-strip {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .scroll-strip::-webkit-scrollbar {
+    display: none;
+  }
+
   /* Owned by the dialog, sheet, dropdown-menu and select wrappers — not for page use. */
   .overlay-motion[data-state="open"]   { animation: overlay-in var(--dur-base) var(--ease-out-expo); }
   .overlay-motion[data-state="closed"] { animation: overlay-out var(--dur-fast) ease-in; }
