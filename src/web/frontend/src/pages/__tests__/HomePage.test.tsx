@@ -90,7 +90,9 @@ test('Home flags a one-off purchase driver with a direct transaction link', asyn
   vi.mocked(briefingApi.home).mockResolvedValue({ ...home, facts: { ...home.facts, top_category_driver: topCategoryDriver } });
   show(<HomePage />);
   const link = await screen.findByRole('link', { name: 'Rare Splurge' });
-  expect(link.getAttribute('href')).toBe('/transactions/42');
+  const href = new URL(link.getAttribute('href')!, 'http://localhost');
+  expect(href.pathname).toBe('/transactions/42');
+  expect(href.searchParams.get('returnTo')).toBe('/');
 });
 
 test('Home shows trip-attributed spending as context, not additive to category totals', async () => {
