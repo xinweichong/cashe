@@ -37,6 +37,7 @@ export function HomePage() {
   const setSelectedCategory = (value: string | null) => setParam('category', value);
   const setSelectedDate = (value: string | null) => setParam('day', value);
   const withReturn = (href: string) => `${href}&returnTo=${encodeURIComponent(location.pathname + location.search)}`;
+  const transactionLink = (id: number) => `/transactions/${id}?returnTo=${encodeURIComponent(location.pathname + location.search)}`;
   const [selectedChangeCategory, setSelectedChangeCategory] = useState<string | null>(null);
   const query = useQuery({ queryKey: ['home-briefing'], queryFn: briefingApi.home });
   const currentStart = query.data?.facts.current.start;
@@ -220,7 +221,7 @@ export function HomePage() {
             {driver.frequency_driver.classification === 'size' && `Driven mostly by bigger purchases: average ${formatMoney(driver.frequency_driver.current_avg)} this period vs ${formatMoney(driver.frequency_driver.previous_avg)} previously, at a similar count.`}
             {driver.frequency_driver.classification === 'mixed' && `Both purchase count (${driver.frequency_driver.previous_count} → ${driver.frequency_driver.current_count}) and average size (${formatMoney(driver.frequency_driver.previous_avg)} → ${formatMoney(driver.frequency_driver.current_avg)}) changed.`}
           </p>}
-          {driver.one_off_driver && <p>Largely one purchase: <Link className="text-teal underline" to={`/transactions/${driver.one_off_driver.transaction_id}`}>{driver.one_off_driver.merchant || 'Unnamed transaction'}</Link> for <strong>{formatMoney(driver.one_off_driver.amount)}</strong> on {driver.one_off_driver.date}.</p>}
+          {driver.one_off_driver && <p>Largely one purchase: <Link className="text-teal underline" to={transactionLink(driver.one_off_driver.transaction_id)}>{driver.one_off_driver.merchant || 'Unnamed transaction'}</Link> for <strong>{formatMoney(driver.one_off_driver.amount)}</strong> on {driver.one_off_driver.date}.</p>}
         </div>}
         {!!facts.trip_drivers.length && <div className="mt-4 pt-4 border-t border-border space-y-3">
           {facts.trip_drivers.map(trip => <p key={trip.trip_id}>Trip <Link className="text-teal underline" to={`/transactions?trip=${trip.trip_id}&start=${facts.current.start}&end=${facts.comparison_current.end}`}>{trip.name}</Link>: {formatMoney(trip.current_total)} this period ({formatMoney(trip.previous_total)} previously). <span className="text-sm text-muted">{trip.overlap_note}</span></p>)}
@@ -254,7 +255,7 @@ export function HomePage() {
             key={item.id}
             category={item.category}
             isIncome={item.type === 'income'}
-            href={`/transactions/${item.id}`}
+            href={transactionLink(item.id)}
             title={item.merchant || 'Unnamed transaction'}
             metaPrimary={item.date?.slice(0, 10) ?? 'Date unknown'}
             amount={item.amount ? formatMoney(item.amount) : 'Amount unresolved'}

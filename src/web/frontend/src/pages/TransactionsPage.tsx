@@ -77,7 +77,7 @@ export function TransactionsPage() {
   const returnTo = searchParams.get('returnTo');
   const listRef = useRef<HTMLDivElement>(null);
   const closeDetail = () => {
-    if (returnTo?.startsWith('/evidence?') || returnTo === '/review' || returnTo?.startsWith('/review?')) {
+    if (returnTo && /^\/(evidence\?|review(\?|$)|home(\?|$)|\?|$)/.test(returnTo)) {
       navigate(returnTo);
       return;
     }
