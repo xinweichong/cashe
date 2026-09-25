@@ -55,3 +55,35 @@ test('phone Activity lenses set type filters and Filters opens as a sheet', asyn
   await page.waitForTimeout(400);
   await page.screenshot({ path: `${REVIEW}/activity-filters.png` });
 });
+
+test('phone Activity day headers scroll away with their rows', async ({ page }) => {
+  await mockRichActivity(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/activity');
+  const header = page.getByTestId('tx-day-header').first();
+  await expect(header).toBeVisible();
+  const before = (await header.boundingBox())!.y;
+  await page.getByRole('tabpanel').evaluate((el) => el.scrollBy(0, 160));
+  await page.waitForTimeout(200);
+  expect((await header.boundingBox())!.y).toBeLessThan(before - 100);
+});
+
+test('the text size setting scales content but not the wordmark', async ({ page }) => {
+  await mockRichActivity(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/activity');
+  const wordmark = page.getByRole('banner').getByText(/ca.*he/).first();
+  const logoBefore = (await wordmark.boundingBox())!.height;
+  await page.getByRole('button', { name: 'Profile menu' }).click();
+  await page.getByRole('menuitemradio', { name: 'Larger' }).click();
+  await page.keyboard.press('Escape');
+  expect(await page.evaluate(() => getComputedStyle(document.documentElement).fontSize)).toBe('20px');
+  expect((await wordmark.boundingBox())!.height).toBeCloseTo(logoBefore, 0);
+  // Still one screen at the larger size.
+  const { scroll, inner } = await page.evaluate(() => ({ scroll: document.documentElement.scrollHeight, inner: window.innerHeight }));
+  expect(scroll).toBeLessThanOrEqual(inner);
+  await page.waitForTimeout(500);
+  await page.screenshot({ path: `${REVIEW}/activity-text-larger.png` });
+  await page.reload();
+  expect(await page.evaluate(() => getComputedStyle(document.documentElement).fontSize)).toBe('20px');
+});

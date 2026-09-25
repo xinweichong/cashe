@@ -30,6 +30,9 @@ interface TransactionListProps {
   selectionMode?: boolean;
   selectedIds?: Set<number>;
   onToggleSelect?: (id: number) => void;
+  /** Pin each day header while its rows scroll (desktop). The phone list
+   * sits in a short card, where a pinned header only hides rows. */
+  stickyDayHeaders?: boolean;
 }
 
 function TransactionRowSkeleton() {
@@ -48,11 +51,11 @@ function TransactionRowSkeleton() {
   );
 }
 
-function DayHeader({ dayKey, total }: { dayKey: string; total: DailyTotalV2 | undefined }) {
+function DayHeader({ dayKey, total, sticky }: { dayKey: string; total: DailyTotalV2 | undefined; sticky: boolean }) {
   return (
     <div
       data-testid="tx-day-header"
-      className="flex items-baseline justify-between px-4 py-1.5 bg-muted/30 border-b border-border/30 sticky top-0 z-10"
+      className={`flex items-baseline justify-between px-4 py-1.5 bg-muted/30 border-b border-border/30${sticky ? ' sticky top-0 z-10' : ''}`}
     >
       <span className="text-[11px] font-mono uppercase tracking-[0.08em] text-muted font-semibold">
         {formatDayHeading(dayKey)}
@@ -93,6 +96,7 @@ export function TransactionList({
   selectionMode = false,
   selectedIds,
   onToggleSelect,
+  stickyDayHeaders = true,
 }: TransactionListProps) {
   const observerRef = useRef<HTMLDivElement>(null);
 
@@ -134,7 +138,7 @@ export function TransactionList({
       <AnimatePresence>
         {rows.map((row) =>
           row.kind === 'header' ? (
-            <DayHeader key={`day-${row.day}`} dayKey={row.day} total={dailyTotals?.get(row.day)} />
+            <DayHeader key={`day-${row.day}`} dayKey={row.day} total={dailyTotals?.get(row.day)} sticky={stickyDayHeaders} />
           ) : (
             <motion.div
               key={row.tx.id}

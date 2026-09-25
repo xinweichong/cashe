@@ -502,7 +502,7 @@ export function PlanPage() {
     const lenses: Lens<PlanLens>[] = [
       { value: 'soon', label: 'Soon', panel: soonPanel },
       ...(settings?.budgets_enabled ? [{ value: 'budgets' as const, label: 'Budgets', bare: true, panel: <BudgetsCard onSelect={(id) => openPanel('budget', id)} /> }] : []),
-      ...(settings?.goals_enabled ? [{ value: 'goals' as const, label: 'Goals', bare: true, panel: <><SavingsCard /><GoalsCard onSelect={(id) => openPanel('goal', id)} /></> }] : []),
+      ...(settings?.goals_enabled ? [{ value: 'goals' as const, label: 'Goals', bare: true, panel: <><SavingsCard compact /><GoalsCard onSelect={(id) => openPanel('goal', id)} /></> }] : []),
       ...(settings?.subscriptions_enabled || settings?.recurring_enabled ? [{ value: 'subs' as const, label: 'Subs', bare: true, panel: <>
         {settings?.subscriptions_enabled && <SubscriptionsSection selectedSubId={panel?.type === 'subscription' ? panel.id : null} onSelectSub={(id) => openPanel('subscription', id)} />}
         {settings?.recurring_enabled && <RecurringCard />}

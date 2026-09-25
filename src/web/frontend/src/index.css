@@ -151,6 +151,12 @@ body {
     background-size: 1rem;
   }
 
+  /* The Small text size scales rem below 16px; keep phone fields at 16px or
+     more so iOS Safari still never zooms on focus. */
+  @media (max-width: 767px) {
+    .input-field, .select-field { font-size: max(16px, 1rem); }
+  }
+
   .btn-gradient {
     background: linear-gradient(135deg, #00D4AA 0%, #34D399 25%, #FBBF24 50%, #FB923C 75%, #FF6B6B 100%);
     background-size: 200% 100%;

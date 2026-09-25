@@ -1,9 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/api/client';
+import { Card } from '@/components/ui/card';
 import { HeroCard } from '@/components/ui/cards';
 import { formatCurrencyWhole } from '@/lib/utils';
 
-export function SavingsCard() {
+export function SavingsCard({ compact = false }: { compact?: boolean }) {
   const { data: overview } = useQuery({
     queryKey: ['savings-overview'],
     queryFn: () => api.getSavingsOverview(),
@@ -13,6 +14,26 @@ export function SavingsCard() {
   if (!overview) return null;
 
   const monthLabel = new Date(overview.month + '-01').toLocaleString('en', { month: 'long', year: 'numeric' });
+
+  // The phone's Goals lens: the same three figures as one flat strip, so
+  // the goals list below keeps the room (and the lens keeps its one glow).
+  if (compact) {
+    const figures = [
+      { label: 'Saved', value: overview.savings, className: 'text-success' },
+      { label: 'To goals', value: overview.allocated_to_goals, className: 'text-teal' },
+      { label: 'Free', value: overview.unallocated, className: 'text-foreground' },
+    ];
+    return (
+      <Card aria-label={`Savings, ${monthLabel}`} className="grid grid-cols-3 divide-x divide-border py-3">
+        {figures.map((f) => (
+          <div key={f.label} className="px-3">
+            <p className="text-2xs font-semibold font-mono uppercase tracking-[0.18em] text-muted">{f.label}</p>
+            <p className={`text-base font-semibold tabular-nums ${f.className}`}>{formatCurrencyWhole(f.value)}</p>
+          </div>
+        ))}
+      </Card>
+    );
+  }
 
   return (
     <HeroCard title={`Savings — ${monthLabel}`} glowColor="teal">

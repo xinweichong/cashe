@@ -440,6 +440,7 @@ export function TransactionsPage() {
             selectionMode={selectionMode}
             selectedIds={selectedIds}
             onToggleSelect={toggleSelect}
+            stickyDayHeaders={false}
           />
         )}
       </div>

@@ -46,7 +46,10 @@ export function PhoneScreen<T extends string>({ glance, lenses, lens, onLensChan
     >
       <div className="shrink-0">{glance}</div>
       <div className="relative flex-1 min-h-0">
-        <AnimatePresence mode="popLayout" initial={false}>
+        {/* No initial={false} here: it would reach into panels whose own
+            staggered lists mount after data loads and leave them at their
+            hidden initial state. The panel's first fade-in is the cost. */}
+        <AnimatePresence mode="popLayout">
           {lenses.filter((l) => l.value === lens).map((l) => (
             <TabsContent key={l.value} value={l.value} forceMount asChild className="mt-0">
               <motion.div
@@ -54,7 +57,12 @@ export function PhoneScreen<T extends string>({ glance, lenses, lens, onLensChan
                 animate={{ opacity: 1, y: 0 }}
                 exit={reduceMotion ? undefined : { opacity: 0, transition: { duration: 0.08 } }}
                 transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-                className={cn('absolute inset-0 overflow-y-auto overscroll-contain rounded-lg', l.bare ? 'flex flex-col gap-2 [&>*]:shrink-0 [&>*:last-child]:flex-1' : 'border border-border bg-card')}
+                className={cn(
+                  'absolute inset-0 overflow-y-auto overscroll-contain',
+                  // A bare lens's own cards carry the radius; the frame stays
+                  // square so it never trims their corners.
+                  l.bare ? 'flex flex-col gap-2 [&>*]:shrink-0 [&>*:last-child]:flex-1' : 'rounded-lg border border-border bg-card',
+                )}
               >
                 {l.panel}
               </motion.div>

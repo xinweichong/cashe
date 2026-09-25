@@ -1,4 +1,6 @@
+import { useState } from 'react';
 import { useTheme } from '@/hooks/useTheme';
+import { TEXT_SIZES, readTextSize, saveTextSize, type TextSize } from '@/lib/textSize';
 import { Link } from 'react-router-dom';
 import { CircleUserRound, Settings, ListChecks } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -6,6 +8,7 @@ import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuIte
 
 export function ProfileMenu() {
   const { preference, setPreference } = useTheme();
+  const [textSize, setTextSize] = useState<TextSize>(readTextSize);
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -29,6 +32,18 @@ export function ProfileMenu() {
           {(['system', 'light', 'dark'] as const).map(value => (
             <DropdownMenuRadioItem key={value} value={value} className="min-h-11">
               {value === 'system' ? 'Follow system' : value === 'light' ? 'Light' : 'Dark'}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel>Text size</DropdownMenuLabel>
+        <DropdownMenuRadioGroup value={textSize} onValueChange={value => {
+          const size = TEXT_SIZES.find(s => s.value === value)?.value;
+          if (size) { saveTextSize(size); setTextSize(size); }
+        }}>
+          {TEXT_SIZES.map(size => (
+            <DropdownMenuRadioItem key={size.value} value={size.value} className="min-h-11" onSelect={event => event.preventDefault()}>
+              <span style={{ fontSize: `${size.percent}%` }}>{size.label}</span>
             </DropdownMenuRadioItem>
           ))}
         </DropdownMenuRadioGroup>

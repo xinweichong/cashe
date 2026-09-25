@@ -33,3 +33,15 @@ test('phone Explore maps a desktop mode link to its lens and switches lenses', a
   await page.waitForTimeout(1000);
   await page.screenshot({ path: `${REVIEW}/explore-merchant.png` });
 });
+
+test('phone Explore lens cards keep their own rounded corners', async ({ page }) => {
+  await page.addInitScript(() => window.localStorage.setItem('cashe-appearance', 'dark'));
+  await mockAuthenticatedExplore(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/explore?lens=category');
+  const panel = page.getByRole('tabpanel');
+  await expect(panel).toBeVisible();
+  expect(await panel.evaluate((el) => getComputedStyle(el).borderTopLeftRadius)).toBe('0px');
+  await page.waitForTimeout(1000);
+  await page.screenshot({ path: `${REVIEW}/explore-category.png` });
+});
