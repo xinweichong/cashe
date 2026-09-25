@@ -1,6 +1,6 @@
 import { MotionConfig } from 'framer-motion';
 import { ThemeProvider } from '@/hooks/ThemeProvider';
-import { lazy, Suspense, useEffect } from 'react';
+import { lazy, Suspense, useEffect, useState, type ComponentType } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { AuthProvider } from '@/hooks/useAuth';
@@ -16,17 +16,37 @@ import { setCategoryColors, nearestSpectrum } from '@/lib/utils';
 import { ToastProvider } from '@/components/ui/toast';
 import { SPECTRUM_PALETTE } from '@/lib/chartTheme';
 
-const PlanPage = lazy(() => import('@/pages/PlanPage').then(m => ({ default: m.PlanPage })));
-const HomePage = lazy(() => import('@/pages/HomePage').then(m => ({ default: m.HomePage })));
-const EvidencePage = lazy(() => import('@/pages/EvidencePage').then(m => ({ default: m.EvidencePage })));
-const ReviewPage = lazy(() => import('@/pages/ReviewPage').then(m => ({ default: m.ReviewPage })));
-const OverviewPage = lazy(() => import('@/pages/OverviewPage').then(m => ({ default: m.OverviewPage })));
-const TransactionsPage = lazy(() => import('@/pages/TransactionsPage').then(m => ({ default: m.TransactionsPage })));
-const AnalyticsPage = lazy(() => import('@/pages/AnalyticsPage').then(m => ({ default: m.AnalyticsPage })));
-const ExplorePatternsPage = lazy(() => import('@/pages/ExplorePatternsPage').then(m => ({ default: m.ExplorePatternsPage })));
-const SettingsPage = lazy(() => import('@/pages/SettingsPage').then(m => ({ default: m.SettingsPage })));
-const MerchantsPage = lazy(() => import('@/pages/MerchantsPage').then(m => ({ default: m.MerchantsPage })));
-const FinancePage = lazy(() => import('@/pages/FinancePage').then(m => ({ default: m.FinancePage })));
+// A lazy route that can start downloading before it renders. If its chunk
+// has already arrived when a route mounts, it renders directly instead of
+// suspending — avoiding React's 300ms minimum fallback before revealing
+// content that suspended. Each mount keeps the component it started with,
+// so a page never remounts when the chunk resolves.
+function lazyRoute(load: () => Promise<ComponentType>) {
+  let resolved: ComponentType | null = null;
+  let pending: Promise<void> | null = null;
+  const preload = () => (pending ??= load().then(
+    (component) => { resolved = component; },
+    (error) => { pending = null; throw error; },
+  ));
+  const Lazy = lazy(() => preload().then(() => ({ default: resolved! })));
+  function Route() {
+    const [Component] = useState(() => resolved ?? Lazy);
+    return <Component />;
+  }
+  return Object.assign(Route, { preload });
+}
+
+const PlanPage = lazyRoute(() => import('@/pages/PlanPage').then(m => m.PlanPage));
+const HomePage = lazyRoute(() => import('@/pages/HomePage').then(m => m.HomePage));
+const EvidencePage = lazyRoute(() => import('@/pages/EvidencePage').then(m => m.EvidencePage));
+const ReviewPage = lazyRoute(() => import('@/pages/ReviewPage').then(m => m.ReviewPage));
+const OverviewPage = lazyRoute(() => import('@/pages/OverviewPage').then(m => m.OverviewPage));
+const TransactionsPage = lazyRoute(() => import('@/pages/TransactionsPage').then(m => m.TransactionsPage));
+const AnalyticsPage = lazyRoute(() => import('@/pages/AnalyticsPage').then(m => m.AnalyticsPage));
+const ExplorePatternsPage = lazyRoute(() => import('@/pages/ExplorePatternsPage').then(m => m.ExplorePatternsPage));
+const SettingsPage = lazyRoute(() => import('@/pages/SettingsPage').then(m => m.SettingsPage));
+const MerchantsPage = lazyRoute(() => import('@/pages/MerchantsPage').then(m => m.MerchantsPage));
+const FinancePage = lazyRoute(() => import('@/pages/FinancePage').then(m => m.FinancePage));
 const OnboardingPage = lazy(() => import('@/pages/OnboardingPage').then(m => ({ default: m.OnboardingPage })));
 const AdminPage = lazy(() => import('@/pages/AdminPage').then(m => ({ default: m.AdminPage })));
 const SetPasswordPage = lazy(() => import('@/pages/SetPasswordPage').then(m => ({ default: m.SetPasswordPage })));
@@ -42,6 +62,32 @@ const ExploreLayoutStudy = import.meta.env.DEV
 const PlanLayoutStudy = import.meta.env.DEV
   ? lazy(() => import('@/dev/PlanLayoutStudy').then(m => ({ default: m.PlanLayoutStudy })))
   : null;
+
+// Start the current URL's route chunk alongside the auth requests rather
+// than after them. "/" may be Home or classic Overview (a server setting),
+// so both are fetched there.
+const ROUTE_PRELOADS: [RegExp, Array<{ preload: () => Promise<void> }>][] = [
+  [/^\/$/, [HomePage, OverviewPage]],
+  [/^\/home\/?$/, [HomePage]],
+  [/^\/(activity|transactions)(\/|$)/, [TransactionsPage]],
+  [/^\/plan\/manage(\/|$)/, [FinancePage]],
+  [/^\/plan\/?$/, [PlanPage]],
+  [/^\/explore\/insights(\/|$)/, [AnalyticsPage]],
+  [/^\/explore\/merchants(\/|$)/, [MerchantsPage]],
+  [/^\/explore\/?$/, [ExplorePatternsPage]],
+  [/^\/evidence(\/|$)/, [EvidencePage]],
+  [/^\/review(\/|$)/, [ReviewPage]],
+  [/^\/settings(\/|$)/, [SettingsPage]],
+  [/^\/overview(\/|$)/, [OverviewPage]],
+  [/^\/analytics(\/|$)/, [AnalyticsPage]],
+  [/^\/merchants(\/|$)/, [MerchantsPage]],
+  [/^\/finance(\/|$)/, [FinancePage]],
+];
+if (typeof window !== 'undefined') {
+  const match = ROUTE_PRELOADS.find(([pattern]) => pattern.test(window.location.pathname));
+  // A failed preload is retried by the route itself when it renders.
+  match?.[1].forEach((route) => route.preload().catch(() => {}));
+}
 
 const queryClient = new QueryClient({
   defaultOptions: {
