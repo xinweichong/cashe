@@ -374,6 +374,25 @@ Each increment should remain reviewable and testable. Use the project's feature-
 | 7. Motion + performance | Complete reduced-motion audit, request/cache consistency, measured navigation optimisation | Repeatable before/after traces and targets; no replayed counts or idle glow on new screens |
 | 8. Release verification | Full automated suite, rendered/device review, targeted docs update, release notes | Acceptance matrix complete; unresolved limits explicitly listed |
 
+### Implementation status (2026-09-25)
+
+Commit labels are not acceptance. This records what current code, tests and captures actually show. "Mocked" means Playwright against the Vite app with the API mocked; no authenticated-backend journey, Safari or real-device check has been run.
+
+| Increment | Implemented and verified | Still open |
+|---|---|---|
+| 1. Baseline | Source audit; phone/tablet/desktop × light/dark captures of Home/Explore/Plan in `e2e/screenshots/` (gitignored, regenerate with `npm run test:visual`) | Legacy reference-screen captures |
+| 2. Prototype | Home/Explore/Plan studies with mocked visual specs | Reduced-motion recordings; tablet split view |
+| 3. Home | Shape-matched initial skeleton; cached charts survive refresh failure with a stale notice; "Updating…" while separately-fetched sections settle; no empty selection card; `category`/`day` in the URL and restored after evidence → Back (mocked browser round trip) | Side-by-side selection detail at desktop (detail stacks beneath); one-observation "What changed"; a single consistent read model if measurement shows it is needed |
+| 4. Explore | Full-width modes with no reserved column; selection detail beneath a stable chart; trip share compares only spending dated inside the same month period (cross-month, ongoing and partial cases tested) | Merchant-level step of day → category → merchant investigation; upstream-failure copy per mode |
+| 5. Plan | Selected-day detail is complete when a date straddles agenda pages; window/page/phone calendar view in the URL; calendar/agenda sync (mocked) | Focus return after edit/dismiss; range scale visual |
+| 6. Supporting | Activity returns focus to the originating row (or the list) on close with filters intact (mocked); Evidence honours a safe `returnTo` | Draft continuity across resize/theme change; authenticated edit journey |
+| 7. Motion/performance | Repeatable harness (`npm run test:perf`: production bundle, mocked API, 4× CPU throttle, 5 cold runs, 390px). Recharts no longer loads on every route (Activity/Plan JS −34%); route chunks load alongside auth, avoiding React's 300ms suspense reveal (content-ready roughly halved: Home 937→495ms, Activity 942→448ms, Explore 939→555ms, Plan 929→408ms). Dialog/sheet/menu now actually animate, via §14 timings | Real-device traces; navigation-intent preloading; gesture/pull-to-refresh profiling |
+| 8. Release | Not started | Gated on the above; authenticated journeys; Safari/device review |
+
+Shared-UI consolidation (production-polish audit U01–U20): owner repairs U01, U10, U14, U15 and migrations U02, U03, U05, U08, U12, U16 are done, with remaining call sites belonging to approval-gated owners. U11 is done for clearly titled panels; auth, Admin's users table and Overview's compact health states keep base-Card composition. Approval-gated U04, U06 (segmented form choice), U07, U09, U13, U18, U19 are not started; U17 is done for Home only; U20 is not started.
+
+Checks at this point: frontend build and lint clean, 201 unit tests, 69 mocked Playwright visual checks, 53 backend transaction API tests.
+
 Foundations should first appear in the working Home prototype, then carry into the production slice. Motion/loading are part of every slice; increment 7 completes cross-route verification rather than postponing polish until the end.
 
 Legacy visual preservation: use additive options or scoped styling for changes that intentionally differ in the new experience, such as static hero glow. Do not introduce forked copies of cards/buttons. Where a shared change is intended to apply everywhere (for example accessible tone text), check and record its impact on the reference screens.

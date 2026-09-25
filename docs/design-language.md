@@ -388,13 +388,13 @@ Current registry (paths relative to `src/web/frontend/src/`):
 |---|---|---|
 | Command, submit, cancel, retry, icon action | `components/ui/button.tsx` | Use existing variants; navigation CTA uses `asChild` with `Link`/`a`. Plain inline navigation remains a link. |
 | Noninteractive status label | `components/ui/badge.tsx` | Existing `tone` for spectrum meaning, `outline` for neutral labels. Never turn a badge into the control itself. |
-| Panel switching | `components/ui/tabs.tsx` | Use actual tabs with matching panel semantics; do not substitute tabs for form values, multi-select filters or navigation links. |
+| Panel switching | `components/ui/tabs.tsx` | Use actual tabs with matching panel semantics; do not substitute tabs for form values, multi-select filters or navigation links. Route-level selectors (e.g. Explore's NavLinks) keep link semantics and reuse `routeTabClassName`, keyed on `aria-current`. |
 | Category-coloured transaction row/avatar | `components/ui/ActivityRowShell.tsx`, `CategoryAvatar.tsx` | Caller owns money formatting and navigation; shared component owns presentation. |
 | Standard card / chart surface / hero / positive highlight | `components/ui/cards.tsx` | Use the matching role. Raw `Card` is for established structural exceptions, not a new visual system. |
 | Compact KPI / new-experience hero amount | `components/ui/StatCard.tsx`, `HeroAmount.tsx` | Use their actual APIs; retain money precision and quality labels. |
 | Text fields | `.input-field` in `index.css`; `components/ui/input.tsx` wrapper | Consolidate the wrapper onto the utility contract; do not create another style string. |
 | Native / custom select | `.select-field`; `components/ui/select.tsx` | Different interaction mechanisms, same theme/geometry intent. Keep native semantics where suitable. |
-| Dialog, sheet, dropdown | Existing `components/ui/` Radix wrappers | Preserve focus/keyboard/portal behaviour; fix shared styles rather than overriding every caller. |
+| Dialog, sheet, dropdown, select | Existing `components/ui/` Radix wrappers | They own surface (`card-elev`, `border-border`, `elev-md`), backdrop and §14 enter/exit motion (`.pop-motion`, `.overlay-motion`, `.sheet-motion-*` in `index.css`), and the close control is `Button` via `Close asChild`. Do not override surfaces in callers. Interrupting confirmations compose `Dialog` (no separate ConfirmDialog API). |
 | Loading / recoverable failure / transient feedback | `Skeleton`, `LoadFailed`, existing toast provider | Compose known patterns; no page-local alternative feedback system. |
 | Category-change visual | `components/charts/CategoryChangeBars.tsx` | Home and Explore reuse the same row/scale contract. |
 
