@@ -9,15 +9,17 @@ import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuIte
 export function ProfileMenu() {
   const { preference, setPreference } = useTheme();
   const [textSize, setTextSize] = useState<TextSize>(readTextSize);
+  // Non-modal: a modal menu locks page scroll while open, and on iOS that
+  // lock shifted the whole one-screen layout up under the status bar.
   return (
-    <DropdownMenu>
+    <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" aria-label="Profile menu" className="min-h-11 min-w-11 px-2 lg:px-3 [&_svg]:size-5">
           <CircleUserRound />
           <span className="hidden lg:inline">Profile</span>
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
+      <DropdownMenuContent align="end" collisionPadding={{ top: 8, bottom: 72 }}>
         <DropdownMenuItem asChild className="min-h-11">
           <Link to="/settings"><Settings />Settings</Link>
         </DropdownMenuItem>

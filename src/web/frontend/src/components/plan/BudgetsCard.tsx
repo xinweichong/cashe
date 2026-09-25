@@ -54,7 +54,7 @@ function AddBudgetForm({ onAdd }: { onAdd: () => void }) {
 
   return (
     <div className="pt-4 border-t border-border space-y-3">
-      <p className="text-sm font-medium text-foreground">Add Budget</p>
+      <p className="text-sm font-medium text-foreground">Add budget</p>
       <div className="flex flex-wrap gap-2">
         <select value={category} onChange={(e) => setCategory(e.target.value)} className="select-field flex-1 min-w-32">
           <option value="__overall__">Overall</option>
@@ -87,7 +87,7 @@ export function BudgetsCard({ onSelect }: { onSelect: (id: number) => void }) {
   return (
     <PageCard
       title="Budgets"
-      action={<Button variant="ghost" size="sm" onClick={() => setShowAddForm(!showAddForm)}>{showAddForm ? 'Cancel' : '+ Add Budget'}</Button>}
+      action={<Button variant="ghost" size="sm" onClick={() => setShowAddForm(!showAddForm)}>{showAddForm ? 'Cancel' : '+ Add budget'}</Button>}
     >
       {isLoading ? (
         <p className="text-muted text-sm py-4 text-center">Catching up…</p>

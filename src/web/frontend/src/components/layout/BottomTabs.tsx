@@ -20,7 +20,7 @@ export function BottomTabs() {
             to={to}
             end={to === '/'}
             className={({ isActive }) =>
-              `min-h-11 min-w-11 flex flex-col items-center gap-0.5 px-2 py-1.5 text-[10px] transition-colors relative ${
+              `min-h-11 min-w-11 flex flex-col items-center gap-0.5 px-2 py-1.5 text-2xs transition-colors relative ${
                 isActive ? 'text-teal' : 'text-muted'
               }`
             }

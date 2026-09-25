@@ -63,7 +63,8 @@ test('phone Activity day headers scroll away with their rows', async ({ page }) 
   const header = page.getByTestId('tx-day-header').first();
   await expect(header).toBeVisible();
   const before = (await header.boundingBox())!.y;
-  await page.getByRole('tabpanel').evaluate((el) => el.scrollBy(0, 160));
+  // The lens panel's scroll area is the tabpanel's first child.
+  await page.getByRole('tabpanel').locator('> div').first().evaluate((el) => el.scrollBy(0, 160));
   await page.waitForTimeout(200);
   expect((await header.boundingBox())!.y).toBeLessThan(before - 100);
 });
@@ -79,9 +80,9 @@ test('the text size setting scales content but not the wordmark', async ({ page 
   await page.keyboard.press('Escape');
   expect(await page.evaluate(() => getComputedStyle(document.documentElement).fontSize)).toBe('20px');
   expect((await wordmark.boundingBox())!.height).toBeCloseTo(logoBefore, 0);
-  // Still one screen at the larger size.
-  const { scroll, inner } = await page.evaluate(() => ({ scroll: document.documentElement.scrollHeight, inner: window.innerHeight }));
-  expect(scroll).toBeLessThanOrEqual(inner);
+  // At Larger the screen turns page-scrolling so the panel keeps real room.
+  const panelHeight = (await page.getByRole('tabpanel').boundingBox())!.height;
+  expect(panelHeight).toBeGreaterThan(844 * 0.6);
   await page.waitForTimeout(500);
   await page.screenshot({ path: `${REVIEW}/activity-text-larger.png` });
   await page.reload();

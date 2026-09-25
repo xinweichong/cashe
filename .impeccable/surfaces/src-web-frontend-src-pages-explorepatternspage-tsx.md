@@ -31,7 +31,7 @@ OWN-WORLD: The Spectrum Instrument, with the shared owners PhoneScreen, LensBar 
 
 STORY: Glance first, lens for depth, and a drill-in for any row, with back returning to the overview.
 
-FIRST VIEWPORT: Glance: ExploreGlance (month-to-date spend, change vs last month, Worth a look and Health as one-tap links to /explore/signals and /explore/health). Lenses: Time (Spending over time first at 220px, then Today's read, then income vs expense), Category (Where it went, What changed, What drove it), Merchant, Recurring, Week (usual week and trip impact). A desktop ?mode= link lands on its lens. The page header is sr-only on the phone index.
+FIRST VIEWPORT: Glance: ExploreGlance (month-to-date spend, change vs last month, Worth a look and Health as one-tap links to /explore/signals and /explore/health). Lenses: Time, Category, Merchant, Week, one card each (Spending over time with three chips plus More; Where it went; Top merchants; Your usual week), with secondary views (Today's read, Income and spending, What changed, What drove it, Most visited, Trip impact) as LensMore rows opening DrillSheets. Recurring costs moved to Plan's Subs lens (critique 2026-09-26). A desktop ?mode= link lands on its lens. The page header is sr-only on the phone index.
 
 FORM: exp-lens (user pick, decision page 2026-09-26). Mirrors the Home phone pattern (seed 568c139f).
 

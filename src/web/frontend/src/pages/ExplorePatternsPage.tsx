@@ -20,12 +20,15 @@ import { DailyReadCard } from '@/components/explore/DailyReadCard';
 import { WorthALookSummary } from '@/components/explore/WorthALookCard';
 import { HealthScoreSummary } from '@/components/explore/HealthScoreCard';
 import { formatChange, formatRange } from '@/components/explore/format';
+import { QuestionCard, RankedBar, RecurringCharges } from '@/components/explore/RecurringCharges';
 import { datesInRange, formatShortDate, getCategoryColor } from '@/lib/utils';
 import { ArrowDown, ArrowUp, ChevronRight } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { HeroCard } from '@/components/ui/cards';
 import { HeroAmount } from '@/components/ui/HeroAmount';
-import { PhoneScreen, type Lens } from '@/components/layout/PhoneScreen';
+import { LensGrow, LensMore, PhoneScreen, type Lens } from '@/components/layout/PhoneScreen';
+import { DrillSheet } from '@/components/layout/DrillSheet';
+import { useDrill } from '@/hooks/useDrill';
 import { useIsPhone } from '@/hooks/useIsPhone';
 
 const WEEKDAY_LABELS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -46,40 +49,6 @@ function merchantProfileLink(merchant: string): string {
 
 function useMonthFacts() {
   return useQuery({ queryKey: ['explore-month-facts'], queryFn: () => briefingApi.month() });
-}
-
-function RankedBar({ label, value, max, href, secondaryHref, secondaryLabel, color, display }: {
-  label: string; value: number; max: number; href?: string; secondaryHref?: string; secondaryLabel?: string;
-  /** Bar fill; defaults to the brand teal. Pass a category colour when the row is a category. */
-  color?: string;
-  /** Right-hand figure; defaults to the value as SGD money. */
-  display?: string;
-}) {
-  const pct = max > 0 ? Math.min(100, Math.round((Math.abs(value) / max) * 100)) : 0;
-  return (
-    <div className="py-1">
-      <div className="flex justify-between gap-4 text-sm items-center">
-        <span className="flex flex-wrap items-center gap-x-3 min-w-0">
-          {href ? <Link to={href} className="hover:underline inline-flex items-center min-h-11">{label}</Link> : <span className="inline-flex items-center min-h-11">{label}</span>}
-          {secondaryHref && <Link to={secondaryHref} className="text-xs text-teal underline inline-flex items-center min-h-11">{secondaryLabel ?? 'Profile'}</Link>}
-        </span>
-        <span className="tabular-nums font-mono">{display ?? formatMoney({ minor_units: value, currency: 'SGD' })}</span>
-      </div>
-      <div className="h-2 rounded bg-foreground/10 mt-1 overflow-hidden">
-        <div className={color ? 'h-full' : 'h-full bg-teal'} style={{ width: `${pct}%`, ...(color ? { backgroundColor: color } : {}) }} />
-      </div>
-    </div>
-  );
-}
-
-function QuestionCard({ title, isError, onRetry, isReady, children, action }: { title: string; isError: boolean; onRetry: () => void; isReady: boolean; children: React.ReactNode; action?: React.ReactNode }) {
-  // A background refetch failure must not hide already-known-good data behind
-  // an error screen — only show LoadFailed when there is nothing to show yet.
-  return (
-    <PageCard title={title} action={action}>
-      {isError && !isReady ? <div role="alert"><LoadFailed onRetry={onRetry} /></div> : !isReady ? <div role="status"><span className="sr-only">Loading…</span><Skeleton className="h-20 w-full" /></div> : children}
-    </PageCard>
-  );
 }
 
 function WhatChanged() {
@@ -188,7 +157,8 @@ function WhereItWent({ facts }: { facts: SpendingFacts | undefined }) {
   );
 }
 
-function SpendingOverTime() {
+function SpendingOverTime({ compactChips = false }: { compactChips?: boolean }) {
+  const [allChips, setAllChips] = useState(false);
   const { data: categories } = useQuery({ queryKey: ['categories'], queryFn: () => api.getCategories() });
   const { data: monthFacts } = useQuery({ queryKey: ['explore-month-facts'], queryFn: () => briefingApi.month() });
   const [selected, setSelected] = useState<string[]>([]);
@@ -256,7 +226,11 @@ function SpendingOverTime() {
     <PageCard title="Spending over time">
       {!!categories?.length && (
         <div className="flex flex-wrap gap-2 mb-3" role="group" aria-label="Categories to chart">
-          {categories.map((c) => (
+          {/* Phone: the charted categories first, three chips, the rest behind More. */}
+          {(compactChips && !allChips
+            ? [...categories].sort((a, b) => Number(selected.includes(b.name)) - Number(selected.includes(a.name))).slice(0, 3)
+            : categories
+          ).map((c) => (
             <ChoiceChip
               key={c.name}
               selected={selected.includes(c.name)}
@@ -266,6 +240,11 @@ function SpendingOverTime() {
               {c.name}
             </ChoiceChip>
           ))}
+          {compactChips && categories.length > 3 && (
+            <ChoiceChip selected={false} aria-expanded={allChips} onClick={() => setAllChips((v) => !v)}>
+              {allChips ? 'Fewer' : `${categories.length - 3} more`}
+            </ChoiceChip>
+          )}
         </div>
       )}
       {!selected.length ? (
@@ -408,36 +387,6 @@ function MostVisited({ facts }: { facts: SpendingFacts | undefined }) {
   );
 }
 
-function RecurringCharges() {
-  const { data, isError, refetch } = useQuery({ queryKey: ['explore-subscription-review'], queryFn: () => api.getSubscriptionReviewV2() });
-  const max = Math.max(1, ...(data?.price_changes ?? []).map(c => Math.abs(c.change.minor_units)));
-  const empty = data && !data.price_changes.length && !data.overdue.length && !data.annual_renewals.length;
-  const column = (heading: string, children: React.ReactNode) => (
-    <section className="space-y-1 min-w-0">
-      <h3 className="text-sm font-semibold pb-1">{heading}</h3>
-      {children}
-    </section>
-  );
-  return (
-    <QuestionCard title="Recurring charges" isError={isError} onRetry={() => void refetch()} isReady={!!data}
-      action={<Link to="/plan" className="text-sm text-teal min-h-11 inline-flex items-center">Upcoming in Plan</Link>}>
-      {empty ? <p className="text-muted">No recurring cost changes to review. Price changes, schedules that may have stopped, and annual renewals appear here.</p> : data && (
-        <div className="grid gap-6 md:grid-cols-3">
-          {column('Price changes', data.price_changes.length
-            ? data.price_changes.map(c => <RankedBar key={c.subscription_id} label={c.label} value={c.change.minor_units} max={max} display={formatChange(c.change as Money)} href={`/plan?subscription=${c.subscription_id}`} />)
-            : <p className="text-sm text-muted">No price changes.</p>)}
-          {column('Possibly stopped', data.overdue.length
-            ? data.overdue.map(o => <Link key={o.subscription_id} to={`/plan?subscription=${o.subscription_id}`} className="flex justify-between gap-3 text-sm min-h-11 items-center hover:underline"><span className="truncate">{o.label}</span><span className="text-muted font-mono tabular-nums shrink-0">{o.days_since_last_charge}d ago</span></Link>)
-            : <p className="text-sm text-muted">Every schedule charged on time.</p>)}
-          {column('Renewing soon', data.annual_renewals.length
-            ? data.annual_renewals.map(r => <Link key={r.subscription_id} to={`/plan?subscription=${r.subscription_id}`} className="flex justify-between gap-3 text-sm min-h-11 items-center hover:underline"><span className="truncate">{r.label}</span><span className="text-muted font-mono tabular-nums shrink-0">in {r.days_until_renewal}d</span></Link>)
-            : <p className="text-sm text-muted">No annual renewals coming up.</p>)}
-        </div>
-      )}
-    </QuestionCard>
-  );
-}
-
 function TripImpact({ trips }: { trips: { id: number; name: string; end_date: string | null }[] }) {
   const [tripId, setTripId] = useState<number | null>(null);
   const effectiveTripId = tripId ?? trips[0]?.id ?? null;
@@ -501,9 +450,16 @@ function TripImpact({ trips }: { trips: { id: number; name: string; end_date: st
   );
 }
 
-type ExploreLens = 'time' | 'category' | 'merchant' | 'recurring' | 'week';
-const EXPLORE_LENSES: readonly ExploreLens[] = ['time', 'category', 'merchant', 'recurring', 'week'];
-const LENS_FOR_MODE: Record<Mode, ExploreLens> = { 'over-time': 'time', 'by-category': 'category', 'by-merchant': 'merchant', recurring: 'recurring' };
+// Explore is past patterns. Recurring costs live with subscriptions in
+// Plan on the phone; a desktop recurring link lands on the Time lens.
+type ExploreLens = 'time' | 'category' | 'merchant' | 'week';
+const EXPLORE_LENSES: readonly ExploreLens[] = ['time', 'category', 'merchant', 'week'];
+const LENS_FOR_MODE: Record<Mode, ExploreLens> = { 'over-time': 'time', 'by-category': 'category', 'by-merchant': 'merchant', recurring: 'time' };
+type ExploreDrill = 'read' | 'income' | 'changed' | 'drove' | 'visited' | 'trip';
+const EXPLORE_DRILLS: readonly ExploreDrill[] = ['read', 'income', 'changed', 'drove', 'visited', 'trip'];
+const DRILL_TITLES: Record<ExploreDrill, string> = {
+  read: "Today's read", income: 'Income and spending', changed: 'What changed', drove: 'What drove it', visited: 'Most visited', trip: 'Trip impact',
+};
 
 // The phone glance: month-to-date spend against last month, with the two
 // summaries the desktop band shows (signals, health) as one-tap links.
@@ -530,8 +486,14 @@ function ExploreGlance({ facts }: { facts: SpendingFacts | undefined }) {
           <ChevronRight size={16} className="text-muted" aria-hidden />
         </Link>
         <Link to="/explore/health" className={`${link} pl-3`}>
-          <span className="flex-1">Health</span>
-          <span className="font-display font-bold tabular-nums">{health.data ? (health.data.has_income_data ? health.data.score : '—') : '–'}</span>
+          {(() => {
+            const score = health.data?.has_income_data ? health.data.score ?? null : null;
+            return <>
+              {score != null && <StatusDot tone={score >= 70 ? 'saved' : score >= 50 ? 'active' : 'warm'} />}
+              <span className="flex-1">Health</span>
+              <span className="tabular-nums"><span className="font-display font-bold">{health.data ? (score ?? '—') : '–'}</span>{score != null && <span className="text-xs text-muted">/100</span>}</span>
+            </>;
+          })()}
           <ChevronRight size={16} className="text-muted" aria-hidden />
         </Link>
       </div>
@@ -551,6 +513,8 @@ export function ExplorePatternsPage() {
   const { data: facts } = useMonthFacts();
   const { data: trips } = useQuery({ queryKey: ['trips'], queryFn: () => api.getTrips() });
   const isPhone = useIsPhone();
+  const { drill, openDrill, closeDrill } = useDrill(EXPLORE_DRILLS);
+  const dailyRead = useQuery({ queryKey: ['analytics-insight', 'daily'], queryFn: () => api.getAnalyticsInsight(), staleTime: 60 * 60 * 1000, enabled: isPhone });
   const location = useLocation();
   const patternsRef = useRef<HTMLElement>(null);
   useEffect(() => {
@@ -569,14 +533,41 @@ export function ExplorePatternsPage() {
       if (next === 'time') params.delete('lens'); else params.set('lens', next);
       setSearch(params, { replace: true });
     };
+    const more = (items: { label: string; drill: ExploreDrill; show?: boolean }[]) => (
+      <LensMore items={items.filter((i) => i.show !== false).map((i) => ({ label: i.label, onOpen: () => openDrill(i.drill) }))} />
+    );
     const lenses: Lens<ExploreLens>[] = [
-      { value: 'time', label: 'Time', bare: true, panel: <><SpendingOverTime /><DailyReadCard /><IncomeExpenseBar /></> },
-      { value: 'category', label: 'Category', bare: true, panel: <><WhereItWent facts={facts} /><WhatChanged /><WhatDroveIt /></> },
-      { value: 'merchant', label: 'Merchant', bare: true, panel: <><MerchantRanking facts={facts} /><MostVisited facts={facts} /></> },
-      { value: 'recurring', label: 'Recurring', bare: true, panel: <RecurringCharges /> },
-      { value: 'week', label: 'Week', bare: true, panel: <><WhatDoesANormalWeekLookLike />{!!trips?.length && <TripImpact trips={trips} />}</> },
+      { value: 'time', label: 'Time', bare: true, panel: <>
+        <LensGrow><SpendingOverTime compactChips /></LensGrow>
+        {more([{ label: "Today's read", drill: 'read', show: !!dailyRead.data?.content }, { label: 'Income and spending', drill: 'income' }])}
+      </> },
+      { value: 'category', label: 'Category', bare: true, panel: <>
+        <LensGrow><WhereItWent facts={facts} /></LensGrow>
+        {more([{ label: 'What changed', drill: 'changed' }, { label: 'What drove it', drill: 'drove' }])}
+      </> },
+      { value: 'merchant', label: 'Merchant', bare: true, panel: <>
+        <LensGrow><MerchantRanking facts={facts} /></LensGrow>
+        {more([{ label: 'Most visited', drill: 'visited' }])}
+      </> },
+      { value: 'week', label: 'Week', bare: true, panel: <>
+        <LensGrow><WhatDoesANormalWeekLookLike /></LensGrow>
+        {more([{ label: 'Trip impact', drill: 'trip', show: !!trips?.length }])}
+      </> },
     ];
-    return <PhoneScreen glance={<ExploreGlance facts={facts} />} lenses={lenses} lens={lens} onLensChange={setLens} label="Explore views" />;
+    return <>
+      <PhoneScreen glance={<ExploreGlance facts={facts} />} lenses={lenses} lens={lens} onLensChange={setLens} label="Explore views" />
+      <DrillSheet open={!!drill} onOpenChange={(open) => !open && closeDrill()} backLabel="Explore" title={drill ? DRILL_TITLES[drill] : ''}>
+        <div className="space-y-3 [&_h2]:sr-only">
+          {drill === 'read' && <DailyReadCard />}
+          {drill === 'income' && <IncomeExpenseBar />}
+          {drill === 'changed' && <WhatChanged />}
+          {drill === 'drove' && <WhatDroveIt />}
+          {drill === 'visited' && <MostVisited facts={facts} />}
+          {drill === 'trip' && !!trips?.length && <TripImpact trips={trips} />}
+        </div>
+      </DrillSheet>
+    </>;
+
   }
 
   return (

@@ -54,7 +54,8 @@ test('merged Explore dashboard: pulse band, signals and health above the pattern
         await page.screenshot({ path: `e2e/screenshots/explore-first-screen-${theme}.png` });
       }
       await expect(page.locator('.recharts-line').first()).toBeVisible();
-      await expect(page.locator('.recharts-bar-rectangle').first()).toBeVisible();
+      // Phone keeps income vs spending one tap away, in a drill-in.
+      if (viewport.name === 'desktop') await expect(page.locator('.recharts-bar-rectangle').first()).toBeVisible();
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
       expect(overflow).toBeLessThanOrEqual(0);
       await page.waitForTimeout(600);
@@ -133,9 +134,11 @@ test('phone pattern lenses stay inside the viewport and every lens is reachable'
   const listBox = (await tabList.boundingBox())!;
   expect(listBox.x + listBox.width).toBeLessThanOrEqual(390);
 
-  const recurringTab = page.getByRole('tab', { name: 'Recurring' });
-  await recurringTab.click();
-  await expect(recurringTab).toHaveAttribute('aria-selected', 'true');
+  // Recurring costs live in Plan's Subs lens on the phone.
+  await expect(page.getByRole('tab', { name: 'Recurring' })).toHaveCount(0);
+  const weekTab = page.getByRole('tab', { name: 'Week' });
+  await weekTab.click();
+  await expect(weekTab).toHaveAttribute('aria-selected', 'true');
 });
 
 test('Over time: step to a day, break it down by category, then merchants with day-scoped evidence', async ({ page }) => {

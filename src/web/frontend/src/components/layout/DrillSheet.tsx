@@ -46,7 +46,7 @@ export function DrillSheet({ open, onOpenChange, title, backLabel, description, 
             className="sheet-motion-right fixed inset-y-0 right-0 z-50 flex w-full flex-col border-l border-border bg-card-elev text-foreground shadow-elev-md focus:outline-none"
           >
             {/* Edge grip: the cue that the card drags right to go back. */}
-            <span aria-hidden className="pointer-events-none absolute left-1.5 top-1/2 h-10 w-1 -translate-y-1/2 rounded-full bg-border" />
+            <span aria-hidden className="pointer-events-none absolute left-1.5 top-1/2 h-10 w-1 -translate-y-1/2 rounded-full bg-muted/50" />
             <div className="shrink-0 pt-[env(safe-area-inset-top)] border-b border-border">
               <div className="flex items-center gap-1 px-2 h-12">
                 <DialogPrimitive.Close className="inline-flex min-h-11 min-w-11 items-center gap-1 rounded-sm pl-1 pr-3 text-sm text-teal active:scale-[0.97] transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">

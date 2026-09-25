@@ -197,7 +197,7 @@ export function MerchantsPage() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="font-medium text-foreground truncate max-w-[180px]">{m.display_name}</div>
-                        <div className="font-mono text-[10px] text-muted uppercase tracking-[0.06em] mt-0.5 sm:hidden">
+                        <div className="font-mono text-2xs text-muted uppercase tracking-[0.06em] mt-0.5 sm:hidden">
                           {m.transaction_count} txns · {m.last_seen ?? '—'}
                         </div>
                       </td>

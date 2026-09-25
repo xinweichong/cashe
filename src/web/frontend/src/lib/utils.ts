@@ -52,6 +52,15 @@ export function formatShortDate(date: string): string {
  * Handles null/undefined gracefully. Handles both "YYYY-MM-DD" (bare) and
  * "YYYY-MM-DDTHH:MM:SS" (ISO) formats.
  */
+/** Just the time of day ("10:05 am"), or '' for a date-only record. */
+export function formatTimeOfDay(date: string | null | undefined): string {
+  const tIdx = date?.indexOf('T') ?? -1;
+  if (!date || tIdx === -1 || date.slice(tIdx + 1).startsWith('00:00')) return '';
+  const [y, m, d] = date.slice(0, tIdx).split('-').map(Number);
+  const [h, min] = date.slice(tIdx + 1).split(':').map(Number);
+  return new Date(y, m - 1, d, h, min).toLocaleTimeString('en-SG', { hour: 'numeric', minute: '2-digit', hour12: true });
+}
+
 export function formatDateTime(date: string | null | undefined): string {
   if (!date) return '—';
   const tIdx = date.indexOf('T');

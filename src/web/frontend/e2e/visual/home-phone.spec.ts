@@ -64,11 +64,13 @@ test('phone Home lenses swap in place and drill-ins slide back', async ({ page }
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
   await page.waitForTimeout(1800);
-  await page.getByRole('tab', { name: 'Soon' }).click();
-  await expect(page).toHaveURL(/lens=soon/);
-  await expect(page.getByText('Gym membership')).toBeVisible();
+  // Home is "now": Month, Trend and Changed; what's coming links to Plan.
+  await expect(page.getByRole('tab', { name: 'Soon' })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: /Coming up/ })).toHaveAttribute('href', '/plan?days=14');
+  await page.getByRole('tab', { name: 'Changed' }).click();
+  await expect(page).toHaveURL(/lens=changed/);
   await page.waitForTimeout(400);
-  await page.screenshot({ path: `${REVIEW}/mobile-lens-soon.png` });
+  await page.screenshot({ path: `${REVIEW}/mobile-lens-changed.png` });
 
   await page.getByTestId('category-donut-legend').getByRole('button', { name: /Bills/ }).click();
   const sheet = page.getByRole('dialog');
@@ -78,7 +80,7 @@ test('phone Home lenses swap in place and drill-ins slide back', async ({ page }
   await page.screenshot({ path: `${REVIEW}/mobile-drill.png` });
   await page.goBack();
   await expect(sheet).toBeHidden();
-  await expect(page).toHaveURL(/lens=soon/);
+  await expect(page).toHaveURL(/lens=changed/);
 });
 
 test('tablet and desktop keep the dashboard, with no lens bar', async ({ page }) => {

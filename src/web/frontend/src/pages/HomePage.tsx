@@ -14,7 +14,6 @@ import { StatCard } from '@/components/ui/StatCard';
 import { ActivityRowShell } from '@/components/ui/ActivityRowShell';
 import { LoadFailed } from '@/components/ui/LoadFailed';
 import { Skeleton } from '@/components/ui/skeleton';
-import { SelectableRow } from '@/components/ui/selectable-row';
 import { TrendLine } from '@/components/charts/TrendLine';
 import { CategoryDonut } from '@/components/charts/CategoryDonut';
 import { CategoryChangeBarRow } from '@/components/charts/CategoryChangeBars';
@@ -26,10 +25,13 @@ import { cn } from '@/lib/utils';
 const PAGE = 'p-4 md:p-6 space-y-4 md:space-y-5 max-w-[1600px] text-base';
 const BAND = 'grid gap-4 md:gap-5 lg:grid-cols-12';
 
-type HomeLens = 'month' | 'trend' | 'changed' | 'soon' | 'recent';
-type HomeDrill = 'category' | 'changed' | 'soon' | 'attention';
-const HOME_LENSES: readonly HomeLens[] = ['month', 'trend', 'changed', 'soon', 'recent'];
-const HOME_DRILLS: readonly HomeDrill[] = ['category', 'changed', 'soon', 'attention'];
+// Home is "now": the month so far, its trend and what changed. What's
+// coming belongs to Plan and the full record to Activity; the Month lens
+// links into both with one-line summaries instead of duplicating them.
+type HomeLens = 'month' | 'trend' | 'changed';
+type HomeDrill = 'category' | 'changed' | 'attention';
+const HOME_LENSES: readonly HomeLens[] = ['month', 'trend', 'changed'];
+const HOME_DRILLS: readonly HomeDrill[] = ['category', 'changed', 'attention'];
 // The phone glance's own height: donut ring plus the amount row and chrome.
 const PHONE_SCREEN = cn(PHONE_SCREEN_HEIGHT, 'flex flex-col gap-2 px-3 pt-3 pb-2 overflow-hidden');
 
@@ -307,11 +309,6 @@ export function HomePage() {
         {label}<ChevronRight size={16} aria-hidden />
       </Button>
     );
-    const lensLink = (label: string, to: string) => (
-      <Link to={to} className="flex min-h-12 items-center justify-between border-t border-border px-4 text-sm font-medium text-teal active:bg-foreground/5">
-        {label}<ChevronRight size={16} aria-hidden />
-      </Link>
-    );
     const changeAbs = facts.change && formatMoney({ ...facts.change, minor_units: Math.abs(facts.change.minor_units) });
     const changes = facts.category_changes.slice(0, 4);
     const maxChange = Math.max(...changes.map((c) => Math.abs(c.change.minor_units)), 1);
@@ -323,7 +320,8 @@ export function HomePage() {
           {spending_target
             ? <MetricRow label={overTarget ? 'Over target' : 'Target left'} value={targetAbs} tone={overTarget ? 'coral' : 'teal'} sub={`of your ${formatMoney(spending_target.target)} monthly target`} href="/plan" />
             : <MetricRow label="Target" value="Not set" sub="Set one in Plan to track pace" href="/plan" />}
-          <MetricRow label="Vs last month" value={facts.change ? <span className="inline-flex items-center gap-1">{facts.change.minor_units >= 0 ? <ArrowUp size={16} aria-label="more" /> : <ArrowDown size={16} aria-label="less" />}{changeAbs}</span> : '—'} tone={!facts.change ? undefined : facts.change.minor_units >= 0 ? 'coral' : 'teal'} sub={facts.change ? `${facts.previous.start}–${facts.previous.end}` : 'No comparison while records need review'} />
+          <MetricRow label="Coming up" value={formatMoney(upcoming_total)} sub={`Next 14 days · ${upcoming.length} ${upcoming.length === 1 ? 'charge' : 'charges'}${upcoming_unknown_count ? `, ${upcoming_unknown_count} unpriced` : ''}`} href="/plan?days=14" />
+          {recent[0] && <MetricRow label="Latest" value={recent[0].amount ? formatMoney(recent[0].amount) : 'Unresolved'} sub={`${recent[0].merchant || 'Unnamed transaction'}${recent[0].date ? ` · ${formatShortDate(recent[0].date)}` : ''}`} href="/activity" />}
         </div>
         {refreshing && <p role="status" className="px-4 py-2 text-xs text-muted">Updating…</p>}
       </div> },
@@ -342,35 +340,6 @@ export function HomePage() {
             : <p className="p-1 text-sm text-muted">{facts.change ? 'No category spending changes in these periods.' : 'Resolve the records needing attention to compare categories.'}</p>}
         </div>
         {lensAction('Why it changed', () => openDrill('changed'))}
-      </div> },
-      { value: 'soon', label: 'Soon', panel: <div className="flex h-full flex-col">
-        <div className="flex-1 px-4 pt-3">
-          <p className="text-sm"><span className="font-display text-lg font-bold tabular-nums">{formatMoney(upcoming_total)}</span> <span className="text-muted">due in the next 14 days</span></p>
-          {!!upcoming_unknown_count && <p className="text-xs text-warning">Plus {upcoming_unknown_count} expected {upcoming_unknown_count === 1 ? 'charge' : 'charges'} with no amount yet.</p>}
-          {upcoming.slice(0, 3).map(item => <SelectableRow key={item.id} onClick={() => openDrill('soon')} className="min-h-12 justify-between gap-4 rounded-none border-b border-border px-0 last:border-0"><span className="min-w-0 truncate">{item.label}<span className="block text-xs text-muted font-mono">{formatShortDate(item.date)}</span></span><span className="font-mono tabular-nums">{item.amount ? formatMoney(item.amount) : 'Unknown'}</span></SelectableRow>)}
-          {!upcoming.length && <p className="mt-2 text-sm text-muted">No pending charges are recorded for these dates.</p>}
-        </div>
-        {upcoming.length > 3 || upcoming_unknown_count || increased_commitments.length
-          ? lensAction(`All upcoming${upcoming.length > 3 ? ` (${upcoming.length})` : ''}`, () => openDrill('soon'))
-          : lensLink('Open plan', '/plan')}
-      </div> },
-      { value: 'recent', label: 'Recent', panel: <div className="flex h-full flex-col">
-        <div className="flex-1">
-          {recent.slice(0, 4).map(item => (
-            <ActivityRowShell
-              key={item.id}
-              category={item.category}
-              isIncome={item.type === 'income'}
-              href={transactionLink(item.id)}
-              title={item.merchant || 'Unnamed transaction'}
-              metaPrimary={item.date?.slice(0, 10) ?? 'Date unknown'}
-              amount={item.amount ? formatMoney(item.amount) : 'Amount unresolved'}
-              amountSub={item.conversion_status === 'indicative' ? 'Indicative' : undefined}
-            />
-          ))}
-          {!recent.length && <p className="p-4 text-sm text-muted">Your captured purchases will appear here.</p>}
-        </div>
-        {lensLink('All activity', '/activity')}
       </div> },
     ];
     const glance = (
@@ -456,9 +425,6 @@ export function HomePage() {
         </DrillSheet>
         <DrillSheet open={drill === 'changed'} onOpenChange={(open) => !open && closeDrill()} backLabel="Home" title="What changed" description={`${facts.comparison_current.start}–${facts.comparison_current.end} against ${facts.previous.start}–${facts.previous.end}`}>
           {renderChanged(true)}
-        </DrillSheet>
-        <DrillSheet open={drill === 'soon'} onOpenChange={(open) => !open && closeDrill()} backLabel="Home" title="Coming up" footer={<Button asChild variant="outline" className="w-full min-h-12"><Link to="/plan">Open plan</Link></Button>}>
-          {upcomingBody}
         </DrillSheet>
         <DrillSheet open={drill === 'attention'} onOpenChange={(open) => !open && closeDrill()} backLabel="Home" title="Needs attention">
           {attentionBody}

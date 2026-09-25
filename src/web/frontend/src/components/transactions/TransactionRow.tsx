@@ -1,5 +1,5 @@
 import { type Transaction } from '@/api/client';
-import { formatCurrency, formatDateTime, isCreditType } from '@/lib/utils';
+import { formatCurrency, formatDateTime, formatTimeOfDay, isCreditType } from '@/lib/utils';
 import { SOURCE_DISPLAY_LABELS } from '@/lib/sourceLabels';
 import { Button } from '@/components/ui/button';
 import { ActivityRowShell } from '@/components/ui/ActivityRowShell';
@@ -13,6 +13,7 @@ export function TransactionRow({
   onRemove,
   removeDisabled = false,
   selectable = false,
+  compact = false,
 }: {
   tx: Transaction;
   readOnly?: boolean;
@@ -24,6 +25,10 @@ export function TransactionRow({
    * checkbox reflecting `selected`, and clicking anywhere on the row toggles
    * selection (still via the same `onClick`, which the caller repurposes). */
   selectable?: boolean;
+  /** Phone list: the day header already names the date, so the row shows
+   * only the time, and the source only when it wasn't captured
+   * automatically (a manual entry is the exception worth flagging). */
+  compact?: boolean;
 }) {
   const isIncome = isCreditType(tx.type);
   const sign = isIncome ? '+' : '-';
@@ -48,9 +53,9 @@ export function TransactionRow({
         />
       ) : undefined}
       title={tx.merchant || tx.description || 'Transaction'}
-      metaPrimary={formatDateTime(tx.transaction_date)}
+      metaPrimary={compact ? formatTimeOfDay(tx.transaction_date) : formatDateTime(tx.transaction_date)}
       amount={<>{sign}{formatCurrency(tx.amount, tx.currency)}</>}
-      amountSub={tx.source ? (SOURCE_DISPLAY_LABELS[tx.source as keyof typeof SOURCE_DISPLAY_LABELS] ?? tx.source) : undefined}
+      amountSub={tx.source && (!compact || tx.source === 'manual') ? (SOURCE_DISPLAY_LABELS[tx.source as keyof typeof SOURCE_DISPLAY_LABELS] ?? tx.source) : undefined}
       trailing={onRemove && (
         <Button
           variant="ghost"

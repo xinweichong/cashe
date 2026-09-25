@@ -164,7 +164,7 @@ export function MerchantProfile({
           { label: 'Last Seen', value: profile.last_seen ?? '—' },
         ].map(({ label, value }) => (
           <div key={label} className="bg-background rounded-lg p-3 border border-border">
-            <p className="text-[10px] font-mono uppercase tracking-[0.06em] text-muted">{label}</p>
+            <p className="text-2xs font-mono uppercase tracking-[0.06em] text-muted">{label}</p>
             <p className="text-sm font-display font-bold text-foreground mt-0.5">{value}</p>
           </div>
         ))}
@@ -190,7 +190,7 @@ export function MerchantProfile({
 
       {/* Tags */}
       <div>
-        <p className="text-[10px] font-mono font-semibold uppercase tracking-[0.22em] text-muted mb-2">Tags</p>
+        <p className="text-2xs font-mono font-semibold uppercase tracking-[0.22em] text-muted mb-2">Tags</p>
         <div className="flex flex-wrap gap-2">
           {ALL_TAGS.map((tag) => {
             const active = (profile.tags ?? []).includes(tag);
@@ -205,7 +205,7 @@ export function MerchantProfile({
 
       {/* Display name — cosmetic only; never rewrites the recorded merchant string above */}
       <div>
-        <p className="text-[10px] font-mono font-semibold uppercase tracking-[0.22em] text-muted mb-2">Display name</p>
+        <p className="text-2xs font-mono font-semibold uppercase tracking-[0.22em] text-muted mb-2">Display name</p>
         <input
           type="text"
           value={displayName}
@@ -224,7 +224,7 @@ export function MerchantProfile({
           only previews/backfills it, never creates or edits the rule. */}
       {ruleImpact && (
         <div>
-          <p className="text-[10px] font-mono font-semibold uppercase tracking-[0.22em] text-muted mb-2">Category rule</p>
+          <p className="text-2xs font-mono font-semibold uppercase tracking-[0.22em] text-muted mb-2">Category rule</p>
           <div className="bg-background rounded-lg p-3 border border-border space-y-2">
             <p className="text-sm text-foreground">New transactions from this merchant are categorized <strong>{ruleImpact.category}</strong>.</p>
             {ruleImpact.differing_count > 0 ? (
@@ -251,7 +251,7 @@ export function MerchantProfile({
 
       {/* Notes */}
       <div>
-        <p className="text-[10px] font-mono font-semibold uppercase tracking-[0.22em] text-muted mb-2">Notes</p>
+        <p className="text-2xs font-mono font-semibold uppercase tracking-[0.22em] text-muted mb-2">Notes</p>
         <textarea
           value={notes}
           onChange={(e) => setNotes(e.target.value)}

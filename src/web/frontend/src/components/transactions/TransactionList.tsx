@@ -33,6 +33,8 @@ interface TransactionListProps {
   /** Pin each day header while its rows scroll (desktop). The phone list
    * sits in a short card, where a pinned header only hides rows. */
   stickyDayHeaders?: boolean;
+  /** Phone rows: time only, source only when manual (see TransactionRow). */
+  compactRows?: boolean;
 }
 
 function TransactionRowSkeleton() {
@@ -57,10 +59,10 @@ function DayHeader({ dayKey, total, sticky }: { dayKey: string; total: DailyTota
       data-testid="tx-day-header"
       className={`flex items-baseline justify-between px-4 py-1.5 bg-muted/30 border-b border-border/30${sticky ? ' sticky top-0 z-10' : ''}`}
     >
-      <span className="text-[11px] font-mono uppercase tracking-[0.08em] text-muted font-semibold">
+      <span className="text-2xs font-mono uppercase tracking-[0.08em] text-muted font-semibold">
         {formatDayHeading(dayKey)}
       </span>
-      <span className="text-[11px] font-mono text-muted" data-testid="tx-day-total">
+      <span className="text-2xs font-mono text-muted" data-testid="tx-day-total">
         {total
           ? `${formatCurrency(total.spending.minor_units / 100, total.spending.currency)}${total.status !== 'complete' ? ' *' : ''}`
           : '···'}
@@ -97,6 +99,7 @@ export function TransactionList({
   selectedIds,
   onToggleSelect,
   stickyDayHeaders = true,
+  compactRows = false,
 }: TransactionListProps) {
   const observerRef = useRef<HTMLDivElement>(null);
 
@@ -156,6 +159,7 @@ export function TransactionList({
                 onClick={() => (selectionMode ? onToggleSelect?.(row.tx.id) : onTransactionClick(row.tx))}
                 selected={selectionMode ? !!selectedIds?.has(row.tx.id) : row.tx.id === selectedTransactionId}
                 selectable={selectionMode}
+                compact={compactRows}
               />
             </motion.div>
           )

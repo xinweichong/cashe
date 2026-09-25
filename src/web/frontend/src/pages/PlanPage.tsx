@@ -12,8 +12,6 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { LoadFailed } from '@/components/ui/LoadFailed';
 import { useIsDesktop } from '@/hooks/useIsDesktop';
 import { cn, formatShortDate, formatCurrencyWhole, toDateStr } from '@/lib/utils';
-import { AnimatePresence, motion } from 'framer-motion';
-import { slideInRightVariants } from '@/lib/motionPresets';
 import { SavingsCard } from '@/components/plan/SavingsCard';
 import { BudgetsCard } from '@/components/plan/BudgetsCard';
 import { BudgetDetail } from '@/components/plan/BudgetDetail';
@@ -27,7 +25,10 @@ import { SubscriptionDetail } from '@/components/subscriptions/SubscriptionDetai
 import { ChevronRight } from 'lucide-react';
 import { SelectableRow } from '@/components/ui/selectable-row';
 import { HeroAmount } from '@/components/ui/HeroAmount';
-import { PHONE_SCREEN_HEIGHT, PhoneScreen, type Lens } from '@/components/layout/PhoneScreen';
+import { LensGrow, LensMore, PHONE_SCREEN_HEIGHT, PhoneScreen, type Lens } from '@/components/layout/PhoneScreen';
+import { SlideOver } from '@/components/layout/SlideOver';
+import { RecurringCharges } from '@/components/explore/RecurringCharges';
+import { useDrill } from '@/hooks/useDrill';
 import { DrillSheet } from '@/components/layout/DrillSheet';
 import { useIsPhone } from '@/hooks/useIsPhone';
 
@@ -137,31 +138,41 @@ function ProjectionHero() {
   );
 }
 
-// The phone glance: the same forecast as ProjectionHero, compacted to the
-// figure, its composition bar and one line of legend.
+// The phone glance reads as pace against the monthly target, coloured by
+// where it lands on the spectrum (teal under, coral over), so the plan's
+// projection never looks like money already spent.
 function ProjectionGlance() {
   const { data, isError, refetch } = useQuery({ queryKey: ['month-forecast'], queryFn: () => briefingApi.monthForecast() });
+  const { data: briefing } = useQuery({ queryKey: ['home-briefing'], queryFn: briefingApi.home });
+  const target = briefing?.spending_target?.target;
   const month = new Date().toLocaleDateString('en-SG', { month: 'short' });
+  const projected = data?.projected_total ?? null;
+  const over = !!projected && !!target && projected.minor_units > target.minor_units;
+  const gap = projected && target ? formatMoney({ ...target, minor_units: Math.abs(projected.minor_units - target.minor_units) }) : null;
+  const whole = (m: { minor_units: number }) => formatCurrencyWhole(m.minor_units / 100);
   return (
-    <HeroCard title={`Projected · ${month}`} className="p-4">
+    <HeroCard title={`On pace · ${month}`} className="p-4" glowColor={!target || !projected ? 'warm' : over ? 'coral' : 'teal'}>
       {isError && !data ? <div role="alert"><LoadFailed onRetry={() => void refetch()} /></div> : !data ? <div role="status"><span className="sr-only">Loading…</span><Skeleton className="h-10 w-44" /><Skeleton className="mt-3 h-3 w-full" /></div> :
-        data.projected_total == null ? <>
-          <HeroAmount value={data.recorded_actual} className="text-4xl" />
+        projected == null ? <>
+          <p className="font-display text-4xl font-bold tracking-tight tabular-nums">{formatMoney(data.recorded_actual)}</p>
           <p className="mt-1 text-xs text-muted">Recorded so far. A projection needs about 4 weeks of history.</p>
         </> : <>
-          <HeroAmount value={data.projected_total} className="text-4xl" />
-          {data.remaining_variable_estimate && data.projected_total.minor_units > 0 && (() => {
-            const total = data.projected_total!.minor_units;
+          <p className={cn('font-display text-4xl font-bold tracking-tight tabular-nums', target && (over ? 'text-coral' : 'text-teal'))}>{formatMoney(projected)}</p>
+          <p className="mt-1 text-sm text-muted">
+            {target ? <>Target {formatMoney(target)} · <span className={over ? 'text-coral' : 'text-teal'}>{gap} {over ? 'over' : 'under'}</span></> : 'Projected for the month · no monthly target set'}
+          </p>
+          {data.remaining_variable_estimate && projected.minor_units > 0 && (() => {
+            const total = projected.minor_units;
             return <div className="mt-3 h-2.5 w-full rounded-pill overflow-hidden flex" role="img" aria-label={`Recorded ${formatMoney(data.recorded_actual)}, scheduled ${formatMoney(data.confirmed_commitments)}, estimated remaining ${formatMoney(data.remaining_variable_estimate!)}`}>
               <span className="h-full bg-teal" style={{ width: `${(data.recorded_actual.minor_units / total) * 100}%` }} />
               <span className="h-full bg-honey" style={{ width: `${(data.confirmed_commitments.minor_units / total) * 100}%` }} />
               <span className="h-full bg-tangerine opacity-70" style={{ width: `${(data.remaining_variable_estimate!.minor_units / total) * 100}%` }} />
             </div>;
           })()}
-          <p className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-2xs font-mono text-muted">
-            <span className="inline-flex items-center gap-1.5"><StatusDot tone="saved" />{formatMoney(data.recorded_actual)} recorded</span>
-            <span className="inline-flex items-center gap-1.5"><StatusDot tone="active" />{formatMoney(data.confirmed_commitments)} scheduled</span>
-            {data.remaining_variable_estimate && <span className="inline-flex items-center gap-1.5"><StatusDot tone="notable" />{formatMoney(data.remaining_variable_estimate)} est.</span>}
+          <p className="mt-2 flex gap-x-3 text-2xs font-mono text-muted whitespace-nowrap">
+            <span className="inline-flex items-center gap-1.5"><StatusDot tone="saved" />{whole(data.recorded_actual)} recorded</span>
+            <span className="inline-flex items-center gap-1.5"><StatusDot tone="active" />{whole(data.confirmed_commitments)} scheduled</span>
+            {data.remaining_variable_estimate && <span className="inline-flex items-center gap-1.5"><StatusDot tone="notable" />{whole(data.remaining_variable_estimate)} est.</span>}
           </p>
           {!!data.unpriced_commitment_count && <p className="mt-1 text-xs text-warning">{data.unpriced_commitment_count} upcoming charge{data.unpriced_commitment_count > 1 ? 's' : ''} with no amount not included.</p>}
         </>}
@@ -170,7 +181,8 @@ function ProjectionGlance() {
 }
 
 type PlanLens = 'soon' | 'budgets' | 'goals' | 'subs' | 'trips';
-type PlanDrill = 'charge' | 'timeline';
+type PlanDrill = 'charge' | 'timeline' | 'recurring' | 'changes';
+const PLAN_DRILLS: readonly PlanDrill[] = ['charge', 'timeline', 'recurring', 'changes'];
 
 function SavedThisMonthStat() {
   const { data: overview } = useQuery({ queryKey: ['savings-overview'], queryFn: () => api.getSavingsOverview(), staleTime: 30_000 });
@@ -320,6 +332,7 @@ export function PlanPage() {
   const isPhone = useIsPhone();
   const navigate = useNavigate();
   const location = useLocation();
+  const drillState = useDrill(PLAN_DRILLS);
   // Window, page and phone calendar view live in the URL (replace-history)
   // so returning from a detail panel restores them. Invalid values fall
   // back to defaults.
@@ -361,16 +374,19 @@ export function PlanPage() {
     params.set(type, String(id));
     return `/plan?${params.toString()}`;
   }
+  // Opening a panel pushes history, so the back gesture closes it; closing
+  // a panel that was opened here pops that entry instead of pushing another.
   function openPanel(type: Panel['type'], id: number) {
     const params = new URLSearchParams(search);
     params.delete('subscription'); params.delete('budget'); params.delete('goal'); params.delete('trip');
     params.set(type, String(id));
-    setSearch(params);
+    setSearch(params, { state: { panel: true } });
   }
   function closePanel() {
+    if ((location.state as { panel?: boolean } | null)?.panel) { navigate(-1); return; }
     const params = new URLSearchParams(search);
     params.delete('subscription'); params.delete('budget'); params.delete('goal'); params.delete('trip');
-    setSearch(params);
+    setSearch(params, { replace: true });
   }
 
   const query = useQuery({
@@ -436,42 +452,23 @@ export function PlanPage() {
   const anyManageEnabled = !!settings && (settings.budgets_enabled || settings.subscriptions_enabled || settings.recurring_enabled || settings.goals_enabled || settings.trips_enabled);
 
   const detailPanel = (
-    <AnimatePresence>
-      {panel && (
-        <motion.div
-          className="fixed top-0 bottom-16 md:bottom-0 right-0 z-40 w-full md:w-[420px] border-l border-border bg-card flex-shrink-0 overflow-hidden"
-          variants={slideInRightVariants}
-          initial="initial"
-          animate="animate"
-          exit="exit"
-        >
+    <SlideOver show={!!panel} onClose={closePanel} className="md:z-40 md:w-[420px] md:shadow-none">
+      {panel && <>
           {panel.type === 'subscription' && <SubscriptionDetail subId={panel.id} onClose={closePanel} />}
           {panel.type === 'budget' && <BudgetDetail budgetId={panel.id} onClose={closePanel} />}
           {panel.type === 'goal' && <GoalDetail goalId={panel.id} onClose={closePanel} />}
           {panel.type === 'trip' && <TripDetail tripId={panel.id} onClose={closePanel} />}
-        </motion.div>
-      )}
-    </AnimatePresence>
+      </>}
+    </SlideOver>
   );
 
   let phoneView: React.ReactNode = null;
   if (isPhone) {
     const lensParam = search.get('lens') as PlanLens | null;
-    const drillParam = search.get('drill') as PlanDrill | null;
+    const { drill: drillParam, openDrill: openDrillRaw, closeDrill: closeDrillRaw } = drillState;
     const chargeParam = search.get('charge');
-    // A drill-in pushes history so the phone's back gesture closes it.
-    const openDrill = (kind: PlanDrill, charge?: string) => {
-      const params = new URLSearchParams(search);
-      params.set('drill', kind);
-      if (charge) params.set('charge', charge); else params.delete('charge');
-      setSearch(params, { state: { drill: true } });
-    };
-    const closeDrill = () => {
-      if ((location.state as { drill?: boolean } | null)?.drill) { navigate(-1); return; }
-      const params = new URLSearchParams(search);
-      params.delete('drill'); params.delete('charge');
-      setSearch(params, { replace: true });
-    };
+    const openDrill = (kind: PlanDrill, charge?: string) => openDrillRaw(kind, charge ? { charge } : {});
+    const closeDrill = () => closeDrillRaw(['charge']);
     const chargeItem = drillParam === 'charge' ? report?.items.find((item) => String(item.id) === chargeParam) : undefined;
     const lensAction = (label: string, onClick: () => void) => (
       <Button type="button" variant="ghost" className="w-full min-h-12 justify-between rounded-none border-t border-border px-4 text-teal" onClick={onClick}>
@@ -501,13 +498,16 @@ export function PlanPage() {
     </div>;
     const lenses: Lens<PlanLens>[] = [
       { value: 'soon', label: 'Soon', panel: soonPanel },
-      ...(settings?.budgets_enabled ? [{ value: 'budgets' as const, label: 'Budgets', bare: true, panel: <BudgetsCard onSelect={(id) => openPanel('budget', id)} /> }] : []),
-      ...(settings?.goals_enabled ? [{ value: 'goals' as const, label: 'Goals', bare: true, panel: <><SavingsCard compact /><GoalsCard onSelect={(id) => openPanel('goal', id)} /></> }] : []),
+      ...(settings?.budgets_enabled ? [{ value: 'budgets' as const, label: 'Budgets', bare: true, panel: <LensGrow><BudgetsCard onSelect={(id) => openPanel('budget', id)} /></LensGrow> }] : []),
+      ...(settings?.goals_enabled ? [{ value: 'goals' as const, label: 'Goals', bare: true, panel: <><SavingsCard compact /><LensGrow><GoalsCard onSelect={(id) => openPanel('goal', id)} /></LensGrow></> }] : []),
       ...(settings?.subscriptions_enabled || settings?.recurring_enabled ? [{ value: 'subs' as const, label: 'Subs', bare: true, panel: <>
-        {settings?.subscriptions_enabled && <SubscriptionsSection selectedSubId={panel?.type === 'subscription' ? panel.id : null} onSelectSub={(id) => openPanel('subscription', id)} />}
-        {settings?.recurring_enabled && <RecurringCard />}
+        {settings?.subscriptions_enabled && <LensGrow><SubscriptionsSection selectedSubId={panel?.type === 'subscription' ? panel.id : null} onSelectSub={(id) => openPanel('subscription', id)} /></LensGrow>}
+        <LensMore items={[
+          ...(settings?.recurring_enabled ? [{ label: 'Recurring transactions', onOpen: () => openDrill('recurring') }] : []),
+          ...(settings?.subscriptions_enabled ? [{ label: 'Price changes and renewals', onOpen: () => openDrill('changes') }] : []),
+        ]} />
       </> }] : []),
-      ...(settings?.trips_enabled ? [{ value: 'trips' as const, label: 'Trips', bare: true, panel: <TripsCard onSelect={(id) => openPanel('trip', id)} /> }] : []),
+      ...(settings?.trips_enabled ? [{ value: 'trips' as const, label: 'Trips', bare: true, panel: <LensGrow><TripsCard onSelect={(id) => openPanel('trip', id)} /></LensGrow> }] : []),
     ];
     const lens: PlanLens = lensParam && lenses.some((l) => l.value === lensParam) ? lensParam : 'soon';
     const setLens = (value: PlanLens) => updateParams({ lens: value === 'soon' ? null : value });
@@ -539,6 +539,12 @@ export function PlanPage() {
             {chargeItem.subscription_id != null && <Link to={panelHref('subscription', chargeItem.subscription_id)} className="text-teal min-h-11 inline-flex items-center">Review or match schedule</Link>}
           </div>}
         </DrillSheet>
+        <DrillSheet open={drillParam === 'recurring' || drillParam === 'changes'} onOpenChange={(open) => !open && closeDrill()} backLabel="Plan" title={drillParam === 'changes' ? 'Price changes and renewals' : 'Recurring transactions'}>
+          <div className="[&_h2]:sr-only">
+            {drillParam === 'recurring' && <RecurringCard />}
+            {drillParam === 'changes' && <RecurringCharges />}
+          </div>
+        </DrillSheet>
         <DrillSheet open={drillParam === 'timeline'} onOpenChange={(open) => !open && closeDrill()} backLabel="Plan" title="Upcoming timeline">
           {calendarPane}
           <label className="flex items-center gap-3 text-sm">Show
@@ -547,7 +553,7 @@ export function PlanPage() {
             </select>
           </label>
           {report && <>
-            <p className="mt-3 text-sm text-muted">{formatMoney(report.known_total)} {report.status === 'partial' ? 'known estimated subtotal' : 'in estimated charges'} · {report.start} to {report.end}</p>
+            <p className="mt-3 text-sm text-muted">{formatMoney(report.known_total)} {report.status === 'partial' ? 'known estimated subtotal' : 'in estimated charges'} · {formatShortDate(report.start)} to {formatShortDate(report.end)}</p>
             <div id="upcoming-agenda" tabIndex={-1} aria-label="Upcoming charges" className="mt-2 focus-visible:outline-none">
               {grouped.map(group => <div key={group.date} className={cn('rounded-md', selectedDate === group.date && '-mx-2 px-2 bg-card-hover/60')}>
                 <h3 className="text-2xs font-mono uppercase tracking-[0.1em] text-muted pt-4 pb-1">{formatShortDate(group.date)}</h3>

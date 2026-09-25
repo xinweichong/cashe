@@ -54,7 +54,7 @@ function AddGoalForm({ onAdd }: { onAdd: () => void }) {
 
   return (
     <div className="pt-4 border-t border-border space-y-3">
-      <p className="text-sm font-medium text-foreground">Add Goal</p>
+      <p className="text-sm font-medium text-foreground">Add goal</p>
       <div className="flex flex-wrap gap-2">
         <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Goal name" className="input-field flex-1 min-w-40" />
         <input type="number" value={newTarget} onChange={(e) => setNewTarget(e.target.value)} placeholder="Target ($)" className="input-field w-28" />
@@ -77,7 +77,7 @@ export function GoalsCard({ onSelect }: { onSelect: (id: number) => void }) {
   return (
     <PageCard
       title="Goals"
-      action={<Button variant="ghost" size="sm" onClick={() => setShowAddForm(!showAddForm)}>{showAddForm ? 'Cancel' : '+ Add Goal'}</Button>}
+      action={<Button variant="ghost" size="sm" onClick={() => setShowAddForm(!showAddForm)}>{showAddForm ? 'Cancel' : '+ Add goal'}</Button>}
     >
       {isLoading ? (
         <p className="text-muted text-sm py-4 text-center">Catching up…</p>

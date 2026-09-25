@@ -50,7 +50,7 @@ export function Sidebar() {
       <div className="p-1 lg:p-3"><ProfileMenu /></div>
 
       {/* ⌘K hint — desktop only */}
-      <div className="hidden lg:flex items-center gap-2 px-4 py-4 border-t border-border/30 text-[11px] text-muted/60 font-mono">
+      <div className="hidden lg:flex items-center gap-2 px-4 py-4 border-t border-border/30 text-2xs text-muted/60 font-mono">
         <Command className="w-3 h-3" />
         <span>K</span>
         <span className="ml-auto">search</span>

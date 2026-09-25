@@ -62,11 +62,11 @@ export function ActivityRowShell({
       {avatarSlot ? avatarSlot(categoryColor) : <CategoryAvatar category={category} isIncome={isIncome} />}
       <div className="min-w-0">
         <div className="text-sm font-medium tracking-[-0.005em] truncate">{title}</div>
-        <div className="font-mono text-[10px] text-muted uppercase tracking-[0.06em] mt-0.5 flex items-center gap-1.5 flex-wrap">
+        <div className="font-mono text-2xs text-muted uppercase tracking-[0.06em] mt-0.5 flex items-center gap-1.5 flex-wrap">
           <span>{metaPrimary}</span>
           {category && (
             <span
-              className="px-1 py-0.5 rounded text-[9px] font-semibold font-mono uppercase tracking-[0.08em]"
+              className="px-1 py-0.5 rounded text-2xs font-semibold font-mono uppercase tracking-[0.08em]"
               style={{ color: categoryColor, background: `${categoryColor}1F` }}
             >
               {category}
@@ -78,7 +78,7 @@ export function ActivityRowShell({
         <div data-testid="tx-amount" className={cn('font-bold tracking-tight text-sm font-display', isIncome && 'text-teal')}>
           {amount}
         </div>
-        {amountSub && <div className="text-[10px] text-muted font-mono mt-0.5 truncate max-w-[80px]">{amountSub}</div>}
+        {amountSub && <div className="text-2xs text-muted font-mono mt-0.5 truncate max-w-[80px]">{amountSub}</div>}
       </div>
       {trailing}
     </>

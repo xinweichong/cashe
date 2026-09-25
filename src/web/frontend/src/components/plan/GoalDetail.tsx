@@ -181,7 +181,7 @@ export function GoalDetail({ goalId, onClose }: { goalId: number; onClose: () =>
             </div>
             <div className="flex gap-1">
               {sparklineData.map(([month]) => (
-                <div key={month} className="flex-1 text-center text-[10px] text-muted leading-none">
+                <div key={month} className="flex-1 text-center text-2xs text-muted leading-none">
                   {new Date(month + '-01').toLocaleString('en', { month: 'short' })}
                 </div>
               ))}
@@ -207,7 +207,7 @@ export function GoalDetail({ goalId, onClose }: { goalId: number; onClose: () =>
           </div>
         ) : (
           <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" className="min-h-11" onClick={() => { setContributing(!contributing); setEditing(false); }}>+ Add Contribution</Button>
+            <Button type="button" variant="outline" className="min-h-11" onClick={() => { setContributing(!contributing); setEditing(false); }}>+ Add contribution</Button>
             <Button type="button" variant="outline" className="min-h-11" onClick={startEdit}><Pencil className="w-3.5 h-3.5" />Edit</Button>
             <Button type="button" variant="outline" className="min-h-11 text-destructive hover:text-destructive" onClick={() => setConfirmDelete(true)}>
               <Trash2 className="w-3.5 h-3.5" />Delete
@@ -236,7 +236,7 @@ export function GoalDetail({ goalId, onClose }: { goalId: number; onClose: () =>
         )}
 
         <section>
-          <p className="text-[10px] font-mono font-semibold uppercase tracking-[0.22em] text-muted mb-2">Contribution History</p>
+          <p className="text-2xs font-mono font-semibold uppercase tracking-[0.22em] text-muted mb-2">Contribution History</p>
           {g.contributions.length === 0 ? (
             <p className="text-xs text-muted italic">No contributions yet.</p>
           ) : (

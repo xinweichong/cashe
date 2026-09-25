@@ -34,6 +34,15 @@ interface TransactionFiltersProps {
   variant?: 'default' | 'sheet';
 }
 
+function quickSelectMatches(start: string, end: string): boolean {
+  const today = new Date();
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  const todayStr = iso(today);
+  const monthStart = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`;
+  return (end === todayStr && (start === monthStart || start === iso(new Date(today.getFullYear(), today.getMonth(), today.getDate() - 30))))
+    || (start === iso(new Date(today.getFullYear(), today.getMonth() - 1, 1)) && end === iso(new Date(today.getFullYear(), today.getMonth(), 0)));
+}
+
 export function TransactionFilters({
   search,
   onSearchChange,
@@ -65,6 +74,10 @@ export function TransactionFilters({
   const activeFilterCount = [category !== 'all', type !== 'all', !!startDate, !!endDate, !!tripId, needsReview]
     .filter(Boolean).length;
   const hasFilters = search || activeFilterCount > 0;
+  const [customOpen, setCustomOpen] = useState(false);
+  // In the phone sheet the raw date inputs sit behind "Custom…", unless a
+  // range that isn't one of the presets is already applied.
+  const customDates = customOpen || ((!!startDate || !!endDate) && !quickSelectMatches(startDate, endDate));
 
   const handleExport = () => {
     const params = new URLSearchParams();
@@ -149,7 +162,7 @@ export function TransactionFilters({
             </span>
           )}
         </Button>
-        {hasFilters && (
+        {hasFilters && !inSheet && (
           <Button
             variant="ghost"
             size={inSheet ? 'default' : 'icon'}
@@ -209,6 +222,37 @@ export function TransactionFilters({
         </div>
 
         {inSheet && <h3 className="mt-3 text-2xs uppercase tracking-[0.22em] text-muted font-mono font-semibold">Dates</h3>}
+        {inSheet ? <>
+        <div className="flex flex-wrap gap-1.5">
+          {quickSelects.map((q) => {
+            const isActive = q.label !== 'All time' && startDate === q.start && endDate === q.end;
+            return (
+              <ChoiceChip key={q.label} selected={isActive} onClick={() => { setStartDate(q.start); setEndDate(q.end); }}>
+                {q.label}
+              </ChoiceChip>
+            );
+          })}
+          <ChoiceChip selected={customDates} aria-expanded={customDates} onClick={() => setCustomOpen((v) => !v)}>Custom…</ChoiceChip>
+        </div>
+          {customDates && <div className="flex flex-wrap items-center gap-2">
+          <input
+            type="date"
+            aria-label="Start date"
+            value={startDate}
+            onChange={(e) => setStartDate(e.target.value)}
+            className="input-field"
+          />
+          <span className="text-muted text-sm">–</span>
+          <input
+            type="date"
+            aria-label="End date"
+            value={endDate}
+            onChange={(e) => setEndDate(e.target.value)}
+            className="input-field"
+          />
+        </div>}
+          <Button type="button" variant="outline" className="mt-4 w-full min-h-12" onClick={handleExport}>Export CSV</Button>
+        </> : <>
         <div className="flex flex-wrap items-center gap-2">
           <input
             type="date"
@@ -243,6 +287,7 @@ export function TransactionFilters({
             Export CSV
           </Button>
         </div>
+        </>}
       </div>
     </div>
   );

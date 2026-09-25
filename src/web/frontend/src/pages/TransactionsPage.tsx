@@ -14,8 +14,8 @@ import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { useBulkCorrectTransactions, useBulkUndoTransactions } from '@/hooks/useTransactions';
 import { useToast } from '@/hooks/useToastContext';
 import { api, type Transaction, type TransactionV2, type DailyTotalV2, type BulkTransactionResultItemV2 } from '@/api/client';
-import { briefingApi } from '@/api/briefing';
-import { slideInRightVariants, fadeUpVariants } from '@/lib/motionPresets';
+import { briefingApi, formatMoney } from '@/api/briefing';
+import { fadeUpVariants } from '@/lib/motionPresets';
 import { localDayKey } from '@/lib/utils';
 import { CheckSquare, Plus, Search, SlidersHorizontal, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
@@ -25,12 +25,16 @@ import { HeroAmount } from '@/components/ui/HeroAmount';
 import { PhoneScreen, type Lens } from '@/components/layout/PhoneScreen';
 import { DrillSheet } from '@/components/layout/DrillSheet';
 import { useIsPhone } from '@/hooks/useIsPhone';
+import { useDrill } from '@/hooks/useDrill';
+import { SlideOver } from '@/components/layout/SlideOver';
 import { LoadFailed } from '@/components/ui/LoadFailed';
 import { Skeleton } from '@/components/ui/skeleton';
 
 const PAGE_SIZE = 20;
 
 type ActivityLens = 'all' | 'review' | 'income' | 'refund';
+type ActivitySheet = 'filters' | 'add';
+const ACTIVITY_SHEETS: readonly ActivitySheet[] = ['filters', 'add'];
 
 // Monday of the current local week through today, as YYYY-MM-DD.
 function currentWeek(): { start: string; end: string } {
@@ -83,7 +87,7 @@ export function TransactionsPage() {
   const [needsReview, setNeedsReview] = useState(() => searchParams.get('review') === '1');
   const [showForm, setShowForm] = useState(false);
   const isPhone = useIsPhone();
-  const [filtersOpen, setFiltersOpen] = useState(false);
+  const sheets = useDrill(ACTIVITY_SHEETS, 'sheet');
   const [week] = useState(currentWeek);
   const weekTotals = useQuery({
     queryKey: ['activity-week-totals', week.start, week.end],
@@ -391,24 +395,16 @@ export function TransactionsPage() {
         )}
       </AnimatePresence>
 
-      {/* Right: transaction detail panel — fixed overlay */}
-      <AnimatePresence>
+      {/* Right: transaction detail panel — fixed overlay; a drag-back drill-in on phone */}
+      <SlideOver show={!!selectedTransaction} onClose={closeDetail} className="md:w-96 shadow-xl">
         {selectedTransaction && (
-          <motion.div
-            className="fixed inset-y-0 right-0 w-full md:w-96 z-50 border-l border-border bg-card shadow-xl overflow-hidden"
-            variants={slideInRightVariants}
-            initial="initial"
-            animate="animate"
-            exit="exit"
-          >
-            <TransactionDetail
-              key={selectedTransaction.id}
-              transaction={selectedTransaction}
-              onClose={closeDetail}
-            />
-          </motion.div>
+          <TransactionDetail
+            key={selectedTransaction.id}
+            transaction={selectedTransaction}
+            onClose={closeDetail}
+          />
         )}
-      </AnimatePresence>
+      </SlideOver>
     </>
   );
 
@@ -441,6 +437,7 @@ export function TransactionsPage() {
             selectedIds={selectedIds}
             onToggleSelect={toggleSelect}
             stickyDayHeaders={false}
+            compactRows
           />
         )}
       </div>
@@ -451,30 +448,41 @@ export function TransactionsPage() {
       { value: 'income', label: 'Income', panel: list },
       { value: 'refund', label: 'Refunds', panel: list },
     ];
+    // The glance follows the lens: the week's spend, the week's income, or
+    // the review queue, so the figure always describes the list beneath it.
+    const weekIncome = weekTotals.data?.reduce((sum, d) => sum + (d.income?.minor_units ?? 0), 0);
+    const currency = weekTotals.data?.[0]?.spending.currency ?? 'SGD';
+    const short = '[@media(max-height:700px)]:text-3xl';
+    const glanceTitle = lens === 'review' ? 'To review' : lens === 'income' ? 'Income this week' : 'Spent this week';
     const glance = (
       <HeroCard
-        title="This week"
+        title={glanceTitle}
         className="p-4"
         action={<div className="flex items-center gap-1">
-          <Button type="button" variant={selectionMode ? 'default' : 'ghost'} size="icon" aria-label={selectionMode ? 'Done selecting' : 'Select transactions'} aria-pressed={selectionMode} onClick={toggleSelectionMode}>
-            <CheckSquare size={16} aria-hidden />
+          <Button type="button" variant={selectionMode ? 'default' : 'ghost'} size="sm" className="min-h-11 gap-1.5 px-2" aria-pressed={selectionMode} onClick={toggleSelectionMode}>
+            <CheckSquare size={16} aria-hidden />{selectionMode ? 'Done' : 'Select'}
           </Button>
-          <Button type="button" variant="outline" size="icon" aria-label="Add a transaction" onClick={() => setShowForm(true)} disabled={selectionMode}>
+          <Button type="button" variant="outline" size="icon" aria-label="Add a transaction" onClick={() => sheets.openDrill('add')} disabled={selectionMode}>
             <Plus size={16} aria-hidden />
           </Button>
         </div>}
       >
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          {weekSpend !== undefined
-            ? <HeroAmount value={{ minor_units: weekSpend, currency: weekTotals.data?.[0]?.spending.currency ?? 'SGD' }} className="text-4xl" />
-            : <Skeleton className="h-10 w-36" />}
+          {lens === 'review'
+            ? <p className={`font-display text-4xl font-bold tracking-tight tabular-nums ${short}`}>{reviewCount} {reviewCount === 1 ? 'purchase' : 'purchases'}</p>
+            : weekSpend === undefined ? <Skeleton className="h-10 w-36" />
+            : lens === 'income'
+              ? <p className={`font-display text-4xl font-bold tracking-tight tabular-nums text-teal ${short}`}>{formatMoney({ minor_units: weekIncome ?? 0, currency })}</p>
+              : <HeroAmount value={{ minor_units: weekSpend, currency }} className={`text-4xl ${short}`} />}
           {!!reviewCount && lens !== 'review' && (
             <Button type="button" variant="ghost" size="sm" className="h-auto min-h-11 px-0 hover:bg-transparent" onClick={() => setLens('review')}>
               <Badge tone="warm" className="font-mono">{reviewCount} to review</Badge>
             </Button>
           )}
         </div>
-        <p className="mt-1 text-xs text-muted">{weekCount !== undefined ? `${weekCount} ${weekCount === 1 ? 'purchase' : 'purchases'} since Monday` : ' '}</p>
+        <p className="mt-1 text-xs text-muted [@media(max-height:700px)]:hidden">{lens === 'review'
+          ? 'Waiting for a category or a check. Newest first below.'
+          : weekCount !== undefined ? `${weekCount} ${weekCount === 1 ? 'record' : 'records'} since Monday · every date below` : '\u00a0'}</p>
       </HeroCard>
     );
     const dock = selectionMode ? (
@@ -502,7 +510,7 @@ export function TransactionsPage() {
             <Input
               type="search"
               aria-label="Search transactions"
-              placeholder="Search merchant, amount, category"
+              placeholder="Search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="h-12 pl-9 pr-9"
@@ -513,7 +521,7 @@ export function TransactionsPage() {
               </Button>
             )}
           </div>
-          <Button type="button" variant="outline" className="relative h-12 w-12 shrink-0 p-0" aria-label={otherFilterCount ? `Filters, ${otherFilterCount} active` : 'Filters'} onClick={() => setFiltersOpen(true)}>
+          <Button type="button" variant="outline" className="relative h-12 w-12 shrink-0 p-0" aria-label={otherFilterCount ? `Filters, ${otherFilterCount} active` : 'Filters'} onClick={() => sheets.openDrill('filters')}>
             <SlidersHorizontal size={18} aria-hidden />
             {!!otherFilterCount && <span className="absolute -right-1 -top-1 inline-flex h-5 min-w-5 items-center justify-center rounded-pill bg-teal px-1 text-2xs font-mono font-semibold text-background">{otherFilterCount}</span>}
           </Button>
@@ -525,11 +533,14 @@ export function TransactionsPage() {
         <h1 className="sr-only">Activity</h1>
         <PhoneScreen glance={glance} lenses={lenses} lens={lens} onLensChange={setLens} label="Activity views" dock={dock} />
         <DrillSheet
-          open={filtersOpen}
-          onOpenChange={setFiltersOpen}
+          open={sheets.drill === 'filters'}
+          onOpenChange={(open) => !open && sheets.closeDrill()}
           backLabel="Activity"
           title="Filters"
-          footer={<Button type="button" className="w-full min-h-12" onClick={() => setFiltersOpen(false)}>Show results</Button>}
+          footer={<div className="flex gap-2">
+            <Button type="button" variant="outline" className="min-h-12 flex-1" disabled={!search && !otherFilterCount && lens === 'all'} onClick={() => { setSearch(''); setCategory('all'); setStartDate(''); setEndDate(''); setType('all'); setTripId(''); setNeedsReview(false); }}>Clear all</Button>
+            <Button type="button" className="min-h-12 flex-[2]" onClick={() => sheets.closeDrill()}>Show results</Button>
+          </div>}
         >
           <TransactionFilters
             variant="sheet"
@@ -551,8 +562,8 @@ export function TransactionsPage() {
             onNeedsReviewChange={setNeedsReview}
           />
         </DrillSheet>
-        <DrillSheet open={showForm} onOpenChange={setShowForm} backLabel="Activity" title="Add a transaction">
-          <TransactionForm categories={categories ?? []} onClose={() => setShowForm(false)} />
+        <DrillSheet open={showForm || sheets.drill === 'add'} onOpenChange={(open) => { if (open) return; setShowForm(false); if (sheets.drill === 'add') sheets.closeDrill(); }} backLabel="Activity" title="Add a transaction">
+          <TransactionForm categories={categories ?? []} onClose={() => { setShowForm(false); if (sheets.drill === 'add') sheets.closeDrill(); }} />
         </DrillSheet>
       </>
     );

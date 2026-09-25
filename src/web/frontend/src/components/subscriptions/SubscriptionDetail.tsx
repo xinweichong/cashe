@@ -299,7 +299,7 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
                   { label: 'History', value: `${history.length} linked` },
                 ].map(({ label, value }) => (
                   <div key={label} className="bg-background rounded-lg p-3 border border-border">
-                    <p className="text-[10px] font-mono uppercase tracking-[0.06em] text-muted">{label}</p>
+                    <p className="text-2xs font-mono uppercase tracking-[0.06em] text-muted">{label}</p>
                     <p className="text-sm font-display font-bold text-foreground mt-0.5">{value}</p>
                   </div>
                 ))}
@@ -350,7 +350,7 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
 
               {sub.status !== 'paused' && pendingUpcomings.length > 0 && (
                 <section>
-                  <p className="text-[10px] font-mono font-semibold uppercase tracking-[0.22em] text-muted mb-2">
+                  <p className="text-2xs font-mono font-semibold uppercase tracking-[0.22em] text-muted mb-2">
                     Upcoming
                   </p>
                   <div className="divide-y divide-border">
@@ -370,7 +370,7 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
               {/* History + link past transactions */}
               <section>
                 <div className="flex items-center justify-between mb-2">
-                  <p className="text-[10px] font-mono font-semibold uppercase tracking-[0.22em] text-muted">
+                  <p className="text-2xs font-mono font-semibold uppercase tracking-[0.22em] text-muted">
                     History
                   </p>
                   <Button

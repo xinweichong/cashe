@@ -13,12 +13,12 @@ export function RecurringCard() {
   });
 
   return (
-    <PageCard title="Recurring Transactions">
+    <PageCard title="Recurring transactions">
       {isLoading ? (
         <Skeleton className="h-24" />
       ) : recurring.length === 0 ? (
         <p className="text-muted text-sm py-4 text-center">
-          No recurring patterns detected yet — patterns appear after 2+ consistent transactions
+          No recurring patterns yet. They appear after two or more consistent transactions.
         </p>
       ) : (
         <div className="divide-y divide-border">
@@ -27,7 +27,7 @@ export function RecurringCard() {
             return (
               <div key={r.id} className="flex items-center gap-3 py-3">
                 <span
-                  className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium shrink-0"
+                  className="inline-flex items-center px-2 py-0.5 rounded-full text-2xs font-medium shrink-0"
                   style={{ background: `${catColor}33`, color: catColor }}
                 >
                   {r.category}

@@ -101,7 +101,7 @@ export function TripDetail({ tripId, onClose }: { tripId: number; onClose: () =>
               { label: 'Per day', value: formatCurrency(summary.daily_average.minor_units / 100) },
             ].map(({ label, value }) => (
               <div key={label} className="bg-background rounded-lg p-3 border border-border">
-                <p className="text-[10px] font-mono uppercase tracking-[0.06em] text-muted">{label}</p>
+                <p className="text-2xs font-mono uppercase tracking-[0.06em] text-muted">{label}</p>
                 <p className="text-sm font-display font-bold text-foreground mt-0.5">{value}</p>
               </div>
             ))}
