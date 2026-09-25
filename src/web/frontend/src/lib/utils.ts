@@ -6,6 +6,12 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+/** A refund is money coming back, same display sign as income — the stored
+ * `amount` column is always positive regardless of type. */
+export function isCreditType(type: string | null | undefined): boolean {
+  return type === 'income' || type === 'refund';
+}
+
 export function formatCurrency(amount: number, currency = 'SGD'): string {
   return new Intl.NumberFormat('en-SG', {
     style: 'currency',

@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import { ChartCard } from '@/components/ui/cards';
 import { useChartTheme } from '@/lib/chartTheme';
 import { X } from 'lucide-react';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, isCreditType } from '@/lib/utils';
 import { ALL_TAGS, formatSGD } from '@/lib/merchants';
 
 export function MerchantProfile({
@@ -280,10 +280,10 @@ export function MerchantProfile({
                 </span>
                 <span
                   className={`text-xs font-medium ${
-                    tx.type === 'income' ? 'text-success' : 'text-foreground'
+                    isCreditType(tx.type) ? 'text-success' : 'text-foreground'
                   }`}
                 >
-                  {tx.type === 'income' ? '+' : '-'}
+                  {isCreditType(tx.type) ? '+' : '-'}
                   {formatCurrency(tx.amount, tx.currency)}
                 </span>
               </Link>

@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { type Transaction, type Trip, api } from '@/api/client';
-import { formatCurrency, formatDateTime, getCategoryColor } from '@/lib/utils';
+import { formatCurrency, formatDateTime, getCategoryColor, isCreditType } from '@/lib/utils';
 import { useUpdateTransaction, useDeleteTransaction, useTransactions } from '@/hooks/useTransactions';
 import { useCategories } from '@/hooks/useCategories';
 import { useIconMap } from '@/hooks/useIconMap';
@@ -127,7 +127,7 @@ export function TransactionDetail({
       {/* Header */}
       <div className="flex items-start justify-between p-4 border-b border-border">
         <div className="flex items-center gap-3 min-w-0">
-          <CategoryAvatar category={tx.category} isIncome={tx.type === 'income'} size="detail" glyph={categoryIcon} />
+          <CategoryAvatar category={tx.category} isIncome={isCreditType(tx.type)} size="detail" glyph={categoryIcon} />
           <div className="min-w-0">
             <p className="text-base font-semibold truncate">
               {tx.merchant || tx.description || 'Transaction'}
@@ -220,8 +220,8 @@ export function TransactionDetail({
       <div className="flex-1 overflow-y-auto p-4 space-y-6">
         {/* Amount */}
         <div>
-          <p className={`text-3xl font-bold ${tx.type === 'income' ? 'text-success' : ''}`}>
-            {tx.type === 'income' ? '+' : '-'}{/^[A-Z]{3}$/.test(tx.currency ?? '') ? formatCurrency(tx.amount, tx.currency) : `${tx.amount} · Currency unknown`}
+          <p className={`text-3xl font-bold ${isCreditType(tx.type) ? 'text-success' : ''}`}>
+            {isCreditType(tx.type) ? '+' : '-'}{/^[A-Z]{3}$/.test(tx.currency ?? '') ? formatCurrency(tx.amount, tx.currency) : `${tx.amount} · Currency unknown`}
           </p>
           {tx.currency !== 'SGD' && tx.exchange_rate != null && Number.isFinite(tx.exchange_rate) && tx.exchange_rate > 0 && tx.exchange_rate !== 1 && Number.isFinite(tx.amount) && tx.amount >= 0 ? (
             <p className="text-sm text-muted mt-1">

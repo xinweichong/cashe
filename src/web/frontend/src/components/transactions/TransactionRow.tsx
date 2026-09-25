@@ -1,5 +1,5 @@
 import { type Transaction } from '@/api/client';
-import { formatCurrency, formatDateTime } from '@/lib/utils';
+import { formatCurrency, formatDateTime, isCreditType } from '@/lib/utils';
 import { SOURCE_DISPLAY_LABELS } from '@/lib/sourceLabels';
 import { Button } from '@/components/ui/button';
 import { ActivityRowShell } from '@/components/ui/ActivityRowShell';
@@ -25,7 +25,7 @@ export function TransactionRow({
    * selection (still via the same `onClick`, which the caller repurposes). */
   selectable?: boolean;
 }) {
-  const isIncome = tx.type === 'income';
+  const isIncome = isCreditType(tx.type);
   const sign = isIncome ? '+' : '-';
   const isClickable = !readOnly && !!onClick;
 
