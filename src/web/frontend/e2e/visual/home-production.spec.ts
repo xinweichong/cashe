@@ -14,51 +14,7 @@ import { test, expect } from '@playwright/test';
 // isAnimationActive={!reduceMotion} wiring, which also fixed a related
 // gap: that timer wasn't gated by prefers-reduced-motion at all before.
 
-const HOME_JSON = {
-  facts: {
-    as_of: '2026-09-10', timezone: 'Asia/Singapore', undated_count: 0,
-    current: { start: '2026-09-01', end: '2026-09-10', spending: { minor_units: 49826, currency: 'SGD' }, income: null, recorded_net_flow: null, transaction_count: 5, unresolved_count: 0, indicative_count: 0, status: 'complete' },
-    comparison_current: { start: '2026-08-01', end: '2026-08-10', spending: { minor_units: 45000, currency: 'SGD' }, income: null, recorded_net_flow: null, transaction_count: 4, unresolved_count: 0, indicative_count: 0, status: 'complete' },
-    previous: { start: '2026-08-01', end: '2026-08-10', spending: { minor_units: 45000, currency: 'SGD' }, income: null, recorded_net_flow: null, transaction_count: 4, unresolved_count: 0, indicative_count: 0, status: 'complete' },
-    change: { minor_units: 4826, currency: 'SGD' },
-    category_changes: [{ category: 'Food', change: { minor_units: 2000, currency: 'SGD' } }],
-    top_category_driver: null, trip_drivers: [],
-  },
-  spending_target: null, recent: [], upcoming: [], upcoming_total: { minor_units: 0, currency: 'SGD' },
-  upcoming_unknown_count: 0, increased_commitments: [], capture_issue_count: 0, followup_issue_count: 0,
-  review_count: 0, recurring_suggestion_count: 0,
-  freshness: { gmail_connected: false, gmail_last_checked: null, gmail_needs_reconnection: false, last_capture_processed_at: null },
-};
-
-const BREAKDOWN_JSON = {
-  start: '2026-09-01', end: '2026-09-10',
-  by_category: {
-    Bills: { minor_units: 18200, currency: 'SGD' },
-    Food: { minor_units: 15810, currency: 'SGD' },
-    Shopping: { minor_units: 9690, currency: 'SGD' },
-    Entertainment: { minor_units: 2886, currency: 'SGD' },
-    Transport: { minor_units: 2640, currency: 'SGD' },
-    Other: { minor_units: 600, currency: 'SGD' },
-  },
-  unresolved_count: 0, indicative_count: 0, status: 'complete',
-};
-
-async function mockAuthenticatedHome(page: import('@playwright/test').Page) {
-  await page.route('**/api/ping', (route) => route.fulfill({ json: { status: 'ok' } }));
-  await page.route('**/api/users/me', (route) => route.fulfill({ json: {
-    username: 'test', gmail_connected: false, telegram_chat_id: null, wants_gmail: false,
-    wants_apple_wallet: false, onboarding_complete: true, force_password_change: false,
-  } }));
-  await page.route('**/api/settings', (route) => route.fulfill({ json: {
-    anomaly_multiplier: 2, velocity_alert_threshold: 2, budgets_enabled: true, goals_enabled: true,
-    trips_enabled: true, subscriptions_enabled: true, recurring_enabled: true, home_briefing_enabled: true,
-  } }));
-  await page.route('**/api/categories', (route) => route.fulfill({ json: [] }));
-  await page.route('**/api/v2/home', (route) => route.fulfill({ json: HOME_JSON }));
-  await page.route('**/api/v2/spending/breakdown**', (route) => route.fulfill({ json: BREAKDOWN_JSON }));
-  await page.route('**/api/v2/transactions/daily-totals**', (route) => route.fulfill({ json: [] }));
-  await page.route('**/api/v2/spending/merchants**', (route) => route.fulfill({ json: [] }));
-}
+import { mockAuthenticatedHome } from '../fixtures/mocks';
 
 for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
   test(`production Home CategoryDonut renders a complete ring at ${viewport.width}px`, async ({ page }) => {

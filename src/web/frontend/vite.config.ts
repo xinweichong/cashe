@@ -15,16 +15,20 @@ export default defineConfig({
     emptyOutDir: true,
     rollupOptions: {
       output: {
-        manualChunks(id: string) {
-          if (
-            id.includes('node_modules/react/') ||
-            id.includes('node_modules/react-dom/') ||
-            id.includes('node_modules/react-router-dom/') ||
-            id.includes('node_modules/lucide-react/')
-          ) return 'vendor-react'
-          if (id.includes('node_modules/recharts/')) return 'vendor-charts'
-          if (id.includes('node_modules/@tanstack/react-query/')) return 'vendor-query'
-          if (id.includes('node_modules/@radix-ui/')) return 'vendor-ui'
+        // Groups capture their modules' dependencies too, so the base vendor
+        // group must outrank the charts group; otherwise Recharts' group
+        // absorbs React and shared utilities and every route loads Recharts.
+        codeSplitting: {
+          groups: [
+            {
+              name: 'vendor-react',
+              test: /node_modules[\\/](react|react-dom|react-router|react-router-dom|scheduler|lucide-react|clsx|tailwind-merge|class-variance-authority|react-is|use-sync-external-store)[\\/]/,
+              priority: 40,
+            },
+            { name: 'vendor-query', test: /node_modules[\\/]@tanstack[\\/]/, priority: 30 },
+            { name: 'vendor-ui', test: /node_modules[\\/]@radix-ui[\\/]/, priority: 30 },
+            { name: 'vendor-charts', test: /node_modules[\\/]recharts[\\/]/, priority: 10 },
+          ],
         },
       },
     },
