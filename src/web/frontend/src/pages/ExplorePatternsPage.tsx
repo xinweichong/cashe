@@ -5,6 +5,7 @@ import { api } from '@/api/client';
 import { briefingApi, evidenceLink, formatMoney, type Money } from '@/api/briefing';
 import { Button } from '@/components/ui/button';
 import { PageCard } from '@/components/ui/cards';
+import { Skeleton } from '@/components/ui/skeleton';
 import { LoadFailed } from '@/components/ui/LoadFailed';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CategoryChangeBars } from '@/components/charts/CategoryChangeBars';
@@ -50,7 +51,7 @@ function QuestionCard({ title, isError, onRetry, isReady, children }: { title: s
   // an error screen — only show LoadFailed when there is nothing to show yet.
   return (
     <PageCard title={title}>
-      {isError && !isReady ? <div role="alert"><LoadFailed onRetry={onRetry} /></div> : !isReady ? <p role="status" className="text-muted">Loading…</p> : children}
+      {isError && !isReady ? <div role="alert"><LoadFailed onRetry={onRetry} /></div> : !isReady ? <div role="status"><span className="sr-only">Loading…</span><Skeleton className="h-20 w-full" /></div> : children}
     </PageCard>
   );
 }
@@ -172,7 +173,7 @@ function SpendingOverTime() {
       ) : isError && !trend ? (
         <div role="alert"><LoadFailed onRetry={() => void refetch()} /></div>
       ) : isLoading || !trend ? (
-        <p role="status" className="text-muted text-sm">Loading…</p>
+        <div role="status"><span className="sr-only">Loading…</span><Skeleton className="h-20 w-full" /></div>
       ) : (
         <div className="h-[240px]"><CategoryTrendLine data={chartData} /></div>
       )}
@@ -219,7 +220,7 @@ function WhichMerchantsAccountForMostOfThisCategory() {
           Ranked by total this period in {effectiveCategory}.
         </p>
       )}
-      {isError && !data ? <div role="alert"><LoadFailed onRetry={() => void refetch()} /></div> : !data ? <p role="status" className="text-muted">Loading…</p> : !data.length ? <p className="text-muted">No spending in this category yet.</p> :
+      {isError && !data ? <div role="alert"><LoadFailed onRetry={() => void refetch()} /></div> : !data ? <div role="status"><span className="sr-only">Loading…</span><Skeleton className="h-20 w-full" /></div> : !data.length ? <p className="text-muted">No spending in this category yet.</p> :
         data.map(m => <RankedBar key={m.merchant} label={m.merchant} value={m.total.minor_units} max={max}
           href={monthFacts ? evidenceLink(monthFacts.current, effectiveCategory, 'spending', m.merchant) : undefined}
           secondaryHref={merchantProfileLink(m.merchant)} />)}
@@ -262,7 +263,7 @@ function HowDidThisTripAffectTheMonth() {
   );
   return (
     <PageCard title="How did this trip affect the month?" action={tripSelect}>
-      {tripsError && !trips ? <div role="alert"><LoadFailed onRetry={() => void refetchTrips()} /></div> : !trips ? <p role="status" className="text-muted">Loading…</p> : !trips.length && <p className="text-muted">No trips recorded yet.</p>}
+      {tripsError && !trips ? <div role="alert"><LoadFailed onRetry={() => void refetchTrips()} /></div> : !trips ? <div role="status"><span className="sr-only">Loading…</span><Skeleton className="h-20 w-full" /></div> : !trips.length && <p className="text-muted">No trips recorded yet.</p>}
       {isError && !summary && <div role="alert"><LoadFailed onRetry={() => void refetch()} /></div>}
       {summary && selectedTrip && <>
         <p>Whole trip: {formatMoney(summary.total as Money)} over {summary.days} days ({formatMoney(summary.daily_average as Money)}/day).</p>

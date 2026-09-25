@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { briefingApi, formatMoney } from '@/api/briefing';
 import { PageCard } from '@/components/ui/cards';
 import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import { LoadFailed } from '@/components/ui/LoadFailed';
 import { ActivityRowShell } from '@/components/ui/ActivityRowShell';
 
@@ -24,7 +25,7 @@ export function EvidencePage() {
       <h1 className="font-display text-2xl font-semibold">{[search.get('merchant'), search.get('category')].filter(Boolean).join(' · ') || 'Spending'} evidence</h1>
       <p className="text-muted">{search.get('start')}–{search.get('end')} · {search.get('measure') || 'spending'}</p>
     </header>
-    {query.isError ? <div role="alert"><LoadFailed onRetry={() => void query.refetch()} /></div> : !query.data ? <p role="status">{query.isLoading ? 'Loading supporting transactions…' : 'Choose a period from your briefing.'}</p> : <PageCard title={`${query.data.total} supporting records`} contentClassName="p-0">
+    {query.isError ? <div role="alert"><LoadFailed onRetry={() => void query.refetch()} /></div> : !query.data ? (query.isLoading ? <div role="status"><span className="sr-only">Loading supporting transactions…</span><Skeleton className="h-40 w-full" /></div> : <p role="status">Choose a period from your briefing.</p>) : <PageCard title={`${query.data.total} supporting records`} contentClassName="p-0">
       {query.data.items.map(item => <ActivityRowShell
         key={item.id}
         href={`/transactions/${item.id}?returnTo=${encodeURIComponent(`/evidence?${search}`)}`}

@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { briefingApi, formatMoney, type DuplicateSide } from '@/api/briefing';
 import { PageCard } from '@/components/ui/cards';
 import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import { LoadFailed } from '@/components/ui/LoadFailed';
 import { invalidateSpendingQueries } from '@/hooks/useTransactions';
 
@@ -29,7 +30,7 @@ export function ReviewPage() {
     {resolve.isError && <p role="alert" className="text-destructive">Couldn’t update this entry. Please try again.</p>}
     {retry.isError && <p role="alert" className="text-destructive">Couldn’t queue the retry. Please try again.</p>}
     {retry.isSuccess && <p role="status">Retry queued. Processing normally runs within two minutes.</p>}
-    {query.isError ? <div role="alert"><LoadFailed onRetry={() => void query.refetch()} /></div> : !query.data ? <p role="status">Loading capture review…</p> : <>
+    {query.isError ? <div role="alert"><LoadFailed onRetry={() => void query.refetch()} /></div> : !query.data ? <div role="status"><span className="sr-only">Loading capture review…</span><Skeleton className="h-20 w-full" /></div> : <>
       <PageCard title="Source observations">
         <label className="min-h-11 flex items-center gap-2"><input type="checkbox" checked={includeHandled} onChange={event => { setIncludeHandled(event.target.checked); setPage(0); }} />Show handled Telegram entries</label>
         <p className="text-sm text-muted">After entering a missing transaction or deciding no entry is needed, mark the Telegram input handled. Its original input and processing status are retained.</p>
@@ -62,7 +63,7 @@ function SpendingReviewList() {
   };
   return <PageCard title="Spending records">
     <p className="text-sm text-muted mb-3">Across all recorded dates. These records can make totals incomplete. Existing indicative conversions are labeled in reports and are not included here.</p>
-    {query.isError ? <div role="alert"><LoadFailed onRetry={() => void query.refetch()} /></div> : !query.data ? <p role="status">Loading spending review…</p> : <>
+    {query.isError ? <div role="alert"><LoadFailed onRetry={() => void query.refetch()} /></div> : !query.data ? <div role="status"><span className="sr-only">Loading spending review…</span><Skeleton className="h-20 w-full" /></div> : <>
       <p className="text-sm text-muted">{query.data.total} records need review</p>
       {query.data.items.map(item => <div key={item.id} className="py-4 border-b border-border last:border-0 space-y-2">
         <p>{item.merchant || 'Unnamed transaction'} <span className="text-muted">· {item.date || 'Date unknown'} · {item.category}</span></p>
@@ -105,7 +106,7 @@ function DuplicateReviewList() {
     {merge.isSuccess && !undo.isSuccess && <p role="status" className="py-2">Merged. <Button type="button" variant="link" size="sm" className="h-auto min-h-11 p-0 align-baseline" disabled={undo.isPending} onClick={() => undo.mutate(merge.data.merge_id)}>Undo</Button></p>}
     {undo.isSuccess && <p role="status" className="py-2">Merge undone.</p>}
     {(dismiss.isError || merge.isError || undo.isError) && <p role="alert" className="text-destructive">Couldn’t update this pair. Please try again.</p>}
-    {query.isError ? <div role="alert"><LoadFailed onRetry={() => void query.refetch()} /></div> : !query.data ? <p role="status">Loading possible duplicates…</p> : <>
+    {query.isError ? <div role="alert"><LoadFailed onRetry={() => void query.refetch()} /></div> : !query.data ? <div role="status"><span className="sr-only">Loading possible duplicates…</span><Skeleton className="h-20 w-full" /></div> : <>
       <p className="text-sm text-muted">{query.data.total} possible duplicates need review</p>
       {query.data.items.map(item => <div key={`${item.transaction_a.id}-${item.transaction_b.id}`} className="py-4 border-b border-border last:border-0 space-y-2">
         <div className="grid sm:grid-cols-2 gap-3">
@@ -141,7 +142,7 @@ function RefundMatchReviewList() {
   return <PageCard title="Refund matches">
     <p className="text-sm text-muted mb-3">A likely purchase for an unlinked refund, based on matching merchant, currency, and amount within 180 days. Confirm to link it as evidence, or dismiss if it's wrong.</p>
     {resolve.isError && <p role="alert" className="text-destructive">Couldn’t update this match. Please try again.</p>}
-    {query.isError ? <div role="alert"><LoadFailed onRetry={() => void query.refetch()} /></div> : !query.data ? <p role="status">Loading refund matches…</p> : <>
+    {query.isError ? <div role="alert"><LoadFailed onRetry={() => void query.refetch()} /></div> : !query.data ? <div role="status"><span className="sr-only">Loading refund matches…</span><Skeleton className="h-20 w-full" /></div> : <>
       <p className="text-sm text-muted">{query.data.total} refund matches need review</p>
       {query.data.items.map(item => <div key={item.refund_transaction_id} className="py-4 border-b border-border last:border-0 space-y-2">
         <p>{item.refund.merchant || 'Unnamed refund'} <span className="text-muted">· {item.refund.date || 'Date unknown'} · {formatMoney(item.refund.amount)}</span></p>
@@ -181,7 +182,7 @@ function RecurringReviewList() {
     {resolve.isSuccess && <p role="status" className="py-2">
       {resolve.data.subscription_id != null ? <>Schedule saved. <Link className="text-teal min-h-11 inline-flex items-center" to={`/plan/manage?subscription=${resolve.data.subscription_id}`}>Review billing details</Link></> : 'Suggestion dismissed.'}
     </p>}
-    {query.isError ? <div role="alert"><LoadFailed onRetry={() => void query.refetch()} /></div> : !query.data ? <p role="status">Loading recurring suggestions…</p> : <>
+    {query.isError ? <div role="alert"><LoadFailed onRetry={() => void query.refetch()} /></div> : !query.data ? <div role="status"><span className="sr-only">Loading recurring suggestions…</span><Skeleton className="h-20 w-full" /></div> : <>
       <p className="text-sm text-muted">{query.data.total} pending suggestions</p>
       {query.data.items.map(item => <div key={item.id} className="py-4 border-b border-border last:border-0 space-y-2">
         <p>{item.merchant}</p><p className="text-sm text-muted">{frequencies[item.frequency] || item.frequency} · Inferred pattern</p>

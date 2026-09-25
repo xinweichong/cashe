@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { briefingApi, formatMoney, type MonthForecast, type UpcomingPlan } from '@/api/briefing';
 import { HeroCard, PageCard } from '@/components/ui/cards';
 import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import { LoadFailed } from '@/components/ui/LoadFailed';
 import { useIsDesktop } from '@/hooks/useIsDesktop';
 import { cn, formatShortDate, toDateStr } from '@/lib/utils';
@@ -93,7 +94,7 @@ function ProjectionHero() {
   const { data, isError, refetch } = useQuery({ queryKey: ['month-forecast'], queryFn: () => briefingApi.monthForecast() });
   return (
     <HeroCard title="This month's projection">
-      {isError && !data ? <div role="alert"><LoadFailed onRetry={() => void refetch()} /></div> : !data ? <p role="status" className="text-muted">Loading…</p> :
+      {isError && !data ? <div role="alert"><LoadFailed onRetry={() => void refetch()} /></div> : !data ? <div role="status"><span className="sr-only">Loading…</span><Skeleton className="h-20 w-full" /></div> :
         data.projected_total == null ? <>
           <p className="text-muted">Not enough recorded history yet to project the rest of this month — at least 4 weeks of history is needed for each remaining weekday.</p>
           <ProjectionComparisonFallback data={data} />
@@ -207,7 +208,7 @@ function SelectedDayDetail({ date }: { date: string }) {
   const report = query.data;
   return (
     <PageCard title={`Charges on ${formatShortDate(date)}`}>
-      {query.isError && !report ? <div role="alert"><LoadFailed onRetry={() => void query.refetch()} /></div> : !report ? <p role="status" className="text-muted">Loading…</p> :
+      {query.isError && !report ? <div role="alert"><LoadFailed onRetry={() => void query.refetch()} /></div> : !report ? <div role="status"><span className="sr-only">Loading…</span><Skeleton className="h-20 w-full" /></div> :
         !report.items.length ? <p className="text-muted">No recorded pending charges on this day.</p> : <>
         <ol>
           {report.items.map(item => <li key={item.id} className="py-3 border-b border-border last:border-0 flex justify-between gap-4">
@@ -315,7 +316,7 @@ export function PlanPage() {
       </select>
     </label>
     {query.isError && <div role="alert">{report ? <p className="text-warning">Couldn’t refresh. This timeline may be out of date.</p> : null}<LoadFailed onRetry={() => void query.refetch()} /></div>}
-    {!report && !query.isError && <p role="status">Loading upcoming charges…</p>}
+    {!report && !query.isError && <div role="status"><span className="sr-only">Loading upcoming charges…</span><Skeleton className="h-20 w-full" /></div>}
     {report && (!report.enabled ? <PageCard title="Track upcoming charges">
       <p>Enable Subscriptions in Settings to see your recorded schedules here.</p>
       <Link to="/settings" className="text-teal min-h-11 inline-flex items-center">Open Settings</Link>
