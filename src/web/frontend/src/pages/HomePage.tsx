@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowRight, Plus } from 'lucide-react';
@@ -40,6 +40,8 @@ export function HomePage() {
   const withReturn = (href: string) => `${href}&returnTo=${encodeURIComponent(location.pathname + location.search)}`;
   const transactionLink = (id: number) => `/transactions/${id}?returnTo=${encodeURIComponent(location.pathname + location.search)}`;
   const [selectedChangeCategory, setSelectedChangeCategory] = useState<string | null>(null);
+  const [showMoreChange, setShowMoreChange] = useState(false);
+  const moreChangeId = useId();
   const query = useQuery({ queryKey: ['home-briefing'], queryFn: briefingApi.home });
   const currentStart = query.data?.facts.current.start;
   const currentEnd = query.data?.facts.current.end;
@@ -198,35 +200,55 @@ export function HomePage() {
         )}
       </PageCard>
       <PageCard title="What changed">
-        {!!facts.category_changes.length && <div data-testid="category-change-bars">
-          {(() => {
-            const changes = facts.category_changes.slice(0, 3);
-            const maxChange = Math.max(...changes.map((c) => Math.abs(c.change.minor_units)), 1);
-            return changes.map(item => <div key={item.category} className="py-1 border-b border-border last:border-0">
-              <CategoryChangeBarRow
-                datum={item}
-                max={maxChange}
-                selected={selectedChangeCategory === item.category}
-                onSelect={setSelectedChangeCategory}
-              />
-              <div className="flex gap-6 pl-2 pb-2"><Link className="text-teal min-h-11 inline-flex items-center" to={withReturn(evidenceLink(facts.comparison_current, item.category))}>This period</Link><Link className="text-teal min-h-11 inline-flex items-center" to={withReturn(evidenceLink(facts.previous, item.category))}>Previous period</Link></div>
-            </div>);
-          })()}
-        </div>}
-        {!facts.category_changes.length && <p className="text-muted">{facts.change ? 'No category spending changes in these periods.' : 'Resolve the records needing attention to compare categories.'}</p>}
-        {driver && <div className="mt-4 pt-4 border-t border-border space-y-3">
-          <p className="text-sm text-muted">{driver.overlap_note}</p>
-          {driver.merchant_driver && <p>Biggest contributor in {driver.category}: <Link className="text-teal underline" to={withReturn(evidenceLink(facts.comparison_current, driver.category, 'spending', driver.merchant_driver.merchant))}>{driver.merchant_driver.merchant}</Link> (<strong>{formatMoney(driver.merchant_driver.change)}</strong> change)</p>}
-          {driver.frequency_driver && driver.frequency_driver.classification !== 'none' && <p>
-            {driver.frequency_driver.classification === 'frequency' && `Driven mostly by more purchases: ${driver.frequency_driver.current_count} this period vs ${driver.frequency_driver.previous_count} previously, at a similar average.`}
-            {driver.frequency_driver.classification === 'size' && `Driven mostly by bigger purchases: average ${formatMoney(driver.frequency_driver.current_avg)} this period vs ${formatMoney(driver.frequency_driver.previous_avg)} previously, at a similar count.`}
-            {driver.frequency_driver.classification === 'mixed' && `Both purchase count (${driver.frequency_driver.previous_count} → ${driver.frequency_driver.current_count}) and average size (${formatMoney(driver.frequency_driver.previous_avg)} → ${formatMoney(driver.frequency_driver.current_avg)}) changed.`}
-          </p>}
-          {driver.one_off_driver && <p>Largely one purchase: <Link className="text-teal underline" to={transactionLink(driver.one_off_driver.transaction_id)}>{driver.one_off_driver.merchant || 'Unnamed transaction'}</Link> for <strong>{formatMoney(driver.one_off_driver.amount)}</strong> on {driver.one_off_driver.date}.</p>}
-        </div>}
-        {!!facts.trip_drivers.length && <div className="mt-4 pt-4 border-t border-border space-y-3">
-          {facts.trip_drivers.map(trip => <p key={trip.trip_id}>Trip <Link className="text-teal underline" to={`/transactions?trip=${trip.trip_id}&start=${facts.current.start}&end=${facts.comparison_current.end}`}>{trip.name}</Link>: {formatMoney(trip.current_total)} this period ({formatMoney(trip.previous_total)} previously). <span className="text-sm text-muted">{trip.overlap_note}</span></p>)}
-        </div>}
+        {(() => {
+          // Lead with the strongest change and its evidence; the rest of the
+          // explanation sits behind "More context". Bars share one scale so
+          // nothing rescales when context expands.
+          const changes = facts.category_changes.slice(0, 3);
+          const maxChange = Math.max(...changes.map((c) => Math.abs(c.change.minor_units)), 1);
+          const changeRow = (item: typeof changes[number]) => <div key={item.category} className="py-1 border-b border-border last:border-0">
+            <CategoryChangeBarRow
+              datum={item}
+              max={maxChange}
+              selected={selectedChangeCategory === item.category}
+              onSelect={setSelectedChangeCategory}
+            />
+            <div className="flex gap-6 pl-2 pb-2"><Link className="text-teal min-h-11 inline-flex items-center" to={withReturn(evidenceLink(facts.comparison_current, item.category))}>This period</Link><Link className="text-teal min-h-11 inline-flex items-center" to={withReturn(evidenceLink(facts.previous, item.category))}>Previous period</Link></div>
+          </div>;
+          const hasMore = changes.length > 1 || !!driver || !!facts.trip_drivers.length;
+          return <>
+            {changes.length
+              ? <div data-testid="category-change-bars">{changeRow(changes[0])}</div>
+              : <p className="text-muted">{facts.change ? 'No category spending changes in these periods.' : 'Resolve the records needing attention to compare categories.'}</p>}
+            {hasMore && <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="mt-2"
+              aria-expanded={showMoreChange}
+              aria-controls={moreChangeId}
+              onClick={() => setShowMoreChange((open) => !open)}
+            >
+              {showMoreChange ? 'Less context' : 'More context'}
+            </Button>}
+            {showMoreChange && <div id={moreChangeId}>
+              {changes.length > 1 && <div className="mt-2">{changes.slice(1).map(changeRow)}</div>}
+              {driver && <div className="mt-4 pt-4 border-t border-border space-y-3">
+                <p className="text-sm text-muted">{driver.overlap_note}</p>
+                {driver.merchant_driver && <p>Biggest contributor in {driver.category}: <Link className="text-teal underline" to={withReturn(evidenceLink(facts.comparison_current, driver.category, 'spending', driver.merchant_driver.merchant))}>{driver.merchant_driver.merchant}</Link> (<strong>{formatMoney(driver.merchant_driver.change)}</strong> change)</p>}
+                {driver.frequency_driver && driver.frequency_driver.classification !== 'none' && <p>
+                  {driver.frequency_driver.classification === 'frequency' && `Driven mostly by more purchases: ${driver.frequency_driver.current_count} this period vs ${driver.frequency_driver.previous_count} previously, at a similar average.`}
+                  {driver.frequency_driver.classification === 'size' && `Driven mostly by bigger purchases: average ${formatMoney(driver.frequency_driver.current_avg)} this period vs ${formatMoney(driver.frequency_driver.previous_avg)} previously, at a similar count.`}
+                  {driver.frequency_driver.classification === 'mixed' && `Both purchase count (${driver.frequency_driver.previous_count} → ${driver.frequency_driver.current_count}) and average size (${formatMoney(driver.frequency_driver.previous_avg)} → ${formatMoney(driver.frequency_driver.current_avg)}) changed.`}
+                </p>}
+                {driver.one_off_driver && <p>Largely one purchase: <Link className="text-teal underline" to={transactionLink(driver.one_off_driver.transaction_id)}>{driver.one_off_driver.merchant || 'Unnamed transaction'}</Link> for <strong>{formatMoney(driver.one_off_driver.amount)}</strong> on {driver.one_off_driver.date}.</p>}
+              </div>}
+              {!!facts.trip_drivers.length && <div className="mt-4 pt-4 border-t border-border space-y-3">
+                {facts.trip_drivers.map(trip => <p key={trip.trip_id}>Trip <Link className="text-teal underline" to={`/transactions?trip=${trip.trip_id}&start=${facts.current.start}&end=${facts.comparison_current.end}`}>{trip.name}</Link>: {formatMoney(trip.current_total)} this period ({formatMoney(trip.previous_total)} previously). <span className="text-sm text-muted">{trip.overlap_note}</span></p>)}
+              </div>}
+            </div>}
+          </>;
+        })()}
       </PageCard>
       <div className="grid md:grid-cols-2 gap-6">
         <PageCard title="Coming up" action={<Link className="text-teal min-h-11 inline-flex items-center" to="/plan">Open plan</Link>}>

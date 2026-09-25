@@ -72,6 +72,7 @@ test('Home shows category driver breakdown with an overlap note and its own evid
   };
   vi.mocked(briefingApi.home).mockResolvedValue({ ...home, facts: { ...home.facts, top_category_driver: topCategoryDriver } });
   show(<HomePage />);
+  fireEvent.click(await screen.findByRole('button', { name: 'More context' }));
   expect(await screen.findByText('This breaks down the category change above.')).toBeTruthy();
   const href = screen.getByRole('link', { name: 'Fancy Bistro' }).getAttribute('href')!;
   const params = new URL(href, 'http://localhost').searchParams;
@@ -89,6 +90,7 @@ test('Home flags a one-off purchase driver with a direct transaction link', asyn
   };
   vi.mocked(briefingApi.home).mockResolvedValue({ ...home, facts: { ...home.facts, top_category_driver: topCategoryDriver } });
   show(<HomePage />);
+  fireEvent.click(await screen.findByRole('button', { name: 'More context' }));
   const link = await screen.findByRole('link', { name: 'Rare Splurge' });
   const href = new URL(link.getAttribute('href')!, 'http://localhost');
   expect(href.pathname).toBe('/transactions/42');
@@ -99,6 +101,7 @@ test('Home shows trip-attributed spending as context, not additive to category t
   const tripDriver = { trip_id: 7, name: 'Bali', current_total: { minor_units: 8000, currency: 'SGD' as const }, previous_total: { minor_units: 0, currency: 'SGD' as const }, change: { minor_units: 8000, currency: 'SGD' as const }, overlap_note: 'Trip spending is already included in the category totals above.' };
   vi.mocked(briefingApi.home).mockResolvedValue({ ...home, facts: { ...home.facts, trip_drivers: [tripDriver] } });
   show(<HomePage />);
+  fireEvent.click(await screen.findByRole('button', { name: 'More context' }));
   expect(await screen.findByRole('link', { name: 'Bali' })).toBeTruthy();
   expect(screen.getByText(/Trip spending is already included/)).toBeTruthy();
 });
@@ -338,6 +341,23 @@ test('a category no longer in the breakdown is not presented as selected', async
   await screen.findByTestId('category-donut-legend');
   expect(screen.queryByRole('button', { name: 'Clear selection' })).toBeNull();
   expect(api.getMerchantRankingFactsV2).not.toHaveBeenCalled();
+});
+
+test('What changed leads with the strongest change and keeps the rest behind a disclosure', async () => {
+  const changes = [
+    { category: 'Food & Drink', change: { minor_units: 900, currency: 'SGD' as const } },
+    { category: 'Transport', change: { minor_units: -300, currency: 'SGD' as const } },
+  ];
+  vi.mocked(briefingApi.home).mockResolvedValue({ ...home, facts: { ...home.facts, category_changes: changes } });
+  show(<HomePage />);
+  const bars = await screen.findByTestId('category-change-bars');
+  expect(within(bars).getByRole('button', { name: /Food & Drink/ })).toBeTruthy();
+  expect(screen.queryByRole('button', { name: /Transport/ })).toBeNull();
+  const toggle = screen.getByRole('button', { name: 'More context' });
+  expect(toggle.getAttribute('aria-expanded')).toBe('false');
+  fireEvent.click(toggle);
+  expect(screen.getByRole('button', { name: 'Less context' }).getAttribute('aria-expanded')).toBe('true');
+  expect(screen.getByRole('button', { name: /Transport/ })).toBeTruthy();
 });
 
 test('capture review queues a deliberate retry and refreshes', async () => {
