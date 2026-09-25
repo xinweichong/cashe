@@ -18,3 +18,17 @@ FIRST VIEWPORT: Container `p-4 md:p-6 max-w-[1600px]`, header (Home / "Where the
 FORM: "Mix-led, compacted", chosen by the user off the layout decision page (options: mix-compact, pulse-first, main-rail); refines seed 338a3ba6's "Where It Went, led by the mix".
 
 FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance.
+
+## Phone direction contract (< 768px only; md+ keeps the contract above untouched)
+
+THESIS: On a phone, Home is one screen that never scrolls: a fixed glance on top, one swappable lens panel, and lens controls in the thumb band. Detail slides in from the right and slides back. It refuses the stacked desktop band reflowed into a 2,700px column.
+
+OWN-WORLD: The Spectrum Instrument unchanged. The new shared owners are PhoneScreen (a viewport-height flex column), LensBar (Radix Tabs in the thumb band, 44px+ triggers, teal active treatment) and DrillSheet (a full-width right sheet with a back row, edge-drag dismiss and a light haptic on open). Everything else reuses HeroCard, HeroAmount, CategoryDonut (compact size), TrendLine, ActivityRowShell, StatusDot and Badge.
+
+STORY: The visitor sees the month's spend, its change and the category mix at once. Lenses (Month, Trend, Changed, Soon, Recent) swap one panel in place. Any row, category or "more" opens a DrillSheet, and a back swipe returns to the glance.
+
+FIRST VIEWPORT: 390x844 phone. A slim header row (as-of date, attention pill, Add icon). A compact warm HeroCard (amount, badges, 112px donut beside a top-4 legend). The flex-1 lens panel. The LensBar just above BottomTabs. The lens is held in the URL (?lens=).
+
+FORM: "Glance + thumb lenses", dealt structure #4 (THE ROLL), seed key 568c139f, locked by the user on the decision page, code-led. Signature interaction: the lens swap is an in-place crossfade and slide, and the DrillSheet uses an edge-drag back.
+
+FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance.

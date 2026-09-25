@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useReducedMotion } from 'framer-motion';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { cn, getCategoryColor, formatCurrency } from '@/lib/utils';
@@ -28,9 +28,16 @@ interface CategoryDonutProps {
   showLegend?: boolean;
   /** 'row' sets the legend beside the chart from `sm` up (stacked below it on phones). */
   layout?: 'stacked' | 'row';
+  /**
+   * 'compact' is the phone glance: a 112px ring always beside a top-3 legend,
+   * no remaining-group expansion and no inline "View transactions" (the
+   * caller opens a DrillSheet from onSelect instead).
+   */
+  size?: 'default' | 'compact';
 }
 
-export function CategoryDonut({ data, selected, onSelect, onViewTransactions, showLegend = false, layout = 'stacked' }: CategoryDonutProps) {
+export function CategoryDonut({ data, selected, onSelect, onViewTransactions, showLegend = false, layout = 'stacked', size = 'default' }: CategoryDonutProps) {
+  const compact = size === 'compact';
   const { CHART_TOOLTIP_STYLE } = useChartTheme();
   const [remainingExpanded, setRemainingExpanded] = useState(false);
   // Recharts' Pie animates its sweep on its own JS timer, independent of the
@@ -38,23 +45,27 @@ export function CategoryDonut({ data, selected, onSelect, onViewTransactions, sh
   // explicitly or reduced-motion users still get the animated draw-in.
   const reduceMotion = useReducedMotion();
 
+  // Memoised on `data` so a parent re-render (a lens switch, a selection)
+  // hands Recharts the same slice array and the sweep never replays.
+  const { sorted, top, rest, total, sliceData } = useMemo(() => {
+    const sorted = [...(data ?? [])].sort((a, b) => b.total - a.total);
+    const top = sorted.slice(0, 5);
+    const rest = sorted.slice(5);
+    const remainingTotal = rest.reduce((sum, d) => sum + d.total, 0);
+    const total = sorted.reduce((sum, d) => sum + d.total, 0);
+    const sliceData: CategoryData[] = rest.length
+      ? [...top, { category: REMAINING_LABEL, total: remainingTotal }]
+      : top;
+    return { sorted, top, rest, total, sliceData };
+  }, [data]);
+
   if (!data || data.length === 0) {
     return (
-      <div className="h-[220px] flex items-center justify-center text-muted text-sm">
+      <div className={cn('flex items-center justify-center text-muted text-sm', compact ? 'h-[112px]' : 'h-[220px]')}>
         No spending data
       </div>
     );
   }
-
-  const sorted = [...data].sort((a, b) => b.total - a.total);
-  const top = sorted.slice(0, 5);
-  const rest = sorted.slice(5);
-  const remainingTotal = rest.reduce((sum, d) => sum + d.total, 0);
-  const total = sorted.reduce((sum, d) => sum + d.total, 0);
-
-  const sliceData: CategoryData[] = rest.length
-    ? [...top, { category: REMAINING_LABEL, total: remainingTotal }]
-    : top;
 
   const selectedDatum = selected ? sorted.find((d) => d.category === selected) : undefined;
 
@@ -67,8 +78,8 @@ export function CategoryDonut({ data, selected, onSelect, onViewTransactions, sh
   }
 
   return (
-    <div className={cn('flex flex-col items-center gap-6', layout === 'row' && 'sm:flex-row sm:items-center')}>
-      <div className={cn('relative w-full max-w-[220px] h-[220px]', layout === 'row' && 'shrink-0')}>
+    <div className={cn(compact ? 'flex flex-row items-center gap-3' : 'flex flex-col items-center gap-6', !compact && layout === 'row' && 'sm:flex-row sm:items-center')}>
+      <div className={cn(compact ? 'relative w-[112px] h-[112px] shrink-0' : 'relative w-full max-w-[220px] h-[220px]', !compact && layout === 'row' && 'shrink-0')}>
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie
@@ -103,8 +114,10 @@ export function CategoryDonut({ data, selected, onSelect, onViewTransactions, sh
           </PieChart>
         </ResponsiveContainer>
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <div className="text-center px-4">
-            {selectedDatum ? (
+          <div className={cn('text-center', compact ? 'px-2' : 'px-4')}>
+            {compact ? (
+              <p className="text-2xs font-mono uppercase tracking-[0.18em] text-muted truncate max-w-[72px]">{selectedDatum ? `${total > 0 ? Math.round((selectedDatum.total / total) * 100) : 0}%` : 'Mix'}</p>
+            ) : selectedDatum ? (
               <>
                 <p className="text-2xs font-mono uppercase tracking-[0.22em] text-muted truncate max-w-[140px]">{selectedDatum.category}</p>
                 <p className="text-xl font-bold font-display">{formatCurrency(selectedDatum.total)}</p>
@@ -123,7 +136,7 @@ export function CategoryDonut({ data, selected, onSelect, onViewTransactions, sh
       <div className="w-full min-w-0 flex flex-col gap-6">
       {showLegend && (
         <ul className="w-full space-y-1" data-testid="category-donut-legend">
-          {sliceData.map((item) => {
+          {(compact ? top.slice(0, 3) : sliceData).map((item) => {
             const isRemaining = item.category === REMAINING_LABEL;
             const isSelected = selected === item.category;
             return (
@@ -132,6 +145,7 @@ export function CategoryDonut({ data, selected, onSelect, onViewTransactions, sh
                   onClick={() => handleSelect(item.category)}
                   selected={isSelected}
                   aria-expanded={isRemaining ? remainingExpanded : undefined}
+                  className={compact ? 'min-h-10 px-2 py-1.5' : undefined}
                 >
                   <span
                     className="w-1.5 h-1.5 rounded-full shrink-0"
@@ -160,7 +174,7 @@ export function CategoryDonut({ data, selected, onSelect, onViewTransactions, sh
         </ul>
       )}
 
-      {selectedDatum && onViewTransactions && (
+      {!compact && selectedDatum && onViewTransactions && (
         <Button type="button" variant="link" size="sm" className="h-auto min-h-11 self-start p-0" onClick={() => onViewTransactions(selectedDatum.category)}>
           View transactions
         </Button>

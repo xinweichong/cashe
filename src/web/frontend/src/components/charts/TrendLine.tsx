@@ -19,9 +19,11 @@ interface TrendLineProps {
   selectedDate?: string | null;
   /** Fires on chart-point click/keyboard day-step — the same handler drives both. */
   onSelectDate?: (date: string) => void;
+  /** Plot height in px; the phone Trend lens passes a shorter plot. */
+  chartHeight?: number;
 }
 
-export function TrendLine({ data, selectedDate, onSelectDate }: TrendLineProps) {
+export function TrendLine({ data, selectedDate, onSelectDate, chartHeight = 160 }: TrendLineProps) {
   const { CHART_AXIS_PROPS, CHART_TOOLTIP_STYLE, COLOR_TEAL } = useChartTheme();
   const gradientId = useId().replace(/:/g, '');
   // Recharts' Area animates its draw-in on its own JS timer, independent of
@@ -44,8 +46,8 @@ export function TrendLine({ data, selectedDate, onSelectDate }: TrendLineProps) 
 
   return (
     <div className="w-full">
-      <div className="w-full h-full min-h-[160px]">
-        <ResponsiveContainer width="100%" height="100%" minHeight={160}>
+      <div className="w-full h-full" style={{ minHeight: chartHeight }}>
+        <ResponsiveContainer width="100%" height="100%" minHeight={chartHeight}>
           <AreaChart data={data} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
             <defs>
               <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">

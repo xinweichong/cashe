@@ -1,7 +1,7 @@
-import { useId, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowRight, Plus } from 'lucide-react';
+import { ArrowRight, ChevronRight, Plus } from 'lucide-react';
 import { briefingApi, evidenceLink, formatMoney } from '@/api/briefing';
 import { api } from '@/api/client';
 import { datesInRange, getCategoryColor } from '@/lib/utils';
@@ -17,9 +17,37 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { TrendLine } from '@/components/charts/TrendLine';
 import { CategoryDonut } from '@/components/charts/CategoryDonut';
 import { CategoryChangeBarRow } from '@/components/charts/CategoryChangeBars';
+import { PhoneScreen, type Lens } from '@/components/layout/PhoneScreen';
+import { DrillSheet } from '@/components/layout/DrillSheet';
+import { useIsPhone } from '@/hooks/useIsPhone';
+import { cn } from '@/lib/utils';
 
 const PAGE = 'p-4 md:p-6 space-y-4 md:space-y-5 max-w-[1600px] text-base';
 const BAND = 'grid gap-4 md:gap-5 lg:grid-cols-12';
+
+type HomeLens = 'month' | 'trend' | 'changed' | 'soon' | 'recent';
+type HomeDrill = 'category' | 'changed' | 'soon' | 'attention';
+const HOME_LENSES: readonly HomeLens[] = ['month', 'trend', 'changed', 'soon', 'recent'];
+const HOME_DRILLS: readonly HomeDrill[] = ['category', 'changed', 'soon', 'attention'];
+// The phone glance's own height: donut ring plus the amount row and chrome.
+const PHONE_SCREEN = 'h-[calc(100dvh-7rem-env(safe-area-inset-bottom))] flex flex-col gap-2 px-3 pt-3 pb-2 overflow-hidden';
+
+// One figure in the phone's Month lens: a label and value that open their
+// evidence, sized as a full-width 56px row for the thumb.
+function MetricRow({ label, value, sub, tone, href }: { label: string; value: React.ReactNode; sub: React.ReactNode; tone?: 'teal' | 'coral'; href?: string }) {
+  const body = <>
+    <div className="min-w-0 flex-1">
+      <p className="text-2xs uppercase tracking-[0.22em] text-muted font-mono font-semibold">{label}</p>
+      <p className="text-xs text-muted truncate">{sub}</p>
+    </div>
+    <span className={cn('font-display text-lg font-bold tabular-nums', tone === 'teal' && 'text-teal', tone === 'coral' && 'text-coral')}>{value}</span>
+    {href && <ChevronRight size={16} className="text-muted shrink-0" aria-hidden />}
+  </>;
+  const row = 'flex min-h-12 items-center gap-3 px-4 py-1.5';
+  return href
+    ? <Link to={href} className={cn(row, 'active:bg-foreground/5 transition-colors')}>{body}</Link>
+    : <div className={row}>{body}</div>;
+}
 
 export function HomePage() {
   const navigate = useNavigate();
@@ -27,7 +55,7 @@ export function HomePage() {
   const [search, setSearch] = useSearchParams();
   // Category and day selections live in the URL (replace-history) so the
   // evidence → correction → Back journey returns to the same selection.
-  const setParam = (key: 'category' | 'day', value: string | null) => {
+  const setParam = (key: 'category' | 'day' | 'lens', value: string | null) => {
     const next = new URLSearchParams(search);
     if (value) next.set(key, value); else next.delete(key);
     setSearch(next, { replace: true });
@@ -39,6 +67,27 @@ export function HomePage() {
   const [selectedChangeCategory, setSelectedChangeCategory] = useState<string | null>(null);
   const [showMoreChange, setShowMoreChange] = useState(false);
   const moreChangeId = useId();
+  const isPhone = useIsPhone();
+  const lensParam = search.get('lens') as HomeLens | null;
+  const lens: HomeLens = lensParam && HOME_LENSES.includes(lensParam) ? lensParam : 'month';
+  const setLens = (value: HomeLens) => setParam('lens', value === 'month' ? null : value);
+  const drillParam = search.get('drill') as HomeDrill | null;
+  const drill = isPhone && drillParam && HOME_DRILLS.includes(drillParam) ? drillParam : null;
+  // A drill-in pushes history, so the phone's own back gesture closes it; a
+  // drill reached by deep link has nothing to go back to and is cleared.
+  const openDrill = (kind: HomeDrill, category?: string) => {
+    const next = new URLSearchParams(search);
+    next.set('drill', kind);
+    if (category) next.set('category', category);
+    setSearch(next, { state: { drill: true } });
+  };
+  const closeDrill = () => {
+    if ((location.state as { drill?: boolean } | null)?.drill) { navigate(-1); return; }
+    const next = new URLSearchParams(search);
+    next.delete('drill');
+    next.delete('category');
+    setSearch(next, { replace: true });
+  };
   const query = useQuery({ queryKey: ['home-briefing'], queryFn: briefingApi.home });
   const currentStart = query.data?.facts.current.start;
   const currentEnd = query.data?.facts.current.end;
@@ -66,6 +115,11 @@ export function HomePage() {
     queryFn: () => api.getMerchantRankingFactsV2(currentStart!, currentEnd!, selectedCategory ?? undefined, 5),
     enabled: !!currentStart && !!currentEnd && !!selectedCategory,
   });
+  // Stable across re-renders (a lens switch, a drill-in) so the donut's
+  // sweep animation plays once instead of replaying on every state change.
+  const categoryTotals = useMemo(() => breakdownQuery.data
+    ? Object.entries(breakdownQuery.data.by_category).map(([category, amount]) => ({ category, total: amount.minor_units / 100 }))
+    : [], [breakdownQuery.data]);
   const header = (asOf: React.ReactNode) => (
     <header className="flex items-center justify-between gap-4">
       <div className="flex flex-col gap-1">
@@ -79,9 +133,23 @@ export function HomePage() {
     </header>
   );
   if (!query.data && query.isError) return (
-    <div className={PAGE}>
+    <div className={cn(PAGE, isPhone && 'p-3')}>
       {header(null)}
       <div role="alert"><LoadFailed onRetry={() => void query.refetch()} /></div>
+    </div>
+  );
+  if (!query.data && isPhone) return (
+    <div role="status" aria-label="Preparing your briefing" className={PHONE_SCREEN}>
+      <h1 className="sr-only">Home</h1>
+      <HeroCard title="Where it went" className="p-4">
+        <Skeleton className="h-10 w-40" />
+        <div className="mt-3 flex items-center gap-3">
+          <Skeleton className="h-[112px] w-[112px] shrink-0 rounded-full" />
+          <Skeleton className="h-24 flex-1" />
+        </div>
+      </HeroCard>
+      <Skeleton className="flex-1 rounded-lg" />
+      <Skeleton className="h-[46px] rounded-sm" />
     </div>
   );
   if (!query.data) return (
@@ -118,15 +186,247 @@ export function HomePage() {
   // Home's queries refetch together after a correction but settle
   // separately; say so rather than silently mixing old and new snapshots.
   const refreshing = [query, breakdownQuery, trendQuery, merchantsQuery].some((q) => q.isFetching && q.data !== undefined);
-  const categoryTotals = breakdownQuery.data
-    ? Object.entries(breakdownQuery.data.by_category).map(([category, amount]) => ({ category, total: amount.minor_units / 100 }))
-    : [];
   // The API lists days newest-first and omits days with no records; the
   // chart needs every day of the period in order, with those as recorded $0.
   const trendPoints = trendQuery.data && currentStart && currentEnd ? datesInRange(currentStart, currentEnd).map((date) => {
     const day = trendQuery.data!.find((d) => d.date === date);
     return { date, amount: day ? day.spending.minor_units / 100 : 0 };
   }) : [];
+  const changeBadges = <>
+    {facts.change && <Badge tone={facts.change.minor_units >= 0 ? 'warm' : 'calm'} className="font-mono">
+      {facts.change.minor_units >= 0 ? '▲' : '▼'} {formatMoney({ ...facts.change, minor_units: Math.abs(facts.change.minor_units) })}
+    </Badge>}
+    {spending_target && <Badge tone={overTarget ? 'warm' : 'saved'} className="font-mono">
+      {overTarget ? 'over target' : 'under target'}
+    </Badge>}
+  </>;
+  const merchantList = selectedCategory && <>
+    {merchantsQuery.data ? (
+      <>
+        {merchantsQuery.isError && <p className="text-xs text-warning">Couldn't refresh merchants for {selectedCategory} — showing the last loaded data. <Button type="button" variant="link" size="sm" className="h-auto min-h-11 p-0 align-baseline" onClick={() => void merchantsQuery.refetch()}>Retry</Button></p>}
+        {merchantsQuery.data.length ? (
+          <ul className="space-y-2">
+            {merchantsQuery.data.map((m) => (
+              <li key={m.merchant} className="flex justify-between text-sm">
+                <span>{m.merchant}</span>
+                <span className="font-mono tabular-nums text-muted">{formatMoney(m.total)}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-muted">No merchant records for {selectedCategory} in this period.</p>
+        )}
+      </>
+    ) : merchantsQuery.isLoading ? (
+      <Skeleton className="h-[100px] w-full" />
+    ) : (
+      <p className="text-sm text-muted">Couldn't load merchants for {selectedCategory}. <Button type="button" variant="link" size="sm" className="h-auto min-h-11 p-0 align-baseline" onClick={() => void merchantsQuery.refetch()}>Retry</Button></p>
+    )}
+  </>;
+  // Lead with the strongest change and its evidence; the rest of the
+  // explanation sits behind "More context" (always open in the phone's
+  // drill-in). Bars share one scale so nothing rescales when it expands.
+  const renderChanged = (expanded: boolean) => {
+    const changes = facts.category_changes.slice(0, 3);
+    const maxChange = Math.max(...changes.map((c) => Math.abs(c.change.minor_units)), 1);
+    const changeRow = (item: typeof changes[number]) => <div key={item.category} className="py-1 border-b border-border last:border-0">
+      <CategoryChangeBarRow
+        datum={item}
+        max={maxChange}
+        selected={selectedChangeCategory === item.category}
+        onSelect={setSelectedChangeCategory}
+      />
+      <div className="flex gap-6 pl-2 pb-2"><Link className="text-teal min-h-11 inline-flex items-center" to={withReturn(evidenceLink(facts.comparison_current, item.category))}>This period</Link><Link className="text-teal min-h-11 inline-flex items-center" to={withReturn(evidenceLink(facts.previous, item.category))}>Previous period</Link></div>
+    </div>;
+    const hasMore = changes.length > 1 || !!driver || !!facts.trip_drivers.length;
+    const open = expanded || showMoreChange;
+    return <>
+      {changes.length
+        ? <div data-testid="category-change-bars">{changeRow(changes[0])}</div>
+        : <p className="text-muted">{facts.change ? 'No category spending changes in these periods.' : 'Resolve the records needing attention to compare categories.'}</p>}
+      {hasMore && !expanded && <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="mt-2"
+        aria-expanded={showMoreChange}
+        aria-controls={moreChangeId}
+        onClick={() => setShowMoreChange((open) => !open)}
+      >
+        {showMoreChange ? 'Less context' : 'More context'}
+      </Button>}
+      {open && <div id={moreChangeId}>
+        {changes.length > 1 && <div className="mt-2">{changes.slice(1).map(changeRow)}</div>}
+        {driver && <div className="mt-4 pt-4 border-t border-border space-y-3">
+          <p className="text-sm text-muted">{driver.overlap_note}</p>
+          {driver.merchant_driver && <p>Biggest contributor in {driver.category}: <Link className="text-teal underline" to={withReturn(evidenceLink(facts.comparison_current, driver.category, 'spending', driver.merchant_driver.merchant))}>{driver.merchant_driver.merchant}</Link> (<strong>{formatMoney(driver.merchant_driver.change)}</strong> change)</p>}
+          {driver.frequency_driver && driver.frequency_driver.classification !== 'none' && <p>
+            {driver.frequency_driver.classification === 'frequency' && `Driven mostly by more purchases: ${driver.frequency_driver.current_count} this period vs ${driver.frequency_driver.previous_count} previously, at a similar average.`}
+            {driver.frequency_driver.classification === 'size' && `Driven mostly by bigger purchases: average ${formatMoney(driver.frequency_driver.current_avg)} this period vs ${formatMoney(driver.frequency_driver.previous_avg)} previously, at a similar count.`}
+            {driver.frequency_driver.classification === 'mixed' && `Both purchase count (${driver.frequency_driver.previous_count} → ${driver.frequency_driver.current_count}) and average size (${formatMoney(driver.frequency_driver.previous_avg)} → ${formatMoney(driver.frequency_driver.current_avg)}) changed.`}
+          </p>}
+          {driver.one_off_driver && <p>Largely one purchase: <Link className="text-teal underline" to={transactionLink(driver.one_off_driver.transaction_id)}>{driver.one_off_driver.merchant || 'Unnamed transaction'}</Link> for <strong>{formatMoney(driver.one_off_driver.amount)}</strong> on {driver.one_off_driver.date}.</p>}
+        </div>}
+        {!!facts.trip_drivers.length && <div className="mt-4 pt-4 border-t border-border space-y-3">
+          {facts.trip_drivers.map(trip => <p key={trip.trip_id}>Trip <Link className="text-teal underline" to={`/transactions?trip=${trip.trip_id}&start=${facts.current.start}&end=${facts.comparison_current.end}`}>{trip.name}</Link>: {formatMoney(trip.current_total)} this period ({formatMoney(trip.previous_total)} previously). <span className="text-sm text-muted">{trip.overlap_note}</span></p>)}
+        </div>}
+      </div>}
+    </>;
+  };
+  const upcomingBody = <>
+    <p>{formatMoney(upcoming_total)} in estimated charges over the next 14 days.</p>
+    {!!upcoming_unknown_count && <p className="text-warning">{upcoming_unknown_count} expected charges have no amount yet.</p>}
+    {upcoming.map(item => <div key={item.id} className="flex justify-between gap-4 py-3 border-b border-border last:border-0"><div>{item.label}<p className="text-sm text-muted">{item.date}</p></div><span>{item.amount ? formatMoney(item.amount) : 'Amount unknown'}</span></div>)}
+    {!upcoming.length && <p className="text-muted mt-3">No pending charges are recorded for these dates. Add subscriptions in Plan to track them.</p>}
+    {!!increased_commitments.length && <div className="mt-4 pt-4 border-t border-border space-y-2">
+      <p className="font-medium">Recently increased</p>
+      {increased_commitments.map(change => <p key={change.subscription_id}>{change.label}: {formatMoney(change.old_amount)} → {formatMoney(change.new_amount)} (<strong>+{formatMoney(change.change)}</strong>, {formatMoney(change.annualized_impact)}/year)</p>)}
+    </div>}
+  </>;
+  const attentionBody = <>
+    <Link to="/review" className="flex items-center gap-2 min-h-11 py-2 rounded-md px-2 -mx-2 hover:bg-card-hover transition-colors text-teal"><StatusDot tone="notable" />{capture_issue_count + followup_issue_count} capture or follow-up items</Link>
+    {!!unresolved && <Link to={withReturn(evidenceLink(facts.current, undefined, 'unresolved'))} className="flex items-center gap-2 min-h-11 py-2 rounded-md px-2 -mx-2 hover:bg-card-hover transition-colors text-warning"><StatusDot tone="warm" />Review {unresolved} spending records with unresolved amounts or dates</Link>}
+    {!!review_count && <Link to="/review" className="flex items-center gap-2 min-h-11 py-2 rounded-md px-2 -mx-2 hover:bg-card-hover transition-colors text-teal"><StatusDot tone="notable" />{review_count} spending records need review</Link>}
+    {!!recurring_suggestion_count && <Link to="/review" className="flex items-center gap-2 min-h-11 py-2 rounded-md px-2 -mx-2 hover:bg-card-hover transition-colors text-teal"><StatusDot tone="calm" />{recurring_suggestion_count} recurring suggestions</Link>}
+    <div className="mt-4 pt-4 border-t border-border space-y-1">
+      <p className="text-muted text-sm">{freshness.gmail_needs_reconnection ? 'Gmail needs reconnection.' : freshness.gmail_connected ? `Gmail last checked: ${freshness.gmail_last_checked ?? 'not checked in this session'}.` : 'Gmail is not connected in this session.'}</p>
+      <p className="text-xs text-muted">{freshness.last_capture_processed_at ? `Last capture processed: ${freshness.last_capture_processed_at}.` : 'No capture has been processed yet.'}</p>
+      <p className="text-xs text-muted">Recent checks do not prove every purchase was captured.</p>
+    </div>
+    <Button asChild variant="outline" size="sm" className="mt-4"><Link to="/settings">Manage connections</Link></Button>
+  </>;
+  if (isPhone) {
+    const attentionCount = capture_issue_count + followup_issue_count + unresolved + review_count + recurring_suggestion_count;
+    const sourcesNeedCare = freshness.gmail_needs_reconnection || !freshness.gmail_connected;
+    const targetAbs = spending_target && formatMoney({ ...spending_target.remaining, minor_units: Math.abs(spending_target.remaining.minor_units) });
+    const lensAction = (label: string, onClick: () => void) => (
+      <Button type="button" variant="ghost" className="w-full min-h-12 justify-between rounded-none border-t border-border px-4 text-teal" onClick={onClick}>
+        {label}<ChevronRight size={16} aria-hidden />
+      </Button>
+    );
+    const lensLink = (label: string, to: string) => (
+      <Link to={to} className="flex min-h-12 items-center justify-between border-t border-border px-4 text-sm font-medium text-teal active:bg-foreground/5">
+        {label}<ChevronRight size={16} aria-hidden />
+      </Link>
+    );
+    const changes = facts.category_changes.slice(0, 3);
+    const maxChange = Math.max(...changes.map((c) => Math.abs(c.change.minor_units)), 1);
+    const lenses: Lens<HomeLens>[] = [
+      { value: 'month', label: 'Month', panel: <div className="flex h-full flex-col">
+        <div className="divide-y divide-border">
+          <MetricRow label="Income" value={facts.current.income ? formatMoney(facts.current.income) : 'None yet'} tone={facts.current.income ? 'teal' : undefined} sub={facts.current.income ? 'Recorded this month' : 'Captured income appears here'} href={withReturn(evidenceLink(facts.current, undefined, 'income'))} />
+          <MetricRow label="Net flow" value={facts.current.recorded_net_flow ? formatMoney(facts.current.recorded_net_flow) : 'Unavailable'} tone={!facts.current.recorded_net_flow ? undefined : netFlowNegative ? 'coral' : 'teal'} sub={facts.current.recorded_net_flow ? `Recorded net ${netFlowNegative ? 'outflow' : 'flow'}` : facts.current.income ? 'Hidden while records need review' : 'No income recorded this month'} />
+          {spending_target
+            ? <MetricRow label={overTarget ? 'Over target' : 'Target left'} value={targetAbs} tone={overTarget ? 'coral' : 'teal'} sub={`of your ${formatMoney(spending_target.target)} monthly target`} href="/plan" />
+            : <MetricRow label="Target" value="Not set" sub="Set one in Plan to track pace" href="/plan" />}
+        </div>
+        <p className="mt-auto px-4 py-3 text-xs text-muted">Through {facts.as_of} · {facts.change ? `${formatMoney({ ...facts.change, minor_units: Math.abs(facts.change.minor_units) })} ${facts.change.minor_units >= 0 ? 'more' : 'less'} than the same days last month.` : 'No comparison while records need review.'}{refreshing && <span role="status"> Updating…</span>}</p>
+      </div> },
+      { value: 'trend', label: 'Trend', panel: <div className="p-3">
+        {trendQuery.data ? <>
+          <TrendLine data={trendPoints} selectedDate={selectedDate} onSelectDate={setSelectedDate} chartHeight={124} />
+          {selectedDate && <Link className="text-sm text-teal min-h-11 inline-flex items-center" to={withReturn(`/evidence?start=${selectedDate}&end=${selectedDate}&measure=spending`)}>View this day's records</Link>}
+        </> : trendQuery.isLoading ? <Skeleton className="h-[168px] w-full" /> : <p className="text-sm text-muted">Couldn't load the daily trend. <Button type="button" variant="link" size="sm" className="h-auto min-h-11 p-0 align-baseline" onClick={() => void trendQuery.refetch()}>Retry</Button></p>}
+      </div> },
+      { value: 'changed', label: 'Changed', panel: <div className="flex h-full flex-col">
+        <div className="flex-1 px-3 pt-2">
+          {changes.length
+            ? changes.map((item) => <div key={item.category} className="border-b border-border last:border-0">
+              <CategoryChangeBarRow datum={item} max={maxChange} selected={false} onSelect={() => openDrill('changed')} />
+            </div>)
+            : <p className="p-1 text-sm text-muted">{facts.change ? 'No category spending changes in these periods.' : 'Resolve the records needing attention to compare categories.'}</p>}
+        </div>
+        {lensAction('Why it changed', () => openDrill('changed'))}
+      </div> },
+      { value: 'soon', label: 'Soon', panel: <div className="flex h-full flex-col">
+        <div className="flex-1 px-4 pt-3">
+          <p className="text-sm"><span className="font-display text-lg font-bold tabular-nums">{formatMoney(upcoming_total)}</span> <span className="text-muted">due in the next 14 days</span></p>
+          {upcoming.slice(0, 3).map(item => <div key={item.id} className="flex justify-between gap-4 py-2.5 border-b border-border last:border-0 text-sm"><div className="min-w-0 truncate">{item.label}<p className="text-xs text-muted font-mono">{item.date}</p></div><span className="font-mono tabular-nums">{item.amount ? formatMoney(item.amount) : 'Unknown'}</span></div>)}
+          {!upcoming.length && <p className="mt-2 text-sm text-muted">No pending charges are recorded for these dates.</p>}
+        </div>
+        {upcoming.length > 3 || upcoming_unknown_count || increased_commitments.length
+          ? lensAction(`All upcoming${upcoming.length > 3 ? ` (${upcoming.length})` : ''}`, () => openDrill('soon'))
+          : lensLink('Open plan', '/plan')}
+      </div> },
+      { value: 'recent', label: 'Recent', panel: <div className="flex h-full flex-col">
+        <div className="flex-1">
+          {recent.slice(0, 4).map(item => (
+            <ActivityRowShell
+              key={item.id}
+              category={item.category}
+              isIncome={item.type === 'income'}
+              href={transactionLink(item.id)}
+              title={item.merchant || 'Unnamed transaction'}
+              metaPrimary={item.date?.slice(0, 10) ?? 'Date unknown'}
+              amount={item.amount ? formatMoney(item.amount) : 'Amount unresolved'}
+              amountSub={item.conversion_status === 'indicative' ? 'Indicative' : undefined}
+            />
+          ))}
+          {!recent.length && <p className="p-4 text-sm text-muted">Your captured purchases will appear here.</p>}
+        </div>
+        {lensLink('All activity', '/activity')}
+      </div> },
+    ];
+    const glance = (
+      <HeroCard
+        title="Where it went"
+        className="p-4"
+        glowColor={overTarget ? 'coral' : 'warm'}
+        action={<div className="flex items-center gap-1">
+          <Button type="button" variant="ghost" size="sm" className="gap-1.5 px-2" onClick={() => openDrill('attention')}>
+            <StatusDot tone={attentionCount ? 'notable' : sourcesNeedCare ? 'warm' : 'calm'} />
+            {attentionCount ? `${attentionCount} to check` : sourcesNeedCare ? 'Sources' : 'Captured'}
+          </Button>
+          <Button asChild variant="outline" size="icon" aria-label="Add a transaction">
+            <Link to="/transactions?add=1"><Plus aria-hidden="true" size={16} /></Link>
+          </Button>
+        </div>}
+      >
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <Link to={withReturn(evidenceLink(facts.current))} aria-label={`See all spending, ${formatMoney(facts.current.spending)}`} className="rounded-sm active:scale-[0.98] transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            <HeroAmount value={facts.current.spending} className="text-4xl" />
+          </Link>
+          {changeBadges}
+        </div>
+        {facts.current.status !== 'complete' && <p className="mt-1 text-xs text-muted">{facts.current.status === 'partial' ? 'Known subtotal · some records need review.' : 'Includes indicative currency conversions.'}</p>}
+        {query.isError && <p role="alert" className="mt-1 text-xs text-warning">Couldn’t refresh. <Button type="button" variant="link" size="sm" className="h-auto min-h-11 p-0 align-baseline" onClick={() => void query.refetch()}>Retry</Button></p>}
+        <div className="mt-3">
+          {breakdownQuery.data
+            ? <CategoryDonut data={categoryTotals} selected={null} onSelect={(category) => category && openDrill('category', category)} showLegend size="compact" />
+            : breakdownQuery.isLoading
+              ? <div className="flex items-center gap-3"><Skeleton className="h-[112px] w-[112px] shrink-0 rounded-full" /><Skeleton className="h-24 flex-1" /></div>
+              : <p className="text-sm text-muted">Couldn't load the category mix. <Button type="button" variant="link" size="sm" className="h-auto min-h-11 p-0 align-baseline" onClick={() => void breakdownQuery.refetch()}>Retry</Button></p>}
+        </div>
+      </HeroCard>
+    );
+    const categoryTotal = selectedCategory ? categoryTotals.find((c) => c.category === selectedCategory)?.total : undefined;
+    return (
+      <>
+        <h1 className="sr-only">Home</h1>
+        <PhoneScreen glance={glance} lenses={lenses} lens={lens} onLensChange={setLens} label="Home views" />
+        <DrillSheet
+          open={drill === 'category' && !!selectedCategory}
+          onOpenChange={(open) => !open && closeDrill()}
+          backLabel="Home"
+          title={<span className="inline-flex items-center gap-2">{selectedCategory && <StatusDot color={getCategoryColor(selectedCategory)} />}{selectedCategory}</span>}
+          description={categoryTotal !== undefined && `${formatMoney({ ...facts.current.spending, minor_units: Math.round(categoryTotal * 100) })} of ${formatMoney(facts.current.spending)} this month`}
+          footer={selectedCategory && <Button asChild className="w-full min-h-12"><Link to={withReturn(evidenceLink(facts.current, selectedCategory))}>View {selectedCategory} transactions</Link></Button>}
+        >
+          <h3 className="mb-2 text-2xs uppercase tracking-[0.22em] text-muted font-mono font-semibold">Top merchants</h3>
+          {merchantList}
+        </DrillSheet>
+        <DrillSheet open={drill === 'changed'} onOpenChange={(open) => !open && closeDrill()} backLabel="Home" title="What changed" description={`${facts.comparison_current.start}–${facts.comparison_current.end} against ${facts.previous.start}–${facts.previous.end}`}>
+          {renderChanged(true)}
+        </DrillSheet>
+        <DrillSheet open={drill === 'soon'} onOpenChange={(open) => !open && closeDrill()} backLabel="Home" title="Coming up" footer={<Button asChild variant="outline" className="w-full min-h-12"><Link to="/plan">Open plan</Link></Button>}>
+          {upcomingBody}
+        </DrillSheet>
+        <DrillSheet open={drill === 'attention'} onOpenChange={(open) => !open && closeDrill()} backLabel="Home" title="Needs attention">
+          {attentionBody}
+        </DrillSheet>
+      </>
+    );
+  }
   return (
     <div className={PAGE}>
       {header(<p className="text-muted">Through {facts.as_of} · {facts.timezone}{refreshing && <span role="status"> · Updating…</span>}</p>)}
@@ -141,12 +441,7 @@ export function HomePage() {
         >
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1.5">
             <HeroAmount value={facts.current.spending} className="text-3xl md:text-4xl" />
-            {facts.change && <Badge tone={facts.change.minor_units >= 0 ? 'warm' : 'calm'} className="font-mono">
-              {facts.change.minor_units >= 0 ? '▲' : '▼'} {formatMoney({ ...facts.change, minor_units: Math.abs(facts.change.minor_units) })}
-            </Badge>}
-            {spending_target && <Badge tone={overTarget ? 'warm' : 'saved'} className="font-mono">
-              {overTarget ? 'over target' : 'under target'}
-            </Badge>}
+            {changeBadges}
           </div>
           <p className="mt-1.5 text-sm text-muted">{facts.current.status === 'partial' ? 'Known spending subtotal · some amounts or dates need review.' : facts.current.status === 'indicative' ? 'Recorded spending · includes indicative currency conversions.' : 'Recorded spending this month'}</p>
           <p className="mt-1 text-sm">{facts.change ? `${formatMoney({ ...facts.change, minor_units: Math.abs(facts.change.minor_units) })} ${facts.change.minor_units >= 0 ? 'more' : 'less'} than the comparable period last month.` : 'A comparison is unavailable while some records need review.'}</p>
@@ -173,27 +468,7 @@ export function HomePage() {
                       </div>
                       <Button type="button" variant="ghost" size="sm" onClick={() => setSelectedCategory(null)}>Clear selection</Button>
                     </div>
-                    {merchantsQuery.data ? (
-                      <>
-                        {merchantsQuery.isError && <p className="text-xs text-warning">Couldn't refresh merchants for {selectedCategory} — showing the last loaded data. <Button type="button" variant="link" size="sm" className="h-auto min-h-11 p-0 align-baseline" onClick={() => void merchantsQuery.refetch()}>Retry</Button></p>}
-                        {merchantsQuery.data.length ? (
-                          <ul className="space-y-2">
-                            {merchantsQuery.data.map((m) => (
-                              <li key={m.merchant} className="flex justify-between text-sm">
-                                <span>{m.merchant}</span>
-                                <span className="font-mono tabular-nums text-muted">{formatMoney(m.total)}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        ) : (
-                          <p className="text-sm text-muted">No merchant records for {selectedCategory} in this period.</p>
-                        )}
-                      </>
-                    ) : merchantsQuery.isLoading ? (
-                      <Skeleton className="h-[100px] w-full" />
-                    ) : (
-                      <p className="text-sm text-muted">Couldn't load merchants for {selectedCategory}. <Button type="button" variant="link" size="sm" className="h-auto min-h-11 p-0 align-baseline" onClick={() => void merchantsQuery.refetch()}>Retry</Button></p>
-                    )}
+                    {merchantList}
                     <Link
                       className="text-sm text-teal min-h-11 inline-flex items-center gap-1"
                       to={withReturn(evidenceLink(facts.current, selectedCategory))}
@@ -259,80 +534,16 @@ export function HomePage() {
             )}
           </PageCard>
           <PageCard title="What changed" className="lg:col-span-4">
-            {(() => {
-              // Lead with the strongest change and its evidence; the rest of the
-              // explanation sits behind "More context". Bars share one scale so
-              // nothing rescales when context expands.
-              const changes = facts.category_changes.slice(0, 3);
-              const maxChange = Math.max(...changes.map((c) => Math.abs(c.change.minor_units)), 1);
-              const changeRow = (item: typeof changes[number]) => <div key={item.category} className="py-1 border-b border-border last:border-0">
-                <CategoryChangeBarRow
-                  datum={item}
-                  max={maxChange}
-                  selected={selectedChangeCategory === item.category}
-                  onSelect={setSelectedChangeCategory}
-                />
-                <div className="flex gap-6 pl-2 pb-2"><Link className="text-teal min-h-11 inline-flex items-center" to={withReturn(evidenceLink(facts.comparison_current, item.category))}>This period</Link><Link className="text-teal min-h-11 inline-flex items-center" to={withReturn(evidenceLink(facts.previous, item.category))}>Previous period</Link></div>
-              </div>;
-              const hasMore = changes.length > 1 || !!driver || !!facts.trip_drivers.length;
-              return <>
-                {changes.length
-                  ? <div data-testid="category-change-bars">{changeRow(changes[0])}</div>
-                  : <p className="text-muted">{facts.change ? 'No category spending changes in these periods.' : 'Resolve the records needing attention to compare categories.'}</p>}
-                {hasMore && <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="mt-2"
-                  aria-expanded={showMoreChange}
-                  aria-controls={moreChangeId}
-                  onClick={() => setShowMoreChange((open) => !open)}
-                >
-                  {showMoreChange ? 'Less context' : 'More context'}
-                </Button>}
-                {showMoreChange && <div id={moreChangeId}>
-                  {changes.length > 1 && <div className="mt-2">{changes.slice(1).map(changeRow)}</div>}
-                  {driver && <div className="mt-4 pt-4 border-t border-border space-y-3">
-                    <p className="text-sm text-muted">{driver.overlap_note}</p>
-                    {driver.merchant_driver && <p>Biggest contributor in {driver.category}: <Link className="text-teal underline" to={withReturn(evidenceLink(facts.comparison_current, driver.category, 'spending', driver.merchant_driver.merchant))}>{driver.merchant_driver.merchant}</Link> (<strong>{formatMoney(driver.merchant_driver.change)}</strong> change)</p>}
-                    {driver.frequency_driver && driver.frequency_driver.classification !== 'none' && <p>
-                      {driver.frequency_driver.classification === 'frequency' && `Driven mostly by more purchases: ${driver.frequency_driver.current_count} this period vs ${driver.frequency_driver.previous_count} previously, at a similar average.`}
-                      {driver.frequency_driver.classification === 'size' && `Driven mostly by bigger purchases: average ${formatMoney(driver.frequency_driver.current_avg)} this period vs ${formatMoney(driver.frequency_driver.previous_avg)} previously, at a similar count.`}
-                      {driver.frequency_driver.classification === 'mixed' && `Both purchase count (${driver.frequency_driver.previous_count} → ${driver.frequency_driver.current_count}) and average size (${formatMoney(driver.frequency_driver.previous_avg)} → ${formatMoney(driver.frequency_driver.current_avg)}) changed.`}
-                    </p>}
-                    {driver.one_off_driver && <p>Largely one purchase: <Link className="text-teal underline" to={transactionLink(driver.one_off_driver.transaction_id)}>{driver.one_off_driver.merchant || 'Unnamed transaction'}</Link> for <strong>{formatMoney(driver.one_off_driver.amount)}</strong> on {driver.one_off_driver.date}.</p>}
-                  </div>}
-                  {!!facts.trip_drivers.length && <div className="mt-4 pt-4 border-t border-border space-y-3">
-                    {facts.trip_drivers.map(trip => <p key={trip.trip_id}>Trip <Link className="text-teal underline" to={`/transactions?trip=${trip.trip_id}&start=${facts.current.start}&end=${facts.comparison_current.end}`}>{trip.name}</Link>: {formatMoney(trip.current_total)} this period ({formatMoney(trip.previous_total)} previously). <span className="text-sm text-muted">{trip.overlap_note}</span></p>)}
-                  </div>}
-                </div>}
-              </>;
-            })()}
+            {renderChanged(false)}
           </PageCard>
       </div>
 
       <div className="grid gap-4 md:gap-5 md:grid-cols-2 xl:grid-cols-3">
         <PageCard title="Coming up" action={<Button asChild variant="ghost" size="sm"><Link to="/plan">Open plan<ArrowRight size={14} aria-hidden /></Link></Button>}>
-          <p>{formatMoney(upcoming_total)} in estimated charges over the next 14 days.</p>
-          {!!upcoming_unknown_count && <p className="text-warning">{upcoming_unknown_count} expected charges have no amount yet.</p>}
-          {upcoming.map(item => <div key={item.id} className="flex justify-between gap-4 py-3 border-b border-border last:border-0"><div>{item.label}<p className="text-sm text-muted">{item.date}</p></div><span>{item.amount ? formatMoney(item.amount) : 'Amount unknown'}</span></div>)}
-          {!upcoming.length && <p className="text-muted mt-3">No pending charges are recorded for these dates. Add subscriptions in Plan to track them.</p>}
-          {!!increased_commitments.length && <div className="mt-4 pt-4 border-t border-border space-y-2">
-            <p className="font-medium">Recently increased</p>
-            {increased_commitments.map(change => <p key={change.subscription_id}>{change.label}: {formatMoney(change.old_amount)} → {formatMoney(change.new_amount)} (<strong>+{formatMoney(change.change)}</strong>, {formatMoney(change.annualized_impact)}/year)</p>)}
-          </div>}
+          {upcomingBody}
         </PageCard>
         <PageCard title="Needs attention">
-          <Link to="/review" className="flex items-center gap-2 min-h-11 py-2 rounded-md px-2 -mx-2 hover:bg-card-hover transition-colors text-teal"><StatusDot tone="notable" />{capture_issue_count + followup_issue_count} capture or follow-up items</Link>
-          {!!unresolved && <Link to={withReturn(evidenceLink(facts.current, undefined, 'unresolved'))} className="flex items-center gap-2 min-h-11 py-2 rounded-md px-2 -mx-2 hover:bg-card-hover transition-colors text-warning"><StatusDot tone="warm" />Review {unresolved} spending records with unresolved amounts or dates</Link>}
-          {!!review_count && <Link to="/review" className="flex items-center gap-2 min-h-11 py-2 rounded-md px-2 -mx-2 hover:bg-card-hover transition-colors text-teal"><StatusDot tone="notable" />{review_count} spending records need review</Link>}
-          {!!recurring_suggestion_count && <Link to="/review" className="flex items-center gap-2 min-h-11 py-2 rounded-md px-2 -mx-2 hover:bg-card-hover transition-colors text-teal"><StatusDot tone="calm" />{recurring_suggestion_count} recurring suggestions</Link>}
-          <div className="mt-4 pt-4 border-t border-border space-y-1">
-            <p className="text-muted text-sm">{freshness.gmail_needs_reconnection ? 'Gmail needs reconnection.' : freshness.gmail_connected ? `Gmail last checked: ${freshness.gmail_last_checked ?? 'not checked in this session'}.` : 'Gmail is not connected in this session.'}</p>
-            <p className="text-xs text-muted">{freshness.last_capture_processed_at ? `Last capture processed: ${freshness.last_capture_processed_at}.` : 'No capture has been processed yet.'}</p>
-            <p className="text-xs text-muted">Recent checks do not prove every purchase was captured.</p>
-          </div>
-          <Button asChild variant="outline" size="sm" className="mt-4"><Link to="/settings">Manage connections</Link></Button>
+          {attentionBody}
         </PageCard>
 
       <PageCard title="Recent activity" className="md:col-span-2 xl:col-span-1" contentClassName="p-0" action={<Button asChild variant="ghost" size="sm"><Link to="/transactions">All activity<ArrowRight size={14} aria-hidden /></Link></Button>}>
