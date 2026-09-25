@@ -26,9 +26,10 @@ interface PhoneScreenProps<T extends string> {
   className?: string;
 }
 
-// AppShell's phone chrome: the 3rem top bar and the 4rem tab bar plus the
-// home-indicator inset. dvh tracks Safari's collapsing toolbars.
-const SCREEN_HEIGHT = 'h-[calc(100dvh-7rem-env(safe-area-inset-bottom))]';
+// AppShell's phone chrome: the 3rem top bar under the status-bar inset and
+// the 4rem tab bar over the home-indicator inset. dvh tracks Safari's
+// collapsing toolbars.
+export const PHONE_SCREEN_HEIGHT = 'h-[calc(100dvh-7rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))]';
 
 export function PhoneScreen<T extends string>({ glance, lenses, lens, onLensChange, label, className }: PhoneScreenProps<T>) {
   const reduceMotion = useReducedMotion();
@@ -36,7 +37,7 @@ export function PhoneScreen<T extends string>({ glance, lenses, lens, onLensChan
     <Tabs
       value={lens}
       onValueChange={(value) => { tapFeedback(); onLensChange(value as T); }}
-      className={cn(SCREEN_HEIGHT, 'flex flex-col gap-2 px-3 pt-3 pb-2 overflow-hidden', className)}
+      className={cn(PHONE_SCREEN_HEIGHT, 'flex flex-col gap-2 px-3 pt-3 pb-2 overflow-hidden', className)}
     >
       <div className="shrink-0">{glance}</div>
       <div className="relative flex-1 min-h-0">

@@ -18,7 +18,7 @@ import { SelectableRow } from '@/components/ui/selectable-row';
 import { TrendLine } from '@/components/charts/TrendLine';
 import { CategoryDonut } from '@/components/charts/CategoryDonut';
 import { CategoryChangeBarRow } from '@/components/charts/CategoryChangeBars';
-import { PhoneScreen, type Lens } from '@/components/layout/PhoneScreen';
+import { PHONE_SCREEN_HEIGHT, PhoneScreen, type Lens } from '@/components/layout/PhoneScreen';
 import { DrillSheet } from '@/components/layout/DrillSheet';
 import { useIsPhone } from '@/hooks/useIsPhone';
 import { cn } from '@/lib/utils';
@@ -31,7 +31,7 @@ type HomeDrill = 'category' | 'changed' | 'soon' | 'attention';
 const HOME_LENSES: readonly HomeLens[] = ['month', 'trend', 'changed', 'soon', 'recent'];
 const HOME_DRILLS: readonly HomeDrill[] = ['category', 'changed', 'soon', 'attention'];
 // The phone glance's own height: donut ring plus the amount row and chrome.
-const PHONE_SCREEN = 'h-[calc(100dvh-7rem-env(safe-area-inset-bottom))] flex flex-col gap-2 px-3 pt-3 pb-2 overflow-hidden';
+const PHONE_SCREEN = cn(PHONE_SCREEN_HEIGHT, 'flex flex-col gap-2 px-3 pt-3 pb-2 overflow-hidden');
 
 // One figure in the phone's Month lens: a label and value that open their
 // evidence, sized as a full-width 56px row for the thumb.
@@ -44,7 +44,9 @@ function MetricRow({ label, value, sub, tone, href }: { label: string; value: Re
     <span className={cn('font-display text-lg font-bold tabular-nums', tone === 'teal' && 'text-teal', tone === 'coral' && 'text-coral')}>{value}</span>
     {href && <ChevronRight size={16} className="text-muted shrink-0" aria-hidden />}
   </>;
-  const row = 'flex min-h-12 items-center gap-3 px-4 py-1.5';
+  // flex-1: on a tall phone the Month rows share the panel's height evenly
+  // instead of leaving a dead band beneath the last one.
+  const row = 'flex flex-1 min-h-12 items-center gap-3 px-4 py-1.5';
   return href
     ? <Link to={href} className={cn(row, 'active:bg-foreground/5 transition-colors')}>{body}</Link>
     : <div className={row}>{body}</div>;
@@ -194,8 +196,8 @@ export function HomePage() {
     return { date, amount: day ? day.spending.minor_units / 100 : 0 };
   }) : [];
   const changeBadges = <>
-    {facts.change && <Badge tone={facts.change.minor_units >= 0 ? 'warm' : 'calm'} className="font-mono">
-      {facts.change.minor_units >= 0 ? '▲' : '▼'} {formatMoney({ ...facts.change, minor_units: Math.abs(facts.change.minor_units) })}
+    {facts.change && <Badge tone={facts.change.minor_units >= 0 ? 'warm' : 'calm'} className="font-mono gap-1">
+      {facts.change.minor_units >= 0 ? <ArrowUp size={12} aria-label="up" /> : <ArrowDown size={12} aria-label="down" />}{formatMoney({ ...facts.change, minor_units: Math.abs(facts.change.minor_units) })}
     </Badge>}
     {spending_target && <Badge tone={overTarget ? 'warm' : 'saved'} className="font-mono">
       {overTarget ? 'over target' : 'under target'}
@@ -311,33 +313,23 @@ export function HomePage() {
       </Link>
     );
     const changeAbs = facts.change && formatMoney({ ...facts.change, minor_units: Math.abs(facts.change.minor_units) });
-    const changes = facts.category_changes.slice(0, 3);
+    const changes = facts.category_changes.slice(0, 4);
     const maxChange = Math.max(...changes.map((c) => Math.abs(c.change.minor_units)), 1);
     const lenses: Lens<HomeLens>[] = [
       { value: 'month', label: 'Month', panel: <div className="flex h-full flex-col">
-        <div className="divide-y divide-border">
+        <div className="flex flex-1 flex-col divide-y divide-border">
           <MetricRow label="Income" value={facts.current.income ? formatMoney(facts.current.income) : 'None yet'} tone={facts.current.income ? 'teal' : undefined} sub={facts.current.income ? 'Recorded this month' : 'Captured income appears here'} href={withReturn(evidenceLink(facts.current, undefined, 'income'))} />
           <MetricRow label="Net flow" value={facts.current.recorded_net_flow ? formatMoney(facts.current.recorded_net_flow) : 'Unavailable'} tone={!facts.current.recorded_net_flow ? undefined : netFlowNegative ? 'coral' : 'teal'} sub={facts.current.recorded_net_flow ? `Recorded net ${netFlowNegative ? 'outflow' : 'flow'}` : facts.current.income ? 'Hidden while records need review' : 'No income recorded this month'} />
           {spending_target
             ? <MetricRow label={overTarget ? 'Over target' : 'Target left'} value={targetAbs} tone={overTarget ? 'coral' : 'teal'} sub={`of your ${formatMoney(spending_target.target)} monthly target`} href="/plan" />
             : <MetricRow label="Target" value="Not set" sub="Set one in Plan to track pace" href="/plan" />}
-        </div>
-        <div className="divide-y divide-border border-t border-border">
           <MetricRow label="Vs last month" value={facts.change ? <span className="inline-flex items-center gap-1">{facts.change.minor_units >= 0 ? <ArrowUp size={16} aria-label="more" /> : <ArrowDown size={16} aria-label="less" />}{changeAbs}</span> : '—'} tone={!facts.change ? undefined : facts.change.minor_units >= 0 ? 'coral' : 'teal'} sub={facts.change ? `${facts.previous.start}–${facts.previous.end}` : 'No comparison while records need review'} />
-          <SelectableRow onClick={() => openDrill('attention')} className="min-h-12 gap-3 rounded-none px-4 py-1.5">
-            <div className="min-w-0 flex-1">
-              <p className="text-2xs uppercase tracking-[0.22em] text-muted font-mono font-semibold">Capture</p>
-              <p className="text-xs text-muted truncate">{freshness.gmail_needs_reconnection ? 'Gmail needs reconnection' : freshness.gmail_connected ? `Gmail checked ${freshness.gmail_last_checked ?? 'recently'}` : 'Gmail not connected'}</p>
-            </div>
-            <StatusDot tone={attentionCount ? 'notable' : sourcesNeedCare ? 'warm' : 'calm'} label={attentionCount ? `${attentionCount} to check` : sourcesNeedCare ? 'Check sources' : 'Nothing to check'} />
-            <ChevronRight size={16} className="text-muted shrink-0" aria-hidden />
-          </SelectableRow>
         </div>
         {refreshing && <p role="status" className="px-4 py-2 text-xs text-muted">Updating…</p>}
       </div> },
-      { value: 'trend', label: 'Trend', panel: <div className="p-3">
+      { value: 'trend', label: 'Trend', panel: <div className="flex h-full flex-col p-3">
         {trendQuery.data ? <>
-          <TrendLine data={trendPoints} selectedDate={selectedDate} onSelectDate={setSelectedDate} chartHeight={124} />
+          <div className="flex-1 min-h-0"><TrendLine data={trendPoints} selectedDate={selectedDate} onSelectDate={setSelectedDate} chartHeight={124} fill /></div>
           {selectedDate && <Link className="text-sm text-teal min-h-11 inline-flex items-center" to={withReturn(`/evidence?start=${selectedDate}&end=${selectedDate}&measure=spending`)}>View this day's records</Link>}
         </> : trendQuery.isLoading ? <Skeleton className="h-[168px] w-full" /> : <p className="text-sm text-muted">Couldn't load the daily trend. <Button type="button" variant="link" size="sm" className="h-auto min-h-11 p-0 align-baseline" onClick={() => void trendQuery.refetch()}>Retry</Button></p>}
       </div> },

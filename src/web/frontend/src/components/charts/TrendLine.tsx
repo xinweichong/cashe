@@ -21,9 +21,11 @@ interface TrendLineProps {
   onSelectDate?: (date: string) => void;
   /** Plot height in px; the phone Trend lens passes a shorter plot. */
   chartHeight?: number;
+  /** Grow the plot to fill the parent's height (chartHeight becomes the floor). */
+  fill?: boolean;
 }
 
-export function TrendLine({ data, selectedDate, onSelectDate, chartHeight = 160 }: TrendLineProps) {
+export function TrendLine({ data, selectedDate, onSelectDate, chartHeight = 160, fill = false }: TrendLineProps) {
   const { CHART_AXIS_PROPS, CHART_TOOLTIP_STYLE, COLOR_TEAL } = useChartTheme();
   const gradientId = useId().replace(/:/g, '');
   // Recharts' Area animates its draw-in on its own JS timer, independent of
@@ -45,8 +47,8 @@ export function TrendLine({ data, selectedDate, onSelectDate, chartHeight = 160 
   }
 
   return (
-    <div className="w-full">
-      <div className="w-full h-full" style={{ minHeight: chartHeight }}>
+    <div className={fill ? 'w-full h-full flex flex-col' : 'w-full'}>
+      <div className={fill ? 'w-full flex-1 min-h-0' : 'w-full h-full'} style={{ minHeight: chartHeight }}>
         <ResponsiveContainer width="100%" height="100%" minHeight={chartHeight}>
           <AreaChart data={data} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
             <defs>

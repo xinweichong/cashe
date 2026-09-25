@@ -21,7 +21,7 @@ export function AppShell() {
       <Sidebar />
       <div className="flex-1 min-w-0 flex flex-col">
         {/* Mobile-only top bar — hidden on md+ where sidebar provides branding */}
-        <header className="md:hidden sticky top-0 z-40 h-12 shrink-0 bg-card/80 backdrop-blur-sm border-b border-border flex items-center px-4 gap-2">
+        <header className="md:hidden sticky top-0 z-40 h-[calc(3rem+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] shrink-0 bg-card/80 backdrop-blur-sm border-b border-border flex items-center px-4 gap-2">
           <CasheWordmark size={22} />
           <div className="ml-auto"><ProfileMenu /></div>
         </header>
