@@ -9,19 +9,12 @@ function LocationProbe() {
   return <output>{location.pathname}{location.search}{location.hash}</output>;
 }
 
-describe('opt-in navigation', () => {
+describe('navigation', () => {
   it('shows four destinations with the detail parent active', () => {
-    render(<MemoryRouter initialEntries={['/activity/42']}><BottomTabs newExperience /></MemoryRouter>);
+    render(<MemoryRouter initialEntries={['/activity/42']}><BottomTabs /></MemoryRouter>);
     expect(screen.getAllByRole('link').map(link => link.textContent)).toEqual(['Home', 'Activity', 'Plan', 'Explore']);
     expect(screen.getByRole('link', { name: 'Activity' }).getAttribute('aria-current')).toBe('page');
     expect(screen.queryByRole('link', { name: 'Settings' })).toBeNull();
-  });
-
-  it('retains classic destinations by default', () => {
-    render(<MemoryRouter><BottomTabs /></MemoryRouter>);
-    expect(screen.getByRole('link', { name: 'Overview' })).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Settings' })).toBeTruthy();
-    expect(screen.getAllByRole('link')).toHaveLength(6);
   });
 
   it.each([

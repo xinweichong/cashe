@@ -40,10 +40,10 @@ test('Explore route selector marks the current view with the Tabs active recipe'
   expect(await other.evaluate((el) => getComputedStyle(el).color)).not.toBe(await tealOf(page));
 });
 
-test('classic Analytics insight period switch is a labelled tab set', async ({ page }) => {
-  await mockShell(page, false);
+test('Analytics (Explore Insights) period switch is a labelled tab set', async ({ page }) => {
+  await mockShell(page, true);
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto('/analytics');
+  await page.goto('/explore/insights');
   const list = page.getByRole('tablist', { name: 'Insight period' });
   await expect(list).toBeVisible();
   await list.getByRole('tab', { name: 'Weekly' }).click();
@@ -54,7 +54,7 @@ test('classic Analytics insight period switch is a labelled tab set', async ({ p
   await page.waitForTimeout(400);
   const daily = list.getByRole('tab', { name: 'Daily' });
   expect(await daily.evaluate((el) => getComputedStyle(el).color)).not.toBe(await tealOf(page));
-  await page.screenshot({ path: 'e2e/screenshots/tabs-analytics-classic.png' });
+  await page.screenshot({ path: 'e2e/screenshots/tabs-analytics-insights.png' });
 });
 
 test('classic Overview trend view switch is a labelled tab set', async ({ page }) => {

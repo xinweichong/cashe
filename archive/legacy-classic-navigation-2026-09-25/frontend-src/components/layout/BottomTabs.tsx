@@ -1,9 +1,19 @@
 import { MAIN_DESTINATIONS } from '@/lib/navigation';
 import { NavLink } from 'react-router-dom';
+import { LayoutDashboard, List, BarChart3, Store, Wallet, Settings } from 'lucide-react';
 import { motion, useReducedMotion } from 'framer-motion';
 import { springs } from '@/lib/motionPresets';
 
-export function BottomTabs() {
+const TABS = [
+  { to: '/',             icon: LayoutDashboard, label: 'Overview'     },
+  { to: '/transactions', icon: List,            label: 'Transactions' },
+  { to: '/analytics',   icon: BarChart3,       label: 'Analytics'    },
+  { to: '/merchants',   icon: Store,           label: 'Merchants'    },
+  { to: '/finance',     icon: Wallet,          label: 'Finance'      },
+  { to: '/settings',    icon: Settings,        label: 'Settings'     },
+];
+
+export function BottomTabs({ newExperience = false }: { newExperience?: boolean }) {
   const reduceMotion = useReducedMotion();
   return (
     <motion.nav
@@ -14,7 +24,7 @@ export function BottomTabs() {
       className="md:hidden fixed bottom-0 left-0 right-0 bg-card/80 backdrop-blur-sm border-t border-border z-50"
     >
       <div className="flex justify-around items-center h-16">
-        {MAIN_DESTINATIONS.map(({ to, icon: Icon, label }) => (
+        {(newExperience ? MAIN_DESTINATIONS : TABS).map(({ to, icon: Icon, label }) => (
           <NavLink
             key={to}
             to={to}

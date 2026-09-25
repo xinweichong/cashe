@@ -64,9 +64,10 @@ const PlanLayoutStudy = import.meta.env.DEV
   : null;
 
 // Start the current URL's route chunk alongside the auth requests rather
-// than after them.
+// than after them. "/" may be Home or classic Overview (a server setting),
+// so both are fetched there.
 const ROUTE_PRELOADS: [RegExp, Array<{ preload: () => Promise<void> }>][] = [
-  [/^\/$/, [HomePage]],
+  [/^\/$/, [HomePage, OverviewPage]],
   [/^\/home\/?$/, [HomePage]],
   [/^\/(activity|transactions)(\/|$)/, [TransactionsPage]],
   [/^\/plan\/manage(\/|$)/, [FinancePage]],
@@ -158,7 +159,7 @@ function CategoryColorLoader() {
 function AppContent() {
   const { isAuthenticated, loading } = useAuth();
   const { data: currentUser, isLoading: userLoading } = useCurrentUser();
-  const { isLoading: settingsLoading } = useQuery({ queryKey: ['settings'], queryFn: api.getSettings, enabled: isAuthenticated });
+  const { data: settings, isLoading: settingsLoading } = useQuery({ queryKey: ['settings'], queryFn: api.getSettings, enabled: isAuthenticated });
 
   if (loading || (isAuthenticated && (userLoading || settingsLoading))) {
     return <SplashScreen />;
@@ -184,8 +185,8 @@ function AppContent() {
       <CategoryColorLoader />
       <Routes>
         {/* Dashboard routes */}
-        <Route element={<AppShell />}>
-          <Route index element={<HomePage />} />
+        <Route element={<AppShell newExperience={!!settings?.home_briefing_enabled} />}>
+          <Route index element={settings?.home_briefing_enabled ? <HomePage /> : <OverviewPage />} />
           <Route path="overview" element={<OverviewPage />} />
           <Route path="activity" element={<TransactionsPage />} />
           <Route path="activity/:transactionId" element={<TransactionsPage />} />
@@ -200,13 +201,13 @@ function AppContent() {
           <Route path="home" element={<HomePage />} />
           <Route path="evidence" element={<EvidencePage />} />
           <Route path="review" element={<ReviewPage />} />
-          <Route path="transactions" element={<LegacyRedirect from="/transactions" to="/activity" />} />
-          <Route path="transactions/:transactionId" element={<LegacyRedirect from="/transactions" to="/activity" />} />
-          <Route path="analytics" element={<LegacyRedirect from="/analytics" to="/explore" />} />
+          <Route path="transactions" element={settings?.home_briefing_enabled ? <LegacyRedirect from="/transactions" to="/activity" /> : <TransactionsPage />} />
+          <Route path="transactions/:transactionId" element={settings?.home_briefing_enabled ? <LegacyRedirect from="/transactions" to="/activity" /> : <TransactionsPage />} />
+          <Route path="analytics" element={settings?.home_briefing_enabled ? <LegacyRedirect from="/analytics" to="/explore" /> : <AnalyticsPage />} />
           <Route path="settings" element={<SettingsPage />} />
-          <Route path="merchants" element={<LegacyRedirect from="/merchants" to="/explore/merchants" />} />
-          <Route path="merchants/:merchantName" element={<LegacyRedirect from="/merchants" to="/explore/merchants" />} />
-          <Route path="finance" element={<LegacyRedirect from="/finance" to="/plan/manage" />} />
+          <Route path="merchants" element={settings?.home_briefing_enabled ? <LegacyRedirect from="/merchants" to="/explore/merchants" /> : <MerchantsPage />} />
+          <Route path="merchants/:merchantName" element={settings?.home_briefing_enabled ? <LegacyRedirect from="/merchants" to="/explore/merchants" /> : <MerchantsPage />} />
+          <Route path="finance" element={settings?.home_briefing_enabled ? <LegacyRedirect from="/finance" to="/plan/manage" /> : <FinancePage />} />
           <Route path="trips" element={<Navigate to="/finance" replace />} />
         </Route>
       </Routes>

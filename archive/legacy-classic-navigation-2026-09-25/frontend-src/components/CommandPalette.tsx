@@ -7,14 +7,25 @@ import { Command } from 'cmdk';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { api } from '@/api/client';
 import { toDateStr } from '@/lib/utils';
-import { Store, Settings, Plus } from 'lucide-react';
+import {
+  LayoutDashboard, List, BarChart3, Store, Wallet, Settings, Plus,
+} from 'lucide-react';
+
+const PAGES = [
+  { to: '/',             icon: LayoutDashboard, label: 'Overview'     },
+  { to: '/transactions', icon: List,            label: 'Transactions' },
+  { to: '/analytics',    icon: BarChart3,       label: 'Analytics'    },
+  { to: '/finance',      icon: Wallet,          label: 'Finance'      },
+  { to: '/merchants',    icon: Store,           label: 'Merchants'    },
+  { to: '/settings',     icon: Settings,        label: 'Settings'     },
+];
 
 const ITEM_CLASS =
   'flex items-center gap-2 px-3 py-2 text-sm rounded-md cursor-pointer ' +
   'text-foreground data-[selected=true]:bg-foreground/10';
 
-export function CommandPalette() {
-  const pages = [...MAIN_DESTINATIONS, { to: '/settings', icon: Settings, label: 'Settings' }];
+export function CommandPalette({ newExperience = false }: { newExperience?: boolean }) {
+  const pages = newExperience ? [...MAIN_DESTINATIONS, { to: '/settings', icon: Settings, label: 'Settings' }] : PAGES;
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
 
@@ -86,7 +97,7 @@ export function CommandPalette() {
               <Command.Group heading="Actions">
                 <Command.Item
                   className={ITEM_CLASS}
-                  onSelect={() => run(() => navigate('/activity?add=1'))}
+                  onSelect={() => run(() => navigate(`${newExperience ? '/activity' : '/transactions'}?add=1`))}
                 >
                   <Plus className="w-4 h-4 text-muted" />
                   Add transaction
@@ -99,7 +110,7 @@ export function CommandPalette() {
                       key={m}
                       className={ITEM_CLASS}
                       onSelect={() =>
-                        run(() => navigate(`/explore/merchants/${encodeURIComponent(m)}`))
+                        run(() => navigate(`${newExperience ? '/explore/merchants' : '/merchants'}/${encodeURIComponent(m)}`))
                       }
                     >
                       <Store className="w-4 h-4 text-muted" />

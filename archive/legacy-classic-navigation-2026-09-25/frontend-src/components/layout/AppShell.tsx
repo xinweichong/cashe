@@ -4,21 +4,21 @@ import { Outlet, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { Sidebar } from './Sidebar';
 import { BottomTabs } from './BottomTabs';
-import { CasheWordmark } from '@/components/ui/Brand';
+import { CasheWordmark, B2_WASH } from '@/components/ui/Brand';
 import { CommandPalette } from '@/components/CommandPalette';
 import { PullToRefresh } from './PullToRefresh';
 import { pageVariants } from '@/lib/motionPresets';
 
-export function AppShell() {
+export function AppShell({ newExperience = false }: { newExperience?: boolean }) {
   const location = useLocation();
   const shouldReduce = useReducedMotion();
   // Keep list filters and drafts mounted when opening a detail route.
   const pageKey = location.pathname.replace(/^(\/(?:activity|transactions|merchants|explore\/merchants))(?:\/.*)?$/, '$1');
 
   return (
-    <div className="min-h-screen flex experience-next shell-wash">
-      <CommandPalette />
-      <Sidebar />
+    <div className={`min-h-screen flex ${newExperience ? 'experience-next shell-wash' : ''}`} style={newExperience ? undefined : { background: B2_WASH }}>
+      <CommandPalette newExperience={newExperience} />
+      <Sidebar newExperience={newExperience} />
       <div className="flex-1 min-w-0 flex flex-col">
         {/* Mobile-only top bar — hidden on md+ where sidebar provides branding */}
         <header className="md:hidden sticky top-0 z-40 h-12 shrink-0 bg-card/80 backdrop-blur-sm border-b border-border flex items-center px-4 gap-2">
@@ -52,7 +52,7 @@ export function AppShell() {
           </AnimatePresence>
         </main>
       </div>
-      <BottomTabs />
+      <BottomTabs newExperience={newExperience} />
     </div>
   );
 }

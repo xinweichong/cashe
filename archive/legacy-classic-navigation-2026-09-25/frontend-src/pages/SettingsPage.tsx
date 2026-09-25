@@ -208,7 +208,7 @@ export function SettingsPage() {
   };
 
   const toggleSetting = async (
-    key: 'budgets_enabled' | 'goals_enabled' | 'trips_enabled' | 'subscriptions_enabled' | 'recurring_enabled',
+    key: 'budgets_enabled' | 'goals_enabled' | 'trips_enabled' | 'subscriptions_enabled' | 'recurring_enabled' | 'home_briefing_enabled',
     val: boolean,
   ) => {
     await api.updateSettings({ [key]: val });
@@ -721,6 +721,7 @@ export function SettingsPage() {
           <PageCard title="Feature Toggles">
             <div className="divide-y divide-border">
               {([
+                { key: 'home_briefing_enabled' as const, label: 'New experience', desc: 'Try Home, Activity, Plan and Explore. Turn off to return to classic navigation' },
                 { key: 'budgets_enabled' as const, label: 'Budgets', desc: 'Set spending limits and track progress' },
                 { key: 'goals_enabled' as const, label: 'Goals', desc: 'Track savings targets and monthly progress' },
                 { key: 'trips_enabled' as const, label: 'Trips', desc: 'Group transactions by trip and track travel spend' },

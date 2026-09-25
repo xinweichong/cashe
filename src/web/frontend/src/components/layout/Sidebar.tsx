@@ -1,31 +1,13 @@
 import { MAIN_DESTINATIONS } from '@/lib/navigation';
 import { ProfileMenu } from './ProfileMenu';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, List, BarChart3, Store, Wallet, Settings, Lock, Command } from 'lucide-react';
+import { Command } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { useQuery } from '@tanstack/react-query';
-import { api } from '@/api/client';
 import { CasheWordmark, CasheIcon } from '@/components/ui/Brand';
 import { springs } from '@/lib/motionPresets';
 
-export function Sidebar({ newExperience = false }: { newExperience?: boolean }) {
-  const { data: settings } = useQuery({
-    queryKey: ['settings'],
-    queryFn: () => api.getSettings(),
-    staleTime: 30_000,
-  });
-  const financeEnabled =
-    settings?.budgets_enabled ||
-    settings?.goals_enabled ||
-    settings?.trips_enabled ||
-    settings?.subscriptions_enabled;
-
-  const navItems = newExperience ? MAIN_DESTINATIONS : [
-    { to: '/', icon: LayoutDashboard, label: 'Overview' },
-    { to: '/transactions', icon: List, label: 'Transactions' },
-    { to: '/analytics', icon: BarChart3, label: 'Analytics' },
-    { to: '/merchants', icon: Store, label: 'Merchants' },
-  ];
+export function Sidebar() {
+  const navItems = MAIN_DESTINATIONS;
 
   return (
     <aside className="hidden md:flex flex-col w-14 lg:w-56 bg-card/80 backdrop-blur-sm border-r border-border h-screen sticky top-0">
@@ -64,61 +46,6 @@ export function Sidebar({ newExperience = false }: { newExperience?: boolean }) 
             )}
           </NavLink>
         ))}
-
-        {!newExperience && <>
-        <NavLink
-          to="/finance"
-          className={({ isActive }) =>
-            `relative min-h-11 flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors justify-center lg:justify-start ${
-              isActive
-                ? 'bg-teal/10 text-foreground font-medium'
-                : 'text-muted hover:text-foreground hover:bg-foreground/5'
-            } ${!financeEnabled ? 'opacity-40' : ''}`
-          }
-        >
-          {({ isActive }) => (
-            <>
-              <Wallet className="w-5 h-5 shrink-0" />
-              <span className="hidden lg:flex items-center gap-1 font-display">
-                Finance
-                {!financeEnabled && <Lock className="w-3 h-3 ml-1" />}
-              </span>
-              {isActive && (
-                <motion.div
-                  layoutId="sidebar-active-dot"
-                  className="absolute right-2 w-1.5 h-1.5 rounded-full bg-teal"
-                  transition={springs.snappy}
-                />
-              )}
-            </>
-          )}
-        </NavLink>
-
-        <NavLink
-          to="/settings"
-          className={({ isActive }) =>
-            `relative min-h-11 flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors justify-center lg:justify-start ${
-              isActive
-                ? 'bg-teal/10 text-foreground font-medium'
-                : 'text-muted hover:text-foreground hover:bg-foreground/5'
-            }`
-          }
-        >
-          {({ isActive }) => (
-            <>
-              <Settings className="w-5 h-5 shrink-0" />
-              <span className="hidden lg:inline font-display">Settings</span>
-              {isActive && (
-                <motion.div
-                  layoutId="sidebar-active-dot"
-                  className="absolute right-2 w-1.5 h-1.5 rounded-full bg-teal"
-                  transition={springs.snappy}
-                />
-              )}
-            </>
-          )}
-        </NavLink>
-        </>}
       </nav>
       <div className="p-1 lg:p-3"><ProfileMenu /></div>
 
