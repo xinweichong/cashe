@@ -15,6 +15,7 @@ dist-ssr
 # Playwright — model-verification artifacts, regenerated per run
 /e2e/.output
 /e2e/.output-perf
+/e2e/.output-journey
 /e2e/screenshots
 /playwright-report
 /test-results

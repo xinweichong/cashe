@@ -13,7 +13,8 @@
     "test:visual": "playwright test",
     "generate:v2-types": "(cd ../../.. && python3 -m scripts.export_v2_openapi_schema src/web/frontend/openapi/v2-schema.json) && openapi-typescript openapi/v2-schema.json -o src/api/v2-schema.gen.ts",
     "check-types:v2": "npm run generate:v2-types && git diff --exit-code -- openapi/v2-schema.json src/api/v2-schema.gen.ts",
-    "test:perf": "playwright test -c playwright.perf.config.ts"
+    "test:perf": "playwright test -c playwright.perf.config.ts",
+    "test:journey": "playwright test -c playwright.journey.config.ts"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",
