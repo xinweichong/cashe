@@ -215,17 +215,21 @@ test('category-change bars share the "This period"/"Previous period" evidence li
   expect(params.get('category')).toBe('Food & Drink');
 });
 
-test('the daily trend reflects real data and links to a selected day\'s evidence', async () => {
+test('the daily trend runs chronologically over the whole period, even though the API lists days newest-first', async () => {
   vi.mocked(briefingApi.home).mockResolvedValue(home);
   vi.mocked(api.getDailyTotalsV2).mockResolvedValue([
-    { date: '2026-09-04', spending: { minor_units: 200, currency: 'SGD' }, income: null, recorded_net_flow: null, transaction_count: 1, unresolved_count: 0, indicative_count: 0, status: 'complete' },
     { date: '2026-09-05', spending: { minor_units: 500, currency: 'SGD' }, income: null, recorded_net_flow: null, transaction_count: 1, unresolved_count: 0, indicative_count: 0, status: 'complete' },
+    { date: '2026-09-04', spending: { minor_units: 200, currency: 'SGD' }, income: null, recorded_net_flow: null, transaction_count: 1, unresolved_count: 0, indicative_count: 0, status: 'complete' },
   ]);
   show(<HomePage />);
   await screen.findByText(/^Through 2026-09-06/);
-  expect(screen.queryByRole('link', { name: /View this day/ })).toBeNull();
-  fireEvent.click(await screen.findByLabelText('Previous day'));
+  const readout = await screen.findByTestId('trend-day-readout');
+  expect(readout.textContent).toContain('$0.00'); // latest day of the period, no records
+  fireEvent.click(screen.getByLabelText('Previous day'));
+  await waitFor(() => expect(readout.textContent).toContain('$5.00'));
+  fireEvent.click(screen.getByLabelText('Previous day'));
   const link = await screen.findByRole('link', { name: "View this day's records" });
+  await waitFor(() => expect(readout.textContent).toContain('$2.00'));
   const params = new URL(link.getAttribute('href')!, 'http://localhost').searchParams;
   expect(params.get('start')).toBe('2026-09-04');
   expect(params.get('end')).toBe('2026-09-04');

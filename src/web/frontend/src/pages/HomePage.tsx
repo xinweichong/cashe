@@ -15,6 +15,14 @@ import { TrendLine } from '@/components/charts/TrendLine';
 import { CategoryDonut } from '@/components/charts/CategoryDonut';
 import { CategoryChangeBarRow } from '@/components/charts/CategoryChangeBars';
 
+function periodDays(start: string, end: string): string[] {
+  const days: string[] = [];
+  for (let d = new Date(`${start}T00:00:00Z`); d.toISOString().slice(0, 10) <= end; d.setUTCDate(d.getUTCDate() + 1)) {
+    days.push(d.toISOString().slice(0, 10));
+  }
+  return days;
+}
+
 export function HomePage() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -51,7 +59,7 @@ export function HomePage() {
   const categoryParam = search.get('category');
   const selectedCategory = categoryParam && breakdownQuery.data && categoryParam in breakdownQuery.data.by_category ? categoryParam : null;
   const dayParam = search.get('day');
-  const selectedDate = dayParam && trendQuery.data?.some((d) => d.date === dayParam) ? dayParam : null;
+  const selectedDate = dayParam && trendQuery.data && currentStart && currentEnd && dayParam >= currentStart && dayParam <= currentEnd ? dayParam : null;
   const merchantsQuery = useQuery({
     queryKey: ['home-merchants', currentStart, currentEnd, selectedCategory],
     queryFn: () => api.getMerchantRankingFactsV2(currentStart!, currentEnd!, selectedCategory ?? undefined, 5),
@@ -98,7 +106,12 @@ export function HomePage() {
   const categoryTotals = breakdownQuery.data
     ? Object.entries(breakdownQuery.data.by_category).map(([category, amount]) => ({ category, total: amount.minor_units / 100 }))
     : [];
-  const trendPoints = trendQuery.data?.map((day) => ({ date: day.date, amount: day.spending.minor_units / 100 })) ?? [];
+  // The API lists days newest-first and omits days with no records; the
+  // chart needs every day of the period in order, with those as recorded $0.
+  const trendPoints = trendQuery.data && currentStart && currentEnd ? periodDays(currentStart, currentEnd).map((date) => {
+    const day = trendQuery.data!.find((d) => d.date === date);
+    return { date, amount: day ? day.spending.minor_units / 100 : 0 };
+  }) : [];
   return (
     <div className="max-w-5xl mx-auto p-4 md:p-8 space-y-6 text-base">
       {header(<p className="text-muted">Through {facts.as_of} · {facts.timezone}{refreshing && <span role="status"> · Updating…</span>}</p>)}
