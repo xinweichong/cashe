@@ -91,9 +91,11 @@
   --shadow-elev-card:  0 8px 32px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.04);
 }
 
+/* Compositor-only: the highlight is a translated layer, not an animated
+   background-position, so placeholders never repaint while they shimmer. */
 @keyframes skeleton-shimmer {
-  0%   { background-position: -200% 0; }
-  100% { background-position:  200% 0; }
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(100%); }
 }
 
 /* Radix overlay motion (§14.2): entrances ease out, exits are quicker fades.
@@ -265,15 +267,18 @@ body {
   /* ── Skeleton shimmer ──────────────────────────────────────────────── */
 
   .skeleton-pulse {
-    background: linear-gradient(
-      90deg,
-      color-mix(in srgb, var(--color-foreground) 5%, transparent) 25%,
-      color-mix(in srgb, var(--color-foreground) 10%, transparent) 50%,
-      color-mix(in srgb, var(--color-foreground) 5%, transparent) 75%
-    );
-    background-size: 200% 100%;
-    animation: skeleton-shimmer 1.5s ease-in-out infinite;
+    position: relative;
+    overflow: hidden;
+    background: color-mix(in srgb, var(--color-foreground) 5%, transparent);
     border-radius: var(--radius-sm);
+  }
+  .skeleton-pulse::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--color-foreground) 6%, transparent), transparent);
+    animation: skeleton-shimmer 1.5s ease-in-out infinite;
+    will-change: transform;
   }
 
   /* ── Hero glow pulse (one per screen max) ──────────────────────────── */

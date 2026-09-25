@@ -77,3 +77,8 @@ const LIGHT_CHART_THEME = {
 export function useChartTheme() {
   return useTheme().resolved === 'light' ? LIGHT_CHART_THEME : DARK_CHART_THEME;
 }
+
+// Recharts animates series on the JS thread. Keep the draw-in short and let
+// it begin after the page or panel fade (~150ms) so the two never compete
+// for frames on a phone.
+export const CHART_MOTION = { animationBegin: 160, animationDuration: 520, animationEasing: 'ease-out' as const };

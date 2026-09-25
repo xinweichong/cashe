@@ -3,7 +3,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { type Transaction, type DailyTotalV2 } from '@/api/client';
 import { TransactionRow } from './TransactionRow';
 import { Skeleton } from '@/components/ui/skeleton';
-import { springs } from '@/lib/motionPresets';
 import { formatCurrency, formatDayHeading, localDayKey } from '@/lib/utils';
 
 const STAGGER_LIMIT = 10;
@@ -150,8 +149,9 @@ export function TransactionList({
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, transition: { duration: 0.12 } }}
               transition={{
-                ...springs.gentle,
-                delay: row.index < STAGGER_LIMIT ? row.index * 0.04 : 0,
+                duration: 0.2,
+                ease: [0.16, 1, 0.3, 1],
+                delay: row.index < STAGGER_LIMIT ? row.index * 0.025 : 0,
               }}
             >
               <TransactionRow

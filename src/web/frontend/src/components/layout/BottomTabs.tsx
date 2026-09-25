@@ -11,7 +11,7 @@ export function BottomTabs() {
       initial={reduceMotion ? false : { y: 20, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       transition={springs.expo}
-      className="md:hidden fixed bottom-0 left-0 right-0 bg-card/80 backdrop-blur-sm border-t border-border z-50"
+      className="md:hidden fixed bottom-0 left-0 right-0 bg-card border-t border-border z-50"
     >
       <div className="flex justify-around items-center h-16">
         {MAIN_DESTINATIONS.map(({ to, icon: Icon, label }) => (

@@ -11,10 +11,12 @@ export const springs = {
 }
 
 // ─── Page transition ─────────────────────────────────────────────────────────
+// Route changes are a quick crossfade with a 4px settle: a spring's long
+// tail read as lag on phones while the next page's charts mounted.
 export const pageVariants: Variants = {
-  initial: { opacity: 0, y: 8 },
-  animate: { opacity: 1, y: 0, transition: springs.gentle },
-  exit:    { opacity: 0, y: -4, transition: { duration: 0.12, ease: 'easeIn' as const } },
+  initial: { opacity: 0, y: 4 },
+  animate: { opacity: 1, y: 0, transition: { duration: 0.18, ease: [0.16, 1, 0.3, 1] } },
+  exit:    { opacity: 0, transition: { duration: 0.08, ease: 'easeIn' as const } },
 }
 
 // ─── Fade up (form expand, card entrance) ────────────────────────────────────

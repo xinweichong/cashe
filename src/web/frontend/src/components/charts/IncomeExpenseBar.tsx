@@ -8,7 +8,7 @@ import { ChartCard } from '@/components/ui/cards';
 import { LoadFailed } from '@/components/ui/LoadFailed';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { COLOR_CORAL, useChartTheme } from '@/lib/chartTheme';
+import { CHART_MOTION, COLOR_CORAL, useChartTheme } from '@/lib/chartTheme';
 
 type Mode = '6mo' | '12mo' | 'yoy';
 const LABELS: Record<Mode, string> = { '6mo': '6M', '12mo': '12M', yoy: 'YoY' };
@@ -60,13 +60,13 @@ export function IncomeExpenseBar() {
             <Legend wrapperStyle={CHART_LEGEND_STYLE} />
             {isYoY ? (
               <>
-                <Bar dataKey="This year" fill={COLOR_CORAL} radius={[4, 4, 0, 0]} />
-                <Bar dataKey="Year before" fill={COLOR_MUTED_BAR} radius={[4, 4, 0, 0]} />
+                <Bar {...CHART_MOTION} dataKey="This year" fill={COLOR_CORAL} radius={[4, 4, 0, 0]} />
+                <Bar {...CHART_MOTION} dataKey="Year before" fill={COLOR_MUTED_BAR} radius={[4, 4, 0, 0]} />
               </>
             ) : (
               <>
-                <Bar dataKey="Income" fill={COLOR_TEAL} radius={[4, 4, 0, 0]} />
-                <Bar dataKey="Spending" fill={COLOR_CORAL} radius={[4, 4, 0, 0]} />
+                <Bar {...CHART_MOTION} dataKey="Income" fill={COLOR_TEAL} radius={[4, 4, 0, 0]} />
+                <Bar {...CHART_MOTION} dataKey="Spending" fill={COLOR_CORAL} radius={[4, 4, 0, 0]} />
               </>
             )}
           </BarChart>

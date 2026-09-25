@@ -54,18 +54,29 @@ function LensScroller({ bare, children }: { bare?: boolean; children: ReactNode 
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const check = () => setMoreBelow(el.scrollTop + el.clientHeight < el.scrollHeight - 4);
+    // At most one measurement per frame: charts animating inside the panel
+    // resize constantly, and each check forces a layout read.
+    let frame = 0;
+    const check = () => {
+      if (frame) return;
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        setMoreBelow(el.scrollTop + el.clientHeight < el.scrollHeight - 4);
+      });
+    };
     check();
     const observer = new ResizeObserver(check);
     observer.observe(el);
     for (const child of Array.from(el.children)) observer.observe(child);
+    // Direct children only: a card swapping in (loading → loaded) changes
+    // the height; chart internals never need to be watched.
     const mutations = new MutationObserver(() => {
       for (const child of Array.from(el.children)) observer.observe(child);
       check();
     });
-    mutations.observe(el, { childList: true, subtree: true });
+    mutations.observe(el, { childList: true });
     el.addEventListener('scroll', check, { passive: true });
-    return () => { observer.disconnect(); mutations.disconnect(); el.removeEventListener('scroll', check); };
+    return () => { cancelAnimationFrame(frame); observer.disconnect(); mutations.disconnect(); el.removeEventListener('scroll', check); };
   }, []);
   return (
     <>
@@ -105,15 +116,17 @@ export function PhoneScreen<T extends string>({ glance, lenses, lens, onLensChan
         {/* No initial={false} here: it would reach into panels whose own
             staggered lists mount after data loads and leave them at their
             hidden initial state. The panel's first fade-in is the cost. */}
-        <AnimatePresence mode="popLayout">
+        {/* Panels are already absolutely stacked, so a plain crossfade needs
+            no popLayout measurement pass. */}
+        <AnimatePresence>
           {lenses.filter((l) => l.value === lens).map((l) => (
             <TabsContent key={l.value} value={l.value} forceMount asChild className="mt-0">
               <motion.div
-                initial={reduceMotion ? false : { opacity: 0, y: 8 }}
+                initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={reduceMotion ? undefined : { opacity: 0, transition: { duration: 0.08 } }}
-                transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
-                className="absolute inset-0"
+                exit={{ opacity: 0, transition: { duration: 0.08 } }}
+                transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+                className="absolute inset-0 will-change-[opacity,transform]"
               >
                 <LensScroller bare={l.bare}>{l.panel}</LensScroller>
               </motion.div>

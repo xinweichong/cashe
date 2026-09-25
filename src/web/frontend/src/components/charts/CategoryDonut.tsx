@@ -4,7 +4,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { cn, getCategoryColor, formatCurrency } from '@/lib/utils';
 import { SelectableRow } from '@/components/ui/selectable-row';
 import { Button } from '@/components/ui/button';
-import { useChartTheme } from '@/lib/chartTheme';
+import { CHART_MOTION, useChartTheme } from '@/lib/chartTheme';
 
 interface CategoryData {
   category: string;
@@ -83,6 +83,7 @@ export function CategoryDonut({ data, selected, onSelect, onViewTransactions, sh
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie
+              {...CHART_MOTION}
               data={sliceData}
               dataKey="total"
               nameKey="category"

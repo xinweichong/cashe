@@ -6,7 +6,7 @@ import {
 } from 'recharts';
 import { Button } from '@/components/ui/button';
 import { formatCurrency, formatShortDate } from '@/lib/utils';
-import { formatDateTick, formatDateLabel, useChartTheme, CHART_Y_DOMAIN } from '@/lib/chartTheme';
+import { formatDateTick, formatDateLabel, useChartTheme, CHART_MOTION, CHART_Y_DOMAIN } from '@/lib/chartTheme';
 
 interface TrendPoint {
   date: string;
@@ -73,6 +73,7 @@ export function TrendLine({ data, selectedDate, onSelectDate, chartHeight = 160,
               labelFormatter={formatDateLabel}
             />
             <Area
+              {...CHART_MOTION}
               type="monotone"
               dataKey="amount"
               stroke={COLOR_TEAL}

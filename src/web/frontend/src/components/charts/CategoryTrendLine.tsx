@@ -6,7 +6,7 @@ import {
 } from 'recharts';
 import { Button } from '@/components/ui/button';
 import { formatCurrency, formatShortDate, getCategoryColor } from '@/lib/utils';
-import { formatDateTick, formatDateLabel, useChartTheme, CHART_Y_DOMAIN } from '@/lib/chartTheme';
+import { formatDateTick, formatDateLabel, useChartTheme, CHART_MOTION, CHART_Y_DOMAIN } from '@/lib/chartTheme';
 
 interface CategoryTrendLineProps {
   data: Record<string, string | number | null>[];
@@ -69,6 +69,7 @@ export function CategoryTrendLine({ data, selectedDate, onSelectDate }: Category
           {activeIndex >= 0 && <ReferenceLine x={String(data[activeIndex].date)} stroke={COLOR_MUTED_BAR} strokeDasharray="3 3" />}
           {categories.map((cat) => (
             <Line
+              {...CHART_MOTION}
               key={cat}
               type="monotone"
               dataKey={cat}
