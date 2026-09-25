@@ -151,7 +151,7 @@ test('accepts an inferred recurring schedule and opens its billing controls', as
   show();
   fireEvent.click(await screen.findByRole('button', { name: 'Accept schedule' }));
   expect(await screen.findByText('No pending recurring suggestions.')).toBeTruthy();
-  expect(screen.getByRole('link', { name: 'Review billing details' }).getAttribute('href')).toBe('/plan/manage?subscription=12');
+  expect(screen.getByRole('link', { name: 'Review billing details' }).getAttribute('href')).toBe('/plan?subscription=12');
   expect(briefingApi.resolveRecurring).toHaveBeenCalledWith('opaque', 'accept');
   expect(screen.getByText(/Provider billing is unchanged/)).toBeTruthy();
 });

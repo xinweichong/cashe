@@ -100,7 +100,7 @@ test('shows recurring cost changes with a link to the subscription', async () =>
   show();
   await selectMode('Recurring');
   const link = await screen.findByRole('link', { name: /Netflix/ });
-  expect(link.getAttribute('href')).toBe('/plan/manage?subscription=9');
+  expect(link.getAttribute('href')).toBe('/plan?subscription=9');
 });
 
 test('defaults the category trend chart to the top movers and fetches via the shared-facts endpoint (default mode)', async () => {

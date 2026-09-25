@@ -47,7 +47,6 @@ const ExploreSignalsPage = lazyRoute(() => import('@/pages/ExploreDetailPages').
 const ExploreHealthPage = lazyRoute(() => import('@/pages/ExploreDetailPages').then(m => m.ExploreHealthPage));
 const SettingsPage = lazyRoute(() => import('@/pages/SettingsPage').then(m => m.SettingsPage));
 const MerchantsPage = lazyRoute(() => import('@/pages/MerchantsPage').then(m => m.MerchantsPage));
-const FinancePage = lazyRoute(() => import('@/pages/FinancePage').then(m => m.FinancePage));
 const OnboardingPage = lazy(() => import('@/pages/OnboardingPage').then(m => ({ default: m.OnboardingPage })));
 const AdminPage = lazy(() => import('@/pages/AdminPage').then(m => ({ default: m.AdminPage })));
 const SetPasswordPage = lazy(() => import('@/pages/SetPasswordPage').then(m => ({ default: m.SetPasswordPage })));
@@ -70,8 +69,7 @@ const ROUTE_PRELOADS: [RegExp, Array<{ preload: () => Promise<void> }>][] = [
   [/^\/$/, [HomePage]],
   [/^\/home\/?$/, [HomePage]],
   [/^\/(activity|transactions)(\/|$)/, [TransactionsPage]],
-  [/^\/plan\/manage(\/|$)/, [FinancePage]],
-  [/^\/plan\/?$/, [PlanPage]],
+  [/^\/plan(\/|$)/, [PlanPage]],
   [/^\/explore\/merchants(\/|$)/, [MerchantsPage]],
   [/^\/explore\/?$/, [ExplorePatternsPage]],
   [/^\/explore\/signals\/?$/, [ExploreSignalsPage]],
@@ -82,7 +80,7 @@ const ROUTE_PRELOADS: [RegExp, Array<{ preload: () => Promise<void> }>][] = [
   [/^\/overview(\/|$)/, [OverviewPage]],
   [/^\/analytics(\/|$)/, [ExplorePatternsPage]],
   [/^\/merchants(\/|$)/, [MerchantsPage]],
-  [/^\/finance(\/|$)/, [FinancePage]],
+  [/^\/finance(\/|$)/, [PlanPage]],
 ];
 if (typeof window !== 'undefined') {
   const match = ROUTE_PRELOADS.find(([pattern]) => pattern.test(window.location.pathname));
@@ -192,7 +190,7 @@ function AppContent() {
           <Route path="activity" element={<TransactionsPage />} />
           <Route path="activity/:transactionId" element={<TransactionsPage />} />
           <Route path="plan" element={<PlanPage />} />
-          <Route path="plan/manage" element={<FinancePage />} />
+          <Route path="plan/manage" element={<LegacyRedirect from="/plan/manage" to="/plan" />} />
           <Route path="explore" element={<ExplorePage />}>
             <Route index element={<ExplorePatternsPage />} />
             <Route path="insights" element={<LegacyRedirect from="/explore/insights" to="/explore" />} />
@@ -210,8 +208,8 @@ function AppContent() {
           <Route path="settings" element={<SettingsPage />} />
           <Route path="merchants" element={<LegacyRedirect from="/merchants" to="/explore/merchants" />} />
           <Route path="merchants/:merchantName" element={<LegacyRedirect from="/merchants" to="/explore/merchants" />} />
-          <Route path="finance" element={<LegacyRedirect from="/finance" to="/plan/manage" />} />
-          <Route path="trips" element={<Navigate to="/finance" replace />} />
+          <Route path="finance" element={<LegacyRedirect from="/finance" to="/plan" />} />
+          <Route path="trips" element={<Navigate to="/plan" replace />} />
         </Route>
       </Routes>
     </>

@@ -25,7 +25,7 @@ const PAGE_SIZE = 20;
 // v2 transactions carry canonical Money instead of flat amount/currency
 // fields — convert at this page boundary so TransactionList/TransactionRow/
 // TransactionDetail keep working against the existing v1-shaped Transaction,
-// the same adapter pattern FinancePage's goalV2ToLegacy established for R04.
+// the same adapter pattern planHooks' goalV2ToLegacy established for R04.
 function transactionV2ToLegacy(tx: TransactionV2): Transaction {
   return {
     id: tx.id,

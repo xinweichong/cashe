@@ -236,10 +236,10 @@ export function HomePage() {
               subtext={overTarget
                 ? `${formatMoney({ ...spending_target.remaining, minor_units: Math.abs(spending_target.remaining.minor_units) })} over your ${formatMoney(spending_target.target)} monthly target.`
                 : `${formatMoney(spending_target.remaining)} remaining of your ${formatMoney(spending_target.target)} monthly target.`}
-              href="/plan/manage"
+              href="/plan"
             />
           ) : (
-            <StatCard label="Overall budget" value="Not set" subtext="Set one in Plan to track pace." href="/plan/manage" />
+            <StatCard label="Overall budget" value="Not set" subtext="Set one in Plan to track pace." href="/plan" />
           )}
         </div>
       </div>

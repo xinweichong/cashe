@@ -10,7 +10,6 @@ vi.mock('@/pages/OverviewPage', () => ({ OverviewPage: () => <div>overview-page<
 vi.mock('@/pages/TransactionsPage', () => ({ TransactionsPage: () => <div>transactions-page</div> }));
 vi.mock('@/pages/ExplorePatternsPage', () => ({ ExplorePatternsPage: () => <div>explore-patterns-page</div> }));
 vi.mock('@/pages/SettingsPage', () => ({ SettingsPage: () => <div>settings-page</div> }));
-vi.mock('@/pages/FinancePage', () => ({ FinancePage: () => <div>finance-page</div> }));
 vi.mock('@/pages/OnboardingPage', () => ({ OnboardingPage: () => <div>onboarding-page</div> }));
 vi.mock('@/pages/AdminPage', () => ({ AdminPage: () => <div>admin-page</div> }));
 vi.mock('@/pages/SetPasswordPage', () => ({ SetPasswordPage: () => <div>set-password-page</div> }));

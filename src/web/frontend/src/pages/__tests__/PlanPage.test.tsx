@@ -1,11 +1,21 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
+import { MemoryRouter } from 'react-router-dom';
 import { briefingApi, type MonthForecast, type UpcomingPlan } from '@/api/briefing';
+import { api } from '@/api/client';
 import { PlanPage } from '../PlanPage';
 
 vi.mock('@/api/briefing', async importOriginal => ({ ...await importOriginal<typeof import('@/api/briefing')>(), briefingApi: { upcoming: vi.fn(), upcomingOnDate: vi.fn(), upcomingCalendar: vi.fn(), updatePlannedCharge: vi.fn(), dismissPlannedCharge: vi.fn(), monthForecast: vi.fn() } }));
+// The management sections (budgets/goals/subscriptions/trips) are exercised
+// in their own component tests; here every settings flag defaults to off so
+// only the timeline is under test, unless a test opts a flag back in.
+const allSettingsOff = {
+  anomaly_multiplier: 2, velocity_alert_threshold: 100,
+  budgets_enabled: false, goals_enabled: false, trips_enabled: false,
+  subscriptions_enabled: false, recurring_enabled: false, home_briefing_enabled: false,
+};
+vi.mock('@/api/client', async importOriginal => ({ ...await importOriginal<typeof import('@/api/client')>(), api: { getSettings: vi.fn(), getSavingsOverview: vi.fn() } }));
 const report: UpcomingPlan = {
   start: '2026-09-08', end: '2026-10-07', timezone: 'Asia/Singapore', enabled: true,
   items: [{ id: 1, subscription_id: 3, label: 'Internet', date: '2026-09-09', frequency: 'monthly', schedule_status: 'possibly_cancelled', confirmation_source: 'unknown', amount: null, date_basis: 'schedule', amount_basis: 'unknown', amount_basis_transaction_id: null }],
@@ -23,6 +33,8 @@ beforeEach(() => {
   vi.resetAllMocks();
   vi.mocked(briefingApi.upcoming).mockResolvedValue(report);
   vi.mocked(briefingApi.monthForecast).mockResolvedValue(forecast);
+  vi.mocked(api.getSettings).mockResolvedValue(allSettingsOff);
+  vi.mocked(api.getSavingsOverview).mockResolvedValue({ month: '2026-09', income: 0, expenses: 0, savings: 0, allocated_to_goals: 0, unallocated: 0 });
   vi.mocked(briefingApi.upcomingCalendar).mockResolvedValue({ start: '2026-09-01', end: '2026-09-30', timezone: 'Asia/Singapore', days: [] });
   vi.mocked(briefingApi.upcomingOnDate).mockResolvedValue({ ...report, items: [] });
 });
@@ -68,7 +80,7 @@ test('shows uncertain charges and links directly to schedule controls', async ()
   expect(await screen.findByText('Amount unknown')).toBeTruthy();
   expect(screen.getByText(/Known estimated subtotal/)).toBeTruthy();
   expect(screen.getByText(/previous charge may be overdue/)).toBeTruthy();
-  expect(screen.getByRole('link', { name: 'Review or match schedule for Internet' }).getAttribute('href')).toBe('/plan/manage?subscription=3');
+  expect(screen.getByRole('link', { name: 'Review or match schedule for Internet' }).getAttribute('href')).toBe('/plan?subscription=3');
   expect(screen.getByText(/not a complete forecast/)).toBeTruthy();
 });
 
@@ -90,19 +102,14 @@ test('changing horizon resets pagination', async () => {
   await waitFor(() => expect(briefingApi.upcoming).toHaveBeenCalledWith(90, 0));
 });
 
-test('disabled subscriptions explain how to enable the timeline', async () => {
+test('disabled timeline still surfaces standing subscriptions below it', async () => {
   vi.mocked(briefingApi.upcoming).mockResolvedValue({ ...report, enabled: false });
+  vi.mocked(api.getSettings).mockResolvedValue({ ...allSettingsOff, subscriptions_enabled: true });
   show();
   expect(await screen.findByRole('link', { name: 'Open Settings' })).toBeTruthy();
   expect(screen.queryByText('Internet')).toBeNull();
-  expect(screen.getByRole('link', { name: /Manage subscriptions/ })).toBeTruthy();
-});
-
-
-test('older Plan management links retain their query and hash', async () => {
-  function Destination() { const location = useLocation(); return <output>{location.pathname}{location.search}{location.hash}</output>; }
-  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter initialEntries={['/plan?tab=goals#details']}><Routes><Route path="/plan" element={<PlanPage />} /><Route path="/plan/manage" element={<Destination />} /></Routes></MemoryRouter></QueryClientProvider>);
-  expect((await screen.findByRole('status')).textContent).toBe('/plan/manage?tab=goals#details');
+  expect(await screen.findByText('Budgets, goals, subscriptions & trips')).toBeTruthy();
+  expect(screen.getByText('Subscriptions')).toBeTruthy();
 });
 
 test('date-only corrections omit the displayed rounded amount and refresh the timeline', async () => {

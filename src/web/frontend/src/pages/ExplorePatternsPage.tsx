@@ -418,13 +418,13 @@ function RecurringCharges() {
       {empty ? <p className="text-muted">No recurring cost changes to review. Price changes, schedules that may have stopped, and annual renewals appear here.</p> : data && (
         <div className="grid gap-6 md:grid-cols-3">
           {column('Price changes', data.price_changes.length
-            ? data.price_changes.map(c => <RankedBar key={c.subscription_id} label={c.label} value={c.change.minor_units} max={max} display={formatChange(c.change as Money)} href={`/plan/manage?subscription=${c.subscription_id}`} />)
+            ? data.price_changes.map(c => <RankedBar key={c.subscription_id} label={c.label} value={c.change.minor_units} max={max} display={formatChange(c.change as Money)} href={`/plan?subscription=${c.subscription_id}`} />)
             : <p className="text-sm text-muted">No price changes.</p>)}
           {column('Possibly stopped', data.overdue.length
-            ? data.overdue.map(o => <Link key={o.subscription_id} to={`/plan/manage?subscription=${o.subscription_id}`} className="flex justify-between gap-3 text-sm min-h-11 items-center hover:underline"><span className="truncate">{o.label}</span><span className="text-muted font-mono tabular-nums shrink-0">{o.days_since_last_charge}d ago</span></Link>)
+            ? data.overdue.map(o => <Link key={o.subscription_id} to={`/plan?subscription=${o.subscription_id}`} className="flex justify-between gap-3 text-sm min-h-11 items-center hover:underline"><span className="truncate">{o.label}</span><span className="text-muted font-mono tabular-nums shrink-0">{o.days_since_last_charge}d ago</span></Link>)
             : <p className="text-sm text-muted">Every schedule charged on time.</p>)}
           {column('Renewing soon', data.annual_renewals.length
-            ? data.annual_renewals.map(r => <Link key={r.subscription_id} to={`/plan/manage?subscription=${r.subscription_id}`} className="flex justify-between gap-3 text-sm min-h-11 items-center hover:underline"><span className="truncate">{r.label}</span><span className="text-muted font-mono tabular-nums shrink-0">in {r.days_until_renewal}d</span></Link>)
+            ? data.annual_renewals.map(r => <Link key={r.subscription_id} to={`/plan?subscription=${r.subscription_id}`} className="flex justify-between gap-3 text-sm min-h-11 items-center hover:underline"><span className="truncate">{r.label}</span><span className="text-muted font-mono tabular-nums shrink-0">in {r.days_until_renewal}d</span></Link>)
             : <p className="text-sm text-muted">No annual renewals coming up.</p>)}
         </div>
       )}

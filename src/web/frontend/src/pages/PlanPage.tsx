@@ -1,15 +1,29 @@
 import { subscriptionConfirmationLabels } from '@/lib/subscriptionConfirmation';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, Navigate, useLocation, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { api } from '@/api/client';
 import { briefingApi, formatMoney, type MonthForecast, type UpcomingPlan } from '@/api/briefing';
 import { HeroCard, PageCard } from '@/components/ui/cards';
+import { StatCard } from '@/components/ui/StatCard';
 import { Button } from '@/components/ui/button';
 import { StatusDot } from '@/components/ui/StatusDot';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LoadFailed } from '@/components/ui/LoadFailed';
 import { useIsDesktop } from '@/hooks/useIsDesktop';
-import { cn, formatShortDate, toDateStr } from '@/lib/utils';
+import { cn, formatShortDate, formatCurrencyWhole, toDateStr } from '@/lib/utils';
+import { AnimatePresence, motion } from 'framer-motion';
+import { slideInRightVariants } from '@/lib/motionPresets';
+import { SavingsCard } from '@/components/plan/SavingsCard';
+import { BudgetsCard } from '@/components/plan/BudgetsCard';
+import { BudgetDetail } from '@/components/plan/BudgetDetail';
+import { GoalsCard } from '@/components/plan/GoalsCard';
+import { GoalDetail } from '@/components/plan/GoalDetail';
+import { TripsCard } from '@/components/plan/TripsCard';
+import { TripDetail } from '@/components/plan/TripDetail';
+import { RecurringCard } from '@/components/plan/RecurringCard';
+import { SubscriptionsSection } from '@/components/subscriptions/SubscriptionsSection';
+import { SubscriptionDetail } from '@/components/subscriptions/SubscriptionDetail';
 
 const amountBasisLabels: Record<'matched_charge' | 'user' | 'unknown', string> = {
   matched_charge: 'Amount based on your last confirmed charge',
@@ -94,7 +108,7 @@ function ProjectionComparisonFallback({ data }: { data: MonthForecast }) {
 function ProjectionHero() {
   const { data, isError, refetch } = useQuery({ queryKey: ['month-forecast'], queryFn: () => briefingApi.monthForecast() });
   return (
-    <HeroCard title="This month's projection">
+    <HeroCard title="This month's projection" className="col-span-2">
       {isError && !data ? <div role="alert"><LoadFailed onRetry={() => void refetch()} /></div> : !data ? <div role="status"><span className="sr-only">Loading…</span><Skeleton className="h-20 w-full" /></div> :
         data.projected_total == null ? <>
           <p className="text-muted">Not enough recorded history yet to project the rest of this month — at least 4 weeks of history is needed for each remaining weekday.</p>
@@ -114,6 +128,32 @@ function ProjectionHero() {
         </details>
       </>}
     </HeroCard>
+  );
+}
+
+function SavedThisMonthStat() {
+  const { data: overview } = useQuery({ queryKey: ['savings-overview'], queryFn: () => api.getSavingsOverview(), staleTime: 30_000 });
+  return (
+    <StatCard
+      label="Saved this month"
+      value={overview ? formatCurrencyWhole(overview.savings) : '—'}
+      color="teal"
+      subtext={overview ? `${formatCurrencyWhole(overview.allocated_to_goals)} toward goals` : 'Income minus expenses'}
+    />
+  );
+}
+
+function UpcomingThisWeekStat() {
+  const days = useMemo(() => Array.from({ length: 7 }, (_, i) => { const d = new Date(); d.setDate(d.getDate() + i); return toDateStr(d); }), []);
+  const { data } = useQuery({ queryKey: ['plan-upcoming-calendar', days[0], days[6]], queryFn: () => briefingApi.upcomingCalendar(days[0], days[6]) });
+  const count = (data?.days ?? []).reduce((sum, d) => sum + d.recorded_charge_count, 0);
+  return (
+    <StatCard
+      label="Upcoming this week"
+      value={data ? `${count} charge${count === 1 ? '' : 's'}` : '—'}
+      color="mint"
+      subtext="Recorded pending schedules, next 7 days"
+    />
   );
 }
 
@@ -227,13 +267,18 @@ function SelectedDayDetail({ date }: { date: string }) {
   );
 }
 
+type Panel =
+  | { type: 'subscription'; id: number }
+  | { type: 'budget'; id: number }
+  | { type: 'goal'; id: number }
+  | { type: 'trip'; id: number };
+
 export function PlanPage() {
-  const location = useLocation();
   const [search, setSearch] = useSearchParams();
   const isDesktop = useIsDesktop();
   // Window, page and phone calendar view live in the URL (replace-history)
-  // so returning from schedule management restores them. Invalid values
-  // fall back to defaults.
+  // so returning from a detail panel restores them. Invalid values fall
+  // back to defaults.
   const daysParam = Number(search.get('days'));
   const days = [14, 30, 90].includes(daysParam) ? daysParam : 30;
   const offsetParam = Number(search.get('offset'));
@@ -251,6 +296,39 @@ export function PlanPage() {
   const setShowCalendarMobile = (open: boolean) => updateParams({ view: open ? 'calendar' : null });
   const selectedDate = search.get('date');
   const calendarMonth = search.get('month') || toDateStr(new Date()).slice(0, 7);
+
+  // The right-side detail panel: exactly one of these params is set at a
+  // time. Setting one clears the other three, so deep links (e.g. Explore's
+  // "review this subscription") always land on a single, unambiguous panel.
+  const panel: Panel | null = (() => {
+    const subId = Number(search.get('subscription'));
+    if (Number.isSafeInteger(subId) && subId > 0) return { type: 'subscription', id: subId };
+    const budgetId = Number(search.get('budget'));
+    if (Number.isSafeInteger(budgetId) && budgetId > 0) return { type: 'budget', id: budgetId };
+    const goalId = Number(search.get('goal'));
+    if (Number.isSafeInteger(goalId) && goalId > 0) return { type: 'goal', id: goalId };
+    const tripId = Number(search.get('trip'));
+    if (Number.isSafeInteger(tripId) && tripId > 0) return { type: 'trip', id: tripId };
+    return null;
+  })();
+  function panelHref(type: Panel['type'], id: number) {
+    const params = new URLSearchParams(search);
+    params.delete('subscription'); params.delete('budget'); params.delete('goal'); params.delete('trip');
+    params.set(type, String(id));
+    return `/plan?${params.toString()}`;
+  }
+  function openPanel(type: Panel['type'], id: number) {
+    const params = new URLSearchParams(search);
+    params.delete('subscription'); params.delete('budget'); params.delete('goal'); params.delete('trip');
+    params.set(type, String(id));
+    setSearch(params);
+  }
+  function closePanel() {
+    const params = new URLSearchParams(search);
+    params.delete('subscription'); params.delete('budget'); params.delete('goal'); params.delete('trip');
+    setSearch(params);
+  }
+
   const query = useQuery({
     queryKey: ['plan-upcoming', days, offset],
     queryFn: () => briefingApi.upcoming(days, offset),
@@ -276,10 +354,6 @@ export function PlanPage() {
     return groups;
   }, [report]);
   const frequencies: Record<string, string> = { weekly: 'Weekly', biweekly: 'Every two weeks', monthly: 'Monthly', quarterly: 'Quarterly', annual: 'Annual' };
-  const legacySearch = new URLSearchParams(location.search);
-  if (legacySearch.has('tab') || legacySearch.has('subscription')) {
-    return <Navigate replace to={`/plan/manage${location.search}${location.hash}`} />;
-  }
 
   function selectDate(date: string) {
     const params = new URLSearchParams(search);
@@ -299,6 +373,8 @@ export function PlanPage() {
   const cutAfter = !!report && offset + report.items.length < report.total && selectedIndex === grouped.length - 1;
   const selectedInAgenda = selectedIndex >= 0 && !cutBefore && !cutAfter;
 
+  const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: () => api.getSettings(), staleTime: 10_000 });
+
   const calendarPane = isDesktop ? (
     <MonthCalendar month={calendarMonth} onMonth={setCalendarMonth} selectedDate={selectedDate} onSelect={selectDate} />
   ) : (
@@ -313,63 +389,113 @@ export function PlanPage() {
     </div>
   );
 
-  return <div className="max-w-4xl mx-auto p-4 md:p-8 space-y-6 text-base">
-    <header className="space-y-2">
-      <div className="text-xs uppercase tracking-[0.22em] text-muted font-mono font-semibold">Plan</div>
-      <h1 className="text-xl font-bold leading-tight tracking-tight text-foreground font-display">See what's coming.</h1>
-      <p className="text-muted">Upcoming charges from your recorded subscription schedules.</p>
-      <Link to="/plan/manage" className="text-teal min-h-11 inline-flex items-center">Manage subscriptions, budgets, goals, and trips</Link>
-    </header>
-    <ProjectionHero />
-    <label className="flex items-center gap-3">Show
-      <select className="select-field min-h-11" value={days} onChange={event => setDays(Number(event.target.value))}>
-        <option value={14}>Next 14 days</option><option value={30}>Next 30 days</option><option value={90}>Next 90 days</option>
-      </select>
-    </label>
-    {query.isError && <div role="alert">{report ? <p className="text-warning">Couldn’t refresh. This timeline may be out of date.</p> : null}<LoadFailed onRetry={() => void query.refetch()} /></div>}
-    {!report && !query.isError && <div role="status"><span className="sr-only">Loading upcoming charges…</span><Skeleton className="h-20 w-full" /></div>}
-    {report && (!report.enabled ? <PageCard title="Track upcoming charges">
-      <p>Enable Subscriptions in Settings to see your recorded schedules here.</p>
-      <Link to="/settings" className="text-teal min-h-11 inline-flex items-center">Open Settings</Link>
-    </PageCard> : <>
-      <div className="lg:grid lg:grid-cols-[280px_1fr] lg:gap-6 lg:items-start">
-        {calendarPane}
-        <div className="space-y-6">
-          <PageCard title="Upcoming timeline">
-            <p className="text-3xl font-semibold tabular-nums">{formatMoney(report.known_total)}</p>
-            <p className="text-muted">{report.status === 'partial' ? 'Known estimated subtotal' : 'Estimated charges'} · {report.start} to {report.end} · {report.timezone}</p>
-            {!!report.unknown_count && <p className="text-warning">{report.unknown_count} charges have unknown amounts and are excluded from this subtotal.</p>}
-            <p className="text-sm text-muted mt-3">Dates and amounts are estimates, not confirmed charges. Only recorded pending schedules appear; this is not a complete forecast. Matched or dismissed charges are excluded.</p>
-            <div id="upcoming-agenda" tabIndex={-1} aria-label="Upcoming charges" className="mt-4 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-              {grouped.map(group => <div key={group.date} id={`agenda-date-${group.date}`} className={cn('scroll-mt-24 rounded-md', selectedDate === group.date && '-mx-2 px-2 bg-card-hover/60')}>
-                <h3 className="text-2xs font-mono uppercase tracking-[0.1em] text-muted pt-4 pb-1 first:pt-0">{formatShortDate(group.date)}</h3>
-                <ol>
-                  {group.items.map(item => <li key={item.id} className="py-4 border-b border-border last:border-0 space-y-1">
-                    <div className="flex justify-between gap-4"><p className="font-medium">{item.label}</p><p className="tabular-nums">{item.amount ? formatMoney(item.amount) : 'Amount unknown'}</p></div>
-                    <p className="text-muted"><time dateTime={item.date}>{item.date}</time> · {frequencies[item.frequency] || item.frequency} · {item.date_basis === 'user' ? 'Date you set' : 'Scheduled estimate'}</p>
-                    <p className="text-sm text-muted">{amountBasisLabels[item.amount_basis]}</p>
-                    <p className="text-sm text-muted">{subscriptionConfirmationLabels[item.confirmation_source]}</p>
-                    {item.schedule_status === 'possibly_cancelled' && <p className="text-warning">Schedule needs review: a previous charge may be overdue.</p>}
-                    <ChargeActions item={item} onDismissed={() => { agendaFocusPending.current = true; }} />
-                    <Link to={`/plan/manage?subscription=${item.subscription_id}`} className="text-teal min-h-11 inline-flex items-center">Review or match schedule for {item.label}</Link>
-                  </li>)}
-                </ol>
-              </div>)}
-            </div>
-            {!report.items.length && <p className="py-4 text-muted">{report.total ? 'No charges on this page. Return to an earlier page.' : 'No pending charges recorded in this window. Add or review a subscription schedule to get started.'}</p>}
-          </PageCard>
-          <nav aria-label="Upcoming charge pages" className="flex items-center justify-between gap-3">
-            <Button variant="outline" className="min-h-11" disabled={!offset} onClick={() => setOffset(Math.max(0, offset - 50))}>Previous charges</Button>
-            <span>{report.total} recorded charges</span>
-            <Button variant="outline" className="min-h-11" disabled={query.isError || offset + 50 >= report.total} onClick={() => setOffset(offset + 50)}>Next charges</Button>
-          </nav>
-          {selectedDate && !selectedInAgenda && <SelectedDayDetail date={selectedDate} />}
-        </div>
-      </div>
-    </>)}
-  </div>;
-}
+  const anyManageEnabled = !!settings && (settings.budgets_enabled || settings.subscriptions_enabled || settings.recurring_enabled || settings.goals_enabled || settings.trips_enabled);
 
+  return (
+    <div className="flex h-full">
+      <div className={cn('flex-1 min-w-0 overflow-y-auto p-4 md:p-6 space-y-4 md:space-y-5 max-w-[1600px]', panel && 'hidden md:block')}>
+        <header className="space-y-2">
+          <div className="text-xs uppercase tracking-[0.22em] text-muted font-mono font-semibold">Plan</div>
+          <h1 className="text-xl md:text-3xl font-bold leading-tight tracking-tight text-foreground font-display">See what's coming, and where it's going.</h1>
+          <p className="text-muted">Upcoming charges, budgets, goals, subscriptions and trips — all in one place.</p>
+        </header>
+
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+          <ProjectionHero />
+          <SavedThisMonthStat />
+          <UpcomingThisWeekStat />
+        </div>
+
+        <div className="grid gap-4 md:gap-5 lg:grid-cols-12 lg:items-start">
+          <div className="lg:col-span-4">{calendarPane}</div>
+          <div className="lg:col-span-8 space-y-4">
+            <label className="flex items-center gap-3">Show
+              <select className="select-field min-h-11" value={days} onChange={event => setDays(Number(event.target.value))}>
+                <option value={14}>Next 14 days</option><option value={30}>Next 30 days</option><option value={90}>Next 90 days</option>
+              </select>
+            </label>
+            {query.isError && <div role="alert">{report ? <p className="text-warning">Couldn't refresh. This timeline may be out of date.</p> : null}<LoadFailed onRetry={() => void query.refetch()} /></div>}
+            {!report && !query.isError && <div role="status"><span className="sr-only">Loading upcoming charges…</span><Skeleton className="h-20 w-full" /></div>}
+            {report && (!report.enabled ? <PageCard title="Track upcoming charges">
+              <p>Enable Subscriptions in Settings to see your recorded schedules here.</p>
+              <Link to="/settings" className="text-teal min-h-11 inline-flex items-center">Open Settings</Link>
+            </PageCard> : <>
+              <PageCard title="Upcoming timeline">
+                <p className="text-3xl font-semibold tabular-nums">{formatMoney(report.known_total)}</p>
+                <p className="text-muted">{report.status === 'partial' ? 'Known estimated subtotal' : 'Estimated charges'} · {report.start} to {report.end} · {report.timezone}</p>
+                {!!report.unknown_count && <p className="text-warning">{report.unknown_count} charges have unknown amounts and are excluded from this subtotal.</p>}
+                <p className="text-sm text-muted mt-3">Dates and amounts are estimates, not confirmed charges. Only recorded pending schedules appear; this is not a complete forecast. Matched or dismissed charges are excluded.</p>
+                <div id="upcoming-agenda" tabIndex={-1} aria-label="Upcoming charges" className="mt-4 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                  {grouped.map(group => <div key={group.date} id={`agenda-date-${group.date}`} className={cn('scroll-mt-24 rounded-md', selectedDate === group.date && '-mx-2 px-2 bg-card-hover/60')}>
+                    <h3 className="text-2xs font-mono uppercase tracking-[0.1em] text-muted pt-4 pb-1 first:pt-0">{formatShortDate(group.date)}</h3>
+                    <ol>
+                      {group.items.map(item => <li key={item.id} className="py-4 border-b border-border last:border-0 space-y-1">
+                        <div className="flex justify-between gap-4"><p className="font-medium">{item.label}</p><p className="tabular-nums">{item.amount ? formatMoney(item.amount) : 'Amount unknown'}</p></div>
+                        <p className="text-muted"><time dateTime={item.date}>{item.date}</time> · {frequencies[item.frequency] || item.frequency} · {item.date_basis === 'user' ? 'Date you set' : 'Scheduled estimate'}</p>
+                        <p className="text-sm text-muted">{amountBasisLabels[item.amount_basis]}</p>
+                        <p className="text-sm text-muted">{subscriptionConfirmationLabels[item.confirmation_source]}</p>
+                        {item.schedule_status === 'possibly_cancelled' && <p className="text-warning">Schedule needs review: a previous charge may be overdue.</p>}
+                        <ChargeActions item={item} onDismissed={() => { agendaFocusPending.current = true; }} />
+                        {item.subscription_id != null && <Link to={panelHref('subscription', item.subscription_id)} className="text-teal min-h-11 inline-flex items-center">Review or match schedule for {item.label}</Link>}
+                      </li>)}
+                    </ol>
+                  </div>)}
+                </div>
+                {!report.items.length && <p className="py-4 text-muted">{report.total ? 'No charges on this page. Return to an earlier page.' : 'No pending charges recorded in this window. Add or review a subscription schedule to get started.'}</p>}
+              </PageCard>
+              <nav aria-label="Upcoming charge pages" className="flex items-center justify-between gap-3">
+                <Button variant="outline" className="min-h-11" disabled={!offset} onClick={() => setOffset(Math.max(0, offset - 50))}>Previous charges</Button>
+                <span>{report.total} recorded charges</span>
+                <Button variant="outline" className="min-h-11" disabled={query.isError || offset + 50 >= report.total} onClick={() => setOffset(offset + 50)}>Next charges</Button>
+              </nav>
+              {selectedDate && !selectedInAgenda && <SelectedDayDetail date={selectedDate} />}
+            </>)}
+          </div>
+        </div>
+
+        {!settings ? null : !anyManageEnabled ? (
+          <div className="p-6 flex flex-col items-center justify-center min-h-48 text-center gap-3">
+            <p className="text-muted text-sm">Enable Budgets, Goals, Trips, Subscriptions, or Recurring in Settings to get started.</p>
+            <Link to="/settings" className="text-sm text-teal underline-offset-4 hover:underline min-h-11 inline-flex items-center">Go to Settings →</Link>
+          </div>
+        ) : (
+          <section className="space-y-4 pt-2">
+            <h2 className="text-lg font-semibold font-display">Budgets, goals, subscriptions &amp; trips</h2>
+            <div className="grid gap-4 md:gap-5 lg:grid-cols-2 items-start">
+              <div className="space-y-4">
+                {settings.budgets_enabled && <BudgetsCard onSelect={(id) => openPanel('budget', id)} />}
+                {settings.subscriptions_enabled && <SubscriptionsSection selectedSubId={panel?.type === 'subscription' ? panel.id : null} onSelectSub={(id) => openPanel('subscription', id)} />}
+                {settings.recurring_enabled && <RecurringCard />}
+              </div>
+              <div className="space-y-4">
+                {settings.goals_enabled && <SavingsCard />}
+                {settings.goals_enabled && <GoalsCard onSelect={(id) => openPanel('goal', id)} />}
+                {settings.trips_enabled && <TripsCard onSelect={(id) => openPanel('trip', id)} />}
+              </div>
+            </div>
+          </section>
+        )}
+      </div>
+
+      <AnimatePresence>
+        {panel && (
+          <motion.div
+            className="fixed top-0 bottom-16 md:bottom-0 right-0 z-40 w-full md:w-[420px] border-l border-border bg-card flex-shrink-0 overflow-hidden"
+            variants={slideInRightVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+          >
+            {panel.type === 'subscription' && <SubscriptionDetail subId={panel.id} onClose={closePanel} />}
+            {panel.type === 'budget' && <BudgetDetail budgetId={panel.id} onClose={closePanel} />}
+            {panel.type === 'goal' && <GoalDetail goalId={panel.id} onClose={closePanel} />}
+            {panel.type === 'trip' && <TripDetail tripId={panel.id} onClose={closePanel} />}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
 
 function ChargeActions({ item, onDismissed }: { item: UpcomingPlan['items'][number]; onDismissed: () => void }) {
   const client = useQueryClient();
@@ -424,7 +550,7 @@ function ChargeActions({ item, onDismissed }: { item: UpcomingPlan['items'][numb
       </>}
       <Button variant="ghost" className="min-h-11" disabled={mutation.isPending} onClick={() => { setMode(null); mutation.reset(); }}>Cancel</Button>
       {mutation.isError && <div role="alert" className="text-destructive">
-        <p>Couldn’t update this prediction. Check the date and amount; the charge may already have changed.</p>
+        <p>Couldn't update this prediction. Check the date and amount; the charge may already have changed.</p>
         <Button variant="outline" className="min-h-11" onClick={() => void client.invalidateQueries({ queryKey: ['plan-upcoming'] })}>Refresh timeline</Button>
       </div>}
     </div>}

@@ -180,7 +180,7 @@ function RecurringReviewList() {
       <Button variant="outline" className="min-h-11" onClick={() => void query.refetch()}>Refresh suggestions</Button>
     </div>}
     {resolve.isSuccess && <p role="status" className="py-2">
-      {resolve.data.subscription_id != null ? <>Schedule saved. <Link className="text-teal min-h-11 inline-flex items-center" to={`/plan/manage?subscription=${resolve.data.subscription_id}`}>Review billing details</Link></> : 'Suggestion dismissed.'}
+      {resolve.data.subscription_id != null ? <>Schedule saved. <Link className="text-teal min-h-11 inline-flex items-center" to={`/plan?subscription=${resolve.data.subscription_id}`}>Review billing details</Link></> : 'Suggestion dismissed.'}
     </p>}
     {query.isError ? <div role="alert"><LoadFailed onRetry={() => void query.refetch()} /></div> : !query.data ? <div role="status"><span className="sr-only">Loading recurring suggestions…</span><Skeleton className="h-20 w-full" /></div> : <>
       <p className="text-sm text-muted">{query.data.total} pending suggestions</p>
