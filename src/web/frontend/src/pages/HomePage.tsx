@@ -6,6 +6,7 @@ import { briefingApi, evidenceLink, formatMoney } from '@/api/briefing';
 import { api } from '@/api/client';
 import { datesInRange, getCategoryColor } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { StatusDot } from '@/components/ui/StatusDot';
 import { HeroCard, PageCard } from '@/components/ui/cards';
 import { HeroAmount } from '@/components/ui/HeroAmount';
@@ -15,6 +16,10 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { TrendLine } from '@/components/charts/TrendLine';
 import { CategoryDonut } from '@/components/charts/CategoryDonut';
 import { CategoryChangeBarRow } from '@/components/charts/CategoryChangeBars';
+
+// Direction: .impeccable/surfaces/src-web-frontend-src-pages-homepage-tsx.md
+// ("Where It Went, led by the mix") — the category mix is the first-viewport
+// focal point; everything else is compact, supporting fact rows beside it.
 
 export function HomePage() {
   const navigate = useNavigate();
@@ -68,26 +73,30 @@ export function HomePage() {
         <h1 className="text-xl font-bold leading-tight tracking-tight text-foreground font-display">Where the dollars go.</h1>
         {asOf}
       </div>
-      <Link className="min-h-11 min-w-11 inline-flex items-center gap-2 text-teal" to="/transactions?add=1"><Plus aria-hidden="true" size={20} />Add</Link>
+      <Button asChild size="sm" variant="outline">
+        <Link to="/transactions?add=1"><Plus aria-hidden="true" size={16} />Add</Link>
+      </Button>
     </header>
   );
   if (!query.data && query.isError) return (
-    <div className="max-w-5xl mx-auto p-4 md:p-8 space-y-6 text-base">
+    <div className="max-w-6xl mx-auto p-4 md:p-8 space-y-6 text-base">
       {header(null)}
       <div role="alert"><LoadFailed onRetry={() => void query.refetch()} /></div>
     </div>
   );
   if (!query.data) return (
-    <div className="max-w-5xl mx-auto p-4 md:p-8 space-y-6 text-base">
+    <div className="max-w-6xl mx-auto p-4 md:p-8 space-y-6 text-base">
       {header(<Skeleton className="h-5 w-48" />)}
-      <div role="status" aria-label="Preparing your briefing" className="space-y-6">
-        <HeroCard title="Month spending">
-          <Skeleton className="h-12 w-48" />
+      <div role="status" aria-label="Preparing your briefing" className="grid lg:grid-cols-[3fr_2fr] gap-6">
+        <HeroCard title="Where it went">
+          <Skeleton className="h-10 w-40" />
           <Skeleton className="mt-3 h-4 w-64 max-w-full" />
-          <Skeleton className="mt-6 h-[160px] w-full" />
+          <Skeleton className="mt-6 h-[220px] w-[220px] rounded-full mx-auto" />
         </HeroCard>
-        <PageCard title="Where it went"><Skeleton className="h-[220px] w-full" /></PageCard>
-        <PageCard title="What changed"><Skeleton className="h-24 w-full" /></PageCard>
+        <div className="space-y-6">
+          <PageCard title="Daily trend"><Skeleton className="h-[160px] w-full" /></PageCard>
+          <PageCard title="What changed"><Skeleton className="h-24 w-full" /></PageCard>
+        </div>
       </div>
     </div>
   );
@@ -109,141 +118,168 @@ export function HomePage() {
     return { date, amount: day ? day.spending.minor_units / 100 : 0 };
   }) : [];
   return (
-    <div className="max-w-5xl mx-auto p-4 md:p-8 space-y-6 text-base">
+    <div className="max-w-6xl mx-auto p-4 md:p-8 space-y-6 text-base">
       {header(<p className="text-muted">Through {facts.as_of} · {facts.timezone}{refreshing && <span role="status"> · Updating…</span>}</p>)}
       {query.isError && <p role="alert" className="text-warning">Couldn’t refresh. This briefing may be out of date. <Button type="button" variant="link" size="sm" className="h-auto min-h-11 p-0 align-baseline" onClick={() => void query.refetch()}>Retry</Button></p>}
-      <HeroCard title="Month spending" action={<Link className="min-h-11 inline-flex items-center text-teal" to={withReturn(evidenceLink(facts.current))}>See spending <ArrowRight className="ml-2" size={16} /></Link>}>
-        <HeroAmount value={facts.current.spending} />
-        <p className="mt-2 text-muted">{facts.current.status === 'partial' ? 'Known spending subtotal · some amounts or dates need review.' : facts.current.status === 'indicative' ? 'Recorded spending · includes indicative currency conversions.' : 'Recorded spending this month'}</p>
-        <p className="mt-4">{facts.change ? `${formatMoney({ ...facts.change, minor_units: Math.abs(facts.change.minor_units) })} ${facts.change.minor_units >= 0 ? 'more' : 'less'} than the comparable period last month.` : 'A comparison is unavailable while some records need review.'}</p>
-        <p className="text-sm text-muted">Comparing {facts.comparison_current.start}–{facts.comparison_current.end} with {facts.previous.start}–{facts.previous.end}.</p>
-        {facts.current.income && <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2"><Link className="text-teal min-h-11 inline-flex items-center" to={withReturn(evidenceLink(facts.current, undefined, 'income'))}>Recorded income {formatMoney(facts.current.income)}</Link>{facts.current.recorded_net_flow && <p className={`py-2 ${netFlowNegative ? 'text-warning' : ''}`}>Recorded net {netFlowNegative ? 'outflow' : 'flow'} {formatMoney(facts.current.recorded_net_flow)}</p>}</div>}
-        {spending_target && <p className={`mt-4 pt-4 border-t border-border ${overTarget ? 'text-warning' : ''}`}>{overTarget
-          ? `${formatMoney({ ...spending_target.remaining, minor_units: Math.abs(spending_target.remaining.minor_units) })} over your ${formatMoney(spending_target.target)} monthly target.`
-          : `${formatMoney(spending_target.remaining)} remaining of your ${formatMoney(spending_target.target)} monthly target.`}</p>}
-        <div className="mt-6 pt-4 border-t border-border">
-          {trendQuery.data ? (
-            <>
-              {trendQuery.isError && <p className="text-xs text-warning mb-1">Couldn't refresh the daily trend — showing the last loaded data. <Button type="button" variant="link" size="sm" className="h-auto min-h-11 p-0 align-baseline" onClick={() => void trendQuery.refetch()}>Retry</Button></p>}
-              <TrendLine data={trendPoints} selectedDate={selectedDate} onSelectDate={setSelectedDate} />
-              {selectedDate && <Link className="text-sm text-teal min-h-11 inline-flex items-center mt-1" to={withReturn(`/evidence?start=${selectedDate}&end=${selectedDate}&measure=spending`)}>View this day's records</Link>}
-            </>
-          ) : trendQuery.isLoading ? (
-            <Skeleton className="h-[160px] w-full" />
-          ) : (
-            <p className="text-sm text-muted">Couldn't load the daily trend. <Button type="button" variant="link" size="sm" className="h-auto min-h-11 p-0 align-baseline" onClick={() => void trendQuery.refetch()}>Retry</Button></p>
-          )}
-        </div>
-      </HeroCard>
-      <PageCard title="Where it went">
-        {breakdownQuery.data ? (
-          <>
-            {breakdownQuery.isError && <p className="text-xs text-warning mb-2">Couldn't refresh the category mix — showing the last loaded data. <Button type="button" variant="link" size="sm" className="h-auto min-h-11 p-0 align-baseline" onClick={() => void breakdownQuery.refetch()}>Retry</Button></p>}
-            <CategoryDonut
-              data={categoryTotals}
-              selected={selectedCategory}
-              onSelect={setSelectedCategory}
-              onViewTransactions={(category) => navigate(withReturn(evidenceLink(facts.current, category)))}
-              showLegend
-            />
-            {selectedCategory && (
-              <div className="mt-6 pt-4 border-t border-border space-y-3">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <StatusDot color={getCategoryColor(selectedCategory)} />
-                    <span className="font-display text-lg font-semibold">{selectedCategory}</span>
-                  </div>
-                  <Button type="button" variant="ghost" size="sm" onClick={() => setSelectedCategory(null)}>Clear selection</Button>
-                </div>
-                {merchantsQuery.data ? (
-                  <>
-                    {merchantsQuery.isError && <p className="text-xs text-warning">Couldn't refresh merchants for {selectedCategory} — showing the last loaded data. <Button type="button" variant="link" size="sm" className="h-auto min-h-11 p-0 align-baseline" onClick={() => void merchantsQuery.refetch()}>Retry</Button></p>}
-                    {merchantsQuery.data.length ? (
-                      <ul className="space-y-2">
-                        {merchantsQuery.data.map((m) => (
-                          <li key={m.merchant} className="flex justify-between text-sm">
-                            <span>{m.merchant}</span>
-                            <span className="font-mono tabular-nums text-muted">{formatMoney(m.total)}</span>
-                          </li>
-                        ))}
-                      </ul>
+
+      {/* First viewport: the category mix leads, with the hero amount and its
+          supporting facts as a compact stack beside/above it — not a report
+          of full-width paragraphs. */}
+      <div className="grid lg:grid-cols-[3fr_2fr] gap-6 items-start">
+        <HeroCard
+          title="Where it went"
+          glowColor={overTarget ? 'coral' : 'warm'}
+          action={<Button asChild variant="ghost" size="sm"><Link to={withReturn(evidenceLink(facts.current))}>See spending<ArrowRight size={14} aria-hidden /></Link></Button>}
+        >
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1.5">
+            <HeroAmount value={facts.current.spending} className="text-3xl md:text-4xl" />
+            {facts.change && <Badge tone={facts.change.minor_units >= 0 ? 'warm' : 'calm'} className="font-mono">
+              {facts.change.minor_units >= 0 ? '▲' : '▼'} {formatMoney({ ...facts.change, minor_units: Math.abs(facts.change.minor_units) })}
+            </Badge>}
+            {spending_target && <Badge tone={overTarget ? 'warm' : 'saved'} className="font-mono">
+              {overTarget ? 'over target' : 'under target'}
+            </Badge>}
+          </div>
+          <p className="mt-1.5 text-sm text-muted">{facts.current.status === 'partial' ? 'Known spending subtotal · some amounts or dates need review.' : facts.current.status === 'indicative' ? 'Recorded spending · includes indicative currency conversions.' : 'Recorded spending this month'}</p>
+
+          <div className="mt-4 pt-4 border-t border-border space-y-1.5 text-sm">
+            <p>{facts.change ? `${formatMoney({ ...facts.change, minor_units: Math.abs(facts.change.minor_units) })} ${facts.change.minor_units >= 0 ? 'more' : 'less'} than the comparable period last month.` : 'A comparison is unavailable while some records need review.'}</p>
+            <p className="text-xs text-muted">Comparing {facts.comparison_current.start}–{facts.comparison_current.end} with {facts.previous.start}–{facts.previous.end}.</p>
+            {facts.current.income && <Link className="text-teal min-h-11 inline-flex items-center gap-1" to={withReturn(evidenceLink(facts.current, undefined, 'income'))}><StatusDot tone="calm" />Recorded income {formatMoney(facts.current.income)}</Link>}
+            {facts.current.recorded_net_flow && <p className={`flex items-center gap-1.5 ${netFlowNegative ? 'text-warning' : ''}`}><StatusDot tone={netFlowNegative ? 'warm' : 'saved'} />Recorded net {netFlowNegative ? 'outflow' : 'flow'} {formatMoney(facts.current.recorded_net_flow)}</p>}
+            {spending_target && <p className={`flex items-center gap-1.5 ${overTarget ? 'text-warning' : ''}`}><StatusDot tone={overTarget ? 'warm' : 'saved'} />{overTarget
+              ? `${formatMoney({ ...spending_target.remaining, minor_units: Math.abs(spending_target.remaining.minor_units) })} over your ${formatMoney(spending_target.target)} monthly target.`
+              : `${formatMoney(spending_target.remaining)} remaining of your ${formatMoney(spending_target.target)} monthly target.`}</p>}
+          </div>
+
+          <div className="mt-6 pt-4 border-t border-border">
+            {breakdownQuery.data ? (
+              <>
+                {breakdownQuery.isError && <p className="text-xs text-warning mb-2">Couldn't refresh the category mix — showing the last loaded data. <Button type="button" variant="link" size="sm" className="h-auto min-h-11 p-0 align-baseline" onClick={() => void breakdownQuery.refetch()}>Retry</Button></p>}
+                <CategoryDonut
+                  data={categoryTotals}
+                  selected={selectedCategory}
+                  onSelect={setSelectedCategory}
+                  onViewTransactions={(category) => navigate(withReturn(evidenceLink(facts.current, category)))}
+                  showLegend
+                />
+                {selectedCategory && (
+                  <div className="mt-6 pt-4 border-t border-border space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <StatusDot color={getCategoryColor(selectedCategory)} />
+                        <span className="font-display text-lg font-semibold">{selectedCategory}</span>
+                      </div>
+                      <Button type="button" variant="ghost" size="sm" onClick={() => setSelectedCategory(null)}>Clear selection</Button>
+                    </div>
+                    {merchantsQuery.data ? (
+                      <>
+                        {merchantsQuery.isError && <p className="text-xs text-warning">Couldn't refresh merchants for {selectedCategory} — showing the last loaded data. <Button type="button" variant="link" size="sm" className="h-auto min-h-11 p-0 align-baseline" onClick={() => void merchantsQuery.refetch()}>Retry</Button></p>}
+                        {merchantsQuery.data.length ? (
+                          <ul className="space-y-2">
+                            {merchantsQuery.data.map((m) => (
+                              <li key={m.merchant} className="flex justify-between text-sm">
+                                <span>{m.merchant}</span>
+                                <span className="font-mono tabular-nums text-muted">{formatMoney(m.total)}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="text-sm text-muted">No merchant records for {selectedCategory} in this period.</p>
+                        )}
+                      </>
+                    ) : merchantsQuery.isLoading ? (
+                      <Skeleton className="h-[100px] w-full" />
                     ) : (
-                      <p className="text-sm text-muted">No merchant records for {selectedCategory} in this period.</p>
+                      <p className="text-sm text-muted">Couldn't load merchants for {selectedCategory}. <Button type="button" variant="link" size="sm" className="h-auto min-h-11 p-0 align-baseline" onClick={() => void merchantsQuery.refetch()}>Retry</Button></p>
                     )}
-                  </>
-                ) : merchantsQuery.isLoading ? (
-                  <Skeleton className="h-[100px] w-full" />
-                ) : (
-                  <p className="text-sm text-muted">Couldn't load merchants for {selectedCategory}. <Button type="button" variant="link" size="sm" className="h-auto min-h-11 p-0 align-baseline" onClick={() => void merchantsQuery.refetch()}>Retry</Button></p>
+                    <Link
+                      className="text-sm text-teal min-h-11 inline-flex items-center gap-1"
+                      to={withReturn(evidenceLink(facts.current, selectedCategory))}
+                    >
+                      View transactions <ArrowRight size={14} />
+                    </Link>
+                  </div>
                 )}
-                <Link
-                  className="text-sm text-teal min-h-11 inline-flex items-center gap-1"
-                  to={withReturn(evidenceLink(facts.current, selectedCategory))}
-                >
-                  View transactions <ArrowRight size={14} />
-                </Link>
-              </div>
+              </>
+            ) : breakdownQuery.isLoading ? (
+              <Skeleton className="h-[220px] w-full" />
+            ) : (
+              <p className="text-sm text-muted">Couldn't load the category mix. <Button type="button" variant="link" size="sm" className="h-auto min-h-11 p-0 align-baseline" onClick={() => void breakdownQuery.refetch()}>Retry</Button></p>
             )}
-          </>
-        ) : breakdownQuery.isLoading ? (
-          <Skeleton className="h-[220px] w-full" />
-        ) : (
-          <p className="text-sm text-muted">Couldn't load the category mix. <Button type="button" variant="link" size="sm" className="h-auto min-h-11 p-0 align-baseline" onClick={() => void breakdownQuery.refetch()}>Retry</Button></p>
-        )}
-      </PageCard>
-      <PageCard title="What changed">
-        {(() => {
-          // Lead with the strongest change and its evidence; the rest of the
-          // explanation sits behind "More context". Bars share one scale so
-          // nothing rescales when context expands.
-          const changes = facts.category_changes.slice(0, 3);
-          const maxChange = Math.max(...changes.map((c) => Math.abs(c.change.minor_units)), 1);
-          const changeRow = (item: typeof changes[number]) => <div key={item.category} className="py-1 border-b border-border last:border-0">
-            <CategoryChangeBarRow
-              datum={item}
-              max={maxChange}
-              selected={selectedChangeCategory === item.category}
-              onSelect={setSelectedChangeCategory}
-            />
-            <div className="flex gap-6 pl-2 pb-2"><Link className="text-teal min-h-11 inline-flex items-center" to={withReturn(evidenceLink(facts.comparison_current, item.category))}>This period</Link><Link className="text-teal min-h-11 inline-flex items-center" to={withReturn(evidenceLink(facts.previous, item.category))}>Previous period</Link></div>
-          </div>;
-          const hasMore = changes.length > 1 || !!driver || !!facts.trip_drivers.length;
-          return <>
-            {changes.length
-              ? <div data-testid="category-change-bars">{changeRow(changes[0])}</div>
-              : <p className="text-muted">{facts.change ? 'No category spending changes in these periods.' : 'Resolve the records needing attention to compare categories.'}</p>}
-            {hasMore && <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="mt-2"
-              aria-expanded={showMoreChange}
-              aria-controls={moreChangeId}
-              onClick={() => setShowMoreChange((open) => !open)}
-            >
-              {showMoreChange ? 'Less context' : 'More context'}
-            </Button>}
-            {showMoreChange && <div id={moreChangeId}>
-              {changes.length > 1 && <div className="mt-2">{changes.slice(1).map(changeRow)}</div>}
-              {driver && <div className="mt-4 pt-4 border-t border-border space-y-3">
-                <p className="text-sm text-muted">{driver.overlap_note}</p>
-                {driver.merchant_driver && <p>Biggest contributor in {driver.category}: <Link className="text-teal underline" to={withReturn(evidenceLink(facts.comparison_current, driver.category, 'spending', driver.merchant_driver.merchant))}>{driver.merchant_driver.merchant}</Link> (<strong>{formatMoney(driver.merchant_driver.change)}</strong> change)</p>}
-                {driver.frequency_driver && driver.frequency_driver.classification !== 'none' && <p>
-                  {driver.frequency_driver.classification === 'frequency' && `Driven mostly by more purchases: ${driver.frequency_driver.current_count} this period vs ${driver.frequency_driver.previous_count} previously, at a similar average.`}
-                  {driver.frequency_driver.classification === 'size' && `Driven mostly by bigger purchases: average ${formatMoney(driver.frequency_driver.current_avg)} this period vs ${formatMoney(driver.frequency_driver.previous_avg)} previously, at a similar count.`}
-                  {driver.frequency_driver.classification === 'mixed' && `Both purchase count (${driver.frequency_driver.previous_count} → ${driver.frequency_driver.current_count}) and average size (${formatMoney(driver.frequency_driver.previous_avg)} → ${formatMoney(driver.frequency_driver.current_avg)}) changed.`}
-                </p>}
-                {driver.one_off_driver && <p>Largely one purchase: <Link className="text-teal underline" to={transactionLink(driver.one_off_driver.transaction_id)}>{driver.one_off_driver.merchant || 'Unnamed transaction'}</Link> for <strong>{formatMoney(driver.one_off_driver.amount)}</strong> on {driver.one_off_driver.date}.</p>}
-              </div>}
-              {!!facts.trip_drivers.length && <div className="mt-4 pt-4 border-t border-border space-y-3">
-                {facts.trip_drivers.map(trip => <p key={trip.trip_id}>Trip <Link className="text-teal underline" to={`/transactions?trip=${trip.trip_id}&start=${facts.current.start}&end=${facts.comparison_current.end}`}>{trip.name}</Link>: {formatMoney(trip.current_total)} this period ({formatMoney(trip.previous_total)} previously). <span className="text-sm text-muted">{trip.overlap_note}</span></p>)}
-              </div>}
-            </div>}
-          </>;
-        })()}
-      </PageCard>
+          </div>
+        </HeroCard>
+
+        <div className="space-y-6">
+          <PageCard title="Daily trend">
+            {trendQuery.data ? (
+              <>
+                {trendQuery.isError && <p className="text-xs text-warning mb-1">Couldn't refresh the daily trend — showing the last loaded data. <Button type="button" variant="link" size="sm" className="h-auto min-h-11 p-0 align-baseline" onClick={() => void trendQuery.refetch()}>Retry</Button></p>}
+                <TrendLine data={trendPoints} selectedDate={selectedDate} onSelectDate={setSelectedDate} />
+                {selectedDate && <Link className="text-sm text-teal min-h-11 inline-flex items-center mt-1" to={withReturn(`/evidence?start=${selectedDate}&end=${selectedDate}&measure=spending`)}>View this day's records</Link>}
+              </>
+            ) : trendQuery.isLoading ? (
+              <Skeleton className="h-[160px] w-full" />
+            ) : (
+              <p className="text-sm text-muted">Couldn't load the daily trend. <Button type="button" variant="link" size="sm" className="h-auto min-h-11 p-0 align-baseline" onClick={() => void trendQuery.refetch()}>Retry</Button></p>
+            )}
+          </PageCard>
+          <PageCard title="What changed">
+            {(() => {
+              // Lead with the strongest change and its evidence; the rest of the
+              // explanation sits behind "More context". Bars share one scale so
+              // nothing rescales when context expands.
+              const changes = facts.category_changes.slice(0, 3);
+              const maxChange = Math.max(...changes.map((c) => Math.abs(c.change.minor_units)), 1);
+              const changeRow = (item: typeof changes[number]) => <div key={item.category} className="py-1 border-b border-border last:border-0">
+                <CategoryChangeBarRow
+                  datum={item}
+                  max={maxChange}
+                  selected={selectedChangeCategory === item.category}
+                  onSelect={setSelectedChangeCategory}
+                />
+                <div className="flex gap-6 pl-2 pb-2"><Link className="text-teal min-h-11 inline-flex items-center" to={withReturn(evidenceLink(facts.comparison_current, item.category))}>This period</Link><Link className="text-teal min-h-11 inline-flex items-center" to={withReturn(evidenceLink(facts.previous, item.category))}>Previous period</Link></div>
+              </div>;
+              const hasMore = changes.length > 1 || !!driver || !!facts.trip_drivers.length;
+              return <>
+                {changes.length
+                  ? <div data-testid="category-change-bars">{changeRow(changes[0])}</div>
+                  : <p className="text-muted">{facts.change ? 'No category spending changes in these periods.' : 'Resolve the records needing attention to compare categories.'}</p>}
+                {hasMore && <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="mt-2"
+                  aria-expanded={showMoreChange}
+                  aria-controls={moreChangeId}
+                  onClick={() => setShowMoreChange((open) => !open)}
+                >
+                  {showMoreChange ? 'Less context' : 'More context'}
+                </Button>}
+                {showMoreChange && <div id={moreChangeId}>
+                  {changes.length > 1 && <div className="mt-2">{changes.slice(1).map(changeRow)}</div>}
+                  {driver && <div className="mt-4 pt-4 border-t border-border space-y-3">
+                    <p className="text-sm text-muted">{driver.overlap_note}</p>
+                    {driver.merchant_driver && <p>Biggest contributor in {driver.category}: <Link className="text-teal underline" to={withReturn(evidenceLink(facts.comparison_current, driver.category, 'spending', driver.merchant_driver.merchant))}>{driver.merchant_driver.merchant}</Link> (<strong>{formatMoney(driver.merchant_driver.change)}</strong> change)</p>}
+                    {driver.frequency_driver && driver.frequency_driver.classification !== 'none' && <p>
+                      {driver.frequency_driver.classification === 'frequency' && `Driven mostly by more purchases: ${driver.frequency_driver.current_count} this period vs ${driver.frequency_driver.previous_count} previously, at a similar average.`}
+                      {driver.frequency_driver.classification === 'size' && `Driven mostly by bigger purchases: average ${formatMoney(driver.frequency_driver.current_avg)} this period vs ${formatMoney(driver.frequency_driver.previous_avg)} previously, at a similar count.`}
+                      {driver.frequency_driver.classification === 'mixed' && `Both purchase count (${driver.frequency_driver.previous_count} → ${driver.frequency_driver.current_count}) and average size (${formatMoney(driver.frequency_driver.previous_avg)} → ${formatMoney(driver.frequency_driver.current_avg)}) changed.`}
+                    </p>}
+                    {driver.one_off_driver && <p>Largely one purchase: <Link className="text-teal underline" to={transactionLink(driver.one_off_driver.transaction_id)}>{driver.one_off_driver.merchant || 'Unnamed transaction'}</Link> for <strong>{formatMoney(driver.one_off_driver.amount)}</strong> on {driver.one_off_driver.date}.</p>}
+                  </div>}
+                  {!!facts.trip_drivers.length && <div className="mt-4 pt-4 border-t border-border space-y-3">
+                    {facts.trip_drivers.map(trip => <p key={trip.trip_id}>Trip <Link className="text-teal underline" to={`/transactions?trip=${trip.trip_id}&start=${facts.current.start}&end=${facts.comparison_current.end}`}>{trip.name}</Link>: {formatMoney(trip.current_total)} this period ({formatMoney(trip.previous_total)} previously). <span className="text-sm text-muted">{trip.overlap_note}</span></p>)}
+                  </div>}
+                </div>}
+              </>;
+            })()}
+          </PageCard>
+        </div>
+      </div>
+
       <div className="grid md:grid-cols-2 gap-6">
-        <PageCard title="Coming up" action={<Link className="text-teal min-h-11 inline-flex items-center" to="/plan">Open plan</Link>}>
+        <PageCard title="Coming up" action={<Button asChild variant="ghost" size="sm"><Link to="/plan">Open plan<ArrowRight size={14} aria-hidden /></Link></Button>}>
           <p>{formatMoney(upcoming_total)} in estimated charges over the next 14 days.</p>
           {!!upcoming_unknown_count && <p className="text-warning">{upcoming_unknown_count} expected charges have no amount yet.</p>}
           {upcoming.map(item => <div key={item.id} className="flex justify-between gap-4 py-3 border-b border-border last:border-0"><div>{item.label}<p className="text-sm text-muted">{item.date}</p></div><span>{item.amount ? formatMoney(item.amount) : 'Amount unknown'}</span></div>)}
@@ -254,17 +290,20 @@ export function HomePage() {
           </div>}
         </PageCard>
         <PageCard title="Needs attention">
-          <Link to="/review" className="block text-teal py-3 min-h-11">{capture_issue_count + followup_issue_count} capture or follow-up items</Link>
-          {!!unresolved && <Link to={withReturn(evidenceLink(facts.current, undefined, 'unresolved'))} className="block text-warning py-3 min-h-11">Review {unresolved} spending records with unresolved amounts or dates</Link>}
-          {!!review_count && <Link to="/review" className="block text-teal py-3 min-h-11">{review_count} spending records need review</Link>}
-          {!!recurring_suggestion_count && <Link to="/review" className="block text-teal py-3 min-h-11">{recurring_suggestion_count} recurring suggestions</Link>}
-          <p className="mt-4 text-muted">{freshness.gmail_needs_reconnection ? 'Gmail needs reconnection.' : freshness.gmail_connected ? `Gmail last checked: ${freshness.gmail_last_checked ?? 'not checked in this session'}.` : 'Gmail is not connected in this session.'}</p>
-          <p className="text-sm text-muted">{freshness.last_capture_processed_at ? `Last capture processed: ${freshness.last_capture_processed_at}.` : 'No capture has been processed yet.'}</p>
-          <p className="text-sm text-muted mt-2">Recent checks do not prove every purchase was captured.</p>
-          <Link to="/settings" className="inline-flex text-teal min-h-11 items-center">Manage connections</Link>
+          <Link to="/review" className="flex items-center gap-2 min-h-11 py-2 rounded-md px-2 -mx-2 hover:bg-card-hover transition-colors text-teal"><StatusDot tone="notable" />{capture_issue_count + followup_issue_count} capture or follow-up items</Link>
+          {!!unresolved && <Link to={withReturn(evidenceLink(facts.current, undefined, 'unresolved'))} className="flex items-center gap-2 min-h-11 py-2 rounded-md px-2 -mx-2 hover:bg-card-hover transition-colors text-warning"><StatusDot tone="warm" />Review {unresolved} spending records with unresolved amounts or dates</Link>}
+          {!!review_count && <Link to="/review" className="flex items-center gap-2 min-h-11 py-2 rounded-md px-2 -mx-2 hover:bg-card-hover transition-colors text-teal"><StatusDot tone="notable" />{review_count} spending records need review</Link>}
+          {!!recurring_suggestion_count && <Link to="/review" className="flex items-center gap-2 min-h-11 py-2 rounded-md px-2 -mx-2 hover:bg-card-hover transition-colors text-teal"><StatusDot tone="calm" />{recurring_suggestion_count} recurring suggestions</Link>}
+          <div className="mt-4 pt-4 border-t border-border space-y-1">
+            <p className="text-muted text-sm">{freshness.gmail_needs_reconnection ? 'Gmail needs reconnection.' : freshness.gmail_connected ? `Gmail last checked: ${freshness.gmail_last_checked ?? 'not checked in this session'}.` : 'Gmail is not connected in this session.'}</p>
+            <p className="text-xs text-muted">{freshness.last_capture_processed_at ? `Last capture processed: ${freshness.last_capture_processed_at}.` : 'No capture has been processed yet.'}</p>
+            <p className="text-xs text-muted">Recent checks do not prove every purchase was captured.</p>
+          </div>
+          <Button asChild variant="outline" size="sm" className="mt-4"><Link to="/settings">Manage connections</Link></Button>
         </PageCard>
       </div>
-      <PageCard title="Recent activity" contentClassName="p-0" action={<Link to="/transactions" className="text-teal min-h-11 inline-flex items-center">All activity</Link>}>
+
+      <PageCard title="Recent activity" contentClassName="p-0" action={<Button asChild variant="ghost" size="sm"><Link to="/transactions">All activity<ArrowRight size={14} aria-hidden /></Link></Button>}>
         {recent.map(item => (
           <ActivityRowShell
             key={item.id}
