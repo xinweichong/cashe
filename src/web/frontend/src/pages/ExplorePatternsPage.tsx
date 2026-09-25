@@ -6,13 +6,14 @@ import { briefingApi, evidenceLink, formatMoney, type Money } from '@/api/briefi
 import { Button } from '@/components/ui/button';
 import { StatusDot } from '@/components/ui/StatusDot';
 import { ChoiceChip } from '@/components/ui/choice-chip';
+import { SelectableRow } from '@/components/ui/selectable-row';
 import { PageCard } from '@/components/ui/cards';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LoadFailed } from '@/components/ui/LoadFailed';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CategoryChangeBars } from '@/components/charts/CategoryChangeBars';
 import { CategoryTrendLine } from '@/components/charts/CategoryTrendLine';
-import { getCategoryColor } from '@/lib/utils';
+import { datesInRange, formatShortDate, getCategoryColor } from '@/lib/utils';
 
 const WEEKDAY_LABELS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
@@ -143,10 +144,41 @@ function SpendingOverTime() {
     setSelected((prev) => (prev.includes(category) ? prev.filter((c) => c !== category) : [...prev, category]));
   }
 
-  const chartData = trend?.map((point) => ({
-    date: point.date,
-    ...Object.fromEntries(selected.map((cat) => [cat, point.categories[cat] ? point.categories[cat]!.minor_units / 100 : 0])),
-  })) ?? [];
+  // The API omits days without records; chart every day of the period, in
+  // order, with those days as recorded $0 so spacing stays true.
+  const period = monthFacts?.current;
+  const chartData = trend && period ? datesInRange(period.start, period.end).map((date) => {
+    const point = trend.find((p) => p.date === date);
+    return { date, ...Object.fromEntries(selected.map((cat) => [cat, point?.categories[cat] ? point.categories[cat]!.minor_units / 100 : 0])) };
+  }) : [];
+
+  // Day → category → merchant investigation, held in the URL (replace).
+  const [search, setSearch] = useSearchParams();
+  const dayParam = search.get('day');
+  const selectedDay = dayParam && period && dayParam >= period.start && dayParam <= period.end ? dayParam : null;
+  function updateParams(changes: Record<string, string | null>) {
+    const params = new URLSearchParams(search);
+    for (const [key, value] of Object.entries(changes)) {
+      if (value === null) params.delete(key); else params.set(key, value);
+    }
+    setSearch(params, { replace: true });
+  }
+  const dayBreakdown = useQuery({
+    queryKey: ['explore-day-breakdown', selectedDay],
+    queryFn: () => api.getCategoryBreakdownV2(selectedDay!, selectedDay!),
+    enabled: !!selectedDay,
+  });
+  const dayCategoryParam = search.get('dayCategory');
+  const dayCategory = dayCategoryParam && dayBreakdown.data && dayCategoryParam in dayBreakdown.data.by_category ? dayCategoryParam : null;
+  const dayMerchants = useQuery({
+    queryKey: ['explore-day-merchants', selectedDay, dayCategory],
+    queryFn: () => api.getMerchantRankingFactsV2(selectedDay!, selectedDay!, dayCategory!, 5),
+    enabled: !!selectedDay && !!dayCategory,
+  });
+  const dayPeriod = period && selectedDay ? { ...period, start: selectedDay, end: selectedDay } : null;
+  const dayRows = dayBreakdown.data
+    ? Object.entries(dayBreakdown.data.by_category).sort((a, b) => b[1].minor_units - a[1].minor_units)
+    : [];
 
   return (
     <PageCard title="Spending over time">
@@ -171,7 +203,58 @@ function SpendingOverTime() {
       ) : isLoading || !trend ? (
         <div role="status"><span className="sr-only">Loading…</span><Skeleton className="h-20 w-full" /></div>
       ) : (
-        <div className="h-[240px]"><CategoryTrendLine data={chartData} /></div>
+        <div className="h-[296px]">
+          <CategoryTrendLine
+            data={chartData}
+            selectedDate={selectedDay}
+            onSelectDate={(day) => updateParams({ day: day === selectedDay ? null : day, dayCategory: null })}
+          />
+        </div>
+      )}
+      {selectedDay && dayPeriod && (
+        <section aria-label={`All spending on ${formatShortDate(selectedDay)}`} className="mt-4 pt-4 border-t border-border space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold">All spending on {formatShortDate(selectedDay)}</h3>
+            <Button type="button" variant="ghost" size="sm" onClick={() => updateParams({ day: null, dayCategory: null })}>Clear day</Button>
+          </div>
+          {dayBreakdown.isError && !dayBreakdown.data ? (
+            <div role="alert"><LoadFailed onRetry={() => void dayBreakdown.refetch()} /></div>
+          ) : !dayBreakdown.data ? (
+            <div role="status"><span className="sr-only">Loading…</span><Skeleton className="h-20 w-full" /></div>
+          ) : !dayRows.length ? (
+            <p className="text-sm text-muted">No recorded spending on this day.</p>
+          ) : dayRows.map(([category, amount]) => (
+            <div key={category}>
+              <SelectableRow
+                selected={dayCategory === category}
+                onClick={() => updateParams({ dayCategory: dayCategory === category ? null : category })}
+              >
+                <StatusDot color={getCategoryColor(category)} />
+                <span className="flex-1 min-w-0 truncate">{category}</span>
+                <span className="font-mono tabular-nums text-muted">{formatMoney(amount)}</span>
+              </SelectableRow>
+              {dayCategory === category && (
+                <div className="pl-5 py-2">
+                  {dayMerchants.isError && !dayMerchants.data ? (
+                    <div role="alert"><LoadFailed onRetry={() => void dayMerchants.refetch()} /></div>
+                  ) : !dayMerchants.data ? (
+                    <div role="status"><span className="sr-only">Loading…</span><Skeleton className="h-12 w-full" /></div>
+                  ) : dayMerchants.data.map((m) => (
+                    <RankedBar
+                      key={m.merchant}
+                      label={m.merchant}
+                      value={m.total.minor_units}
+                      max={Math.max(1, ...dayMerchants.data!.map((x) => x.total.minor_units))}
+                      href={evidenceLink(dayPeriod, category, 'spending', m.merchant)}
+                      secondaryHref={merchantProfileLink(m.merchant)}
+                    />
+                  ))}
+                  <Link className="text-sm text-teal min-h-11 inline-flex items-center" to={evidenceLink(dayPeriod, category)}>All {category} on this day</Link>
+                </div>
+              )}
+            </div>
+          ))}
+        </section>
       )}
     </PageCard>
   );

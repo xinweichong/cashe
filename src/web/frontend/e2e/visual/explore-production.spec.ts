@@ -88,3 +88,26 @@ test('mode tabs scroll within their own bounds on phone instead of overflowing t
   await recurringTab.click();
   await expect(recurringTab).toHaveAttribute('aria-selected', 'true');
 });
+
+test('Over time: step to a day, break it down by category, then merchants with day-scoped evidence', async ({ page }) => {
+  await mockAuthenticatedExplore(page);
+  await page.route('**/api/v2/spending/breakdown**', (route) => route.fulfill({ json: {
+    start: '2026-09-02', end: '2026-09-02', unresolved_count: 0, indicative_count: 0, status: 'complete',
+    by_category: { Food: { minor_units: 800, currency: 'SGD' }, Shopping: { minor_units: 300, currency: 'SGD' } },
+  } }));
+  await page.route('**/api/v2/spending/merchants**', (route) => route.fulfill({ json: [
+    { merchant: 'Hawker Stall', visits: 1, total: { minor_units: 800, currency: 'SGD' } },
+  ] }));
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/explore?day=2026-09-02');
+  const day = page.getByRole('region', { name: /All spending on/ });
+  await expect(day).toBeVisible();
+  await expect(page.getByTestId('category-trend-day-readout')).toContainText('charted');
+  await day.getByRole('button', { name: /^Food/ }).click();
+  await expect(page).toHaveURL(/dayCategory=Food/);
+  const merchant = day.getByRole('link', { name: 'Hawker Stall' });
+  await expect(merchant).toHaveAttribute('href', /start=2026-09-02&end=2026-09-02/);
+  await page.screenshot({ path: 'e2e/screenshots/explore-day-investigation.png', fullPage: true });
+  await page.getByRole('button', { name: 'Clear day' }).click();
+  await expect(day).toHaveCount(0);
+});

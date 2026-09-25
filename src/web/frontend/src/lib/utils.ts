@@ -165,3 +165,12 @@ export function getGoalTone(percent: number): { color: string } {
   if (percent < 75) return { color: COLOR_MINT };
   return             { color: COLOR_TEAL };
 }
+
+/** Every ISO date (YYYY-MM-DD) from start to end inclusive, in order. */
+export function datesInRange(start: string, end: string): string[] {
+  const days: string[] = [];
+  for (let d = new Date(`${start}T00:00:00Z`); d.toISOString().slice(0, 10) <= end; d.setUTCDate(d.getUTCDate() + 1)) {
+    days.push(d.toISOString().slice(0, 10));
+  }
+  return days;
+}

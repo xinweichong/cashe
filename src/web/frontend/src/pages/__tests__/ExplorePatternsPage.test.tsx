@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { api, type Trip } from '@/api/client';
@@ -13,6 +13,7 @@ vi.mock('@/api/client', async importOriginal => ({
     getCategories: vi.fn(),
     getMerchantRankingFactsV2: vi.fn(),
     getCategoryDailyTrendV2: vi.fn(),
+    getCategoryBreakdownV2: vi.fn(),
     getTrips: vi.fn(),
     getTripSummaryV2: vi.fn(),
   },
@@ -234,4 +235,31 @@ test('the trip card shows loading, not a premature empty state, while trips are 
   expect(screen.queryByText('No trips recorded yet.')).toBeNull();
   resolveTrips([]);
   expect(await screen.findByText('No trips recorded yet.')).toBeTruthy();
+});
+
+test('Over time investigates a day by category and merchant, with evidence scoped to that day', async () => {
+  vi.mocked(api.getCategories).mockResolvedValue([{ name: 'Food & Drink', keywords: null, icon: null, color: null, type: 'wants' }] as Awaited<ReturnType<typeof api.getCategories>>);
+  vi.mocked(api.getCategoryDailyTrendV2).mockResolvedValue([{ date: '2026-09-03', categories: { 'Food & Drink': { minor_units: 1200, currency: 'SGD' } } }]);
+  vi.mocked(api.getCategoryBreakdownV2).mockResolvedValue({ start: '2026-09-03', end: '2026-09-03', by_category: { 'Food & Drink': { minor_units: 1200, currency: 'SGD' }, Transport: { minor_units: 300, currency: 'SGD' } }, unresolved_count: 0, indicative_count: 0, status: 'complete' });
+  vi.mocked(api.getMerchantRankingFactsV2).mockResolvedValue([{ merchant: 'Hawker Stall', visits: 1, total: { minor_units: 1200, currency: 'SGD' } }]);
+  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter initialEntries={['/explore?day=2026-09-03']}><ExplorePatternsPage /></MemoryRouter></QueryClientProvider>);
+  const day = await screen.findByRole('region', { name: /All spending on/ });
+  await waitFor(() => expect(api.getCategoryBreakdownV2).toHaveBeenCalledWith('2026-09-03', '2026-09-03'));
+  fireEvent.click(within(day).getByRole('button', { name: /Food & Drink/ }));
+  const merchant = await within(day).findByRole('link', { name: 'Hawker Stall' });
+  expect(api.getMerchantRankingFactsV2).toHaveBeenCalledWith('2026-09-03', '2026-09-03', 'Food & Drink', 5);
+  const params = new URL(merchant.getAttribute('href')!, 'http://localhost').searchParams;
+  expect(params.get('start')).toBe('2026-09-03');
+  expect(params.get('end')).toBe('2026-09-03');
+  expect(params.get('category')).toBe('Food & Drink');
+  expect(params.get('merchant')).toBe('Hawker Stall');
+  fireEvent.click(screen.getByRole('button', { name: 'Clear day' }));
+  await waitFor(() => expect(screen.queryByRole('region', { name: /All spending on/ })).toBeNull());
+});
+
+test('a day outside the period is not presented as selected', async () => {
+  render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter initialEntries={['/explore?day=2025-01-01']}><ExplorePatternsPage /></MemoryRouter></QueryClientProvider>);
+  await screen.findByText('Spending over time');
+  expect(screen.queryByRole('region', { name: /All spending on/ })).toBeNull();
+  expect(api.getCategoryBreakdownV2).not.toHaveBeenCalled();
 });
