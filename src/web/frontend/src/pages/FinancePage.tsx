@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { api, type BudgetProgressV2, type Category, type GoalProgress, type GoalProgressV2, type Trip, type RecurringTransaction } from '@/api/client';
 import { PageCard, HeroCard, HighlightCard } from '@/components/ui/cards';
 import { Button } from '@/components/ui/button';
+import { ProgressBar } from '@/components/ui/ProgressBar';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -51,36 +52,6 @@ function SavingsOverviewCard() {
   );
 }
 
-function ProgressBar({ percent, color }: { percent: number; color: string }) {
-  // Determine gradient based on color (budget tone)
-  let gradient = color;
-  if (color === '#FBBF24') {
-    // Honey/warm gradient for active budget
-    gradient = 'linear-gradient(90deg, #FBBF24 0%, #F59E0B 100%)';
-  } else if (color === '#FF6B6B') {
-    // Coral gradient for over budget
-    gradient = 'linear-gradient(90deg, #FF6B6B 0%, #EF4444 100%)';
-  } else if (color === '#FB923C') {
-    // Tangerine gradient for notable
-    gradient = 'linear-gradient(90deg, #FB923C 0%, #EA580C 100%)';
-  } else if (color === '#34D399') {
-    // Mint gradient for calm
-    gradient = 'linear-gradient(90deg, #34D399 0%, #10B981 100%)';
-  }
-
-  return (
-    <div className="w-full h-2 bg-foreground/10 rounded-full overflow-hidden">
-      <motion.div
-        className="h-full rounded-full"
-        style={{ background: gradient }}
-        initial={{ width: 0 }}
-        animate={{ width: `${Math.min(percent, 100)}%` }}
-        transition={springs.gentle}
-      />
-    </div>
-  );
-}
-
 function BudgetRow({
   b,
   onDelete,
@@ -105,7 +76,7 @@ function BudgetRow({
     setEditing(false);
   };
 
-  const { color } = getBudgetTone(b.percent);
+  const { color, toneName } = getBudgetTone(b.percent);
 
   return (
     <div className={cn('py-3 space-y-1.5 border-b border-border last:border-b-0', 'card-hover')}>
@@ -134,7 +105,7 @@ function BudgetRow({
           )}
         </div>
       </div>
-      <ProgressBar percent={b.percent} color={color} />
+      <ProgressBar percent={b.percent} label={`${b.label} budget used`} tone={toneName === 'warn' ? 'warm' : toneName} />
       <div className="flex justify-between text-xs text-muted font-mono">
         <span>
           <span style={{ color }} className="font-medium">${spent.toFixed(2)}</span>

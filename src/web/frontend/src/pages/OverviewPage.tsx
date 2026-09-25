@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight, CalendarDays } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
+import { ProgressBar } from '@/components/ui/ProgressBar';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { usePeriod, type Period } from '@/hooks/usePeriod';
@@ -418,14 +419,7 @@ export function OverviewPage() {
                             {b.percent.toFixed(0)}%
                           </span>
                         </div>
-                        <div className="w-full h-1.5 bg-foreground/10 rounded-full overflow-hidden">
-                          <motion.div
-                            className={`h-full rounded-full ${b.status === 'over_budget' ? 'bg-destructive' : 'bg-warning'}`}
-                            initial={{ width: 0 }}
-                            animate={{ width: `${Math.min(b.percent, 100)}%` }}
-                            transition={springs.gentle}
-                          />
-                        </div>
+                        <ProgressBar percent={b.percent} label={`${b.label} budget used`} tone={b.status === 'over_budget' ? 'warm' : 'active'} />
                       </div>
                     ))}
                 </div>
@@ -459,14 +453,7 @@ export function OverviewPage() {
                         {g.percent.toFixed(0)}%
                       </span>
                     </div>
-                    <div className="w-full h-1.5 bg-foreground/10 rounded-full overflow-hidden">
-                      <motion.div
-                        className={`h-full rounded-full ${g.percent >= 100 ? 'bg-success' : 'bg-primary'}`}
-                        initial={{ width: 0 }}
-                        animate={{ width: `${Math.min(g.percent, 100)}%` }}
-                        transition={springs.gentle}
-                      />
-                    </div>
+                    <ProgressBar percent={g.percent} label={`${g.name} goal progress`} />
                     <div className="flex justify-between text-xs text-muted">
                       <span>{formatCurrencyWhole(g.saved_amount.minor_units / 100)} of {formatCurrencyWhole(g.target_amount.minor_units / 100)}</span>
                       {g.target_date && <span>by {g.target_date}</span>}
