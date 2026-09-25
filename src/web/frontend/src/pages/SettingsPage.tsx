@@ -4,6 +4,7 @@ import { useQueryClient, useMutation, useQuery } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import { PageCard } from '@/components/ui/cards';
 import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
@@ -761,15 +762,11 @@ export function SettingsPage() {
                     <p className="text-sm font-medium text-foreground">{label}</p>
                     <p className="text-xs text-muted">{desc}</p>
                   </div>
-                  <button
-                    role="switch"
-                    aria-checked={!!settings?.[key]}
+                  <Switch
+                    checked={!!settings?.[key]}
+                    onCheckedChange={(next) => toggleSetting(key, next)}
                     aria-label={label}
-                    onClick={() => toggleSetting(key, !settings?.[key])}
-                    className={`relative w-10 h-5 rounded-full shrink-0 transition-colors ${settings?.[key] ? 'toggle-on' : 'bg-foreground/20'}`}
-                  >
-                    <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${settings?.[key] ? 'translate-x-5' : 'translate-x-0'}`} />
-                  </button>
+                  />
                 </div>
               ))}
             </div>

@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { api, type BudgetProgressV2, type Category, type GoalProgress, type GoalProgressV2, type Trip, type RecurringTransaction } from '@/api/client';
 import { PageCard, HeroCard, HighlightCard } from '@/components/ui/cards';
 import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -908,20 +909,12 @@ function TripRow({ trip }: { trip: Trip }) {
 
         <div className="flex items-center gap-1.5 shrink-0">
           <span className="text-xs text-muted hidden sm:inline">Auto-assign</span>
-          <button
-            onClick={handleToggle}
-            disabled={isPendingToggle}
-            className={`relative w-10 h-5 rounded-full transition-colors disabled:opacity-50 ${
-              isActive ? 'toggle-on' : 'bg-foreground/20'
-            }`}
-            title={isActive ? 'Active — click to deactivate' : 'Inactive — click to activate'}
-          >
-            <span
-              className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${
-                isActive ? 'translate-x-5' : 'translate-x-0'
-              }`}
-            />
-          </button>
+          <Switch
+            checked={isActive}
+            onCheckedChange={handleToggle}
+            pending={isPendingToggle}
+            aria-label={`Auto-assign new transactions to ${trip.name}`}
+          />
         </div>
 
         <Button
