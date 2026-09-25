@@ -427,7 +427,7 @@ Utility classes defined in `src/web/frontend/src/index.css` under `@layer compon
 - **`.btn-gradient`** — gradient background for the `default` Button variant. Do not apply manually; the CVA default variant uses it.
 - **`.select-field`** — use on all native `<select>` elements. Includes the white SVG chevron via `background-image`. Never use `.input-field` on a `<select>`.
 - **`.grid-scroll-panel`** — use on grid-area children that may contain long content: `overflow-y: auto; min-height: 0`. The `min-height: 0` is critical and must not be removed.
-- **`.toggle-on`** — existing switch fill utility; Settings and Finance currently duplicate switch markup. Do not copy it into new controls. A shared switch extraction requires approval; preserve current semantics until that migration is agreed.
+- **`.toggle-on`** — the switch fill, owned by `components/ui/switch.tsx`. Use `Switch`; never apply the class directly.
 - **`.area-header`**, **`.area-title`**, **`.area-left`**, **`.area-right`**, **`.area-top`** — `grid-area` assignments for named CSS Grid template areas. No-ops outside a grid parent (safe on mobile).
 - **`.page-grid-overview`**, **`.page-grid-analytics`**, **`.page-grid-finance`**, **`.page-grid-settings`** — per-page grid template definitions with responsive `@media` overrides. Mobile: single-column stack. Desktop (`md+`): multi-column viewport-filling grid.
 - **Radix `<SelectTrigger>` chevron** — always `opacity-50` (`<ChevronDown className="h-4 w-4 opacity-50" />`). Do not change to `text-foreground` or any explicit color. The 50% opacity is intentional and must be preserved across all usages.
@@ -529,8 +529,8 @@ Pagination control (only rendered when `totalPages > 1`):
 
 ### Common UI Patterns
 
-- **Quick-select chips:** `px-2.5 py-1 text-xs rounded-full border transition-colors`. Active: `border-foreground text-foreground bg-foreground/10`. Inactive: `border-border text-muted hover:text-foreground`. "All time" chip is never highlighted active.
-- **Segmented / inline toggle:** Container `flex rounded-md border border-border overflow-hidden`. Active button: `bg-primary text-primary-foreground`. Inactive: `text-muted hover:text-foreground`. Subsequent buttons add `border-l border-border`.
+- **Filter / quick-select chips:** use `ChoiceChip` (`components/ui/choice-chip.tsx`). "All time" is never highlighted as selected.
+- **Single-choice form values:** use `SegmentedChoice`. Same-panel view switches use `Tabs`; route selectors use `routeTabClassName`. Do not hand-build segmented button rows.
 - **Source labels:** Use `SOURCE_DISPLAY_LABELS` from `@/components/icons/sources` for human-readable source display names (e.g. `'DBS PayLah!'`, used in `TransactionDetail.tsx`). `SOURCE_LABELS` contains single-character glyphs for the `SourceGlyph` component and must not be used for readable text. Never hardcode source strings in UI text.
 - **Error feedback:** Always `text-sm text-destructive`, inline below the relevant field or immediately below the submit button.
 - **Loading state:** Replace button label text (e.g. "Saving…"). Never leave the button without visual feedback during async operations.

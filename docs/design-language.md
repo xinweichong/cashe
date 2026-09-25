@@ -398,7 +398,20 @@ Current registry (paths relative to `src/web/frontend/src/`):
 | Loading / recoverable failure / transient feedback | `Skeleton`, `LoadFailed`, existing toast provider | Compose known patterns; no page-local alternative feedback system. |
 | Category-change visual | `components/charts/CategoryChangeBars.tsx` | Home and Explore reuse the same row/scale contract. |
 
-**Not yet shared primitives:** filter/choice chips, switch, status dot, category label, generic selectable list row and progress indicator. Existing examples are references, not permission to clone them. The [surface audit](plans/2026-09-17-cashe-production-experience-polish.md#mandatory-first-pass-ui-surface-audit-and-consolidation) specifies which require consolidation and approval. Do not pretend a documented HTML example is an implemented component.
+**Approved shared owners (2026-09-25).** See [the proposals](plans/2026-09-25-cashe-shared-ui-owner-proposals.md) for rationale and states.
+
+| Role | Owner | Use |
+|---|---|---|
+| Filter / choice chip | `components/ui/choice-chip.tsx` | A pressed toggle (`aria-pressed`) with `neutral`, `warning` or `categoryColor` treatment. Category text is mixed toward foreground to hold 4.5:1 in both themes. Not a command, a read-only label or a panel switch. |
+| Single-choice form value | `components/ui/segmented-choice.tsx` | Native radios shown as segments on the Tabs track; for form values such as transaction type. |
+| Switch | `components/ui/switch.tsx` | `role="switch"`, 44px hit area, `pending` blocks repeat toggles. The only consumer of `.toggle-on`. |
+| Status dot | `components/ui/StatusDot.tsx` | The §7.4 6px dot in a Badge tone or category colour; meaning lives in the label or adjacent text. |
+| Category identity | `CategoryAvatar` `size="detail"`, optional `glyph` | 40px detail headers; rows keep the 32px default. |
+| Selectable row | `components/ui/selectable-row.tsx` | Full-width row that selects (`aria-pressed`) or opens something; disclosures pass `aria-expanded`. No nested controls. |
+| Budget/goal progress | `components/ui/ProgressBar.tsx` | `role="progressbar"`, Badge-tone fill, overage announced. Not for forecast composition or rankings. |
+| Category icon/colour choice | `components/categories/CategoryPickers.tsx` | Radio groups with 44px options; taken colours disabled and explained. |
+
+Still not shared: a common category label (ActivityRowShell and Finance keep their own), and a public calendar date-cell primitive (Plan keeps one in-file recipe). Existing examples are references, not permission to clone them.
 
 Layout/width, content and documented semantic colour may vary by caller. New fills, radii, selection styles, motion variants or arbitrary component sizing need a shared documented owner, not accumulating `className` overrides. Keep role distinctions: read-only badges, multi-select filters, single-choice form controls, calendar dates and tabs must not be collapsed into one misleading semantic control.
 
@@ -464,7 +477,7 @@ A new quieter pattern for status that doesn't need full pill weight (recurring d
 </span>
 ```
 
-Where `.dot` is a 6×6 rounded pill in the spectrum colour, and the text is normal-weight body. Use status dots when stacked or repeated — they scale visually better than pills. This is a design specification: there is currently no shared `StatusDot` component or implementation of those example classes. Request approval for its shared extraction before adding new dot/label variants. Chart points and navigation indicators are not status labels and retain their own roles.
+Where `.dot` is a 6×6 rounded pill in the spectrum colour, and the text is normal-weight body. Use status dots when stacked or repeated — they scale visually better than pills. Implemented as `components/ui/StatusDot.tsx` (`tone` or `color`, optional `label`). Chart points and navigation indicators are not status labels and retain their own roles.
 
 ### 7.5 Cards
 

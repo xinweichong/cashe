@@ -1,6 +1,6 @@
 # Shared UI owner proposals (approval required)
 
-Status: proposals only. Nothing here is implemented. Each item needs explicit approval under AGENTS.md's gate before code is written. The IDs refer to the [production-polish surface audit](2026-09-17-cashe-production-experience-polish.md). Every proposal reuses existing tokens, spacing, radii and motion; none adds a colour, font or animation system.
+Status: all seven approved by the user on 2026-09-25 and implemented (see design-language §7.0 for the registry). Deviations from these proposals: ChoiceChip ships without the `mode="radio"` variant (single-choice rows use pressed toggles rather than an incomplete radio pattern); CategoryAvatar's detail size also takes an optional `glyph`, so the detail header keeps the category's chosen icon; and merchant tags became neutral chips, because their old colours carried no meaning. The IDs refer to the [production-polish surface audit](2026-09-17-cashe-production-experience-polish.md). Every proposal reuses existing tokens, spacing, radii and motion; none adds a colour, font or animation system.
 
 Checked for every owner: rest, hover, focus-visible (the §15 teal ring), selected, disabled, pending where relevant, light and dark themes, a 44px effective touch target, and reduced motion (no transition beyond `--dur-fast`). Each migration keeps the consumer's data, events and URL behaviour unchanged. The `uiInventory` test's native-button allowlist shrinks as each consumer migrates.
 
