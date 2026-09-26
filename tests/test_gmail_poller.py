@@ -9,46 +9,8 @@ from src.gmail_poller import GmailPoller
 
 
 def _make_storage():
-    conn = sqlite3.connect(":memory:")
-    conn.row_factory = sqlite3.Row
-    conn.executescript("""
-        CREATE TABLE transactions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            source TEXT NOT NULL,
-            source_id TEXT UNIQUE,
-            amount REAL NOT NULL,
-            currency TEXT DEFAULT 'SGD',
-            exchange_rate REAL DEFAULT 1.0,
-            merchant TEXT,
-            description TEXT,
-            category TEXT,
-            transaction_date DATETIME,
-            ingested_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-            raw_data TEXT,
-            type TEXT DEFAULT 'expense'
-        );
-        CREATE TABLE categories (name TEXT PRIMARY KEY, keywords TEXT, icon TEXT, color TEXT, type TEXT DEFAULT 'neutral');
-        CREATE TABLE ingestion_state (source TEXT PRIMARY KEY, last_processed_id TEXT, last_processed_at TEXT, updated_at TEXT);
-        CREATE TABLE merchant_overrides (merchant TEXT PRIMARY KEY, category TEXT, source TEXT, updated_at TEXT);
-        CREATE TABLE app_settings (key TEXT PRIMARY KEY, value TEXT, updated_at TEXT);
-        CREATE TABLE recurring_transactions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            merchant TEXT NOT NULL,
-            avg_amount REAL NOT NULL,
-            frequency TEXT NOT NULL,
-            category TEXT,
-            first_seen DATETIME,
-            last_seen DATETIME,
-            occurrences INTEGER DEFAULT 2
-        );
-        CREATE TABLE merchant_tags (merchant TEXT PRIMARY KEY, tags TEXT DEFAULT '', notes TEXT DEFAULT '', updated_at DATETIME DEFAULT CURRENT_TIMESTAMP);
-        CREATE TABLE budgets (id INTEGER PRIMARY KEY AUTOINCREMENT, category TEXT, period TEXT NOT NULL DEFAULT 'monthly', amount REAL NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, UNIQUE(category, period));
-        CREATE TABLE goals (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, target_amount REAL NOT NULL, saved_amount REAL NOT NULL DEFAULT 0, target_date DATE, status TEXT NOT NULL DEFAULT 'active', created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP);
-        CREATE TABLE goal_contributions (id INTEGER PRIMARY KEY AUTOINCREMENT, goal_id INTEGER NOT NULL, amount REAL NOT NULL, month TEXT NOT NULL, contributed_date TEXT, source TEXT NOT NULL DEFAULT 'auto', note TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);
-    """)
-    return Storage(conn)
-
-
+    from src.db import init_db
+    return Storage(init_db(":memory:"))
 
 
 def _make_poller():
@@ -179,7 +141,15 @@ class _FakeGmailService:
     def messages(self):
         return self
 
-    def list(self, userId: str, q: str):
+    def getProfile(self, userId):
+        return _FakeRequest({"historyId": "100"})
+
+    def history(self):
+        return self
+
+    def list(self, userId: str, q: str = "", **kwargs):
+        if "startHistoryId" in kwargs:
+            return _FakeRequest({"historyId": "101"})
         return _FakeRequest({"messages": list(self._summary_list)})
 
     def get(self, userId: str, id: str, format: str):
@@ -219,51 +189,134 @@ def _make_msg(msg_id: str, message_id_header: str, body_text: str) -> dict:
     }
 
 
-class TestPollOnceMarkAsRead:
-    """poll_once must mark messages as read whenever the parser succeeds,
-    even when the message is a known duplicate. Otherwise mark-as-read
-    transient failures cause the same email to loop forever in is:unread.
-    """
-
+class TestDurableCapture:
     def _make_configured_poller(self, storage, service):
-        poller = _make_poller()
+        from src.ingestion import IngestionPipeline
+        poller = GmailPoller(
+            "unused", "unused", ["unialerts@uobgroup.com"],
+            [_StubParser()], storage, pipeline=IngestionPipeline(storage),
+        )
         poller.service = service
-        poller.storage = storage
-        poller.sender_filters = ["unialerts@uobgroup.com"]
-        poller.parsers = [_StubParser(source="uob_paynow_sent")]
         return poller
 
-    def test_marks_new_email_as_read(self):
+    def test_captures_without_changing_inbox_labels(self):
         storage = _make_storage()
-        msg = _make_msg("gmail-1", "<MSG-1@uobgroup.com>", "body irrelevant — parser is stubbed")
-        service = _FakeGmailService([msg])
+        service = _FakeGmailService([_make_msg("gmail-1", "<MSG-1>", "body")])
         poller = self._make_configured_poller(storage, service)
+        assert "is:unread" not in poller._build_query()
+        assert len(poller.poll_once()) == 1
+        assert service.modify_calls == []
+        assert storage.get_source_event("gmail", "gmail-1")["status"] == "processed"
+        assert storage.get_setting("gmail_history_id") == "100"
+        assert poller.force_poll() == 0
 
-        results = poller.poll_once()
-
-        assert len(results) == 1
-        assert len(service.modify_calls) == 1
-        assert service.modify_calls[0] == {
-            "id": "gmail-1",
-            "body": {"removeLabelIds": ["UNREAD"]},
-        }
-
-    def test_marks_already_stored_email_as_read(self):
-        """Regression: when is_duplicate(source, message_id) is True,
-        mark-as-read must still fire so the email exits is:unread."""
+    def test_existing_transaction_links_evidence(self):
         storage = _make_storage()
-        storage._conn.execute(
-            "INSERT INTO transactions (source, source_id, amount, merchant) "
-            "VALUES ('uob_paynow_sent', '<MSG-1@uobgroup.com>', 14.79, 'FOMO PAY PTE. LTD.')"
-        )
-        storage._conn.commit()
-
-        msg = _make_msg("gmail-1", "<MSG-1@uobgroup.com>", "body irrelevant — parser is stubbed")
-        service = _FakeGmailService([msg])
+        tx_id = storage.insert_transaction(source="uob_paynow_sent", source_id="<MSG-1>", amount=14.79)
+        service = _FakeGmailService([_make_msg("gmail-1", "<MSG-1>", "body")])
         poller = self._make_configured_poller(storage, service)
+        assert poller.poll_once() == []
+        assert storage.get_source_event("gmail", "gmail-1")["transaction_id"] == tx_id
+        assert service.modify_calls == []
 
-        results = poller.poll_once()
+    def test_failure_retries_from_durable_payload(self, monkeypatch):
+        storage = _make_storage()
+        service = _FakeGmailService([_make_msg("gmail-1", "<MSG-1>", "body")])
+        poller = self._make_configured_poller(storage, service)
+        original = poller.pipeline.ingest
+        def fail(result, **kwargs):
+            raise RuntimeError("temporary failure")
+        monkeypatch.setattr(poller.pipeline, "ingest", fail)
+        assert poller.poll_once() == []
+        assert storage.get_source_event("gmail", "gmail-1")["status"] == "failed"
+        monkeypatch.setattr(poller.pipeline, "ingest", original)
+        assert poller.force_poll() == 1
+        assert storage.get_source_event("gmail", "gmail-1")["status"] == "processed"
+        assert poller.force_poll() == 0
 
-        assert results == []  # duplicate not re-stored
-        assert len(service.modify_calls) == 1  # but mark-as-read still fired
-        assert service.modify_calls[0]["id"] == "gmail-1"
+    def test_unrecognized_event_is_retained(self, monkeypatch):
+        storage = _make_storage()
+        service = _FakeGmailService([_make_msg("gmail-1", "<MSG-1>", "body")])
+        poller = self._make_configured_poller(storage, service)
+        monkeypatch.setattr(poller.parsers[0], "parse", lambda body: None)
+        assert poller.poll_once() == []
+        assert storage.get_source_event("gmail", "gmail-1")["status"] == "unrecognized"
+
+    def test_paginated_sync_persists_before_checkpoint(self):
+        storage = _make_storage()
+        class Pages(_FakeGmailService):
+            def list(self, userId, q="", **kwargs):
+                if kwargs.get("pageToken"):
+                    return _FakeRequest({"messages": [{"id": "gmail-2"}]})
+                return _FakeRequest({"messages": [{"id": "gmail-1"}], "nextPageToken": "page2"})
+        service = Pages([_make_msg("gmail-1", "<MSG-1>", "body"), _make_msg("gmail-2", "<MSG-2>", "body")])
+        poller = self._make_configured_poller(storage, service)
+        assert poller.force_poll() == 2
+        assert storage.get_setting("gmail_sync_progress") == "{}"
+
+    def test_start_is_idempotent(self, monkeypatch):
+        from unittest.mock import MagicMock
+        storage = _make_storage()
+        poller = self._make_configured_poller(storage, _FakeGmailService([]))
+        thread = MagicMock()
+        monkeypatch.setattr("src.gmail_poller.threading.Thread", lambda **kwargs: thread)
+        poller.start()
+        poller.start()
+        thread.start.assert_called_once()
+
+
+def test_incremental_history_retains_only_configured_senders():
+    storage = _make_storage()
+    class History(_FakeGmailService):
+        def list(self, **kwargs):
+            assert kwargs['startHistoryId'] == '90'
+            return _FakeRequest({'historyId': '100', 'history': [
+                {'messagesAdded': [{'message': {'id': 'bank'}}, {'message': {'id': 'personal'}}]},
+            ]})
+    personal = _make_msg('personal', '<PERSONAL>', 'do not retain')
+    personal['payload']['headers'][0]['value'] = 'friend@example.com'
+    service = History([_make_msg('bank', '<BANK>', 'body'), personal])
+    poller = TestDurableCapture()._make_configured_poller(storage, service)
+    storage.set_setting('gmail_history_id', '90')
+    assert poller.force_poll() == 1
+    assert storage.get_source_event('gmail', 'personal') is None
+    assert storage.get_setting('gmail_history_id') == '100'
+
+
+def test_expired_history_restarts_bounded_sync():
+    from googleapiclient.errors import HttpError
+    from httplib2 import Response
+    storage = _make_storage()
+    class Expired(_FakeGmailService):
+        def list(self, **kwargs):
+            if 'startHistoryId' in kwargs:
+                raise HttpError(Response({'status': '404'}), b'{}')
+            assert 'is:unread' not in kwargs['q']
+            assert 'after:' in kwargs['q']
+            return _FakeRequest({'messages': []})
+    poller = TestDurableCapture()._make_configured_poller(storage, Expired([]))
+    storage.set_setting('gmail_history_id', '1')
+    assert poller.force_poll() == 0
+    assert storage.get_setting('gmail_history_id') == ''
+    assert poller.force_poll() == 0
+    assert storage.get_setting('gmail_history_id') == '100'
+
+
+def test_page_failure_replays_without_skipping_messages():
+    storage = _make_storage()
+    class Interrupted(_FakeGmailService):
+        fail = True
+        def get(self, **kwargs):
+            if kwargs['id'] == 'gmail-2' and self.fail:
+                raise RuntimeError('connection lost')
+            return super().get(**kwargs)
+    service = Interrupted([_make_msg('gmail-1', '<ONE>', 'body'), _make_msg('gmail-2', '<TWO>', 'body')])
+    poller = TestDurableCapture()._make_configured_poller(storage, service)
+    with pytest.raises(RuntimeError):
+        poller.force_poll()
+    assert storage.get_setting('gmail_history_id') is None
+    assert storage.get_source_event('gmail', 'gmail-1')['status'] == 'pending'
+    service.fail = False
+    assert poller.force_poll() == 2
+    assert poller.force_poll() == 0
+    assert storage._conn.execute('SELECT COUNT(*) FROM transactions').fetchone()[0] == 2

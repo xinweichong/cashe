@@ -219,7 +219,13 @@ def _make_in_memory_user_db():
             transaction_date DATETIME,
             ingested_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             raw_data TEXT,
-            type TEXT DEFAULT 'expense'
+            type TEXT DEFAULT 'expense',
+            original_minor_units INTEGER,
+            reporting_minor_units INTEGER,
+            conversion_status TEXT,
+            conversion_rate TEXT,
+            conversion_source TEXT,
+            conversion_quoted_at TEXT
         );
         CREATE TABLE categories (name TEXT PRIMARY KEY, keywords TEXT, icon TEXT, color TEXT, type TEXT DEFAULT 'neutral');
         CREATE TABLE ingestion_state (source TEXT PRIMARY KEY, last_processed_id TEXT, last_processed_at DATETIME, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP);
@@ -283,6 +289,10 @@ class TestCrossUserDataIsolation:
             assert r.status_code == 200
             alice_txs = r.json()
             assert any(t["merchant"] == "Secret Shop" for t in alice_txs)
+            facts = await ac.get('/api/v2/spending/month?as_of=2026-01-06')
+            assert facts.json()['current']['spending']['minor_units'] == 9900
+            evidence = await ac.get('/api/v2/spending/evidence?start=2026-01-01&end=2026-01-06')
+            assert evidence.json()['total'] == 1
 
         # Bob gets a fresh client (different session cookie jar)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
@@ -291,4 +301,327 @@ class TestCrossUserDataIsolation:
             assert r.status_code == 200
             bob_txs = r.json()
             assert not any(t["merchant"] == "Secret Shop" for t in bob_txs)
+            facts = await ac.get('/api/v2/spending/month?as_of=2026-01-06')
+            assert facts.json()['current']['spending']['minor_units'] == 0
+            evidence = await ac.get('/api/v2/spending/evidence?start=2026-01-01&end=2026-01-06')
+            assert evidence.json()['total'] == 0
 
+
+
+class TestLoginThrottling:
+    @pytest.mark.asyncio
+    async def test_failed_attempts_are_limited(self, client):
+        for _ in range(5):
+            response = await client.post("/api/login", json={"username": TEST_USERNAME, "password": "wrong"})
+            assert response.status_code == 401
+        response = await client.post("/api/login", json={"username": TEST_USERNAME, "password": TEST_PASSWORD})
+        assert response.status_code == 429
+
+    @pytest.mark.asyncio
+    async def test_unknown_users_are_limited_too(self, client):
+        for _ in range(5):
+            assert (await client.post("/api/login", json={"username": "unknown", "password": "wrong"})).status_code == 401
+        assert (await client.post("/api/login", json={"username": "unknown", "password": "wrong"})).status_code == 429
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("invalid", ["session", "expired", "revoked", "forged", "replay"])
+async def test_oauth_state_is_bound_expiring_and_single_use(in_memory_db, monkeypatch, invalid):
+    from unittest.mock import MagicMock
+    import time
+    admin = AdminStorage(make_admin_db_with_user(TEST_PASSWORD))
+    _auth.init_auth(admin)
+    manager = FakeUserManager(Storage(in_memory_db))
+    manager._ctx.poller = MagicMock()
+    manager._ctx.poller.get_auth_url.side_effect = lambda **kwargs: kwargs["state"]
+    app = create_dashboard_app(manager, admin)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        await client.post("/api/login", json={"username": TEST_USERNAME, "password": TEST_PASSWORD})
+        response = await client.get("/api/onboarding/gmail/connect-url")
+        state = response.json()["url"]
+        assert state != TEST_USERNAME and len(state) >= 32
+        if invalid == "session":
+            client.cookies.clear()
+        elif invalid == "expired":
+            now = time.monotonic()
+            monkeypatch.setattr("src.web.app.time.monotonic", lambda: now + 601)
+        elif invalid == "revoked":
+            admin.destroy_session(client.cookies["session"])
+        elif invalid == "forged":
+            state = TEST_USERNAME
+        else:
+            assert (await client.get("/oauth/callback", params={"state": state, "code": "code"})).status_code == 200
+        response = await client.get("/oauth/callback", params={"state": state, "code": "code"})
+        assert response.status_code == 400
+        assert manager._ctx.poller.complete_reauth.call_count == (1 if invalid == "replay" else 0)
+
+
+@pytest.mark.asyncio
+async def test_wallet_credentials_are_private_and_revocable(authed_client, in_memory_db):
+    import hashlib
+    response = await authed_client.post("/api/connections/apple-wallet/credential")
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store"
+    token = response.json()["token"]
+    storage = Storage(in_memory_db)
+    assert storage.get_setting("wallet_credential_hash") == hashlib.sha256(token.encode()).hexdigest()
+    status = await authed_client.get("/api/connections/apple-wallet")
+    assert status.json() == {"configured": True, "required": False}
+    assert token not in status.text
+    assert (await authed_client.delete("/api/connections/apple-wallet/credential")).status_code == 200
+    assert not storage.authorize_wallet(None)
+    assert not storage.authorize_wallet(hashlib.sha256(token.encode()).hexdigest())
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("method,path", [
+    ("get", "/api/connections/apple-wallet"),
+    ("post", "/api/connections/apple-wallet/credential"),
+    ("delete", "/api/connections/apple-wallet/credential"),
+])
+async def test_wallet_credential_routes_require_login(client, method, path):
+    assert (await getattr(client, method)(path)).status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_capture_issue_api_omits_payload_and_requeues(authed_client, in_memory_db):
+    storage = Storage(in_memory_db)
+    event = storage.record_source_event('gmail', 'private-source-id', 'private-raw-email')
+    storage.finish_source_event(event['id'], 'failed', error_code='ValueError')
+    response = await authed_client.get('/api/v2/capture/issues')
+    assert response.status_code == 200
+    assert response.json()[0]['status'] == 'failed'
+    assert 'private' not in response.text
+    assert (await authed_client.post(f"/api/v2/capture/issues/{event['id']}/retry")).json() == {'status': 'queued'}
+    assert storage.get_source_event('gmail', 'private-source-id')['status'] == 'pending'
+    assert (await authed_client.post('/api/v2/capture/issues/999/retry')).status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_capture_issue_api_requires_auth(client):
+    assert (await client.get('/api/v2/capture/issues')).status_code == 401
+    assert (await client.post('/api/v2/capture/issues/1/retry')).status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_capture_followup_api_omits_payload_and_requeues(authed_client, in_memory_db):
+    storage = Storage(in_memory_db)
+    storage.insert_transaction(source='manual', source_id='private-id', amount=12.5,
+                               followups=[('notification', {'match_source': 'private-keyword'})])
+    job = storage.pending_ingestion_effects()[0]
+    storage.finish_ingestion_effect(job['id'], error_code='RuntimeError')
+    response = await authed_client.get('/api/v2/capture/followups')
+    assert response.status_code == 200
+    assert response.json()[0]['status'] == 'failed'
+    assert 'private' not in response.text
+    assert 'payload' not in response.text
+    url = f"/api/v2/capture/followups/{job['id']}/retry"
+    assert (await authed_client.post(url)).json() == {'status': 'queued'}
+    assert storage.pending_ingestion_effects()[0]['attempts'] == 0
+    storage.finish_ingestion_effect(job['id'])
+    assert (await authed_client.post(url)).status_code == 409
+    assert (await authed_client.post('/api/v2/capture/followups/999/retry')).status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_capture_followup_api_requires_auth(client):
+    assert (await client.get('/api/v2/capture/followups')).status_code == 401
+    assert (await client.post('/api/v2/capture/followups/1/retry')).status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_spending_facts_api_requires_auth_and_valid_queries(client, authed_client):
+    assert (await client.get('/api/v2/spending/month')).status_code == 401
+    assert (await client.get('/api/v2/spending/evidence?start=2026-09-01&end=2026-09-06')).status_code == 401
+    assert (await authed_client.get('/api/v2/spending/month?as_of=invalid')).status_code == 422
+    assert (await authed_client.get('/api/v2/spending/month?as_of=0001-01-01')).status_code == 422
+    assert (await authed_client.get('/api/v2/spending/evidence?start=2026-09-06&end=2026-09-01')).status_code == 422
+    assert (await authed_client.get('/api/v2/spending/evidence?start=2026-09-01&end=2026-09-06&limit=101')).status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_spending_facts_evidence_omits_internal_columns(authed_client, in_memory_db):
+    storage = Storage(in_memory_db)
+    tx_id = storage.insert_transaction(source='manual', source_id='private-source-id', amount=12.5,
+                                       transaction_date='2026-09-05T12:00:00', raw_data='secret-email')
+    response = await authed_client.get('/api/v2/spending/month?as_of=2026-09-06')
+    assert response.status_code == 200
+    assert response.json()['current']['spending'] == {'minor_units': 1250, 'currency': 'SGD'}
+    response = await authed_client.get('/api/v2/spending/evidence?start=2026-09-01&end=2026-09-06')
+    assert response.status_code == 200
+    assert response.json()['items'][0]['id'] == tx_id
+    assert 'private-source-id' not in response.text and 'secret-email' not in response.text
+    assert 'raw_data' not in response.text and 'source_id' not in response.text
+
+
+@pytest.mark.asyncio
+async def test_spending_evidence_accepts_resolved_conversion(authed_client, in_memory_db):
+    # Foreign transactions converted at a live API rate are stored as 'resolved'.
+    storage = Storage(in_memory_db)
+    tx_id = storage.insert_transaction(source='manual', source_id='usd-live-rate', amount=10.0, currency='USD',
+                                       exchange_rate=1.35, transaction_date='2026-09-05T12:00:00')
+    in_memory_db.execute("UPDATE transactions SET conversion_status='resolved', reporting_minor_units=1350 WHERE id=?",
+                         (tx_id,))
+    response = await authed_client.get('/api/v2/spending/evidence?start=2026-09-01&end=2026-09-06')
+    assert response.status_code == 200
+    assert response.json()['items'][0]['conversion_status'] == 'resolved'
+    assert response.json()['items'][0]['amount'] == {'minor_units': 1350, 'currency': 'SGD'}
+
+
+@pytest.mark.asyncio
+async def test_weekly_spending_api_auth_validation_and_periods(client, authed_client):
+    assert (await client.get('/api/v2/spending/week')).status_code == 401
+    assert (await authed_client.get('/api/v2/spending/week?as_of=invalid')).status_code == 422
+    assert (await authed_client.get('/api/v2/spending/week?as_of=0001-01-01')).status_code == 422
+    response = await authed_client.get('/api/v2/spending/week?as_of=2026-01-01')
+    assert response.status_code == 200
+    assert response.json()['current']['start'] == '2025-12-29'
+    assert response.json()['previous']['end'] == '2025-12-25'
+
+
+@pytest.mark.asyncio
+async def test_weekday_pattern_api_requires_auth_validates_weeks_and_evidence_matches(client, authed_client, in_memory_db, monkeypatch):
+    from datetime import datetime
+    import src.spending_facts as facts_module
+    monkeypatch.setattr(facts_module, 'local_now', lambda *args: datetime(2026, 9, 14))
+    assert (await client.get('/api/v2/spending/weekday-pattern')).status_code == 401
+    assert (await authed_client.get('/api/v2/spending/weekday-pattern?weeks=0')).status_code == 422
+    storage = Storage(in_memory_db)
+    tx_id = storage.insert_transaction(source='manual', source_id='tue', amount=20,
+                                       transaction_date='2026-09-08T10:00:00')
+    response = await authed_client.get('/api/v2/spending/weekday-pattern?weeks=1')
+    assert response.status_code == 200
+    data = response.json()
+    assert data['start'] == '2026-09-07' and data['end'] == '2026-09-13'
+    tuesday = next(item for item in data['pattern'] if item['weekday'] == 1)
+    assert tuesday['average'] == {'minor_units': 2000, 'currency': 'SGD'}
+    evidence = await authed_client.get('/api/v2/spending/evidence?start=2026-09-07&end=2026-09-13&weekday=1')
+    assert [item['id'] for item in evidence.json()['items']] == [tx_id]
+    assert (await authed_client.get('/api/v2/spending/evidence?start=2026-09-07&end=2026-09-13&weekday=7')).status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_month_forecast_api_requires_auth_and_computes_from_real_data(client, authed_client, in_memory_db, monkeypatch):
+    from datetime import datetime
+    import src.forecast as forecast_module
+    monkeypatch.setattr(forecast_module, 'local_now', lambda *args: datetime(2026, 9, 28))
+    assert (await client.get('/api/v2/forecast/month')).status_code == 401
+    assert (await authed_client.get('/api/v2/forecast/month?as_of=invalid')).status_code == 422
+    storage = Storage(in_memory_db)
+    storage.insert_transaction(source='manual', source_id='sep-1', amount=50,
+                               transaction_date='2026-09-05T12:00:00')
+    response = await authed_client.get('/api/v2/forecast/month')
+    assert response.status_code == 200
+    data = response.json()
+    assert data['recorded_actual'] == {'minor_units': 5000, 'currency': 'SGD'}
+    assert data['status'] == 'unavailable'
+    assert data['reasons'] == ['insufficient_history']
+    assert data['projected_total'] is None
+
+
+@pytest.mark.asyncio
+async def test_forecast_scenario_api_requires_auth_validates_and_computes(client, authed_client, in_memory_db, monkeypatch):
+    from datetime import datetime
+    import src.forecast as forecast_module
+    monkeypatch.setattr(forecast_module, 'local_now', lambda *args: datetime(2026, 9, 28))
+    body = {"adjustments": [{"kind": "one_off_exclusion", "transaction_id": 1}]}
+    assert (await client.post('/api/v2/forecast/scenario', json=body)).status_code == 401
+    assert (await authed_client.post('/api/v2/forecast/scenario', json={"adjustments": []})).status_code == 422
+    storage = Storage(in_memory_db)
+    for day in ['2026-08-04', '2026-08-11', '2026-08-18', '2026-08-25', '2026-08-05', '2026-08-12', '2026-08-19', '2026-08-26']:
+        storage.insert_transaction(source='manual', source_id=f'hist-{day}', amount=10, merchant='Cafe',
+                                   category='Food', transaction_date=f'{day}T09:00:00')
+    tx_id = storage.insert_transaction(source='manual', source_id='splurge', amount=300, merchant='Splurge',
+                                       category='Food', transaction_date='2026-09-05T12:00:00')
+    response = await authed_client.post('/api/v2/forecast/scenario', json={
+        "adjustments": [{"kind": "one_off_exclusion", "transaction_id": tx_id}]
+    })
+    assert response.status_code == 200
+    data = response.json()
+    assert data['adjustments'][0]['amount_delta'] == {'minor_units': -30000, 'currency': 'SGD'}
+    assert data['result']['projected_total']['minor_units'] == data['base']['projected_total']['minor_units'] - 30000
+    # Read-only — no transaction, goal, or schedule state changes.
+    assert (await authed_client.get(f'/api/v2/transactions/{tx_id}')).json()['id'] == tx_id
+
+
+@pytest.mark.asyncio
+async def test_home_briefing_is_private_and_projects_safe_fields(client, authed_client, in_memory_db, monkeypatch):
+    from datetime import datetime
+    import src.storage as module
+    monkeypatch.setattr(module, 'local_now', lambda *args: datetime(2026, 9, 6))
+    storage = Storage(in_memory_db)
+    storage.insert_transaction(source='manual', source_id='private-source', amount=12.5,
+                               merchant='Cafe', transaction_date='2026-09-05T12:00:00', raw_data='secret-email')
+    storage.record_source_event('gmail', 'private-email', 'secret-raw-body')
+    assert (await client.get('/api/v2/home')).status_code == 401
+    response = await authed_client.get('/api/v2/home')
+    assert response.status_code == 200
+    data = response.json()
+    assert data['facts']['current']['spending']['minor_units'] == 1250
+    assert data['capture_issue_count'] == 1
+    assert data['recent'][0]['merchant'] == 'Cafe'
+    assert data['facts']['current']['income'] is None
+    assert data['freshness']['gmail_connected'] is False
+    assert 'private-source' not in response.text and 'secret-' not in response.text
+    assert 'raw_data' not in response.text
+
+
+@pytest.mark.asyncio
+async def test_home_briefing_exposes_driver_and_capture_freshness_fields(authed_client, in_memory_db, monkeypatch):
+    from datetime import datetime
+    import src.storage as module
+    monkeypatch.setattr(module, 'local_now', lambda *args: datetime(2026, 9, 6))
+    storage = Storage(in_memory_db)
+    storage.insert_transaction(source='manual', source_id='old-source', amount=10,
+                               merchant='Cafe', category='Food', transaction_date='2026-08-05T12:00:00')
+    storage.insert_transaction(source='manual', source_id='new-source', amount=100,
+                               merchant='Fancy Bistro', category='Food', transaction_date='2026-09-05T12:00:00')
+    response = await authed_client.get('/api/v2/home')
+    assert response.status_code == 200
+    data = response.json()
+    assert data['facts']['top_category_driver']['category'] == 'Food'
+    assert data['facts']['top_category_driver']['merchant_driver']['merchant'] == 'Fancy Bistro'
+    assert data['facts']['trip_drivers'] == []
+    assert data['increased_commitments'] == []
+    assert data['freshness']['last_capture_processed_at'] is None
+
+
+@pytest.mark.asyncio
+async def test_home_upcoming_excludes_matched_cancelled_and_outside_window(authed_client, in_memory_db, monkeypatch):
+    from datetime import datetime
+    import src.storage as module
+    monkeypatch.setattr(module, 'local_now', lambda *args: datetime(2026, 9, 6))
+    storage = Storage(in_memory_db)
+    storage.set_setting('subscriptions_enabled', 'true')
+    sub = storage.create_subscription(merchant='Service', frequency='monthly')
+    storage.create_upcoming_transaction(sub, '2026-09-07', 10)
+    storage.create_upcoming_transaction(sub, '2026-09-08', None)
+    storage.create_upcoming_transaction(sub, '2026-09-20', 999)
+    old = storage.create_upcoming_transaction(sub, '2026-09-09', 999)
+    storage.dismiss_planned_charge(old)
+    data = (await authed_client.get('/api/v2/home')).json()
+    assert len(data['upcoming']) == 2
+    assert data['upcoming_total']['minor_units'] == 1000
+    assert data['upcoming_unknown_count'] == 1
+    storage.update_subscription(sub, status='cancelled')
+    assert (await authed_client.get('/api/v2/home')).json()['upcoming'] == []
+
+
+@pytest.mark.asyncio
+async def test_home_flag_defaults_off_and_validates_atomically(authed_client):
+    assert (await authed_client.get('/api/settings')).json()['home_briefing_enabled'] is False
+    assert (await authed_client.put('/api/settings', json={'home_briefing_enabled': True, 'anomaly_multiplier': 99})).status_code == 422
+    assert (await authed_client.get('/api/settings')).json()['home_briefing_enabled'] is False
+    assert (await authed_client.put('/api/settings', json={'home_briefing_enabled': 'true'})).status_code == 422
+    assert (await authed_client.put('/api/settings', json={'home_briefing_enabled': True})).status_code == 200
+    assert (await authed_client.get('/api/settings')).json()['home_briefing_enabled'] is True
+
+
+@pytest.mark.asyncio
+async def test_capture_review_pagination(authed_client, in_memory_db):
+    storage = Storage(in_memory_db)
+    first = storage.record_source_event('gmail', 'first', '{}')
+    second = storage.record_source_event('gmail', 'second', '{}')
+    assert (await authed_client.get('/api/v2/capture/issues?limit=1')).json()[0]['id'] == second['id']
+    assert (await authed_client.get('/api/v2/capture/issues?limit=1&offset=1')).json()[0]['id'] == first['id']
+    assert (await authed_client.get('/api/v2/capture/issues?offset=-1')).status_code == 422

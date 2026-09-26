@@ -5,10 +5,11 @@ main.py and web/app.py never create them directly.
 """
 import logging
 import os
-import sqlite3
 from dataclasses import dataclass
 from typing import Optional
 
+from src.config import DEFAULT_TIMEZONE
+from src.db import init_db
 from src.subscriptions import SubscriptionMatcher
 
 logger = logging.getLogger(__name__)
@@ -92,8 +93,7 @@ class UserManager:
         user_dir = os.path.join(self._data_dir, "users", username)
         os.makedirs(user_dir, exist_ok=True)
 
-        db_path = os.path.join(user_dir, "expense_tracker.db")
-        _init_user_db(db_path)
+        db_path = self._user_db_path(username)
 
         # Record in admin DB (no-op if already exists)
         if self._admin_storage.get_user(username) is None:
@@ -123,6 +123,7 @@ class UserManager:
             f"monthly_{username}",
             f"daily_{username}",
             f"subscription_matcher_{username}",
+            f"capture_retry_{username}",
         ]:
             if self._scheduler is not None:
                 try:
@@ -147,7 +148,6 @@ class UserManager:
         from src.gmail_poller import GmailPoller
         from src.ingestion import IngestionPipeline
 
-        from src.main import init_db
         conn = init_db(db_path)
         storage = Storage(conn)
 
@@ -161,10 +161,11 @@ class UserManager:
         sender_filters = gmail_cfg.get("sender_filters", [])
 
         bot = self._bot
-        suggestion_callback = (
-            (lambda m, f, a: bot.notify_subscription_suggestion(username, m, f, a))
-            if bot is not None else None
-        )
+
+        def suggestion_callback(merchant, frequency, amount, suggestion_id):
+            if bot is not None:
+                return bot.notify_subscription_suggestion(username, merchant, frequency, amount, suggestion_id)
+
         poller = GmailPoller(
             credentials_path=credentials_path,
             token_path=token_path,
@@ -181,7 +182,6 @@ class UserManager:
             ),
             poll_interval=poll_interval,
         )
-        # Attach exchange_service and categorizer to context for webhook direct path
         ctx = UserContext(
             username=username,
             storage=storage,
@@ -190,26 +190,19 @@ class UserManager:
             db_path=db_path,
             token_path=token_path,
         )
-        # Back-reference so webhook can reach exchange_service
-        ctx.exchange_service = self._exchange_service  # type: ignore[attr-defined]
         return ctx
 
     def _make_on_transaction(self, username: str, storage, categorizer):
         bot = self._bot
 
-        def on_transaction(tx_dict: dict) -> None:
+        def on_transaction(tx_dict: dict):
             if bot is None:
                 return
-            try:
-                tx_id = tx_dict["id"]
-                amount = float(tx_dict.get("amount", 0))
-                merchant = tx_dict.get("merchant", "")
-                category = tx_dict.get("category")
-                source = tx_dict.get("source", "")
-                # Pipeline-ingested transactions are already categorized — treat as "ingest"
-                bot.notify_transaction(tx_id, amount, merchant, category, "ingest", source, username=username)
-            except Exception as e:
-                logger.warning("notify_transaction failed for %s: %s", username, e)
+            return bot.notify_transaction(
+                tx_dict["id"], float(tx_dict["amount"]), tx_dict.get("merchant", ""),
+                tx_dict.get("category"), tx_dict.get("_match_source", "ingest"),
+                tx_dict.get("source", ""), username=username,
+            )
 
         return on_transaction
 
@@ -228,29 +221,43 @@ class UserManager:
 
         return on_auth_error
 
+    def _tracked(self, job_name: str, fn):
+        """Wrap a zero-arg scheduler callable with persisted job-run health tracking."""
+        def wrapped():
+            run_id = self._admin_storage.record_job_start(job_name)
+            try:
+                fn()
+                self._admin_storage.record_job_success(run_id)
+            except Exception as exc:
+                self._admin_storage.record_job_failure(run_id, type(exc).__name__)
+                raise
+        return wrapped
+
     def _register_scheduler_jobs(self, username: str) -> None:
         """Register weekly/monthly/daily summary APScheduler jobs for one user."""
         if self._scheduler is None:
             return
         ctx = self.get(username)
-        tz = self._config.get("timezone", "Asia/Singapore")
+        tz = self._config.get("timezone", DEFAULT_TIMEZONE)
         bot = self._bot
 
         def weekly():
             if bot and ctx:
-                bot.notify_text(_weekly_summary(ctx.storage, bot, self._llm_service), username)
+                bot.notify_text(_weekly_summary(ctx.storage, bot), username)
 
         def monthly():
             if bot and ctx:
-                bot.notify_text(_monthly_summary(ctx.storage, bot, self._llm_service), username)
+                bot.notify_text(_monthly_summary(ctx.storage, bot), username)
 
         def daily():
             ctx = self.get(username)
             if ctx:
                 if self._llm_service:
                     _generate_llm_insight(ctx.storage, self._llm_service)
-                bot.notify_daily_digest(username)
-                if bot and ctx:
+                    _generate_llm_daily_insight(ctx.storage, self._llm_service)
+                    _generate_llm_weekly_insight(ctx.storage, self._llm_service)
+                if bot:
+                    bot.notify_daily_digest(username)
                     _check_budget_alerts(ctx.storage, bot, username)
 
         def run_subscriptions():
@@ -270,76 +277,33 @@ class UserManager:
             id=f"daily_{username}", replace_existing=True,
         )
         self._scheduler.add_job(
-            run_subscriptions, "cron", hour=6, minute=0, timezone=tz,
+            self._tracked(f"subscription_matcher_{username}", run_subscriptions),
+            "cron", hour=6, minute=0, timezone=tz,
             id=f"subscription_matcher_{username}", replace_existing=True,
         )
+        if ctx and ctx.poller and ctx.poller.pipeline:
+            self._scheduler.add_job(
+                self._tracked(f"capture_retry_{username}", ctx.poller.pipeline.retry_pending),
+                "interval", seconds=120,
+                id=f"capture_retry_{username}", replace_existing=True, max_instances=1,
+            )
 
-
-
-# ---------------------------------------------------------------------------
-# DB initialisation (extracted so it can be called without a full UserManager)
-# ---------------------------------------------------------------------------
-
-def _init_user_db(db_path: str) -> sqlite3.Connection:
-    """Initialise (or open) a user's expense_tracker.db with the full schema."""
-    # Reuse the init_db logic from main.py by importing it at call time to
-    # avoid circular imports (main.py imports UserManager).
-    from src.main import init_db
-    return init_db(db_path)
 
 
 # ---------------------------------------------------------------------------
 # Summary helpers (used by scheduler jobs)
 # ---------------------------------------------------------------------------
 
-def _weekly_summary(storage, bot, llm_service=None) -> str:
-    import json
-    from src.config import local_now
+def _weekly_summary(storage, bot) -> str:
+    """Scheduled Sunday report: current Monday through the local send date."""
+    return bot._format_spending_period(storage, "week", include_evidence=False)
+
+
+def _monthly_summary(storage, bot) -> str:
+    """Scheduled first-of-month report: the completed previous calendar month."""
     from datetime import timedelta
-    end = local_now()
-    start = end - timedelta(days=7)
-    text = bot.format_weekly_summary(
-        start.strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d"), storage=storage
-    )
-    if llm_service:
-        _generate_weekly_insight(storage, llm_service)
-        insight_str = storage.get_setting("llm_weekly_insight_content", "")
-        if insight_str:
-            try:
-                insight = json.loads(insight_str)
-                narrative = insight.get("narrative", "")
-                nudges = insight.get("nudges", [])
-                if narrative:
-                    text += "\n\n*AI Weekly Insight*\n" + narrative
-                    if nudges:
-                        text += "\n" + "\n".join(f"• {n}" for n in nudges)
-            except Exception:
-                pass
-    return text
-
-
-def _monthly_summary(storage, bot, llm_service=None) -> str:
-    import json
-    from src.config import local_now
-    now = local_now()
-    start = now.replace(day=1).strftime("%Y-%m-%d")
-    end = now.strftime("%Y-%m-%d")
-    text = bot.format_monthly_summary(start, end, storage=storage)
-    if llm_service:
-        _generate_monthly_insight(storage, llm_service)
-        insight_str = storage.get_setting("llm_monthly_insight_content", "")
-        if insight_str:
-            try:
-                insight = json.loads(insight_str)
-                narrative = insight.get("narrative", "")
-                nudges = insight.get("nudges", [])
-                if narrative:
-                    text += "\n\n*AI Monthly Insight*\n" + narrative
-                    if nudges:
-                        text += "\n" + "\n".join(f"• {n}" for n in nudges)
-            except Exception:
-                pass
-    return text
+    previous_end = bot._local_now().date().replace(day=1) - timedelta(days=1)
+    return bot._format_spending_period(storage, "month", as_of=previous_end, include_evidence=False)
 
 
 def _check_budget_alerts(storage, bot, username) -> None:
@@ -378,93 +342,6 @@ def _check_budget_alerts(storage, bot, username) -> None:
             pass
 
 
-def _generate_weekly_insight(storage, llm_service) -> None:
-    """Generate weekly LLM insight and cache in app_settings."""
-    import json
-    from src.analytics import get_category_comparison, get_spending_velocity
-    from src.config import local_now
-    from datetime import timedelta
-
-    try:
-        now = local_now()
-        end = now.strftime("%Y-%m-%d")
-        start = (now - timedelta(days=7)).strftime("%Y-%m-%d")
-
-        summary_raw = storage.get_spending_summary(start_date=start, end_date=end)
-        velocity = get_spending_velocity(storage._conn)
-        categories = get_category_comparison(storage._conn, period="week")
-
-        top_cats = [
-            {"name": c["category"], "amount": c["current"]}
-            for c in categories[:5]
-        ]
-
-        summary_dict = {
-            "period_label": f"{start} to {end}",
-            "total_expense": round(summary_raw["total"], 2),
-            "total_income": 0,  # weekly view focuses on expense
-            "top_categories": top_cats,
-            "velocity_status": velocity.get("status"),
-        }
-
-        result = llm_service.generate_weekly_insight(summary_dict)
-        storage.set_setting("llm_weekly_insight_content", json.dumps(result))
-        storage.set_setting("llm_weekly_insight_generated_at", now.isoformat())
-        logger.info("Weekly LLM insight cached successfully")
-    except Exception as e:
-        logger.warning("Weekly LLM insight generation failed: %s", e)
-
-
-def _generate_monthly_insight(storage, llm_service) -> None:
-    """Generate monthly LLM insight and cache in app_settings."""
-    import json
-    from src.analytics import get_period_comparison, get_category_comparison, get_spending_velocity
-    from src.config import local_now
-
-    try:
-        now = local_now()
-        start = now.replace(day=1).strftime("%Y-%m-%d")
-        end = now.strftime("%Y-%m-%d")
-
-        comparison = get_period_comparison(storage._conn, period="month")
-        categories = get_category_comparison(storage._conn, period="month")
-        velocity = get_spending_velocity(storage._conn)
-
-        balance_row = storage._conn.execute(
-            """SELECT
-                 COALESCE(SUM(CASE WHEN type='income' THEN amount*exchange_rate END), 0) AS income,
-                 COALESCE(SUM(CASE WHEN (type IS NULL OR type='expense') THEN amount*exchange_rate END), 0) AS expenses
-               FROM transactions
-               WHERE DATE(transaction_date) BETWEEN ? AND ?""",
-            (start, end),
-        ).fetchone()
-        income = balance_row["income"]
-        expenses = balance_row["expenses"]
-        savings_rate = ((income - expenses) / income * 100) if income > 0 else 0
-
-        top_cats = [
-            {"name": c["category"], "amount": c["current"], "change_pct": c["change_percent"]}
-            for c in categories[:5]
-        ]
-
-        summary_dict = {
-            "period_label": now.strftime("%B %Y"),
-            "total_expense": round(expenses, 2),
-            "total_income": round(income, 2),
-            "savings_rate": round(savings_rate, 1),
-            "change_vs_last_month_pct": comparison.get("change_percent"),
-            "top_categories": top_cats,
-            "velocity_status": velocity.get("status"),
-        }
-
-        result = llm_service.generate_monthly_insight(summary_dict)
-        storage.set_setting("llm_monthly_insight_content", json.dumps(result))
-        storage.set_setting("llm_monthly_insight_generated_at", now.isoformat())
-        logger.info("Monthly LLM insight cached successfully")
-    except Exception as e:
-        logger.warning("Monthly LLM insight generation failed: %s", e)
-
-
 def _generate_llm_insight(storage, llm_service) -> None:
     """Generate LLM insight from current month summary and cache in app_settings.
 
@@ -485,17 +362,31 @@ def _generate_llm_insight(storage, llm_service) -> None:
         categories = get_category_comparison(storage._conn, period="month")
         velocity = get_spending_velocity(storage._conn)
 
+        # reporting_minor_units (R02 canonical money) rather than amount *
+        # exchange_rate — a legacy exchange_rate of 1.0 is a silent
+        # unresolved fallback, not real conversion evidence.
         balance_row = storage._conn.execute(
             """SELECT
-                 COALESCE(SUM(CASE WHEN type='income' THEN amount*exchange_rate END), 0) AS income,
-                 COALESCE(SUM(CASE WHEN (type IS NULL OR type='expense') THEN amount*exchange_rate END), 0) AS expenses
+                 COALESCE(SUM(CASE WHEN type='income' THEN reporting_minor_units END), 0) / 100.0 AS income,
+                 COALESCE(SUM(CASE WHEN (type IS NULL OR type='expense') THEN reporting_minor_units END), 0) / 100.0 AS expenses
                FROM transactions
                WHERE DATE(transaction_date) BETWEEN ? AND ?""",
             (start, end),
         ).fetchone()
         income = balance_row["income"]
         expenses = balance_row["expenses"]
-        savings_rate = ((income - expenses) / income * 100) if income > 0 else 0
+        if income <= 0:
+            # No recorded income this period means savings_rate has no
+            # meaningful denominator — the 0-income fallback used to compute
+            # a fabricated 0% rate and still ask the LLM to narrate it, the
+            # same "misleading advice from absent data" gap get_health_score
+            # already guards against via has_income_data. Skip generation
+            # entirely rather than cache a plausible-sounding but meaningless
+            # narrative; any previously cached (now-stale) insight is left
+            # as-is for the frontend's existing is_stale handling.
+            logger.info("Skipping LLM insight generation: no income recorded this period")
+            return
+        savings_rate = (income - expenses) / income * 100
 
         top_cats = [
             {"name": c["category"], "amount": c["current"], "change_pct": c["change_percent"]}
@@ -518,3 +409,104 @@ def _generate_llm_insight(storage, llm_service) -> None:
         logger.info("LLM insight cached successfully")
     except Exception as e:
         logger.warning("LLM insight generation failed: %s", e)
+
+
+def _period_income_expense(storage, start: str, end: str) -> tuple[float, float]:
+    """R02 canonical income/expense totals for an inclusive date range.
+
+    Uses reporting_minor_units rather than a raw amount * exchange_rate
+    recompute — a legacy exchange_rate of 1.0 is a silent unresolved
+    fallback, not real conversion evidence.
+    """
+    row = storage._conn.execute(
+        """SELECT
+             COALESCE(SUM(CASE WHEN type='income' THEN reporting_minor_units END), 0) / 100.0 AS income,
+             COALESCE(SUM(CASE WHEN (type IS NULL OR type='expense') THEN reporting_minor_units END), 0) / 100.0 AS expenses
+           FROM transactions
+           WHERE DATE(transaction_date) BETWEEN ? AND ?""",
+        (start, end),
+    ).fetchone()
+    return row["income"], row["expenses"]
+
+
+def _period_top_categories(storage, start: str, end: str, limit: int = 5) -> list[dict]:
+    rows = storage._conn.execute(
+        """SELECT category, COALESCE(SUM(reporting_minor_units), 0) / 100.0 AS total
+           FROM transactions
+           WHERE (type IS NULL OR type = 'expense') AND category IS NOT NULL
+             AND DATE(transaction_date) BETWEEN ? AND ?
+           GROUP BY category ORDER BY total DESC LIMIT ?""",
+        (start, end, limit),
+    ).fetchall()
+    return [{"name": r["category"], "amount": round(r["total"], 2), "change_pct": None} for r in rows]
+
+
+def _generate_llm_daily_insight(storage, llm_service) -> None:
+    """Generate an LLM narrative for yesterday's spending, cached for the
+    morning digest and /yesterday. Skipped (leaving any prior cache stale)
+    when nothing was spent yesterday — there's nothing to narrate."""
+    import json
+    from datetime import timedelta
+    from src.config import local_now
+
+    logger.info("Generating daily LLM insight...")
+    try:
+        now = local_now()
+        yesterday = (now - timedelta(days=1)).strftime("%Y-%m-%d")
+        income, expense = _period_income_expense(storage, yesterday, yesterday)
+        if expense <= 0:
+            logger.info("Skipping daily LLM insight: nothing spent yesterday")
+            return
+        summary_dict = {
+            "period_label": "Yesterday",
+            "total_expense": round(expense, 2),
+            "total_income": round(income, 2),
+            "savings_rate": None,
+            "change_vs_last_month_pct": None,
+            "top_categories": _period_top_categories(storage, yesterday, yesterday),
+            "velocity_status": None,
+        }
+        result = llm_service.generate_period_insight(summary_dict)
+        storage.set_setting("llm_daily_insight_content", json.dumps(result))
+        storage.set_setting("llm_daily_insight_generated_at", now.isoformat())
+        logger.info("Daily LLM insight cached successfully")
+    except Exception as e:
+        logger.warning("Daily LLM insight generation failed: %s", e)
+
+
+def _generate_llm_weekly_insight(storage, llm_service) -> None:
+    """Generate an LLM narrative for the current week to date, cached for /week."""
+    import json
+    from src.analytics import get_category_comparison, get_period_comparison
+    from src.config import local_now
+
+    logger.info("Generating weekly LLM insight...")
+    try:
+        now = local_now()
+        comparison = get_period_comparison(storage._conn, period="week")
+        start, end = comparison["current_start"], comparison["current_end"]
+        income, expense = _period_income_expense(storage, start, end)
+        if expense <= 0:
+            logger.info("Skipping weekly LLM insight: nothing spent this week")
+            return
+        savings_rate = round((income - expense) / income * 100, 1) if income > 0 else None
+        categories = get_category_comparison(storage._conn, period="week")
+        top_cats = [
+            {"name": c["category"], "amount": c["current"], "change_pct": c["change_percent"]}
+            for c in categories[:5]
+        ]
+        summary_dict = {
+            "period_label": "This week",
+            "total_expense": round(expense, 2),
+            "total_income": round(income, 2),
+            "savings_rate": savings_rate,
+            "change_vs_last_month_pct": comparison.get("change_percent"),
+            "top_categories": top_cats,
+            "velocity_status": None,
+        }
+        result = llm_service.generate_period_insight(summary_dict)
+        storage.set_setting("llm_weekly_insight_content", json.dumps(result))
+        storage.set_setting("llm_weekly_insight_generated_at", now.isoformat())
+        logger.info("Weekly LLM insight cached successfully")
+    except Exception as e:
+        logger.warning("Weekly LLM insight generation failed: %s", e)

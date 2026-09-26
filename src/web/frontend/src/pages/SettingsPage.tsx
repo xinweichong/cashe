@@ -2,15 +2,18 @@ import { useState, useEffect, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useQueryClient, useMutation, useQuery } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Card } from '@/components/ui/card';
 import { PageCard } from '@/components/ui/cards';
+import { CategoryColorPicker, CategoryIconPicker } from '@/components/categories/CategoryPickers';
 import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
@@ -22,21 +25,17 @@ import {
   useMerchantOverrides,
 } from '@/hooks/useCategories';
 import { useCurrentUser, useInvalidateCurrentUser } from '@/hooks/useCurrentUser';
-import { useAuth } from '@/hooks/useAuth';
+import { useAuth } from '@/hooks/useAuthContext';
 import { api, type Category, type SessionInfo } from '@/api/client';
-import { setCategoryColors, PALETTE, getCategoryColor } from '@/lib/utils';
-import { springs, staggerContainerVariants, staggerItemVariants } from '@/lib/animations';
+import { getCategoryColor } from '@/lib/utils';
+import { staggerContainerVariants, staggerItemVariants } from '@/lib/motionPresets';
 import {
   Pencil, Trash2, Plus, X, ChevronDown,
   CheckCircle2, Wifi, WifiOff, AlertTriangle,
 } from 'lucide-react';
 import { TelegramStep, GmailStep, AppleWalletStep } from '@/components/onboarding/steps';
+import { useSettings } from '@/hooks/useSettings';
 
-const ICON_OPTIONS = [
-  '🍜', '🚗', '🛒', '📄', '🎬', '📌', '💰', '🏥', '✈️', '🎓',
-  '🏠', '💎', '🎮', '📱', '🏋️', '🎨', '🐾', '🎁', '☕', '🍕',
-  '👕', '💊', '🔧', '🎵', '📖', '🌺', '⚡', '🎪', '🌊', '🍀',
-];
 
 const CAT_TYPES = [
   { value: 'needs',   label: 'Needs'   },
@@ -98,10 +97,6 @@ export function SettingsPage() {
   const updateCat = useUpdateCategory();
   const deleteCat = useDeleteCategory();
 
-  useEffect(() => {
-    if (categories) setCategoryColors(categories);
-  }, [categories]);
-
   const deleteOverride = useMutation({
     mutationFn: (merchant: string) => api.deleteMerchantOverride(merchant),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['merchant-overrides'] }),
@@ -160,30 +155,37 @@ export function SettingsPage() {
     );
   };
 
-  const handleDeleteCategory = (name: string) => {
-    if (confirm(`Delete category "${name}"? Transactions will be moved to "Other".`)) {
-      deleteCat.mutate(name, { onSuccess: () => qc.invalidateQueries({ queryKey: ['merchant-overrides'] }) });
-    }
-  };
+  const [pendingConfirm, setPendingConfirm] = useState<{
+    title: string; description: string; confirmLabel: string; run: () => void;
+  } | null>(null);
 
-  const handleDeleteOverride = (merchant: string) => {
-    if (confirm(`Remove learned override for "${merchant}"?`)) {
-      deleteOverride.mutate(merchant);
-    }
-  };
+  const handleDeleteCategory = (name: string) => setPendingConfirm({
+    title: `Delete category "${name}"?`,
+    description: 'Its transactions will be moved to "Other".',
+    confirmLabel: 'Delete category',
+    run: () => deleteCat.mutate(name, { onSuccess: () => qc.invalidateQueries({ queryKey: ['merchant-overrides'] }) }),
+  });
+
+  const handleDeleteOverride = (merchant: string) => setPendingConfirm({
+    title: `Remove learned override for "${merchant}"?`,
+    description: 'Future transactions from this merchant will be categorized by keywords again.',
+    confirmLabel: 'Remove override',
+    run: () => deleteOverride.mutate(merchant),
+  });
 
   // ── Settings (feature toggles + alert thresholds) ───────────────────────────
   const [anomalyMultiplier, setAnomalyMultiplier] = useState<string>('');
   const [velocityThreshold, setVelocityThreshold] = useState<string>('');
   const [settingsError, setSettingsError] = useState('');
 
-  const { data: settings, refetch: refetchSettings } = useQuery({
-    queryKey: ['settings'],
-    queryFn: () => api.getSettings(),
-  });
+  const { data: settings, refetch: refetchSettings } = useSettings();
 
+  // Syncs the editable draft from server data, which arrives asynchronously
+  // after mount (and again on refetch) — there's no prop/render-time value to
+  // derive this from directly.
   useEffect(() => {
     if (settings) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setAnomalyMultiplier(String(settings.anomaly_multiplier));
       setVelocityThreshold(String(settings.velocity_alert_threshold));
     }
@@ -259,8 +261,14 @@ export function SettingsPage() {
   const [disconnectingGmail, setDisconnectingGmail] = useState(false);
   const [disconnectingTelegram, setDisconnectingTelegram] = useState(false);
 
-  const handleDisconnectGmail = async () => {
-    if (!confirm('Disconnect Gmail? This stops email ingestion — it\'s gone for good.')) return;
+  const handleDisconnectGmail = () => setPendingConfirm({
+    title: 'Disconnect Gmail?',
+    description: 'This stops email ingestion — it\'s gone for good.',
+    confirmLabel: 'Disconnect Gmail',
+    run: () => void disconnectGmail(),
+  });
+
+  const disconnectGmail = async () => {
     setDisconnectingGmail(true);
     try {
       await api.disconnectGmail();
@@ -270,8 +278,14 @@ export function SettingsPage() {
     }
   };
 
-  const handleDisconnectTelegram = async () => {
-    if (!confirm('Unlink Telegram? You will no longer receive transaction notifications.')) return;
+  const handleDisconnectTelegram = () => setPendingConfirm({
+    title: 'Unlink Telegram?',
+    description: 'You will no longer receive transaction notifications.',
+    confirmLabel: 'Unlink Telegram',
+    run: () => void disconnectTelegram(),
+  });
+
+  const disconnectTelegram = async () => {
     setDisconnectingTelegram(true);
     try {
       await api.disconnectTelegram();
@@ -333,7 +347,6 @@ export function SettingsPage() {
                 placeholder="Current password"
                 value={currentPw}
                 onChange={(e) => setCurrentPw(e.target.value)}
-                className="bg-background border-border"
                 autoComplete="current-password"
               />
               <Input
@@ -341,7 +354,6 @@ export function SettingsPage() {
                 placeholder="New password"
                 value={newPw}
                 onChange={(e) => setNewPw(e.target.value)}
-                className="bg-background border-border"
                 autoComplete="new-password"
               />
               <Input
@@ -349,7 +361,6 @@ export function SettingsPage() {
                 placeholder="Confirm new password"
                 value={confirmPw}
                 onChange={(e) => setConfirmPw(e.target.value)}
-                className="bg-background border-border"
                 autoComplete="new-password"
               />
               {pwError && <p className="text-sm text-destructive">{pwError}</p>}
@@ -382,7 +393,8 @@ export function SettingsPage() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-7 w-7 text-destructive shrink-0"
+                          className="text-destructive shrink-0"
+                          aria-label="Remove session"
                           onClick={() => removeSession.mutate(s.token)}
                           disabled={removeSession.isPending}
                         >
@@ -552,14 +564,17 @@ export function SettingsPage() {
       <div className="area-right grid-scroll-panel space-y-4">
 
         {/* Categories */}
-        <Card className="border-border">
-          <div className="p-4 border-b border-border flex items-center justify-between">
-            <h2 className="font-medium">Categories</h2>
+        <PageCard
+          title="Categories"
+          headerClassName="border-b border-border"
+          contentClassName="p-0"
+          action={
             <Button size="sm" variant="ghost" onClick={() => { setShowAddCategory(true); setCatError(''); }}>
               <Plus className="w-4 h-4 mr-1" />
               Add
             </Button>
-          </div>
+          }
+        >
           <motion.div
             className="divide-y divide-border"
             variants={staggerContainerVariants}
@@ -578,18 +593,7 @@ export function SettingsPage() {
                     <div className="space-y-3">
                       <div className="shrink-0">
                         <label className="text-xs text-muted block mb-1">Icon</label>
-                        <div className="flex flex-wrap gap-1 max-w-[200px]">
-                          {ICON_OPTIONS.map((ic) => (
-                            <button
-                              key={ic}
-                              type="button"
-                              className={`w-7 h-7 rounded text-sm flex items-center justify-center border transition-colors ${editIcon === ic ? 'border-primary bg-primary/10' : 'border-transparent hover:bg-accent'}`}
-                              onClick={() => setEditIcon(ic)}
-                            >
-                              {ic}
-                            </button>
-                          ))}
-                        </div>
+                        <CategoryIconPicker value={editIcon} onChange={setEditIcon} />
                       </div>
                       <div>
                         <label className="text-xs text-muted">Keywords (comma-separated)</label>
@@ -597,31 +601,17 @@ export function SettingsPage() {
                           value={editKeywords}
                           onChange={(e) => setEditKeywords(e.target.value)}
                           placeholder="keyword1, keyword2"
-                          className="bg-background border-border text-sm"
+                          className="text-sm"
                           autoFocus
                         />
                       </div>
                       <div>
                         <label className="text-xs text-muted">Color</label>
-                        <div className="flex flex-wrap gap-2 mt-1">
-                          {PALETTE.map((c) => {
-                            const taken = usedColors.includes(c.toLowerCase()) && (cat.color?.toLowerCase() !== c.toLowerCase());
-                            return (
-                              <motion.button
-                                key={c}
-                                type="button"
-                                disabled={taken}
-                                title={taken ? 'Already in use' : c}
-                                className={`w-7 h-7 rounded-full border-2 transition-colors ${editColor === c ? 'border-white' : 'border-transparent'} ${taken ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer'}`}
-                                style={{ backgroundColor: c }}
-                                onClick={() => setEditColor(c)}
-                                animate={{ scale: editColor === c ? 1.1 : 1 }}
-                                whileHover={taken ? {} : { scale: editColor === c ? 1.1 : 1.05 }}
-                                transition={springs.snappy}
-                              />
-                            );
-                          })}
-                        </div>
+                        <CategoryColorPicker
+                          value={editColor}
+                          onChange={setEditColor}
+                          taken={(c) => usedColors.includes(c.toLowerCase()) && cat.color?.toLowerCase() !== c.toLowerCase()}
+                        />
                       </div>
                       {catError && <p className="text-xs text-destructive">{catError}</p>}
                       <div className="flex gap-2">
@@ -641,11 +631,12 @@ export function SettingsPage() {
                           <span className="text-sm font-medium truncate">{cat.name}</span>
                         </div>
                         <div className="flex gap-1">
-                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => startEdit(cat)}>
+                          <Button variant="ghost" size="icon" aria-label={`Edit ${cat.name}`} onClick={() => startEdit(cat)}>
                             <Pencil className="w-3.5 h-3.5" />
                           </Button>
                           <Button
-                            variant="ghost" size="icon" className="h-7 w-7 text-destructive"
+                            variant="ghost" size="icon" className="text-destructive"
+                            aria-label={`Delete ${cat.name}`}
                             onClick={() => handleDeleteCategory(cat.name)}
                             disabled={deleteCat.isPending}
                           >
@@ -671,7 +662,7 @@ export function SettingsPage() {
                       {cat.keywords?.trim() && (
                         <div className="flex flex-wrap gap-1 mt-1.5 ml-7">
                           {cat.keywords.split(',').map((kw) => (
-                            <Badge key={kw.trim()} variant="outline" className="text-xs border-border">
+                            <Badge key={kw.trim()} variant="outline">
                               {kw.trim()}
                             </Badge>
                           ))}
@@ -679,14 +670,17 @@ export function SettingsPage() {
                       )}
                       {(overridesByCategory.get(cat.name)?.length ?? 0) > 0 && (
                         <div className="mt-1.5 ml-7">
-                          <button
+                          <Button
                             type="button"
+                            variant="outline"
+                            size="sm"
+                            className="text-xs text-muted"
+                            aria-expanded={expandedCategory === cat.name}
                             onClick={() => setExpandedCategory(expandedCategory === cat.name ? null : cat.name)}
-                            className="flex items-center gap-1 px-2 py-0.5 text-xs rounded-full border border-border text-muted hover:text-foreground hover:border-foreground/50 transition-colors"
                           >
                             <span>{overridesByCategory.get(cat.name)!.length} learned</span>
                             <ChevronDown className={`w-3 h-3 transition-transform ${expandedCategory === cat.name ? 'rotate-180' : ''}`} />
-                          </button>
+                          </Button>
                           {expandedCategory === cat.name && (
                             <div className="flex flex-wrap gap-1.5 mt-2">
                               {overridesByCategory.get(cat.name)!.map((merchant) => (
@@ -696,6 +690,7 @@ export function SettingsPage() {
                                     type="button"
                                     onClick={() => handleDeleteOverride(merchant)}
                                     disabled={deleteOverride.isPending}
+                                    aria-label={`Remove learned override for ${merchant}`}
                                     className="text-muted hover:text-destructive transition-colors"
                                   >
                                     <X className="w-2.5 h-2.5" />
@@ -715,7 +710,7 @@ export function SettingsPage() {
               <div className="p-6 text-center text-muted text-sm">No categories yet</div>
             )}
           </motion.div>
-        </Card>
+        </PageCard>
 
         {/* Feature Toggles */}
         <div id="feature-toggles">
@@ -728,17 +723,16 @@ export function SettingsPage() {
                 { key: 'subscriptions_enabled' as const, label: 'Subscriptions', desc: 'Track recurring services and upcoming charges' },
                 { key: 'recurring_enabled' as const, label: 'Recurring Transactions', desc: 'Detect and surface repeating transaction patterns' },
               ]).map(({ key, label, desc }) => (
-                <div key={key} className="flex items-center justify-between py-4">
-                  <div>
+                <div key={key} className="flex items-center justify-between gap-4 py-4">
+                  <div className="min-w-0 flex-1">
                     <p className="text-sm font-medium text-foreground">{label}</p>
-                    <p className="text-xs text-muted font-mono">{desc}</p>
+                    <p className="text-xs text-muted">{desc}</p>
                   </div>
-                  <button
-                    onClick={() => toggleSetting(key, !settings?.[key])}
-                    className={`relative w-10 h-5 rounded-full transition-colors ${settings?.[key] ? 'toggle-on' : 'bg-foreground/20'}`}
-                  >
-                    <span className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${settings?.[key] ? 'translate-x-5' : 'translate-x-0'}`} />
-                  </button>
+                  <Switch
+                    checked={!!settings?.[key]}
+                    onCheckedChange={(next) => toggleSetting(key, next)}
+                    aria-label={label}
+                  />
                 </div>
               ))}
             </div>
@@ -768,7 +762,7 @@ export function SettingsPage() {
                 className="input-field w-32"
               />
             </div>
-            <button onClick={saveSettings} className="btn-action">Save</button>
+            <Button type="button" onClick={saveSettings}>Save</Button>
             {settingsError && <p className="text-sm text-destructive mt-1">{settingsError}</p>}
           </div>
         </PageCard>
@@ -777,7 +771,7 @@ export function SettingsPage() {
 
       {/* Add Category Dialog */}
       <Dialog open={showAddCategory} onOpenChange={(open) => { setShowAddCategory(open); if (!open) { setNewCatName(''); setNewCatKeywords(''); setNewCatIcon('📌'); setNewCatColor(''); setCatError(''); } }}>
-        <DialogContent className="bg-card border-border">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>Add Category</DialogTitle>
           </DialogHeader>
@@ -788,24 +782,12 @@ export function SettingsPage() {
                 value={newCatName}
                 onChange={(e) => setNewCatName(e.target.value)}
                 placeholder="e.g. Healthcare"
-                className="bg-background border-border"
                 autoFocus
               />
             </div>
             <div>
               <label className="text-xs text-muted">Icon</label>
-              <div className="flex flex-wrap gap-1 mt-1">
-                {ICON_OPTIONS.map((ic) => (
-                  <button
-                    key={ic}
-                    type="button"
-                    className={`w-7 h-7 rounded text-sm flex items-center justify-center border transition-colors ${newCatIcon === ic ? 'border-primary bg-primary/10' : 'border-transparent hover:bg-accent'}`}
-                    onClick={() => setNewCatIcon(ic)}
-                  >
-                    {ic}
-                  </button>
-                ))}
-              </div>
+              <div className="mt-1"><CategoryIconPicker value={newCatIcon} onChange={setNewCatIcon} /></div>
             </div>
             <div>
               <label className="text-xs text-muted">Keywords (comma-separated)</label>
@@ -813,30 +795,11 @@ export function SettingsPage() {
                 value={newCatKeywords}
                 onChange={(e) => setNewCatKeywords(e.target.value)}
                 placeholder="e.g. clinic, pharmacy, doctor"
-                className="bg-background border-border"
               />
             </div>
             <div>
               <label className="text-xs text-muted">Color</label>
-              <div className="flex flex-wrap gap-2 mt-1">
-                {PALETTE.map((c) => {
-                  const taken = usedColors.includes(c.toLowerCase());
-                  return (
-                    <motion.button
-                      key={c}
-                      type="button"
-                      disabled={taken}
-                      title={taken ? 'Already in use' : c}
-                      className={`w-7 h-7 rounded-full border-2 transition-colors ${newCatColor === c ? 'border-white' : 'border-transparent'} ${taken ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer'}`}
-                      style={{ backgroundColor: c }}
-                      onClick={() => setNewCatColor(c)}
-                      animate={{ scale: newCatColor === c ? 1.1 : 1 }}
-                      whileHover={taken ? {} : { scale: newCatColor === c ? 1.1 : 1.05 }}
-                      transition={springs.snappy}
-                    />
-                  );
-                })}
-              </div>
+              <div className="mt-1"><CategoryColorPicker value={newCatColor} onChange={setNewCatColor} taken={(c) => usedColors.includes(c.toLowerCase())} /></div>
             </div>
             {catError && <p className="text-xs text-destructive">{catError}</p>}
             <Separator />
@@ -845,6 +808,25 @@ export function SettingsPage() {
               <Button onClick={handleAddCategory} disabled={!newCatName.trim() || createCat.isPending}>Add</Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!pendingConfirm} onOpenChange={(open) => { if (!open) setPendingConfirm(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{pendingConfirm?.title}</DialogTitle>
+            <DialogDescription>{pendingConfirm?.description}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setPendingConfirm(null)}>Cancel</Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => { pendingConfirm?.run(); setPendingConfirm(null); }}
+            >
+              {pendingConfirm?.confirmLabel}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

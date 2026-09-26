@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { api } from '@/api/client';
 import { useInvalidateCurrentUser } from '@/hooks/useCurrentUser';
+import { Button } from '@/components/ui/button';
 
 export function SetPasswordPage() {
   const invalidateCurrentUser = useInvalidateCurrentUser();
@@ -81,9 +82,9 @@ export function SetPasswordPage() {
 
           {error && <p className="text-sm text-destructive">{error}</p>}
 
-          <button type="submit" disabled={saving} className="btn-action w-full">
+          <Button type="submit" disabled={saving} className="w-full">
             {saving ? 'Saving…' : 'Set password'}
-          </button>
+          </Button>
         </form>
       </div>
     </div>

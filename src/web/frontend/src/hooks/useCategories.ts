@@ -33,41 +33,6 @@ export function useDeleteCategory() {
   });
 }
 
-export function useSummary(start_date: string, end_date: string) {
-  return useQuery({
-    queryKey: ['summary', start_date, end_date],
-    queryFn: () => api.getSummary(start_date, end_date),
-  });
-}
-
-export function useTrend(start_date: string, end_date: string) {
-  return useQuery({
-    queryKey: ['trend', start_date, end_date],
-    queryFn: () => api.getTrend(start_date, end_date),
-  });
-}
-
-export function useTrendByCategory(start_date: string, end_date: string) {
-  return useQuery({
-    queryKey: ['trend-by-category', start_date, end_date],
-    queryFn: () => api.getTrendByCategory(start_date, end_date),
-  });
-}
-
-export function useBalance(start_date: string, end_date: string) {
-  return useQuery({
-    queryKey: ['balance', start_date, end_date],
-    queryFn: () => api.getBalance(start_date, end_date),
-  });
-}
-
-export function useInsights(start_date: string, end_date: string) {
-  return useQuery({
-    queryKey: ['insights', start_date, end_date],
-    queryFn: () => api.getInsights(start_date, end_date),
-  });
-}
-
 export function useMerchantOverrides() {
   return useQuery({
     queryKey: ['merchant-overrides'],

@@ -1,19 +1,21 @@
-import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useState } from 'react';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { AnimatePresence, motion } from 'framer-motion';
-import { api, type MerchantSummary } from '@/api/client';
+import { api, type MerchantSummaryV2 } from '@/api/client';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { ChoiceChip } from '@/components/ui/choice-chip';
 import { Skeleton } from '@/components/ui/skeleton';
 import { StatCard } from '@/components/ui/StatCard';
 import { MerchantProfile } from '@/components/merchants/MerchantProfile';
-import { slideInRightVariants } from '@/lib/animations';
+import { slideInRightVariants } from '@/lib/motionPresets';
 import { Search } from 'lucide-react';
 import { LoadFailed } from '@/components/ui/LoadFailed';
-import { TAG_COLORS, ALL_TAGS, formatSGD } from '@/lib/merchants';
+import { ALL_TAGS } from '@/lib/merchants';
 import { SPECTRUM_PALETTE } from '@/lib/chartTheme';
-import { getCategoryColor } from '@/lib/utils';
+import { getCategoryColor, formatCurrency } from '@/lib/utils';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 
 function merchantInitialColor(name: string): string {
   const idx = name.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0) % SPECTRUM_PALETTE.length;
@@ -30,40 +32,37 @@ const SORT_OPTIONS = [
 export function MerchantsPage() {
   const { merchantName } = useParams<{ merchantName?: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+  const merchantsPath = location.pathname.startsWith('/explore/') ? '/explore/merchants' : '/merchants';
 
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState('total_spent');
   const [tagFilter, setTagFilter] = useState('');
-  const [selectedMerchant, setSelectedMerchant] = useState<string | null>(merchantName ?? null);
-
-  // Sync URL param → panel
-  useEffect(() => {
-    if (merchantName) setSelectedMerchant(merchantName);
-  }, [merchantName]);
+  // The open profile is the route's :merchantName; opening and closing navigate.
+  const selectedMerchant = merchantName ?? null;
+  const debouncedSearch = useDebouncedValue(search);
 
   const { data: merchants = [], isLoading, isError, refetch } = useQuery({
-    queryKey: ['merchant-intelligence', sortBy, tagFilter, search],
+    queryKey: ['merchant-intelligence-v2', sortBy, tagFilter, debouncedSearch],
     queryFn: () =>
-      api.getMerchantIntelligenceList({
+      api.getMerchantListV2({
         sort_by: sortBy as 'total_spent' | 'transaction_count' | 'last_seen' | 'merchant_name',
         tag: tagFilter || undefined,
-        search: search || undefined,
+        search: debouncedSearch || undefined,
         limit: 100,
       }),
     staleTime: 30_000,
   });
 
   const handleCloseProfile = () => {
-    setSelectedMerchant(null);
-    navigate('/merchants');
+    navigate(`${merchantsPath}${location.search}`);
   };
 
-  const handleRowClick = (m: MerchantSummary) => {
+  const handleRowClick = (m: MerchantSummaryV2) => {
     if (selectedMerchant === m.merchant) {
       handleCloseProfile();
     } else {
-      setSelectedMerchant(m.merchant);
-      navigate(`/merchants/${encodeURIComponent(m.merchant)}`);
+      navigate(`${merchantsPath}/${encodeURIComponent(m.merchant)}${location.search}`);
     }
   };
 
@@ -94,14 +93,14 @@ export function MerchantsPage() {
             />
             <StatCard
               label="Total Spend"
-              value={`$${merchants.reduce((sum, m) => sum + m.total_sgd, 0).toFixed(0)}`}
+              value={formatCurrency(merchants.reduce((sum, m) => sum + m.total.minor_units / 100, 0))}
               color="warm"
             />
             {merchants.length > 0 && (
               <StatCard
                 label="Top Merchant"
-                value={merchants[0].merchant}
-                subtext={formatSGD(merchants[0].total_sgd)}
+                value={merchants[0].display_name}
+                subtext={formatCurrency(merchants[0].total.minor_units / 100)}
               />
             )}
           </div>
@@ -116,7 +115,7 @@ export function MerchantsPage() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search merchants…"
-              className="w-full pl-9 pr-3 py-2 text-sm bg-background border border-border rounded-md text-foreground placeholder:text-muted"
+              className="input-field w-full pl-9"
             />
           </div>
 
@@ -132,22 +131,9 @@ export function MerchantsPage() {
             </select>
 
             {ALL_TAGS.map((tag) => (
-              <button
-                key={tag}
-                onClick={() => setTagFilter(tagFilter === tag ? '' : tag)}
-                className="focus:outline-none"
-              >
-                <Badge
-                  variant="outline"
-                  className={`cursor-pointer transition-colors ${
-                    tagFilter === tag
-                      ? `${TAG_COLORS[tag]} border-current`
-                      : 'border-border text-muted hover:text-foreground'
-                  }`}
-                >
-                  {tag}
-                </Badge>
-              </button>
+              <ChoiceChip key={tag} selected={tagFilter === tag} onClick={() => setTagFilter(tagFilter === tag ? '' : tag)}>
+                {tag}
+              </ChoiceChip>
             ))}
           </div>
         </div>
@@ -199,12 +185,12 @@ export function MerchantsPage() {
                             color: merchantInitialColor(m.merchant),
                           }}
                         >
-                          {m.merchant.charAt(0).toUpperCase()}
+                          {m.display_name.charAt(0).toUpperCase()}
                         </div>
                       </td>
                       <td className="px-4 py-3">
-                        <div className="font-medium text-foreground truncate max-w-[180px]">{m.merchant}</div>
-                        <div className="font-mono text-[10px] text-muted uppercase tracking-[0.06em] mt-0.5 sm:hidden">
+                        <div className="font-medium text-foreground truncate max-w-[180px]">{m.display_name}</div>
+                        <div className="font-mono text-2xs text-muted uppercase tracking-[0.06em] mt-0.5 sm:hidden">
                           {m.transaction_count} txns · {m.last_seen ?? '—'}
                         </div>
                       </td>
@@ -231,18 +217,14 @@ export function MerchantsPage() {
                       <td className="px-4 py-3 hidden md:table-cell">
                         <div className="flex flex-wrap gap-1">
                           {(m.tags ?? []).map((tag) => (
-                            <Badge
-                              key={tag}
-                              variant="outline"
-                              className={`text-[10px] px-1.5 py-0 ${TAG_COLORS[tag] ?? 'text-muted'}`}
-                            >
+                            <Badge key={tag} variant="outline" className="text-muted">
                               {tag}
                             </Badge>
                           ))}
                         </div>
                       </td>
                       <td className="px-4 py-3 text-right font-display font-bold text-foreground">
-                        {formatSGD(m.total_sgd)}
+                        {formatCurrency(m.total.minor_units / 100)}
                       </td>
                       <td className="px-4 py-3 text-right text-muted hidden sm:table-cell">
                         {m.transaction_count}

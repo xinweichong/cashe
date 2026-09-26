@@ -83,6 +83,13 @@ class TestEnvConfig:
         config = load_config(str(tmp_path / "nonexistent.yaml"))
         assert config["server"]["port"] == 8081
 
+    def test_gemini_api_key_env_overrides_file(self, monkeypatch, tmp_path):
+        """GEMINI_API_KEY env var should override gemini_api_key in config.yaml."""
+        path = tmp_path / "config.yaml"
+        path.write_text('gemini_api_key: "file-key"\n')
+        monkeypatch.setenv("GEMINI_API_KEY", "env-key")
+        assert load_config(str(path))["gemini_api_key"] == "env-key"
+
     def test_config_from_env_default_categories(self, monkeypatch, tmp_path):
         """Env-var config should include default categories."""
         monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "env-token")

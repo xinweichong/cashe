@@ -42,6 +42,35 @@ class TestMerchantList:
         assert grab["tags"] == []
         assert grab["notes"] == ""
 
+    def test_total_nets_refund_count_and_avg_exclude_it(self, in_memory_db):
+        storage = Storage(connection=in_memory_db)
+        today = local_now().strftime("%Y-%m-%d")
+        storage.insert_transaction(
+            source="manual", source_id="ml1", amount=100.0, merchant="Shop",
+            category="Food", transaction_date=today, tx_type="expense",
+        )
+        storage.insert_transaction(
+            source="manual", source_id="ml2", amount=30.0, merchant="Shop",
+            category="Food", transaction_date=today, tx_type="refund",
+        )
+        result = storage.get_merchant_list()
+        shop = next(r for r in result if r["merchant"] == "Shop")
+        assert shop["total_sgd"] == 70.0
+        assert shop["transaction_count"] == 1
+        assert shop["avg_amount_sgd"] == 100.0
+
+    def test_merchant_with_only_a_refund_still_appears(self, in_memory_db):
+        storage = Storage(connection=in_memory_db)
+        today = local_now().strftime("%Y-%m-%d")
+        storage.insert_transaction(
+            source="manual", source_id="ml3", amount=20.0, merchant="Refund Only",
+            category="Food", transaction_date=today, tx_type="refund",
+        )
+        result = storage.get_merchant_list()
+        merchant = next(r for r in result if r["merchant"] == "Refund Only")
+        assert merchant["total_sgd"] == -20.0
+        assert merchant["transaction_count"] == 0
+
     def test_sorted_by_total_spent_by_default(self, in_memory_db):
         storage = Storage(connection=in_memory_db)
         today = local_now().strftime("%Y-%m-%d")
@@ -168,6 +197,51 @@ class TestMerchantProfile:
         storage = Storage(connection=in_memory_db)
         assert storage.get_merchant_profile("NonExistent") is None
 
+    def test_profile_nets_refund_count_and_avg_exclude_it(self, in_memory_db):
+        storage = Storage(connection=in_memory_db)
+        today = local_now().strftime("%Y-%m-%d")
+        storage.insert_transaction(
+            source="manual", source_id="mp1", amount=100.0, merchant="Shop",
+            category="Food", transaction_date=today, tx_type="expense",
+        )
+        storage.insert_transaction(
+            source="manual", source_id="mp2", amount=30.0, merchant="Shop",
+            category="Food", transaction_date=today, tx_type="refund",
+        )
+        profile = storage.get_merchant_profile("Shop")
+        assert profile["total_sgd"] == 70.0
+        assert profile["transaction_count"] == 1
+        assert profile["avg_amount_sgd"] == 100.0
+
+    def test_profile_resolves_for_merchant_with_only_a_refund(self, in_memory_db):
+        storage = Storage(connection=in_memory_db)
+        today = local_now().strftime("%Y-%m-%d")
+        storage.insert_transaction(
+            source="manual", source_id="mp3", amount=20.0, merchant="Refund Only",
+            category="Food", transaction_date=today, tx_type="refund",
+        )
+        profile = storage.get_merchant_profile("Refund Only")
+        assert profile is not None
+        assert profile["total_sgd"] == -20.0
+        assert profile["transaction_count"] == 0
+        assert "row_count" not in profile
+
+
+class TestMerchantTrendStorage:
+    def test_current_month_nets_refund(self, in_memory_db):
+        storage = Storage(connection=in_memory_db)
+        today = local_now().strftime("%Y-%m-%d")
+        storage.insert_transaction(
+            source="manual", source_id="mt1", amount=100.0, merchant="Shop",
+            category="Food", transaction_date=today, tx_type="expense",
+        )
+        storage.insert_transaction(
+            source="manual", source_id="mt2", amount=30.0, merchant="Shop",
+            category="Food", transaction_date=today, tx_type="refund",
+        )
+        result = storage.get_merchant_trend("Shop")
+        assert result["current_month"] == 70.0
+
 
 @pytest.fixture
 def client():
@@ -188,7 +262,13 @@ def client():
             transaction_date DATETIME,
             ingested_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             raw_data TEXT,
-            type TEXT DEFAULT 'expense'
+            type TEXT DEFAULT 'expense',
+            original_minor_units INTEGER,
+            reporting_minor_units INTEGER,
+            conversion_status TEXT,
+            conversion_rate TEXT,
+            conversion_source TEXT,
+            conversion_quoted_at TEXT
         );
         CREATE TABLE IF NOT EXISTS merchant_tags (
             merchant   TEXT PRIMARY KEY,
@@ -200,6 +280,11 @@ def client():
             merchant TEXT PRIMARY KEY,
             category TEXT NOT NULL,
             source TEXT DEFAULT 'manual',
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS merchant_aliases (
+            merchant TEXT PRIMARY KEY,
+            display_name TEXT NOT NULL,
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
         );
         CREATE TABLE IF NOT EXISTS app_settings (
@@ -245,7 +330,7 @@ def client():
 class TestMerchantAPI:
     def test_get_merchant_list_empty(self, client):
         c, db = client
-        resp = c.get("/api/merchant-intelligence")
+        resp = c.get("/api/v2/merchants")
         assert resp.status_code == 200
         assert resp.json() == []
 
@@ -259,12 +344,12 @@ class TestMerchantAPI:
             (today,),
         )
         db.commit()
-        resp = c.get("/api/merchant-intelligence")
+        resp = c.get("/api/v2/merchants")
         assert resp.status_code == 200
         data = resp.json()
         assert len(data) == 1
         assert data[0]["merchant"] == "Grab"
-        assert data[0]["total_sgd"] == 25.0
+        assert data[0]["total"] == {"minor_units": 2500, "currency": "SGD"}
         assert data[0]["tags"] == []
 
     def test_get_merchant_profile(self, client):
@@ -277,13 +362,13 @@ class TestMerchantAPI:
             (today,),
         )
         db.commit()
-        resp = c.get("/api/merchant-intelligence/Grab")
+        resp = c.get("/api/v2/merchants/Grab")
         assert resp.status_code == 200
         assert resp.json()["merchant"] == "Grab"
 
     def test_get_merchant_profile_404_for_unknown(self, client):
         c, _ = client
-        resp = c.get("/api/merchant-intelligence/Unknown")
+        resp = c.get("/api/v2/merchants/Unknown")
         assert resp.status_code == 404
 
     def test_put_merchant_tags(self, client):
@@ -301,7 +386,7 @@ class TestMerchantAPI:
         )
         assert resp.status_code == 200
         # Verify stored
-        resp2 = c.get("/api/merchant-intelligence/Grab")
+        resp2 = c.get("/api/v2/merchants/Grab")
         assert resp2.json()["tags"] == ["online", "recurring"]
 
     def test_put_merchant_tags_rejects_invalid_tag(self, client):
@@ -333,8 +418,38 @@ class TestMerchantAPI:
             json={"notes": "Ride-hailing app"},
         )
         assert resp.status_code == 200
-        resp2 = c.get("/api/merchant-intelligence/Grab")
+        resp2 = c.get("/api/v2/merchants/Grab")
         assert resp2.json()["notes"] == "Ride-hailing app"
+
+    def test_put_merchant_alias(self, client):
+        c, db = client
+        today = local_now().strftime("%Y-%m-%d")
+        db.execute(
+            "INSERT INTO transactions (source, source_id, amount, merchant, transaction_date, type) "
+            "VALUES ('manual', 'g1', 10.0, 'Grab', ?, 'expense')",
+            (today,),
+        )
+        db.commit()
+        resp = c.put("/api/merchant-intelligence/Grab/alias", json={"display_name": "Grab Rides"})
+        assert resp.status_code == 200
+        assert resp.json() == {"merchant": "Grab", "display_name": "Grab Rides"}
+        assert c.get("/api/v2/merchants/Grab").json()["display_name"] == "Grab Rides"
+        assert c.get("/api/v2/merchants").json()[0]["display_name"] == "Grab Rides"
+        # Blanking the alias reverts display_name to the raw merchant.
+        c.put("/api/merchant-intelligence/Grab/alias", json={"display_name": ""})
+        assert c.get("/api/v2/merchants/Grab").json()["display_name"] == "Grab"
+
+    def test_merchant_rule_impact_404_without_a_rule(self, client):
+        c, db = client
+        today = local_now().strftime("%Y-%m-%d")
+        db.execute(
+            "INSERT INTO transactions (source, source_id, amount, merchant, transaction_date, type) "
+            "VALUES ('manual', 'g1', 10.0, 'Grab', ?, 'expense')",
+            (today,),
+        )
+        db.commit()
+        assert c.get("/api/merchant-intelligence/Grab/rule-impact").status_code == 404
+        assert c.post("/api/merchant-intelligence/Grab/apply-rule").status_code == 404
 
     def test_get_merchant_trend(self, client):
         c, db = client
@@ -348,3 +463,66 @@ class TestMerchantAPI:
         data = resp.json()
         assert "merchant" in data
         assert "months" in data
+
+
+class TestMerchantV2API:
+    def test_list_v2_returns_typed_money(self, client):
+        c, db = client
+        today = local_now().strftime("%Y-%m-%d")
+        db.execute(
+            "INSERT INTO transactions (source, source_id, amount, currency, exchange_rate, "
+            "merchant, category, transaction_date, type) VALUES ('manual', 'g1', 25.0, 'SGD', 1.0, "
+            "'Grab', 'Transport', ?, 'expense')",
+            (today,),
+        )
+        db.commit()
+        resp = c.get("/api/v2/merchants")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 1
+        assert data[0]["merchant"] == "Grab"
+        assert data[0]["total"] == {"minor_units": 2500, "currency": "SGD"}
+        assert data[0]["avg_amount"] == {"minor_units": 2500, "currency": "SGD"}
+        assert data[0]["transaction_count"] == 1
+        assert data[0]["tags"] == []
+
+    def test_list_v2_unresolved_fx_does_not_crash(self, client):
+        # A legacy exchange_rate of 1.0 on a non-SGD currency is the silent
+        # unresolved marker (R02) — merchant_list's SUM/AVG CASE excludes it,
+        # so the whole group is NULL. Assert this degrades to zero rather
+        # than 500ing the route.
+        c, db = client
+        today = local_now().strftime("%Y-%m-%d")
+        db.execute(
+            "INSERT INTO transactions (source, source_id, amount, currency, exchange_rate, "
+            "merchant, category, transaction_date, type) VALUES ('manual', 'b1', 200.0, 'THB', 1.0, "
+            "'Bangkok Air', 'Travel', ?, 'expense')",
+            (today,),
+        )
+        db.commit()
+        resp = c.get("/api/v2/merchants")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data[0]["merchant"] == "Bangkok Air"
+        assert data[0]["total"] == {"minor_units": 0, "currency": "SGD"}
+
+    def test_profile_v2(self, client):
+        c, db = client
+        today = local_now().strftime("%Y-%m-%d")
+        db.execute(
+            "INSERT INTO transactions (source, source_id, amount, currency, exchange_rate, "
+            "merchant, transaction_date, type) VALUES ('manual', 'g1', 15.0, 'SGD', 1.0, "
+            "'Grab', ?, 'expense')",
+            (today,),
+        )
+        db.commit()
+        resp = c.get("/api/v2/merchants/Grab")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["merchant"] == "Grab"
+        assert data["total"] == {"minor_units": 1500, "currency": "SGD"}
+
+    def test_profile_v2_404_for_unknown(self, client):
+        c, _ = client
+        resp = c.get("/api/v2/merchants/Unknown")
+        assert resp.status_code == 404

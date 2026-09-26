@@ -1,14 +1,14 @@
 import { useState } from 'react';
-import { useAuth } from '@/hooks/useAuth';
+import { useAuth } from '@/hooks/useAuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { CasheWordmark, B1_WASH } from '@/components/ui/Brand';
 import { motion } from 'framer-motion';
-import { fadeUpVariants } from '@/lib/animations';
+import { fadeUpVariants } from '@/lib/motionPresets';
 
 const taglineStyle: React.CSSProperties = {
-  color: 'rgba(238, 234, 245, 0.68)',
+  color: 'var(--color-muted)',
   fontFamily: "'JetBrains Mono', 'SF Mono', monospace",
   fontSize: '13px',
   fontWeight: 600,
@@ -62,7 +62,6 @@ export function LoginScreen() {
               placeholder="Username"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
-              className="bg-background border-border"
               autoFocus
               autoComplete="username"
             />
@@ -71,7 +70,6 @@ export function LoginScreen() {
               placeholder="Password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="bg-background border-border"
               autoComplete="current-password"
             />
             {error && (

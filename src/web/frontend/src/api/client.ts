@@ -1,6 +1,23 @@
+import type { SubscriptionConfirmation } from '@/lib/subscriptionConfirmation';
+import type { components } from './v2-schema.gen';
 const BASE = '';
 
-async function request<T>(path: string, opts?: RequestInit): Promise<T> {
+export type TransactionV2 = components['schemas']['TransactionV2'];
+export type TransactionCreateV2 = components['schemas']['TransactionCreate'];
+export type TransactionCorrectionV2 = components['schemas']['TransactionCorrection'];
+export type TransactionDeletionV2 = components['schemas']['TransactionDeletion'];
+export type TripSummaryV2 = components['schemas']['TripSummary'];
+export type MerchantRankingV2 = components['schemas']['MerchantRanking'];
+export type BudgetProgressV2 = components['schemas']['BudgetProgress'];
+export type MerchantSummaryV2 = components['schemas']['MerchantSummary'];
+export type CategoryTrendPointV2 = components['schemas']['CategoryTrendPoint'];
+export type GoalProgressV2 = components['schemas']['GoalProgress'];
+export type DailyTotalV2 = components['schemas']['DailyTotal'];
+export type CategoryBreakdownV2 = components['schemas']['CategoryBreakdown'];
+export type BulkTransactionResultItemV2 = components['schemas']['BulkTransactionResultItem'];
+export type SubscriptionReviewV2 = components['schemas']['SubscriptionReview'];
+
+export async function request<T>(path: string, opts?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     ...opts,
     headers: {
@@ -25,13 +42,21 @@ export interface Transaction {
   source_id: string;
   amount: number;
   currency: string;
-  exchange_rate: number;
+  exchange_rate: number | null;
   merchant: string | null;
   description: string | null;
   category: string | null;
   transaction_date: string;
   ingested_at: string;
   type: string;
+}
+
+export interface TransactionProvenance {
+  transaction_id: number;
+  sources: {
+    channel: 'apple_wallet' | 'gmail' | 'manual' | 'cash' | 'other';
+    evidence_recorded: boolean;
+  }[];
 }
 
 export interface Category {
@@ -94,7 +119,8 @@ export interface GoalProgress {
   target_date: string | null;
   status: 'active' | 'completed' | 'paused';
   percent: number;
-  monthly_rate: number;
+  monthly_rate: number | null;
+  rate_window: { start: string; end: string } | null;
   months_to_target: number | null;
   on_track: 'on_track' | 'ahead' | 'behind' | null;
   contributions: GoalContribution[];
@@ -102,6 +128,7 @@ export interface GoalProgress {
 
 export interface MerchantSummary {
   merchant: string;
+  display_name: string;
   total_sgd: number;
   transaction_count: number;
   avg_amount_sgd: number;
@@ -114,6 +141,7 @@ export interface MerchantSummary {
 
 export interface MerchantProfile {
   merchant: string;
+  display_name: string;
   total_sgd: number;
   transaction_count: number;
   avg_amount_sgd: number;
@@ -154,12 +182,13 @@ export interface Trip {
 }
 
 export interface Subscription {
+  confirmation_source: SubscriptionConfirmation;
   id: number;
   merchant: string;
   label: string | null;
   frequency: 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'annual';
   billing_day: number | null;
-  status: 'active' | 'possibly_cancelled' | 'cancelled';
+  status: 'active' | 'possibly_cancelled' | 'paused' | 'cancelled';
   notes: string | null;
   last_amount: number | null;
   next_expected_date: string | null;
@@ -242,6 +271,44 @@ export interface SessionInfo {
   last_used_at: string;
 }
 
+// Legacy analytics response shapes — these endpoints are slated for
+// migration onto shared spending facts; see docs/plans completion roadmap R04.
+export interface TrendPoint {
+  date: string;
+  amount: number;
+}
+
+export interface MerchantTrend {
+  merchant: string;
+  months: { month: string; total: number; count: number }[];
+  current_month: number;
+  previous_month: number;
+  trend: 'up' | 'down' | 'stable';
+}
+
+export interface Anomaly {
+  id: number;
+  merchant: string | null;
+  amount: number;
+  currency: string;
+  category: string | null;
+  transaction_date: string;
+  avg_amount: number;
+  explanation?: string;
+}
+
+/** GET and PUT /api/settings (src/web/app.py SETTINGS). */
+export interface AppSettings {
+  anomaly_multiplier: number;
+  velocity_alert_threshold: number;
+  budgets_enabled: boolean;
+  goals_enabled: boolean;
+  trips_enabled: boolean;
+  subscriptions_enabled: boolean;
+  recurring_enabled: boolean;
+  home_briefing_enabled: boolean;
+}
+
 export const api = {
   // Auth
   login: (username: string, password: string) =>
@@ -283,6 +350,11 @@ export const api = {
 
   getWebhookUrl: () => request<{ url: string }>('/api/onboarding/webhook-url'),
 
+  getWalletConnection: () => request<{ configured: boolean; required: boolean }>('/api/connections/apple-wallet'),
+  createWalletCredential: () => request<{ token: string }>('/api/connections/apple-wallet/credential', { method: 'POST' }),
+  revokeWalletCredential: () => request<{ status: string }>('/api/connections/apple-wallet/credential', { method: 'DELETE' }),
+
+
   completeOnboarding: () =>
     request<{ status: string }>('/api/onboarding/complete', { method: 'PUT' }),
 
@@ -292,9 +364,6 @@ export const api = {
 
   disconnectGmail: () =>
     request<{ status: string }>('/api/connections/gmail', { method: 'DELETE' }),
-
-  getGmailReconnectUrl: () =>
-    request<{ url: string }>('/api/connections/gmail/connect-url'),
 
   // Transactions
   getTransactions: (params?: Record<string, string | number>) => {
@@ -306,47 +375,83 @@ export const api = {
     return request<Transaction[]>(`/api/transactions${query}`);
   },
 
-  getTransaction: (id: number) =>
-    request<Transaction>(`/api/transactions/${id}`),
+  getTransactionProvenance: (id: number) =>
+    request<TransactionProvenance>(`/api/v2/transactions/${id}/provenance`),
 
-  createTransaction: (data: Partial<Transaction> & { source?: string }) =>
-    request<Transaction>('/api/transactions', {
+  getTransactionV2: (id: number) =>
+    request<TransactionV2>(`/api/v2/transactions/${id}`),
+
+  getTransactionsV2: (params?: Record<string, string | number>) => {
+    const query = params
+      ? '?' + new URLSearchParams(
+          Object.entries(params).map(([k, v]) => [k, String(v)])
+        ).toString()
+      : '';
+    return request<TransactionV2[]>(`/api/v2/transactions${query}`);
+  },
+
+  getDailyTotalsV2: (start: string, end: string) =>
+    request<DailyTotalV2[]>(`/api/v2/transactions/daily-totals?start=${start}&end=${end}`),
+
+  getCategoryBreakdownV2: (start: string, end: string) =>
+    request<CategoryBreakdownV2>(`/api/v2/spending/breakdown?start=${start}&end=${end}`),
+
+  // Shared-facts merchant ranking (spending_facts.merchant_ranking) — distinct
+  // from getMerchantRankingV2's legacy /api/v2/overview/merchants, which is
+  // not proven to reconcile with getCategoryBreakdownV2 for the same period.
+  getMerchantRankingFactsV2: (start: string, end: string, category?: string, limit = 10) => {
+    const params = new URLSearchParams({ start, end, limit: String(limit) });
+    if (category) params.set('category', category);
+    return request<MerchantRankingV2[]>(`/api/v2/spending/merchants?${params}`);
+  },
+
+  // Shared-facts per-day category trend (spending_facts.category_daily_trend)
+  // — distinct from getTrendByCategoryV2's legacy /api/v2/overview/trend-by-
+  // category, which is not proven to reconcile with getDailyTotalsV2/
+  // getCategoryBreakdownV2 for the same period.
+  getCategoryDailyTrendV2: (start: string, end: string, categories?: string[]) => {
+    const params = new URLSearchParams({ start, end });
+    if (categories?.length) params.set('categories', categories.join(','));
+    return request<CategoryTrendPointV2[]>(`/api/v2/spending/trend-by-category?${params}`);
+  },
+
+  bulkCorrectTransactions: (data: {
+    transaction_ids: number[];
+    category?: string;
+    type?: string;
+    remember_category?: boolean;
+    expected_revisions?: Record<number, number>;
+  }) =>
+    request<BulkTransactionResultItemV2[]>('/api/v2/transactions/bulk', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
 
-  updateTransaction: (id: number, data: Partial<Transaction>) =>
-    request<Transaction>(`/api/transactions/${id}`, {
+  bulkUndoTransactions: (data: { transaction_ids: number[]; expected_revisions?: Record<number, number> }) =>
+    request<BulkTransactionResultItemV2[]>('/api/v2/transactions/bulk/undo', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  createTransaction: (data: Partial<TransactionCreateV2> & { amount: number }, requestKey?: string) =>
+    request<TransactionV2>('/api/v2/transactions', {
+      method: 'POST',
+      headers: requestKey ? { 'Idempotency-Key': requestKey } : undefined,
+      body: JSON.stringify(data),
+    }),
+
+  updateTransaction: (id: number, data: Partial<TransactionCorrectionV2>) =>
+    request<TransactionV2>(`/api/v2/transactions/${id}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
 
   deleteTransaction: (id: number) =>
-    request<{ status: string }>(`/api/transactions/${id}`, { method: 'DELETE' }),
+    request<TransactionDeletionV2>(`/api/v2/transactions/${id}`, { method: 'DELETE' }),
 
   // Summary & Analytics
-  getSummary: (start_date: string, end_date: string) =>
-    request<any>(`/api/summary?start_date=${start_date}&end_date=${end_date}`),
-
-  getTrend: (start_date: string, end_date: string) =>
-    request<any>(`/api/trend?start_date=${start_date}&end_date=${end_date}`),
-
-  getTrendByCategory: (start_date: string, end_date: string) =>
-    request<any>(`/api/trend/by-category?start_date=${start_date}&end_date=${end_date}`),
-
-  getBalance: (start_date: string, end_date: string) =>
-    request<any>(`/api/balance?start_date=${start_date}&end_date=${end_date}`),
-
-  getInsights: (start_date: string, end_date: string) =>
-    request<any>(`/api/insights?start_date=${start_date}&end_date=${end_date}`),
-
   getMerchants: (start_date: string, end_date: string) =>
     request<string[]>(`/api/merchants?start_date=${start_date}&end_date=${end_date}`),
-
-  getIncomeVsExpense: (months = 6) =>
-    request<Array<{ month: string; income: number; expenses: number }>>(
-      `/api/income-vs-expense?months=${months}`
-    ),
 
   // Categories
   getCategories: () =>
@@ -383,39 +488,13 @@ export const api = {
     request<string[]>('/api/apple-wallet/cards'),
 
   // Analytics endpoints
-  getAnalyticsComparison: (period: string, date?: string) => {
-    const params = new URLSearchParams({ period });
-    if (date) params.set('date', date);
-    return request<any>(`/api/analytics/comparison?${params}`);
-  },
-
-  getAnalyticsMerchants: (limit = 10, merchant?: string) => {
-    const params = new URLSearchParams({ limit: String(limit) });
-    if (merchant) params.set('merchant', merchant);
-    return request<any>(`/api/analytics/merchants?${params}`);
-  },
-
-  getAnalyticsVelocity: () =>
-    request<any>('/api/analytics/velocity'),
-
-  getAnalyticsAlerts: () =>
-    request<any>('/api/analytics/alerts'),
-
-  getAnalyticsSummaries: () =>
-    request<any>('/api/analytics/summaries'),
-
-  getAnalyticsYoY: (months = 12) =>
-    request<any[]>(`/api/analytics/yoy?months=${months}`),
-
   getAnalyticsInsight: () =>
     request<LLMInsight>('/api/analytics/insight'),
 
-  getWeeklyInsight: () => request<LLMInsight>('/api/analytics/insight/weekly'),
-  getMonthlyInsight: () => request<LLMInsight>('/api/analytics/insight/monthly'),
   getRecurring: () => request<RecurringTransaction[]>('/api/recurring'),
 
   // Merchant Intelligence
-  getMerchantIntelligenceList: (params?: {
+  getMerchantListV2: (params?: {
     sort_by?: 'total_spent' | 'transaction_count' | 'last_seen' | 'merchant_name';
     tag?: string;
     category?: string;
@@ -430,11 +509,11 @@ export const api = {
             .map(([k, v]) => [k, String(v)])
         ).toString()
       : '';
-    return request<MerchantSummary[]>(`/api/merchant-intelligence${query}`);
+    return request<MerchantSummaryV2[]>(`/api/v2/merchants${query}`);
   },
 
-  getMerchantProfile: (merchant: string) =>
-    request<MerchantProfile>(`/api/merchant-intelligence/${encodeURIComponent(merchant)}`),
+  getMerchantProfileV2: (merchant: string) =>
+    request<MerchantSummaryV2>(`/api/v2/merchants/${encodeURIComponent(merchant)}`),
 
   setMerchantTags: (merchant: string, tags: string[]) =>
     request<{ merchant: string; tags: string[]; notes: string }>(
@@ -451,10 +530,25 @@ export const api = {
   getMerchantTrend: (merchant: string) =>
     request<MerchantTrend>(`/api/merchant-intelligence/${encodeURIComponent(merchant)}/trend`),
 
-  // Budgets
-  getBudgets: () => request<Budget[]>('/api/budgets'),
+  setMerchantAlias: (merchant: string, displayName: string) =>
+    request<{ merchant: string; display_name: string }>(
+      `/api/merchant-intelligence/${encodeURIComponent(merchant)}/alias`,
+      { method: 'PUT', body: JSON.stringify({ display_name: displayName }) }
+    ),
 
-  getBudgetProgress: () => request<BudgetProgress[]>('/api/budgets/progress'),
+  getMerchantRuleImpact: (merchant: string) =>
+    request<{ merchant: string; category: string; differing_count: number }>(
+      `/api/merchant-intelligence/${encodeURIComponent(merchant)}/rule-impact`
+    ),
+
+  applyMerchantRule: (merchant: string) =>
+    request<{ status: 'ok'; updated_count: number }>(
+      `/api/merchant-intelligence/${encodeURIComponent(merchant)}/apply-rule`,
+      { method: 'POST' }
+    ),
+
+  // Budgets
+  getBudgetProgressV2: () => request<BudgetProgressV2[]>('/api/v2/budgets/progress'),
 
   createBudget: (data: { category: string | null; amount: number; period: string }) =>
     request<Budget>('/api/budgets', {
@@ -471,45 +565,17 @@ export const api = {
   deleteBudget: (id: number) =>
     request<{ status: string }>(`/api/budgets/${id}`, { method: 'DELETE' }),
 
-  getHealthScore: (months?: number) =>
-    request<HealthScore>(`/api/health-score${months ? `?months=${months}` : ''}`),
-
   // App Settings
-  getSettings: () =>
-    request<{
-      anomaly_multiplier: number;
-      velocity_alert_threshold: number;
-      budgets_enabled: boolean;
-      goals_enabled: boolean;
-      trips_enabled: boolean;
-      subscriptions_enabled: boolean;
-      recurring_enabled: boolean;
-    }>('/api/settings'),
+  getSettings: () => request<AppSettings>('/api/settings'),
 
-  updateSettings: (data: {
-    anomaly_multiplier?: number;
-    velocity_alert_threshold?: number;
-    budgets_enabled?: boolean;
-    goals_enabled?: boolean;
-    trips_enabled?: boolean;
-    subscriptions_enabled?: boolean;
-    recurring_enabled?: boolean;
-  }) =>
-    request<{
-      anomaly_multiplier: number;
-      velocity_alert_threshold: number;
-      budgets_enabled: boolean;
-      goals_enabled: boolean;
-      trips_enabled: boolean;
-      subscriptions_enabled: boolean;
-      recurring_enabled: boolean;
-    }>('/api/settings', {
+  updateSettings: (data: Partial<AppSettings>) =>
+    request<AppSettings>('/api/settings', {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
 
   // Goals
-  getGoals: () => request<GoalProgress[]>('/api/goals'),
+  getGoalsV2: () => request<GoalProgressV2[]>('/api/v2/goals'),
 
   createGoal: (data: { name: string; target_amount: number; target_date?: string }) =>
     request<GoalProgress>('/api/goals', {
@@ -531,9 +597,6 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
-
-  getGoalContributions: (id: number) =>
-    request<GoalContribution[]>(`/api/goals/${id}/contributions`),
 
   updateContribution: (goalId: number, contributionId: number, data: { amount?: number; note?: string | null; contributed_date?: string }) =>
     request<GoalProgress>(`/api/goals/${goalId}/contributions/${contributionId}`, {
@@ -577,6 +640,8 @@ export const api = {
 
   getTripSummary: (id: number) => request<TripSummary>(`/api/trips/${id}/summary`),
 
+  getTripSummaryV2: (id: number) => request<TripSummaryV2>(`/api/v2/trips/${id}/summary`),
+
   getTripTransactions: (id: number, limit?: number, offset?: number) =>
     request<Transaction[]>(`/api/trips/${id}/transactions?limit=${limit ?? 50}&offset=${offset ?? 0}`),
 
@@ -591,15 +656,15 @@ export const api = {
       method: 'DELETE',
     }),
 
-  checkTripMembership: (tripId: number, txId: number) =>
-    request<{ in_trip: boolean }>(`/api/trips/${tripId}/transactions/${txId}/membership`),
+  getTransactionTripIds: (txId: number) =>
+    request<{ trip_ids: number[] }>(`/api/transactions/${txId}/trips`),
 
   // Subscriptions
   getSubscriptions: () =>
     request<{ subscriptions: Subscription[]; summary: SubscriptionSummary }>('/api/subscriptions'),
 
-  getSubscriptionSummary: () =>
-    request<SubscriptionSummary>('/api/subscriptions/summary'),
+  getSubscriptionReviewV2: () =>
+    request<SubscriptionReviewV2>('/api/v2/subscriptions/review'),
 
   createSubscription: (data: {
     merchant: string;
@@ -614,6 +679,9 @@ export const api = {
     data: Partial<Pick<Subscription, 'merchant' | 'label' | 'frequency' | 'billing_day' | 'status' | 'notes'>>,
   ) =>
     request<Subscription>(`/api/subscriptions/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+
+  confirmSubscription: (id: number) =>
+    request<{ status: string }>(`/api/subscriptions/${id}/confirm`, { method: 'POST' }),
 
   deleteSubscription: (id: number) =>
     request<{ status: string }>(`/api/subscriptions/${id}`, { method: 'DELETE' }),

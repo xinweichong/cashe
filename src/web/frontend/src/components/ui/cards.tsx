@@ -1,4 +1,6 @@
 import type { CSSProperties, ReactNode } from 'react';
+import { Link } from 'react-router-dom';
+import { ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Card, CardContent } from '@/components/ui/card';
 
@@ -16,7 +18,7 @@ export function PageCard({ title, action, children, className, contentClassName,
   return (
     <Card className={cn(className)}>
       <div className={cn('flex flex-row items-center justify-between p-4 gap-2', headerClassName)}>
-        <span className="min-w-0 truncate text-base font-semibold text-foreground font-display">{title}</span>
+        <h2 className="min-w-0 text-base font-semibold text-foreground font-display">{title}</h2>
         {action && <div className="shrink-0 ml-2">{action}</div>}
       </div>
       <CardContent className={cn('p-4 pt-0', contentClassName)}>{children}</CardContent>
@@ -25,23 +27,9 @@ export function PageCard({ title, action, children, className, contentClassName,
 }
 
 // ── ChartCard ─────────────────────────────────────────────────────────────────
-interface ChartCardProps {
-  title: string;
-  action?: ReactNode;
-  children: ReactNode;
-  className?: string;
-}
-
-export function ChartCard({ title, action, children, className }: ChartCardProps) {
-  return (
-    <Card className={cn(className)}>
-      <div className="flex flex-row items-center justify-between p-4 gap-2">
-        <span className="min-w-0 truncate text-base font-semibold text-foreground font-display">{title}</span>
-        {action && <div className="shrink-0 ml-2">{action}</div>}
-      </div>
-      <CardContent className="p-0">{children}</CardContent>
-    </Card>
-  );
+// A PageCard whose content runs edge to edge (charts size themselves).
+export function ChartCard(props: Omit<PageCardProps, 'contentClassName'>) {
+  return <PageCard {...props} contentClassName="p-0" />;
 }
 
 // ── HeroCard ─────────────────────────────────────────────────────────────────
@@ -63,12 +51,14 @@ interface HeroCardProps {
 
 export function HeroCard({ title, action, children, className, glowColor = 'warm' }: HeroCardProps) {
   return (
-    <div className={cn('rounded-[24px] p-8', GLOW_CLASS[glowColor], className)}>
-      <div className="hero-hairline" aria-hidden />
+    <div className={cn('rounded-2xl p-8', GLOW_CLASS[glowColor], className)}>
+      <div className="hero-glow-clip" aria-hidden>
+        <div className="hero-hairline" />
+      </div>
       <div className="flex flex-row items-center justify-between gap-2 mb-3">
-        <span className="text-xs uppercase tracking-[0.22em] text-muted font-semibold font-mono">
+        <h2 className="text-xs uppercase tracking-[0.22em] text-muted font-semibold font-mono">
           {title}
-        </span>
+        </h2>
         {action && <div className="shrink-0">{action}</div>}
       </div>
       {children}
@@ -85,11 +75,12 @@ interface HighlightCardProps {
 }
 
 const HIGHLIGHT_CARD_STYLE: CSSProperties = {
-  border: '1px solid rgba(0,212,170,.25)',
+  border: '1px solid color-mix(in srgb, var(--color-teal) 25%, transparent)',
   background:
-    'radial-gradient(120% 100% at 0% 0%, rgba(0,212,170,.08) 0%, rgba(11,11,20,0) 50%), #161624',
-  boxShadow: '0 0 0 1px rgba(0,212,170,.18), 0 0 36px -8px rgba(0,212,170,.28)',
-  borderRadius: '14px',
+    'radial-gradient(120% 100% at 0% 0%, color-mix(in srgb, var(--color-teal) 8%, transparent) 0%, transparent 50%), var(--color-card)',
+  boxShadow:
+    '0 0 0 1px color-mix(in srgb, var(--color-teal) 18%, transparent), 0 0 36px -8px color-mix(in srgb, var(--color-teal) 28%, transparent)',
+  borderRadius: 'var(--radius-lg)',
   padding: '20px',
 };
 
@@ -97,12 +88,43 @@ export function HighlightCard({ title, action, children, className }: HighlightC
   return (
     <div style={HIGHLIGHT_CARD_STYLE} className={cn(className)}>
       <div className="flex flex-row items-center justify-between gap-2 mb-3">
-        <span className="text-xs uppercase tracking-[0.22em] font-semibold font-mono" style={{ color: '#00D4AA' }}>
+        <h2 className="text-xs uppercase tracking-[0.22em] font-semibold font-mono" style={{ color: 'var(--color-teal)' }}>
           {title}
-        </span>
+        </h2>
         {action && <div className="shrink-0">{action}</div>}
       </div>
       {children}
     </div>
+  );
+}
+
+// ── CardLink ──────────────────────────────────────────────────────────────────
+// Approved shared owner (2026-09-25, Explore dashboard): makes a whole card a
+// navigation target — chevron top-right, hover lift, focus ring. Wrap exactly
+// one card surface (StatCard via its `href`, PageCard, HighlightCard). The
+// wrapped card must not contain other links or controls.
+interface CardLinkProps {
+  to: string;
+  children: ReactNode;
+  className?: string;
+  'aria-label'?: string;
+}
+
+export function CardLink({ to, children, className, ...props }: CardLinkProps) {
+  return (
+    <Link
+      to={to}
+      aria-label={props['aria-label']}
+      className={cn(
+        'card-link group relative block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+        className,
+      )}
+    >
+      {children}
+      <ChevronRight
+        aria-hidden="true"
+        className="absolute top-4 right-4 w-4 h-4 text-muted transition-transform duration-150 group-hover:translate-x-0.5 group-hover:text-foreground"
+      />
+    </Link>
   );
 }

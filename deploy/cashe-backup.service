@@ -1,0 +1,33 @@
+[Unit]
+Description=Cashe encrypted backup upload
+# Do not let a stuck run block the next scheduled attempt indefinitely.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# Runs as root: the app's Docker container runs as root and writes data/ on
+# the host, so every .db/.db-wal/.db-shm file it creates is root-owned. A
+# WAL-mode SQLite database needs its -shm sidecar accessible even for a
+# read-only connection (to coordinate with the app, which keeps writing
+# while the backup runs) — an unprivileged user cannot do this safely. The
+# backup already needs to read every user's database and credentials.json
+# regardless, so there is no meaningful privilege reduction being given up.
+User=root
+WorkingDirectory=/home/ubuntu/expense-tracker
+# R2_ENDPOINT_URL and R2_BACKUP_BUCKET live here, mode 0600, not in git.
+EnvironmentFile=/etc/cashe/backup.env
+# This venv is separate from the app's Docker image on purpose — the app
+# container only installs requirements.txt (no boto3/cryptography).
+ExecStart=/home/ubuntu/expense-tracker/backup-venv/bin/python -m scripts.backup upload \
+    --key-file /secure/cashe-backup.key \
+    --data-dir /home/ubuntu/expense-tracker/data \
+    --config /home/ubuntu/expense-tracker/config.yaml \
+    --credentials /home/ubuntu/expense-tracker/credentials.json
+# Dead-man's-switch ping: only fires if ExecStart exited 0. HEALTHCHECK_URL
+# lives in backup.env (private, not in git) — nothing pings if the backup
+# itself failed, so a missed ping is exactly the signal that should alert.
+ExecStartPost=/usr/bin/curl -fsS -m 10 --retry 3 ${HEALTHCHECK_URL}
+# Keep a single job execution: systemd will not start a new run of this
+# unit while a previous one is still active (Type=oneshot default).
+TimeoutStartSec=600

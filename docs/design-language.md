@@ -376,41 +376,96 @@ Five tiers. Most surfaces use `elev-none` (a single 1px border on `--color-backg
 
 ## 7 · Components
 
+### 7.0 Reuse contract and component registry
+
+**One visual role and interaction contract should have one shared owner. Always reuse it.** This applies across classic/new pages, admin/auth/onboarding and previews. Search the component library and existing callers before implementing a surface. Do not create a different button, pill, field or card by changing a caller's classes or inline styles.
+
+New screens may compose established elements without new design approval. If the system cannot express a needed element, **obtain explicit user approval before implementing a new primitive, variant, interaction pattern or bespoke interface treatment**, including a new extraction from duplicated markup. Prepare a written specification of the reuse alternatives, proposed API/states/tokens, consumers and migration impact first. A proposed component in a plan is not approval. Previously granted approval for the same concrete scope remains valid. See [AGENTS.md](../AGENTS.md#mandatory-reuse-and-approval-gate).
+
+Current registry (paths relative to `src/web/frontend/src/`):
+
+| Role | Shared owner | Rule |
+|---|---|---|
+| Command, submit, cancel, retry, icon action | `components/ui/button.tsx` | Use existing variants; navigation CTA uses `asChild` with `Link`/`a`. Plain inline navigation remains a link. |
+| Noninteractive status label | `components/ui/badge.tsx` | Existing `tone` for spectrum meaning, `outline` for neutral labels. Never turn a badge into the control itself. |
+| Panel switching | `components/ui/tabs.tsx` | Use actual tabs with matching panel semantics; do not substitute tabs for form values, multi-select filters or navigation links. Route-level selectors (e.g. Explore's NavLinks) keep link semantics and reuse `routeTabClassName`, keyed on `aria-current`. |
+| Category-coloured transaction row/avatar | `components/ui/ActivityRowShell.tsx`, `CategoryAvatar.tsx` | Caller owns money formatting and navigation; shared component owns presentation. |
+| Standard card / chart surface / hero / positive highlight | `components/ui/cards.tsx` | Use the matching role. Raw `Card` is for established structural exceptions, not a new visual system. |
+| Compact KPI / new-experience hero amount | `components/ui/StatCard.tsx`, `HeroAmount.tsx` | Use their actual APIs; retain money precision and quality labels. |
+| Text fields | `.input-field` in `index.css`; `components/ui/input.tsx` wrapper | Consolidate the wrapper onto the utility contract; do not create another style string. |
+| Native / custom select | `.select-field`; `components/ui/select.tsx` | Different interaction mechanisms, same theme/geometry intent. Keep native semantics where suitable. |
+| Dialog, sheet, dropdown, select | Existing `components/ui/` Radix wrappers | They own surface (`card-elev`, `border-border`, `elev-md`), backdrop and §14 enter/exit motion (`.pop-motion`, `.overlay-motion`, `.sheet-motion-*` in `index.css`), and the close control is `Button` via `Close asChild`. Do not override surfaces in callers. Interrupting confirmations compose `Dialog` (no separate ConfirmDialog API). |
+| Loading / recoverable failure / transient feedback | `Skeleton`, `LoadFailed`, existing toast provider | Compose known patterns; no page-local alternative feedback system. |
+| Category-change visual | `components/charts/CategoryChangeBars.tsx` | Home and Explore reuse the same row/scale contract. |
+| Category mix (donut + ranked legend) | `components/charts/CategoryDonut.tsx` | `showLegend` adds the selectable top-5 legend with a "Remaining categories" group. `layout="row"` (approved 2026-09-25 for Home's full-width dashboard) places the legend beside the chart from `sm` up and stacks it below on phones; it changes only placement, not the chart, legend rows or selection. The default `stacked` layout stays for Explore. |
+| Whole-card link | `CardLink` in `components/ui/cards.tsx`; `StatCard` `href` | Approved 2026-09-25 (Explore dashboard) for KPI tiles, the "Worth a look" summary and the Financial health summary. Chevron top-right, 1px lift plus `elev-xs` on hover (plain cards also take `card-hover` fill; glow cards keep their wash), focus ring. Wrap exactly one card; the card must contain no other links or controls, so summary rows inside it are plain. Other surfaces need approval before adopting it. |
+
+**Approved shared owners (2026-09-25).** See [the proposals](plans/2026-09-25-cashe-shared-ui-owner-proposals.md) for rationale and states.
+
+| Role | Owner | Use |
+|---|---|---|
+| Filter / choice chip | `components/ui/choice-chip.tsx` | A pressed toggle (`aria-pressed`) with `neutral`, `warning` or `categoryColor` treatment. Category text is mixed toward foreground to hold 4.5:1 in both themes. Not a command, a read-only label or a panel switch. |
+| Single-choice form value | `components/ui/segmented-choice.tsx` | Native radios shown as segments on the Tabs track; for form values such as transaction type. |
+| Switch | `components/ui/switch.tsx` | `role="switch"`, 44px hit area, `pending` blocks repeat toggles. The only consumer of `.toggle-on`. |
+| Status dot | `components/ui/StatusDot.tsx` | The §7.4 6px dot in a Badge tone or category colour; meaning lives in the label or adjacent text. |
+| Category identity | `CategoryAvatar` `size="detail"`, optional `glyph` | 40px detail headers; rows keep the 32px default. |
+| Selectable row | `components/ui/selectable-row.tsx` | Full-width row that selects (`aria-pressed`) or opens something; disclosures pass `aria-expanded`. No nested controls. |
+| Budget/goal progress | `components/ui/ProgressBar.tsx` | `role="progressbar"`, Badge-tone fill, overage announced. Not for forecast composition or rankings. |
+| Category icon/colour choice | `components/categories/CategoryPickers.tsx` | Radio groups with 44px options; taken colours disabled and explained. |
+
+**Extracted shared owners (2026-09-26).** Consolidations of markup that was already repeated, approved by the user as part of the simplification pass. Each keeps the look it replaced; none adds a new fill, radius or motion.
+
+| Role | Owner | Use |
+|---|---|---|
+| Detail panel chrome | `components/ui/detail-panel.tsx` — `DetailHeader`, `DetailLoading`, `StatTiles`, `ConfirmDestructive`, `SectionLabel` | Budget, goal, trip, subscription and merchant panels. `ConfirmDestructive` is the inline in-panel delete confirmation those panels already used; interrupting confirmations still compose `Dialog`. |
+| Query first-load state | `components/ui/QueryState.tsx`; `RetryLink` in `components/ui/LoadFailed.tsx` | `QueryState` shows `LoadFailed` or a `Skeleton` until data arrives, then renders its child function; a background refetch failure never hides shown data. `RetryLink` is the inline Retry in a "Couldn't refresh…" sentence. |
+| Signed money change | `components/ui/SignedChange.tsx`; `formatMoneyAbs` in `api/briefing.ts` | Up/down arrow plus unsigned amount, where the sign is conveyed by the arrow or the sentence. |
+| Circular progress | `components/ui/ProgressRing.tsx` | Goal detail/list rings and the health score ring; caller supplies size, radius, stroke and any centred `<text>`. |
+| Trend day stepper | `components/charts/DayStepper.tsx` (`NoTrendData`) | Previous/next-day controls under `TrendLine` and `CategoryTrendLine`; each chart keeps its own stepping rule. |
+| Detail-panel mini chart | `components/charts/MiniBarChart.tsx` | Single-series SGD bars in a `ChartCard` (merchant months, subscription charges). |
+| Lens footer action | `LensAction` in `components/layout/PhoneScreen.tsx` | The full-width "go deeper" row at the foot of a phone lens panel. |
+| Drag-to-dismiss | `hooks/useDragDismiss.ts`, `components/layout/EdgeGrip.tsx` | `SlideOver` and `DrillSheet`: drag right to close, off under reduced motion; the grip is the visual cue. |
+
+Still not shared: a common category label (ActivityRowShell and Finance keep their own), and a public calendar date-cell primitive (Plan keeps one in-file recipe). Existing examples are references, not permission to clone them.
+
+Layout/width, content and documented semantic colour may vary by caller. New fills, radii, selection styles, motion variants or arbitrary component sizing need a shared documented owner, not accumulating `className` overrides. Keep role distinctions: read-only badges, multi-select filters, single-choice form controls, calendar dates and tabs must not be collapsed into one misleading semantic control.
+
 ### 7.1 Buttons
 
-CVA-based with six variants and five sizes.
+CVA-based. The implemented API has six variants and four sizes; do not invent props from older aspirational examples. The current primary is the full-spectrum gradient. This inventory does not authorise changing all primary buttons to a different fill.
 
 | Variant | Use |
 |---|---|
-| `default` | Primary action. Teal background, dark text. The most common button. |
-| `hero` | Splash, empty-state CTA, "Get started". Full spectrum gradient background with hover sweep animation. Used 2–4 places in the entire app. |
-| `destructive` | Delete, sign out, remove. Red `#FF453A` background. |
-| `outline` | Cancel, secondary actions. Transparent with `border-foreground/20`. |
+| `default` | Primary action. Existing full-spectrum gradient, `text-on-brand`; reserve prominence for the main command. |
+| `destructive` | Confirm an irreversible destructive action, using themed destructive tokens. |
+| `outline` | Cancel/secondary actions. Existing background/input-border treatment with neutral hover. |
 | `ghost` | View all, dropdown trigger, low-emphasis. Transparent, hover to `bg-foreground/5`. **Never** hover to teal. |
-| `link` | Inline text-style action. Teal foreground, underline on hover. |
+| `link` | Inline text-style command. `text-teal` underline treatment. |
+| `secondary` | Existing compatibility variant, now resolved to a neutral `card-elev`/`foreground` fill via the shared theme aliases; still not in production use. |
 
 Sizes:
 
 | Size | Height | Padding | Use |
 |---|---|---|---|
-| `xs` | 28px | 10px | Inline edit/delete buttons in dense rows |
-| `sm` | 34px | 12px | Toolbar buttons, secondary actions |
+| `sm` | 36px | 12px | Toolbar buttons, secondary actions |
 | `default` | 40px | 16px | Standard buttons |
-| `lg` | 46px | 22px | Primary CTAs, hero CTAs |
-| `icon` | 36×36 | — | Icon-only buttons (settings cog, close, more) |
+| `lg` | 44px | 32px | Primary CTAs, hero CTAs |
+| `icon` | 40×40 | — | Icon-only buttons (settings cog, close, more) |
 
-**Ghost-button bug fix:** today's ghost variant hovers to `bg-accent text-accent-foreground` which paints the button teal. New ghost variant hovers to `bg-foreground/5 text-foreground` — a quiet darken, no colour shift.
+Provide at least 44px effective touch targets in the new experience without inventing page-local compact sizes. `hero` and `xs` are not implemented Button variants/sizes; adding either requires approval. `.btn-action` has been removed; all callers use `Button`. Ghost hover is already neutral; preserve it. Align control radii to §5 in the shared owner rather than overriding them on individual pages.
 
 ### 7.2 Form fields
 
-Unified around the `.input-field` utility class. The Radix `<Input>` wrapper is retired (or made a thin wrapper over the utility class) — one way to style an input, always.
+`.input-field` (in `index.css`) is the single text-field contract; `Input` is a thin wrapper that adds only its fixed 40px height and file-input styling. Native checkbox/radio/date behaviour remains intact.
 
-- **Resting:** `bg-background border border-border rounded-md px-3 py-1.5 text-sm text-foreground`
-- **Focus:** `border-foreground ring-1 ring-foreground/20` — subtle but visible
-- **Error:** `border-destructive/40` — combined with `text-destructive` helper text below the field
-- **Disabled:** `opacity-50 cursor-not-allowed`
+- **Resting:** `bg-background border border-border rounded-sm px-3 py-1.5 text-foreground`, placeholder `text-muted`. Text is 16px below `md` (avoids iOS Safari zoom-on-focus) and 14px from `md` up.
+- **Focus:** the global §15 treatment, `focus-visible:ring-2 ring-ring ring-offset-2`. An earlier subtler `border-foreground ring-1` target conflicted with §15; §15 wins.
+- **Error:** set `aria-invalid="true"` for `border-destructive/40`, with `text-destructive` helper text below the field.
+- **Disabled:** `opacity-50 cursor-not-allowed`.
 
-`.select-field` keeps the SVG chevron approach (white chevron, 50% opacity, no colour shift on hover).
+`.select-field` shares the same states.
+
+`.select-field` keeps the existing theme-aware SVG chevron. Use it for native selects rather than `.input-field`. Custom Radix Select remains appropriate where needed; do not replace native selects solely for appearance. Field focus must meet §15 and the current global focus treatment.
 
 ### 7.3 Badges
 
@@ -424,7 +479,7 @@ CVA-based with the original four variants (`default`, `secondary`, `destructive`
 | `notable` | `#FB923C` @ 13% | `#FB923C` | `#FB923C` @ 25% |
 | `warm` | `#FF6B6B` @ 13% | `#FF6B6B` | `#FF6B6B` @ 25% |
 
-Replaces ad-hoc inline colour classes for category pills, source labels, and status pills.
+These tones are implemented and resolve through theme tokens; the hex values above are dark-spectrum references, not instructions to hardcode light-theme text. `tone` takes precedence over `variant`. Replace ad-hoc status pills with this shared owner. Category identity uses `getCategoryColor`, not an arbitrary status tone; a common category-label extraction is approval-gated. A filter is an interactive control, not a clickable Badge.
 
 ### 7.4 Status dots
 
@@ -437,21 +492,21 @@ A new quieter pattern for status that doesn't need full pill weight (recurring d
 </span>
 ```
 
-Where `.dot` is a 6×6 rounded pill in the spectrum colour, and the text is normal-weight body. Use status dots when stacked or repeated — they scale visually better than pills.
+Where `.dot` is a 6×6 rounded pill in the spectrum colour, and the text is normal-weight body. Use status dots when stacked or repeated — they scale visually better than pills. Implemented as `components/ui/StatusDot.tsx` (`tone` or `color`, optional `label`). Chart points and navigation indicators are not status labels and retain their own roles.
 
 ### 7.5 Cards
 
-Three reusable wrappers + two new highlights:
+Five shared surface roles:
 
 | Component | Use | Token |
 |---|---|---|
 | `<PageCard>` | Content, tables, lists, SVG visuals | `radius-md`, `elev-none` |
 | `<ChartCard>` | Recharts charts (edge-to-edge content) | `radius-md`, `elev-none` |
-| `<StatCard>` | Compact KPI display | `radius-lg`, `elev-none`, variant maps to expense/income/neutral |
-| `<HeroCard>` **(new)** | Overview's top card — the hero numeric | `radius-2xl`, `elev-glow-warm`, radial-tint background + gradient hairline along top edge |
-| `<HighlightCard>` **(new)** | Goal-completed callout, on-track health card, savings streak | `radius-lg`, `elev-glow-teal`, teal-tinted left-edge radial wash |
+| `<StatCard>` | Compact KPI display | Target `radius-lg`, `elev-none`; actual API uses `color`, not an expense/income `variant` |
+| `<HeroCard>` | Hero numeric surface | `radius-2xl`, warm glow, radial tint and gradient hairline |
+| `<HighlightCard>` | Supported positive-outcome callout | `radius-lg`, teal glow and left-edge wash |
 
-All five accept `title`, optional `action` (right-aligned in header), and `children`. `className` forwards to the root for one-off overrides.
+`PageCard`, `ChartCard`, `HeroCard` and `HighlightCard` accept `title`, optional `action`, and `children`. `StatCard` accepts `label`, `value`, `color`, optional `delta`, `sparklineData`, `hero`, `subtext` and `className`. Class overrides are for placement, not new surface designs. Current Card resting elevation, StatCard radius and hardcoded highlight treatments differ from the targets; fix them centrally as tracked in the surface audit. Do not paper over those differences in callers.
 
 ### 7.6 Chart conventions
 
@@ -492,8 +547,10 @@ All Recharts configuration centralised in `src/lib/chartTheme.ts`. Never inline 
 - "Let's get started" / "Hey there" / any greeting that wastes a line
 - "Uh oh, something went wrong" — too cute for a finance product
 - "We couldn't process that. Please try again." — passive, jargon-y
-- Emojis in microcopy. (Category icons are emoji — that's fine. Microcopy emojis — no.)
+- Emojis in web/app microcopy. (Category icons are emoji — that's fine. Microcopy emojis — no.) **Telegram is the one exception — see below.**
 - Exclamation marks. (One allowed per page maximum, and only for genuine celebration. The hook "cash, caught." uses a period, not an exclamation.)
+
+**Telegram exception:** the bot has no colour, iconography, or layout to lean on — text is the entire surface. There, a small, consistent set of emoji stand in for what colour/icons do elsewhere: marking message identity (💰 income, 💸 uncategorized pick, ✈️ trip context, 🚨 budget exceeded, ⚠️ budget warning, 🔄 recurring) and giving buttons a scannable glyph (📅 📊 ➕ etc.). This is deliberate personality, not decoration for its own sake — it's how cashe-the-bot reads as a real correspondent texting you back rather than a form response. Keep it to one glyph per message/button, drawn from a consistent small set, never stacked or used mid-sentence. All other voice rules (no exclamation marks, no cheerleading, matter-of-fact tone) still apply in full — the emoji marks *what kind* of message this is, the words still carry the meaning.
 
 ### 8.3 Copy migrations
 
@@ -706,7 +763,8 @@ Source of truth for presets: [`src/lib/animations.tsx`](../src/web/frontend/src/
 | `pageVariants` | gentle in, 0.12s ease-in out | Route transitions (AppShell) |
 | `fadeUpVariants` | gentle in, 0.12s ease-in out | Form expands, card entrances |
 | `slideInRightVariants` | snappy in, 0.15s ease-in out | Right-side detail panels |
-| `slideUpVariants` | snappy in, 0.2s ease-in out | Bottom drawers (mobile) |
+| `pushInRightVariants` | 0.3s expo in, 0.2s ease-in out | SlideOver on a phone (full-width push) |
+| `fadeVariants` | 0.15s in, 0.1s out | Reduced-motion stand-in for slides |
 | `staggerContainer/ItemVariants` | 0.04s children | Lists — cap staggering at 10 items (`STAGGER_LIMIT`) |
 | `AnimatedCurrency` | 0.7s ease-out count-up | Hero numerics only — one count-up per page |
 
@@ -739,3 +797,19 @@ A finance app's most-repeated UI element is a number. One grammar, everywhere:
 - **Hero numerics** use `AnimatedCurrency` (§14) and keep cents.
 - **Percentages** round to whole (`toFixed(0)` + `%`).
 - Amounts in rows, tables, and KPIs are `font-mono` (§3.1).
+
+
+## Navigation (single experience, 2026-09-25)
+
+Home, Activity, Plan, and Explore are the sidebar and phone-tab destinations, unconditionally — the "New experience" Settings toggle and the classic sidebar/tabs it switched to were removed. Settings and capture review live in the profile menu; Review is also linked from Home and Activity. Old transaction, finance, analytics, and merchant URLs redirect with their suffix, query, and fragment intact via `LegacyRedirect`. `/overview` retains the classic dashboard as a permanent, unlinked comparison route. The original both-branches versions of the navigation shell files are archived at `archive/legacy-classic-navigation-2026-09-25/` for reference.
+
+Home and Explore use natural page scrolling. Activity retains independently scrolling list/detail panels; opening a detail keeps the parent mounted to preserve filters and drafts. Explore is one dashboard on shared spending facts: a pulse band (a double-width warm-glow hero for spent with `HeroAmount`, then vs. same days last month and income; each tile a `CardLink` to its evidence), then two equal-height columns: the optional AI daily read above a "Worth a look" summary capped at three rows, and the biggest-mover tile above a score-only health summary. The two summaries open `/explore/signals` and `/explore/health` for the full lists; then Over time / By category / By merchant / Recurring modes as full-width bento groups; `/explore/insights` redirects to `/explore`. Merchant reports remain at `/explore/merchants`. Plan opens a naturally scrolling upcoming-charge timeline with 14/30/90-day windows, estimated and unknown amounts, and schedule-review links. Inline prediction edits use labeled date/SGD amount fields, preserve failed forms, and omit unchanged rounded values. Dismissal has an explicit confirmation explaining that it does not cancel the provider. Existing matching and finance tools remain at /plan/manage. The timeline contains recorded pending schedules; future-cycle expansion, confirmation metadata, and the planned forecast remain incomplete. The four primary navigation targets and profile controls have a 44px minimum hit area. Browser/device accessibility checks remain pending.
+
+
+## Appearance preferences
+
+The application follows the system light/dark preference by default. Profile → Appearance offers System, Light, and Dark in both navigation modes. Only the appearance preference is stored locally (`cashe-appearance`); it contains no financial data. Theme changes update context and tokens without remounting forms.
+
+Dark muted text is now `#A8A1B5`. Light surfaces use background `#F6F5F8`, card `#FFFFFF`, foreground `#201C2C`, muted `#625C70`, and interactive teal `#007A63`. Brand gradients retain their spectrum and use dark `--color-on-brand` text. Primary and muted tokens meet 4.5:1 against neutral background/card/elevated surfaces in both themes; this is not a whole-interface accessibility certification. Category colors, opacity variants, charts, enlarged text, and device layouts still require rendered review.
+
+Charts consume `useChartTheme()` from `lib/chartTheme.ts`: axis, tooltip, cursor, legend, tracks, and text use centralized explicit hex colors for each theme. Never hardcode those colors in chart components. Framer Motion follows reduced-motion preference globally; CSS animations and transitions are suppressed when requested.

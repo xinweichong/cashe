@@ -81,6 +81,17 @@ class TestTripCRUD:
         with pytest.raises(ValueError):
             storage.delete_trip(999)
 
+    def test_deleting_an_enlisted_transaction_cascades_its_trip_link(self, in_memory_db):
+        """trip_transactions.transaction_id declares ON DELETE CASCADE and relies
+        on FK enforcement actually being on to take effect."""
+        storage = Storage(connection=in_memory_db)
+        trip_id = storage.create_trip(name="X", start_date="2026-04-01")
+        tx_id = _insert_tx(in_memory_db, "t1")
+        storage.enlist_transaction(trip_id, tx_id)
+        storage.delete_transaction(tx_id)
+        rows = in_memory_db.execute("SELECT * FROM trip_transactions WHERE transaction_id = ?", (tx_id,)).fetchall()
+        assert len(rows) == 0
+
 
 class TestTripActivation:
     def test_activate_trip_sets_status_active(self, in_memory_db):
@@ -170,32 +181,6 @@ class TestTripTransactions:
         storage.delist_transaction(trip_id, tx_id)
         assert len(storage.get_trip_transactions(trip_id)) == 0
 
-    def test_auto_assign_adds_to_active_trip(self, in_memory_db):
-        storage = Storage(connection=in_memory_db)
-        in_memory_db.execute("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('trips_enabled', 'true')")
-        in_memory_db.commit()
-        trip_id = storage.create_trip(name="Active Trip", start_date="2026-04-01")
-        storage.activate_trip(trip_id)
-        tx_id = _insert_tx(in_memory_db, "t1")
-        storage.auto_assign_to_active_trip(tx_id)
-        assert len(storage.get_trip_transactions(trip_id)) == 1
-
-    def test_auto_assign_no_op_when_disabled(self, in_memory_db):
-        storage = Storage(connection=in_memory_db)
-        # trips_enabled defaults to false
-        trip_id = storage.create_trip(name="Active Trip", start_date="2026-04-01")
-        storage.activate_trip(trip_id)
-        tx_id = _insert_tx(in_memory_db, "t1")
-        storage.auto_assign_to_active_trip(tx_id)
-        assert len(storage.get_trip_transactions(trip_id)) == 0
-
-    def test_auto_assign_no_op_when_no_active_trip(self, in_memory_db):
-        storage = Storage(connection=in_memory_db)
-        in_memory_db.execute("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('trips_enabled', 'true')")
-        in_memory_db.commit()
-        tx_id = _insert_tx(in_memory_db, "t1")
-        storage.auto_assign_to_active_trip(tx_id)  # no active trip → no-op, no error
-
     def test_is_in_trip_true(self, in_memory_db):
         storage = Storage(connection=in_memory_db)
         trip_id = storage.create_trip(name="X", start_date="2026-04-01")
@@ -252,9 +237,53 @@ class TestTripSummary:
         assert "Transport" in categories
         assert summary["by_category"][0]["category"] == "Dining"
 
+    def test_summary_nets_refund_count_excludes_it(self, in_memory_db):
+        storage = Storage(connection=in_memory_db)
+        trip_id = storage.create_trip(name="Osaka", start_date="2026-04-10")
+        purchase_id = storage.insert_transaction(
+            source="manual", source_id="trip-purchase", amount=100.0, category="Dining",
+            transaction_date="2026-04-10", tx_type="expense",
+        )
+        refund_id = storage.insert_transaction(
+            source="manual", source_id="trip-refund", amount=30.0, category="Dining",
+            transaction_date="2026-04-11", tx_type="refund",
+        )
+        storage.enlist_transaction(trip_id, purchase_id)
+        storage.enlist_transaction(trip_id, refund_id)
+        summary = storage.get_trip_summary(trip_id)
+        assert summary["total_sgd"] == pytest.approx(70.0)
+        assert summary["transaction_count"] == 1
+        assert summary["by_category"][0]["amount_sgd"] == pytest.approx(70.0)
+
     def test_summary_unknown_trip_returns_none(self, in_memory_db):
         storage = Storage(connection=in_memory_db)
         assert storage.get_trip_summary(999) is None
+
+    def test_summary_excludes_unresolved_foreign_amount_without_crashing(self, in_memory_db):
+        """R04: a legacy exchange_rate of 1.0 is unresolved, not real
+        conversion evidence — an unresolved transaction must be excluded
+        from trip totals, not summed at face value or crash the aggregation
+        (previously a bare `amount * exchange_rate` was never NULL; the
+        canonical-money-aware expression can be, for a genuinely unresolved
+        conversion, and the Python-side sum()/round() calls must tolerate
+        that)."""
+        storage = Storage(connection=in_memory_db)
+        trip_id = storage.create_trip(name="Bangkok", start_date="2026-04-10")
+        known_id = storage.insert_transaction(
+            source="manual", source_id="known", amount=100.0,
+            category="Dining", transaction_date="2026-04-10",
+        )
+        unresolved_id = storage.insert_transaction(
+            source="manual", source_id="unresolved", amount=5000.0,
+            currency="THB", exchange_rate=1.0,
+            category="Dining", transaction_date="2026-04-10",
+        )
+        storage.enlist_transaction(trip_id, known_id)
+        storage.enlist_transaction(trip_id, unresolved_id)
+        summary = storage.get_trip_summary(trip_id)
+        assert summary["total_sgd"] == pytest.approx(100.0, abs=0.01)
+        assert summary["transaction_count"] == 2
+        assert summary["by_category"][0]["amount_sgd"] == pytest.approx(100.0, abs=0.01)
 
 
 @pytest.fixture
@@ -313,6 +342,48 @@ class TestTripAPI:
         assert resp.json()["destination"] == "Japan"
 
     @pytest.mark.asyncio
+    async def test_trip_baseline_exclusion_marks_enlisted_transactions(self, api):
+        ac, storage = api
+        create = await ac.post("/api/trips", json={"name": "Bali", "start_date": "2026-08-01"})
+        trip_id = create.json()["id"]
+        tx_id = storage.insert_transaction(source="manual", source_id="bali-1", amount=900.0,
+                                           merchant="Resort", transaction_date="2026-08-04T09:00:00")
+        storage.enlist_transaction(trip_id, tx_id)
+        resp = await ac.post(f"/api/v2/trips/{trip_id}/baseline-exclusion", json={"excluded": True})
+        assert resp.status_code == 200
+        assert resp.json() == {"status": "ok", "transactions_updated": 1}
+        assert storage.get_transaction(tx_id)["excluded_from_baseline"] == 1
+
+    @pytest.mark.asyncio
+    async def test_trip_baseline_exclusion_requires_a_boolean(self, api):
+        ac, _ = api
+        create = await ac.post("/api/trips", json={"name": "Bali", "start_date": "2026-08-01"})
+        trip_id = create.json()["id"]
+        resp = await ac.post(f"/api/v2/trips/{trip_id}/baseline-exclusion", json={"excluded": "yes"})
+        assert resp.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_period_baseline_exclusion_marks_transactions_in_range(self, api):
+        ac, storage = api
+        inside = storage.insert_transaction(source="manual", source_id="p-1", amount=50.0,
+                                            transaction_date="2026-08-10T09:00:00")
+        outside = storage.insert_transaction(source="manual", source_id="p-2", amount=50.0,
+                                             transaction_date="2026-08-20T09:00:00")
+        resp = await ac.post("/api/v2/baseline-exclusion/period",
+                             json={"start": "2026-08-01", "end": "2026-08-15", "excluded": True})
+        assert resp.status_code == 200
+        assert resp.json() == {"status": "ok", "transactions_updated": 1}
+        assert storage.get_transaction(inside)["excluded_from_baseline"] == 1
+        assert storage.get_transaction(outside)["excluded_from_baseline"] == 0
+
+    @pytest.mark.asyncio
+    async def test_period_baseline_exclusion_rejects_inverted_range(self, api):
+        ac, _ = api
+        resp = await ac.post("/api/v2/baseline-exclusion/period",
+                             json={"start": "2026-08-15", "end": "2026-08-01", "excluded": True})
+        assert resp.status_code == 422
+
+    @pytest.mark.asyncio
     async def test_activate_trip(self, api):
         ac, _ = api
         create = await ac.post("/api/trips", json={"name": "X", "start_date": "2026-04-01"})
@@ -366,6 +437,34 @@ class TestTripAPI:
         assert "by_day" in data
 
     @pytest.mark.asyncio
+    async def test_get_trip_summary_v2_returns_canonical_money(self, api):
+        ac, storage = api
+        create = await ac.post("/api/trips", json={"name": "Tokyo", "destination": "Japan", "start_date": "2026-04-10"})
+        trip_id = create.json()["id"]
+        tx_id = storage.insert_transaction(
+            source="manual", source_id="v2-1", amount=150.0,
+            category="Dining", transaction_date="2026-04-10T12:00:00",
+        )
+        storage.enlist_transaction(trip_id, tx_id)
+
+        resp = await ac.get(f"/api/v2/trips/{trip_id}/summary")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["trip"]["id"] == trip_id
+        assert data["trip"]["name"] == "Tokyo"
+        assert data["trip"]["destination"] == "Japan"
+        assert data["total"] == {"minor_units": 15000, "currency": "SGD"}
+        assert data["transaction_count"] == 1
+        assert data["by_category"] == [{"category": "Dining", "amount": {"minor_units": 15000, "currency": "SGD"}, "count": 1}]
+        assert data["by_day"] == [{"date": "2026-04-10", "amount": {"minor_units": 15000, "currency": "SGD"}}]
+
+    @pytest.mark.asyncio
+    async def test_get_trip_summary_v2_unknown_trip_returns_404(self, api):
+        ac, _ = api
+        resp = await ac.get("/api/v2/trips/999/summary")
+        assert resp.status_code == 404
+
+    @pytest.mark.asyncio
     async def test_enlist_and_delist_transaction(self, api):
         ac, storage = api
         db = storage._conn
@@ -386,7 +485,7 @@ class TestTripAPI:
         assert (await ac.get(f"/api/trips/{trip_id}/transactions")).json() == []
 
     @pytest.mark.asyncio
-    async def test_check_trip_membership(self, api):
+    async def test_transaction_trips_lists_enlisted_trips(self, api):
         ac, storage = api
         db = storage._conn
         db.execute(
@@ -398,13 +497,13 @@ class TestTripAPI:
         create = await ac.post("/api/trips", json={"name": "X", "start_date": "2026-04-01"})
         trip_id = create.json()["id"]
 
-        resp = await ac.get(f"/api/trips/{trip_id}/transactions/{tx_id}/membership")
+        resp = await ac.get(f"/api/transactions/{tx_id}/trips")
         assert resp.status_code == 200
-        assert resp.json()["in_trip"] is False
+        assert resp.json() == {"trip_ids": []}
 
         await ac.post(f"/api/trips/{trip_id}/transactions", json={"transaction_id": tx_id})
-        resp = await ac.get(f"/api/trips/{trip_id}/transactions/{tx_id}/membership")
-        assert resp.json()["in_trip"] is True
+        resp = await ac.get(f"/api/transactions/{tx_id}/trips")
+        assert resp.json() == {"trip_ids": [trip_id]}
 
     @pytest.mark.asyncio
     async def test_settings_include_trips_enabled(self, api):

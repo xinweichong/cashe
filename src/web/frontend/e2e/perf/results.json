@@ -1,0 +1,34 @@
+{
+  "cpuThrottle": 4,
+  "viewport": "390x844",
+  "results": {
+    "home": {
+      "runs": 5,
+      "ready": 585,
+      "lcp": 432,
+      "tbt": 87,
+      "jsKB": 328
+    },
+    "activity": {
+      "runs": 5,
+      "ready": 447,
+      "lcp": 324,
+      "tbt": 23,
+      "jsKB": 211
+    },
+    "explore": {
+      "runs": 5,
+      "ready": 582,
+      "lcp": 344,
+      "tbt": 107,
+      "jsKB": 310
+    },
+    "plan": {
+      "runs": 5,
+      "ready": 415,
+      "lcp": 400,
+      "tbt": 12,
+      "jsKB": 200
+    }
+  }
+}

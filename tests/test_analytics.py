@@ -1,5 +1,3 @@
-import json
-import os
 import pytest
 from datetime import datetime, timedelta
 import sqlite3
@@ -15,8 +13,6 @@ from src.analytics import (
     get_anomalies,
     check_new_merchants,
     generate_summary,
-    load_summary,
-    get_yoy_comparison,
 )
 
 
@@ -38,7 +34,13 @@ def make_db():
             transaction_date DATETIME,
             ingested_at DATETIME DEFAULT CURRENT_TIMESTAMP,
             raw_data TEXT,
-            type TEXT DEFAULT 'expense'
+            type TEXT DEFAULT 'expense',
+            original_minor_units INTEGER,
+            reporting_minor_units INTEGER,
+            conversion_status TEXT,
+            conversion_rate TEXT,
+            conversion_source TEXT,
+            conversion_quoted_at TEXT
         );
     """)
     return conn
@@ -102,6 +104,76 @@ class TestPeriodComparison:
         assert result["previous_total"] == 0
         conn.close()
 
+    def test_unresolved_foreign_amount_is_excluded_not_face_valued(self):
+        """R04: a legacy exchange_rate of 1.0 is a silent unresolved fallback,
+        not real conversion evidence (src.canonical_money's rule) — analytics
+        must not sum a foreign amount at face value just because the legacy
+        column happens to be 1."""
+        conn = make_db()
+        storage = Storage(conn)
+        now = datetime.now().strftime("%Y-%m-%d")
+        storage.insert_transaction(
+            source="manual", source_id="known", amount=50.0,
+            transaction_date=now,
+        )
+        storage.insert_transaction(
+            source="manual", source_id="unresolved-foreign", amount=500.0,
+            currency="THB", exchange_rate=1.0, transaction_date=now,
+        )
+        result = get_period_comparison(conn, period="month")
+        assert result["current_total"] == 50.0
+        conn.close()
+
+    def test_refund_nets_against_spending_in_its_own_period(self):
+        # R05: a refund must reduce spending in the period the refund itself
+        # falls in — not retroactively rewrite the original purchase's
+        # period — and must net (not just be excluded like a transfer).
+        conn = make_db()
+        storage = Storage(conn)
+        now = datetime.now().strftime("%Y-%m-%d")
+        storage.insert_transaction(
+            source="manual", source_id="purchase", amount=100.0, category="Food",
+            transaction_date=now, tx_type="expense",
+        )
+        storage.insert_transaction(
+            source="manual", source_id="refund", amount=30.0, category="Food",
+            transaction_date=now, tx_type="refund",
+        )
+        result = get_period_comparison(conn, period="month")
+        assert result["current_total"] == 70.0
+
+    def test_category_comparison_nets_refund(self):
+        conn = make_db()
+        storage = Storage(conn)
+        now = datetime.now().strftime("%Y-%m-%d")
+        storage.insert_transaction(
+            source="manual", source_id="purchase", amount=100.0, category="Food",
+            transaction_date=now, tx_type="expense",
+        )
+        storage.insert_transaction(
+            source="manual", source_id="refund", amount=30.0, category="Food",
+            transaction_date=now, tx_type="refund",
+        )
+        result = get_category_comparison(conn, period="month")
+        food = next(r for r in result if r["category"] == "Food")
+        assert food["current"] == 70.0
+
+    def test_category_comparison_surfaces_category_with_only_a_refund(self):
+        # A category discovered only via an 'expense' row would silently drop
+        # a category that has a refund but no expense in this window.
+        conn = make_db()
+        storage = Storage(conn)
+        now = datetime.now().strftime("%Y-%m-%d")
+        storage.insert_transaction(
+            source="manual", source_id="only-refund", amount=30.0, category="Returned",
+            transaction_date=now, tx_type="refund",
+        )
+        result = get_category_comparison(conn, period="month")
+        categories = {r["category"] for r in result}
+        assert "Returned" in categories
+        returned = next(r for r in result if r["category"] == "Returned")
+        assert returned["current"] == -30.0
+
 
 class TestMerchantAnalysis:
     def test_top_merchants_by_spend(self, db_with_transactions):
@@ -113,6 +185,27 @@ class TestMerchantAnalysis:
         assert "count" in result[0]
         assert "total" in result[0]
 
+    def test_top_merchants_total_nets_refund_count_and_avg_exclude_it(self):
+        conn = make_db()
+        storage = Storage(conn)
+        now = datetime.now().strftime("%Y-%m-%d")
+        storage.insert_transaction(
+            source="manual", source_id="tm-purchase", amount=100.0, merchant="Shop",
+            category="Food", transaction_date=now, tx_type="expense",
+        )
+        storage.insert_transaction(
+            source="manual", source_id="tm-refund", amount=30.0, merchant="Shop",
+            category="Food", transaction_date=now, tx_type="refund",
+        )
+        result = get_top_merchants(conn)
+        shop = next(r for r in result if r["merchant"] == "Shop")
+        assert shop["total"] == 70.0
+        # count/avg describe actual purchases, not net-of-refund arithmetic —
+        # a refund isn't itself "a purchase" to average in.
+        assert shop["count"] == 1
+        assert shop["avg_amount"] == 100.0
+        conn.close()
+
     def test_merchant_trend(self, db_with_transactions):
         result = get_merchant_trend(db_with_transactions, merchant="Food place 0")
         assert "current_month" in result
@@ -121,6 +214,22 @@ class TestMerchantAnalysis:
         assert result["previous_month"] == 100.0
         assert result["trend"] == "stable"
         assert isinstance(result["months"], list)
+
+    def test_merchant_trend_nets_refund(self):
+        conn = make_db()
+        storage = Storage(conn)
+        now = datetime.now()
+        storage.insert_transaction(
+            source="manual", source_id="mt-purchase", amount=100.0, merchant="Shop",
+            category="Food", transaction_date=now.strftime("%Y-%m-%d"), tx_type="expense",
+        )
+        storage.insert_transaction(
+            source="manual", source_id="mt-refund", amount=30.0, merchant="Shop",
+            category="Food", transaction_date=now.strftime("%Y-%m-%d"), tx_type="refund",
+        )
+        result = get_merchant_trend(conn, merchant="Shop", now=now)
+        assert result["current_month"] == 70.0
+        conn.close()
 
     def test_merchant_trend_unknown_merchant(self):
         conn = make_db()
@@ -168,6 +277,23 @@ class TestSpendingVelocity:
         assert result["current_mtd"] == 50.0
         conn.close()
 
+    def test_current_mtd_nets_refund(self):
+        conn = make_db()
+        storage = Storage(conn)
+        today = datetime.now()
+        first_day = today.replace(day=1).strftime("%Y-%m-%d")
+        storage.insert_transaction(
+            source="manual", source_id="vel-purchase", amount=50.0, merchant="Test",
+            category="Food", transaction_date=first_day, tx_type="expense",
+        )
+        storage.insert_transaction(
+            source="manual", source_id="vel-refund", amount=20.0, merchant="Test",
+            category="Food", transaction_date=first_day, tx_type="refund",
+        )
+        result = get_spending_velocity(conn)
+        assert result["current_mtd"] == 30.0
+        conn.close()
+
 
 class TestAnomalies:
     def test_no_anomalies(self, db_with_transactions):
@@ -193,6 +319,27 @@ class TestAnomalies:
         result = get_anomalies(conn)
         assert len(result) > 0
         assert result[0]["amount"] == 500.0
+        conn.close()
+
+    def test_unresolved_foreign_amount_is_never_flagged(self):
+        """A legacy exchange_rate of 1.0 is unresolved, not real conversion
+        evidence — an unresolved foreign amount must not be comparable to
+        (and possibly flagged against) a category average at all."""
+        conn = make_db()
+        storage = Storage(conn)
+        for i in range(5):
+            storage.insert_transaction(
+                source="manual", source_id=f"normal-{i}",
+                amount=15.0, merchant="Normal shop",
+                category="Food", transaction_date=datetime.now().strftime("%Y-%m-%d"),
+            )
+        storage.insert_transaction(
+            source="manual", source_id="unresolved-foreign",
+            amount=5000.0, currency="THB", exchange_rate=1.0, merchant="Bangkok Cafe",
+            category="Food", transaction_date=datetime.now().strftime("%Y-%m-%d"),
+        )
+        result = get_anomalies(conn)
+        assert all(row["merchant"] != "Bangkok Cafe" for row in result)
         conn.close()
 
 
@@ -235,12 +382,8 @@ class TestNewMerchants:
 
 
 class TestSummaryReport:
-    def test_generate_monthly_summary(self, db_with_transactions, tmp_path):
-        result = generate_summary(
-            db_with_transactions,
-            report_type="monthly",
-            cache_dir=str(tmp_path),
-        )
+    def test_generate_monthly_summary(self, db_with_transactions):
+        result = generate_summary(db_with_transactions, report_type="monthly")
         assert result["total_spent"] == 400.0
         assert result["transaction_count"] == 4
         assert "top_category" in result
@@ -250,25 +393,23 @@ class TestSummaryReport:
             assert key in result, f"Missing key: {key}"
         assert result["type"] == "monthly"
 
-    def test_summary_cached_to_file(self, db_with_transactions, tmp_path):
-        generate_summary(
-            db_with_transactions,
-            report_type="monthly",
-            cache_dir=str(tmp_path),
+    def test_top_category_nets_refund(self):
+        conn = make_db()
+        storage = Storage(conn)
+        now = datetime.now().strftime("%Y-%m-%d")
+        storage.insert_transaction(
+            source="manual", source_id="sum-purchase", amount=100.0, category="Food",
+            transaction_date=now, tx_type="expense",
         )
-        # Check that a JSON file was created
-        files = os.listdir(tmp_path)
-        assert any(f.endswith(".json") for f in files)
-
-    def test_load_cached_summary(self, db_with_transactions, tmp_path):
-        original = generate_summary(
-            db_with_transactions,
-            report_type="monthly",
-            cache_dir=str(tmp_path),
+        storage.insert_transaction(
+            source="manual", source_id="sum-refund", amount=30.0, category="Food",
+            transaction_date=now, tx_type="refund",
         )
-        loaded = load_summary(str(tmp_path), report_type="monthly")
-        assert loaded["total_spent"] == original["total_spent"]
-
+        result = generate_summary(conn, report_type="monthly")
+        assert result["top_category"]["category"] == "Food"
+        assert result["top_category"]["total"] == 70.0
+        assert result["transaction_count"] == 1  # refund isn't counted as an expense transaction
+        conn.close()
 
 class TestTimezoneAwareDateRanges:
     def test_get_month_range_accepts_now_param(self):
@@ -300,27 +441,17 @@ class TestTimezoneAwareDateRanges:
         conn.close()
 
 
-class TestYoYComparison:
-    def test_returns_correct_month_count(self, in_memory_db):
-        result = get_yoy_comparison(in_memory_db, months=6)
-        assert len(result) == 6
-
-    def test_month_labels_present(self, in_memory_db):
-        result = get_yoy_comparison(in_memory_db, months=3)
-        for row in result:
-            assert "month_label" in row
-            assert "month" in row
-            assert "this_year_expenses" in row
-            assert "last_year_expenses" in row
-            assert "this_year_income" in row
-            assert "last_year_income" in row
-
-    def test_empty_db_returns_zeros(self, in_memory_db):
-        result = get_yoy_comparison(in_memory_db, months=3)
-        assert all(r["this_year_expenses"] == 0.0 for r in result)
-        assert all(r["last_year_expenses"] == 0.0 for r in result)
-
-    def test_ordered_oldest_to_newest(self, in_memory_db):
-        result = get_yoy_comparison(in_memory_db, months=6)
-        months = [r["month"] for r in result]
-        assert months == sorted(months)
+def test_query_total_counts_a_legacy_sgd_row_like_every_other_total(in_memory_db):
+    """A pre-canonical-money SGD row (no reporting_minor_units) counts at face
+    value here too, as it does in Storage's aggregates and spending_facts —
+    it used to be silently dropped from analytics totals only."""
+    from src.analytics import _query_total
+    in_memory_db.execute(
+        "INSERT INTO transactions (source, source_id, amount, currency, exchange_rate, merchant, transaction_date, type) "
+        "VALUES ('manual', 'legacy-1', 12.5, 'SGD', 1.0, 'Cafe', '2026-04-10', 'expense')"
+    )
+    in_memory_db.execute(
+        "INSERT INTO transactions (source, source_id, amount, currency, exchange_rate, merchant, transaction_date, type) "
+        "VALUES ('manual', 'legacy-thb', 300.0, 'THB', 1.0, 'Stall', '2026-04-10', 'expense')"
+    )
+    assert _query_total(in_memory_db, "2026-04-01", "2026-04-30") == 12.5

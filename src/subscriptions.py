@@ -20,6 +20,8 @@ from src.storage import Storage
 logger = logging.getLogger(__name__)
 
 STALE_FACTOR = 1.5  # charge overdue by > 1.5× interval → possibly_cancelled
+GENERATION_HORIZON_DAYS = 90  # matches get_upcoming_plan's max `days`
+_MAX_GENERATION_STEPS = 200  # defensive bound — even weekly over the horizon is ~13
 
 FREQUENCY_DAYS = {
     "weekly": 7,
@@ -90,40 +92,27 @@ class SubscriptionMatcher:
 
     def run(self) -> None:
         subscriptions = self.storage.list_subscriptions()
-        # Only active and possibly_cancelled — never cancelled
+        # Paused and cancelled schedules retain history without automatic processing.
         active = [s for s in subscriptions if s["status"] in ("active", "possibly_cancelled")]
         for sub in active:
             try:
-                self._process(sub)
+                # Re-read under the same lock as pause/cancel writes so a stale
+                # worker snapshot cannot generate charges or reactivate a schedule.
+                with self.storage.reconciliation_lock():
+                    current = self.storage.get_subscription(sub["id"])
+                    if current and current["status"] in ("active", "possibly_cancelled"):
+                        self._process(current)
             except Exception:
                 logger.exception("SubscriptionMatcher error for sub %s", sub["id"])
 
     def _process(self, sub: dict) -> None:
         sub_id = sub["id"]
         frequency = sub["frequency"]
-        billing_day = sub["billing_day"]
         interval_days = FREQUENCY_DAYS.get(frequency, 30)
 
-        # Anchor next-period math on the latest known upcoming.expected_date
-        # (matched or pending — both are pinned to billing_day). Using the actual
-        # tx.transaction_date would mis-anchor when a charge lands a day or two
-        # before billing_day and stall the subscription.
-        upcomings = self.storage.list_upcoming_transactions(sub_id)
-        latest_upcoming = upcomings[-1] if upcomings else None
-        last_date = latest_upcoming["expected_date"] if latest_upcoming else None
-        has_pending = any(u["status"] == "pending" for u in upcomings)
-
-        # 1. Generate upcoming if none exists for next billing period.
-        #    Skip when a pending upcoming is already in flight — it represents
-        #    the next period and we shouldn't get ahead of it.
-        next_date = compute_next_billing_date(frequency, billing_day, last_date=last_date)
-        if not has_pending and not self.storage.upcoming_exists_for_period(sub_id, next_date):
-            expected_amount = self._infer_expected_amount(sub_id)
-            self.storage.create_upcoming_transaction(sub_id, next_date, expected_amount)
-            logger.info(
-                "Created upcoming for sub %s (merchant=%s) on %s",
-                sub_id, sub["merchant"], next_date,
-            )
+        # 1. Generate every eligible pending cycle through the horizon (R11),
+        #    not just the next one.
+        self._generate_horizon(sub)
 
         # 2. Auto-match pending upcoming transactions
         for upcoming in self.storage.list_upcoming_transactions(sub_id):
@@ -152,8 +141,79 @@ class SubscriptionMatcher:
             elif days_since <= threshold and sub["status"] == "possibly_cancelled":
                 self.storage.update_subscription(sub_id, status="active")
 
-    def _infer_expected_amount(self, sub_id: int) -> Optional[float]:
+    def _generate_horizon(self, sub: dict) -> None:
+        """R11: materialize every eligible pending occurrence through
+        GENERATION_HORIZON_DAYS, not just the next one.
+
+        Walks the schedule forward from the latest known period (by
+        schedule_period_date, the stable identity fixed at creation and
+        never touched by a later expected_date correction — so a
+        corrected or dismissed period is neither regenerated nor
+        duplicated). A period the schedule would place before today (e.g.
+        caught up after the subscription was paused or newly reactivated)
+        is walked past but never materialized — it was never actually
+        billed, so it isn't a real upcoming charge.
+
+        Chains each step from the previous occurrence rather than always
+        recomputing from a fixed original anchor — safe because
+        compute_next_billing_date's billing_day math (_safe_date) only
+        reads the base date's year/month to pick the next candidate, so
+        clamping a short month (e.g. billing_day=31 in February) never
+        permanently shifts later months down; each step reclamps
+        independently. The frequency-without-billing_day fallback
+        (fixed +N days) is stable by construction — each step is a fixed
+        offset from the previous, nothing to drift relative to.
+        """
+        sub_id = sub["id"]
+        frequency = sub["frequency"]
+        billing_day = sub["billing_day"]
+        today = local_now().date()
+        horizon_end = today + timedelta(days=GENERATION_HORIZON_DAYS)
+
+        upcomings = self.storage.list_upcoming_transactions(sub_id)
+        existing_periods = {u["schedule_period_date"] for u in upcomings}
+        cursor = max((u["schedule_period_date"] for u in upcomings), default=None)
+        expected = None  # (amount, basis_tx_id), inferred on first use
+
+        for _ in range(_MAX_GENERATION_STEPS):
+            next_date_str = compute_next_billing_date(frequency, billing_day, last_date=cursor)
+            next_date = datetime.strptime(next_date_str, "%Y-%m-%d").date()
+            cursor = next_date_str
+            if next_date > horizon_end:
+                break
+            if next_date < today or next_date_str in existing_periods:
+                continue
+            if expected is None:
+                expected = self._infer_expected_amount(sub_id)
+            expected_amount, basis_tx_id = expected
+            self.storage.create_upcoming_transaction(
+                sub_id, next_date_str, expected_amount, amount_basis_transaction_id=basis_tx_id,
+            )
+            existing_periods.add(next_date_str)
+            logger.info(
+                "Created upcoming for sub %s (merchant=%s) on %s",
+                sub_id, sub["merchant"], next_date_str,
+            )
+
+    def _infer_expected_amount(self, sub_id: int) -> tuple[Optional[float], Optional[int]]:
+        """R11: upcoming_transactions.expected_amount is SGD-only (no
+        currency column of its own), so this must produce a real SGD value,
+        never a face-value multiply — the old `amount * exchange_rate` had
+        no currency validation and, worse, silently trusted a legacy
+        exchange_rate of 1.0 as a real conversion (the same bug class R04
+        fixed everywhere else money crosses a currency boundary). An
+        unresolved conversion now yields no expected amount rather than a
+        wrong one — get_upcoming_plan already treats a missing amount as
+        an "unknown" item, not a zero.
+
+        Returns (amount, basis_transaction_id) — the id of the matched
+        charge the amount was inferred from, so the caller can record
+        charge-level amount provenance (R11 sub-project 2)."""
+        from src.money import from_minor_units
+        from src.spending_facts import resolve_money
         txs = self.storage.get_subscription_matched_transactions(sub_id, limit=1)
         if txs:
-            return txs[0]["amount"] * txs[0]["exchange_rate"]
-        return None
+            minor, _status = resolve_money(txs[0])
+            if minor is not None:
+                return float(from_minor_units(minor, "SGD")), txs[0]["id"]
+        return None, None

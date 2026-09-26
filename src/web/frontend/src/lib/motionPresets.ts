@@ -1,0 +1,67 @@
+import type { Variants } from 'framer-motion'
+
+// Mirrors --ease-out-expo in index.css.
+export const EASE_OUT_EXPO = [0.16, 1, 0.3, 1] as const
+
+// Quick crossfade for route and lens changes.
+export const quickFade = { duration: 0.18, ease: EASE_OUT_EXPO }
+
+// ─── Spring presets ──────────────────────────────────────────────────────────
+export const springs = {
+  gentle: { type: 'spring' as const, stiffness: 200, damping: 25 },
+  snappy: { type: 'spring' as const, stiffness: 350, damping: 30 },
+  bouncy: { type: 'spring' as const, stiffness: 400, damping: 20 },
+  expo:   { type: 'tween'  as const, ease: EASE_OUT_EXPO, duration: 0.4 },
+}
+
+// ─── Page transition ─────────────────────────────────────────────────────────
+// Route changes are a quick crossfade with a 4px settle: a spring's long
+// tail read as lag on phones while the next page's charts mounted.
+export const pageVariants: Variants = {
+  initial: { opacity: 0, y: 4 },
+  animate: { opacity: 1, y: 0, transition: quickFade },
+  exit:    { opacity: 0, transition: { duration: 0.08, ease: 'easeIn' as const } },
+}
+
+// ─── Fade up (form expand, card entrance) ────────────────────────────────────
+export const fadeUpVariants: Variants = {
+  initial: { opacity: 0, y: 12 },
+  animate: { opacity: 1, y: 0, transition: springs.gentle },
+  exit:    { opacity: 0, y: 8,  transition: { duration: 0.12, ease: 'easeIn' as const } },
+}
+
+// ─── Slide in from right (detail panels) ─────────────────────────────────────
+export const slideInRightVariants: Variants = {
+  initial: { opacity: 0, x: 32 },
+  animate: { opacity: 1, x: 0, transition: springs.snappy },
+  exit:    { opacity: 0, x: 32, transition: { duration: 0.15, ease: 'easeIn' as const } },
+}
+
+// ─── Full-width push (SlideOver on a phone) ──────────────────────────────────
+// Travels the full width like a native push, on a fixed ease-out curve (a
+// spring's settle read as lag).
+export const pushInRightVariants: Variants = {
+  initial: { x: '100%' },
+  animate: { x: 0, transition: { duration: 0.3, ease: EASE_OUT_EXPO } },
+  exit:    { x: '100%', transition: { duration: 0.2, ease: 'easeIn' as const } },
+}
+
+// ─── Plain fade (reduced-motion stand-in for slides) ─────────────────────────
+export const fadeVariants: Variants = {
+  initial: { opacity: 0 },
+  animate: { opacity: 1, transition: { duration: 0.15 } },
+  exit:    { opacity: 0, transition: { duration: 0.1 } },
+}
+
+// ─── Stagger container ────────────────────────────────────────────────────────
+export const staggerContainerVariants: Variants = {
+  initial: {},
+  animate: { transition: { staggerChildren: 0.04, delayChildren: 0.05 } },
+}
+
+// ─── Stagger item (child of staggerContainer) ─────────────────────────────────
+export const staggerItemVariants: Variants = {
+  initial: { opacity: 0, y: 10 },
+  animate: { opacity: 1, y: 0, transition: springs.gentle },
+  exit:    { opacity: 0, transition: { duration: 0.1 } },
+}

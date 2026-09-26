@@ -13,6 +13,9 @@ class ParseResult:
     raw_data: Optional[str] = None
     currency: str = "SGD"
     tx_type: str = "expense"
+    timestamp_precision: str = "unknown"
+    payment_identity_kind: Optional[str] = None
+    payment_identity: Optional[str] = None
 
 
 @runtime_checkable

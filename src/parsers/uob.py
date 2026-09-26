@@ -86,13 +86,13 @@ class UobParser:
         )
 
     @staticmethod
-    def _parse_time_12h(time_str: str) -> tuple[int, int]:
-        """Parse '2:05PM' or '12:14AM' → (hour24, minute). Returns (0, 0) on parse failure."""
+    def _parse_time_12h(time_str: str) -> Optional[tuple[int, int]]:
+        """Parse '2:05PM' or '12:14AM' → (hour24, minute). Returns None on parse failure."""
         try:
             dt = datetime.strptime(time_str.upper(), "%I:%M%p")
             return dt.hour, dt.minute
         except ValueError:
-            return 0, 0
+            return None
 
     @staticmethod
     def _iso_from_slash_date(date_str: str) -> str:
@@ -122,7 +122,10 @@ class UobParser:
             currency=currency,
             merchant=merchant,
             description=f"UOB Card *{card_last4} - {merchant}",
+            payment_identity_kind="uob_card_last4",
+            payment_identity=card_last4,
             transaction_date=f"{iso_date}T00:00:00",
+            timestamp_precision="date",
             raw_data=body,
         )
 
@@ -138,7 +141,10 @@ class UobParser:
             amount=amount,
             merchant="Transit",
             description=f"UOB Card *{m.group(2)} - Transit",
+            payment_identity_kind="uob_card_last4",
+            payment_identity=m.group(2),
             transaction_date=f"{iso_date}T00:00:00",
+            timestamp_precision="date",
             raw_data=body,
         )
 
@@ -151,14 +157,18 @@ class UobParser:
         day, month_str, short_year = int(m.group(4)), m.group(5), int(m.group(6))
         time_str, merchant = m.group(7), m.group(8).strip()
         iso_date = self._iso_from_dmmy(day, month_str, short_year)
-        h, mi = self._parse_time_12h(time_str)
+        parsed_time = self._parse_time_12h(time_str)
+        h, mi = parsed_time or (0, 0)
         return ParseResult(
             source="uob_card",
             source_id="",
             amount=amount,
             merchant=merchant,
             description=f"UOB Card *{card_last4} - {merchant} (Reversal)",
+            payment_identity_kind="uob_card_last4",
+            payment_identity=card_last4,
             transaction_date=f"{iso_date}T{h:02d}:{mi:02d}:00",
+            timestamp_precision="minute" if parsed_time else "unknown",
             currency=currency,
             tx_type="income",
             raw_data=body,
@@ -180,66 +190,42 @@ class UobParser:
             merchant="PayNow",
             description=f"PayNow received to a/c ending {account_ending}",
             transaction_date=dt.strftime("%Y-%m-%dT%H:%M:%S"),
+            timestamp_precision="minute",
+            payment_identity_kind="uob_account_suffix",
+            payment_identity=account_ending,
             tx_type="income",
             raw_data=body,
         )
 
-    def _parse_transfer(self, body: str) -> Optional[ParseResult]:
-        m = self.TRANSFER_PATTERN.search(body)
+    def _parse_outgoing(self, body: str, pattern, source: str, describe) -> Optional[ParseResult]:
+        """A transfer, NETS QR payment or PayNow send: all share one alert
+        shape (amount, counterparty, 12h time, d Mon yy), differing only in
+        pattern, source and description."""
+        m = pattern.search(body)
         if not m:
             return None
         amount = float(m.group(1).replace(",", ""))
-        recipient = m.group(2).strip()
-        time_str = m.group(3)
+        counterparty = m.group(2).strip()
         day, month_str, short_year = int(m.group(4)), m.group(5), int(m.group(6))
         iso_date = self._iso_from_dmmy(day, month_str, short_year)
-        h, mi = self._parse_time_12h(time_str)
+        parsed_time = self._parse_time_12h(m.group(3))
+        h, mi = parsed_time or (0, 0)
         return ParseResult(
-            source="uob_transfer",
+            source=source,
             source_id="",
             amount=amount,
-            merchant=recipient,
-            description=f"Transfer to {recipient}",
+            merchant=counterparty,
+            description=describe(counterparty),
             transaction_date=f"{iso_date}T{h:02d}:{mi:02d}:00",
+            timestamp_precision="minute" if parsed_time else "unknown",
             raw_data=body,
         )
+
+    def _parse_transfer(self, body: str) -> Optional[ParseResult]:
+        return self._parse_outgoing(body, self.TRANSFER_PATTERN, "uob_transfer", lambda r: f"Transfer to {r}")
 
     def _parse_nets_qr(self, body: str) -> Optional[ParseResult]:
-        m = self.NETS_QR_PATTERN.search(body)
-        if not m:
-            return None
-        amount = float(m.group(1).replace(",", ""))
-        merchant = m.group(2).strip()
-        time_str = m.group(3)
-        day, month_str, short_year = int(m.group(4)), m.group(5), int(m.group(6))
-        iso_date = self._iso_from_dmmy(day, month_str, short_year)
-        h, mi = self._parse_time_12h(time_str)
-        return ParseResult(
-            source="uob_nets",
-            source_id="",
-            amount=amount,
-            merchant=merchant,
-            description=f"NETS QR - {merchant}",
-            transaction_date=f"{iso_date}T{h:02d}:{mi:02d}:00",
-            raw_data=body,
-        )
+        return self._parse_outgoing(body, self.NETS_QR_PATTERN, "uob_nets", lambda m: f"NETS QR - {m}")
 
     def _parse_paynow_sent(self, body: str) -> Optional[ParseResult]:
-        m = self.PAYNOW_SENT_PATTERN.search(body)
-        if not m:
-            return None
-        amount = float(m.group(1).replace(",", ""))
-        recipient = m.group(2).strip()
-        time_str = m.group(3)
-        day, month_str, short_year = int(m.group(4)), m.group(5), int(m.group(6))
-        iso_date = self._iso_from_dmmy(day, month_str, short_year)
-        h, mi = self._parse_time_12h(time_str)
-        return ParseResult(
-            source="uob_paynow_sent",
-            source_id="",
-            amount=amount,
-            merchant=recipient,
-            description=f"PayNow transfer to {recipient}",
-            transaction_date=f"{iso_date}T{h:02d}:{mi:02d}:00",
-            raw_data=body,
-        )
+        return self._parse_outgoing(body, self.PAYNOW_SENT_PATTERN, "uob_paynow_sent", lambda r: f"PayNow transfer to {r}")

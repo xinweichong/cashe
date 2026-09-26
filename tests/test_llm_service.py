@@ -76,60 +76,6 @@ class TestGeneratePeriodInsight:
         assert result["nudges"] == []
 
 
-class TestGenerateWeeklyInsight:
-    def test_returns_narrative_and_nudges(self, svc, mock_model):
-        payload = {"narrative": "Fast week.", "nudges": ["Cut coffee", "Walk more"]}
-        _mock_response(mock_model, json.dumps(payload))
-        result = svc.generate_weekly_insight({"period_label": "Week of Jun 2026"})
-        assert result["narrative"] == "Fast week."
-        assert len(result["nudges"]) == 2
-
-    def test_caps_nudges_at_three(self, svc, mock_model):
-        payload = {"narrative": "x", "nudges": ["a", "b", "c", "d"]}
-        _mock_response(mock_model, json.dumps(payload))
-        result = svc.generate_weekly_insight({})
-        assert len(result["nudges"]) == 3
-
-    def test_api_error_returns_empty(self, svc, mock_model):
-        mock_model.models.generate_content.side_effect = Exception("timeout")
-        result = svc.generate_weekly_insight({})
-        assert result["narrative"] == ""
-        assert result["nudges"] == []
-
-
-class TestGenerateMonthlyInsight:
-    def test_returns_narrative_and_nudges(self, svc, mock_model):
-        payload = {"narrative": "Good savings.", "nudges": ["Invest surplus", "Reduce dining"]}
-        _mock_response(mock_model, json.dumps(payload))
-        result = svc.generate_monthly_insight({"period_label": "Jun 2026"})
-        assert result["narrative"] == "Good savings."
-        assert len(result["nudges"]) == 2
-
-    def test_caps_nudges_at_three(self, svc, mock_model):
-        payload = {"narrative": "y", "nudges": ["a", "b", "c", "d", "e"]}
-        _mock_response(mock_model, json.dumps(payload))
-        result = svc.generate_monthly_insight({})
-        assert len(result["nudges"]) == 3
-
-    def test_api_error_returns_empty(self, svc, mock_model):
-        mock_model.models.generate_content.side_effect = Exception("timeout")
-        result = svc.generate_monthly_insight({})
-        assert result["narrative"] == ""
-        assert result["nudges"] == []
-
-
-class TestExplainAnomaly:
-    def test_returns_string(self, svc, mock_model):
-        _mock_response(mock_model, "This is 3x your usual Grab fare.")
-        result = svc.explain_anomaly("Grab", 180.0, 56.0, "Transport")
-        assert result == "This is 3x your usual Grab fare."
-
-    def test_api_error_returns_empty_string(self, svc, mock_model):
-        mock_model.models.generate_content.side_effect = Exception("error")
-        result = svc.explain_anomaly("Grab", 180.0, 56.0, "Transport")
-        assert result == ""
-
-
 class TestCreateLlmService:
     def test_returns_none_when_no_key(self):
         result = create_llm_service({})
@@ -139,32 +85,18 @@ class TestCreateLlmService:
         result = create_llm_service({"gemini_api_key": ""})
         assert result is None
 
-    def test_returns_service_when_key_present(self):
+    def test_returns_none_when_key_present_but_policy_not_confirmed(self):
+        """An API key alone must not enable cloud calls (fail-closed gate)."""
+        result = create_llm_service({"gemini_api_key": "abc123"})
+        assert result is None
+
+    def test_returns_none_when_policy_confirmed_but_no_key(self):
+        result = create_llm_service({"gemini_policy_confirmed": True})
+        assert result is None
+
+    def test_returns_service_when_key_present_and_policy_confirmed(self):
         with patch("google.genai.Client"):
-            result = create_llm_service({"gemini_api_key": "abc123"})
+            result = create_llm_service({"gemini_api_key": "abc123", "gemini_policy_confirmed": True})
         assert result is not None
         assert isinstance(result, LLMService)
 
-
-class TestExplainSubscriptionChange:
-    def test_returns_string(self, svc, mock_model):
-        _mock_response(mock_model, "Netflix raised its price by $2/month, costing $24 more per year.")
-        result = svc.explain_subscription_change("Netflix", "Netflix", 15.98, 17.98)
-        assert result == "Netflix raised its price by $2/month, costing $24 more per year."
-
-    def test_api_error_returns_empty_string(self, svc, mock_model):
-        mock_model.models.generate_content.side_effect = Exception("error")
-        result = svc.explain_subscription_change("Netflix", "Netflix", 15.98, 17.98)
-        assert result == ""
-
-
-class TestGenerateGoalCoaching:
-    def test_returns_string(self, svc, mock_model):
-        _mock_response(mock_model, "Cut dining spending by 20% to reach your goal faster.")
-        result = svc.generate_goal_coaching({"target": 1000}, {"food": 500})
-        assert result == "Cut dining spending by 20% to reach your goal faster."
-
-    def test_api_error_returns_empty_string(self, svc, mock_model):
-        mock_model.models.generate_content.side_effect = Exception("error")
-        result = svc.generate_goal_coaching({}, {})
-        assert result == ""

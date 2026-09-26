@@ -1,30 +1,25 @@
+import { subscriptionConfirmationLabels } from '@/lib/subscriptionConfirmation';
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { Ban, Pencil, Trash2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { ChartCard } from '@/components/ui/cards';
-import {
-  CHART_AXIS_PROPS,
-  CHART_CURSOR_BAR,
-  CHART_TOOLTIP_STYLE,
-  COLOR_TEAL,
-} from '@/lib/chartTheme';
 import { api, type Subscription, type Transaction, type UpcomingTransaction } from '@/api/client';
 import { SubscriptionForm } from './SubscriptionForm';
+import { invalidateSpendingQueries } from '@/hooks/useTransactions';
+import { toDateStr, formatCurrency } from '@/lib/utils';
+import { FREQUENCY_LABELS } from '@/lib/subscriptionFrequency';
+import { MiniBarChart } from '@/components/charts/MiniBarChart';
+import { ConfirmDestructive, SectionLabel, StatTiles } from '@/components/ui/detail-panel';
 
 interface SubscriptionDetailProps {
   subId: number;
   onClose: () => void;
 }
 
-const FREQUENCY_LABELS: Record<Subscription['frequency'], string> = {
-  weekly: 'Weekly',
-  biweekly: 'Biweekly',
-  monthly: 'Monthly',
-  quarterly: 'Quarterly',
-  annual: 'Annual',
-};
+// A linked charge in SGD, or why it can't be shown.
+function sgdEquivalent(tx: Transaction): string {
+  return tx.exchange_rate == null ? 'Conversion unresolved' : formatCurrency(tx.amount * tx.exchange_rate);
+}
 
 const FREQUENCY_MONTHLY_FACTOR: Record<Subscription['frequency'], number> = {
   weekly: 4.33,
@@ -65,48 +60,66 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
   const { data: merchantTxs = [] } = useQuery({
     queryKey: ['merchant-transactions-for-link', sub?.merchant],
     queryFn: () => api.getTransactions({ merchant: sub!.merchant, limit: 100 }),
-    enabled: sub != null,
+    enabled: sub != null && showLinkPicker,
     staleTime: 60_000,
   });
 
-  // Transactions for upcoming match picker (last 90 days, all merchants)
-  const today = new Date().toISOString().slice(0, 10);
-  const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  // Transactions for upcoming match picker (last 90 days, all merchants).
+  // Computed once per mount so the query key stays stable across re-renders.
+  const [{ today, ninetyDaysAgo }] = useState(() => ({
+    today: toDateStr(new Date()),
+    ninetyDaysAgo: toDateStr(new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)),
+  }));
   const { data: recentTxs = [] } = useQuery({
     queryKey: ['transactions', 'match-picker', ninetyDaysAgo, today],
     queryFn: () =>
       api.getTransactions({ start_date: ninetyDaysAgo, end_date: today, limit: 50 }) as Promise<Transaction[]>,
-    enabled: sub != null,
+    // Only the match picker on a pending charge uses these.
+    enabled: sub != null && sub.status !== 'paused' && upcoming.some((u: UpcomingTransaction) => u.status === 'pending'),
   });
 
   const cancelMutation = useMutation({
     mutationFn: () => api.updateSubscription(subId, { status: 'cancelled' }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['subscriptions'] });
+      invalidateSpendingQueries(qc);
       setConfirmCancel(false);
+    },
+  });
+
+  const confirmationMutation = useMutation({
+    mutationFn: () => api.confirmSubscription(subId),
+    onSuccess: () => {
+      invalidateSpendingQueries(qc);
+    },
+  });
+
+  const pauseMutation = useMutation({
+    mutationFn: (status: 'paused' | 'active') => api.updateSubscription(subId, { status }),
+    onSuccess: () => {
+      invalidateSpendingQueries(qc);
     },
   });
 
   const deleteMutation = useMutation({
     mutationFn: () => api.deleteSubscription(subId),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['subscriptions'] });
+      invalidateSpendingQueries(qc);
       onClose();
     },
   });
 
   const dismissMutation = useMutation({
     mutationFn: (upcomingId: number) => api.dismissUpcoming(subId, upcomingId),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['subscription-upcoming', subId] }),
+    onSuccess: () => {
+      invalidateSpendingQueries(qc);
+    },
   });
 
   const matchMutation = useMutation({
     mutationFn: ({ upcomingId, txId }: { upcomingId: number; txId: number }) =>
       api.matchUpcoming(subId, upcomingId, txId).then(() => txId),
     onSuccess: (txId) => {
-      qc.invalidateQueries({ queryKey: ['subscription-upcoming', subId] });
-      qc.invalidateQueries({ queryKey: ['subscription-history', subId] });
-      qc.invalidateQueries({ queryKey: ['subscriptions'] });
+      invalidateSpendingQueries(qc);
       const matchedTx = recentTxs.find((t) => t.id === txId);
       if (matchedTx && sub && matchedTx.merchant && matchedTx.merchant !== sub.merchant) {
         setAdoptPrompt({ txMerchant: matchedTx.merchant });
@@ -117,7 +130,7 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
   const adoptMutation = useMutation({
     mutationFn: (merchant: string) => api.updateSubscription(subId, { merchant }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['subscriptions'] });
+      invalidateSpendingQueries(qc);
       setAdoptPrompt(null);
     },
   });
@@ -125,8 +138,7 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
   const linkMutation = useMutation({
     mutationFn: (txId: number) => api.linkTransaction(subId, txId),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['subscription-history', subId] });
-      qc.invalidateQueries({ queryKey: ['subscriptions'] });
+      invalidateSpendingQueries(qc);
       setLinkSelectedId('');
     },
   });
@@ -147,7 +159,7 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
         .slice(0, 6)
         .map((t: Transaction) => ({
           date: t.transaction_date.slice(0, 10),
-          amount: Number((t.amount * t.exchange_rate).toFixed(2)),
+          amount: t.exchange_rate == null ? null : Number((t.amount * t.exchange_rate).toFixed(2)),
         }))
         .reverse(),
     [history],
@@ -174,12 +186,13 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
                   <span className="text-warning">⚠ Possibly cancelled</span>
                 )}
                 {sub.status === 'cancelled' && <span>Cancelled</span>}
+                {sub.status === 'paused' && <span>Paused in Cashe</span>}
               </div>
             )}
           </div>
-          <button onClick={onClose} className="text-muted hover:text-foreground p-1 shrink-0">
+          <Button variant="ghost" size="icon" className="shrink-0" onClick={onClose} aria-label="Close">
             <X className="w-4 h-4" />
-          </button>
+          </Button>
         </div>
 
         {/* Action bar — persistent chrome */}
@@ -189,27 +202,31 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
               <div className="flex items-center justify-between px-4 py-2 gap-3">
                 <span className="text-sm text-foreground">Cancel this subscription?</span>
                 <div className="flex gap-2 shrink-0">
-                  <button
-                    onClick={() => setConfirmCancel(false)}
-                    className="px-3 py-1 text-xs text-muted hover:text-foreground"
-                  >
+                  <Button type="button" size="sm" variant="ghost" onClick={() => setConfirmCancel(false)}>
                     Back
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="bg-warning text-background hover:bg-warning/90"
                     onClick={() => cancelMutation.mutate()}
                     disabled={cancelMutation.isPending}
-                    className="px-3 py-1 text-xs bg-warning text-background rounded-md disabled:opacity-40"
                   >
                     {cancelMutation.isPending ? 'Cancelling…' : 'Confirm'}
-                  </button>
+                  </Button>
                 </div>
               </div>
             ) : (
-              <div className="flex gap-2 px-4 py-2">
+              <div className="flex flex-wrap gap-2 px-4 py-2">
+                {sub.status !== 'cancelled' && (
+                  <Button variant="outline" className="min-h-11" disabled={pauseMutation.isPending}
+                    onClick={() => pauseMutation.mutate(sub.status === 'paused' ? 'active' : 'paused')}>
+                    {pauseMutation.isPending ? 'Saving…' : sub.status === 'paused' ? 'Resume in Cashe' : 'Pause in Cashe'}
+                  </Button>
+                )}
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-7 w-7"
                   onClick={() => setShowEdit(true)}
                   aria-label="Edit"
                 >
@@ -219,7 +236,7 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-7 w-7 text-warning"
+                    className="text-warning"
                     onClick={() => setConfirmCancel(true)}
                     aria-label="Cancel subscription"
                   >
@@ -229,7 +246,7 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-7 w-7 text-destructive"
+                  className="text-destructive"
                   onClick={() => setConfirmDelete(true)}
                   aria-label="Delete"
                 >
@@ -242,24 +259,24 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
 
         {/* Scrollable body */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {sub && sub.status !== 'cancelled' && (
+            <p className="text-xs text-muted">
+              {sub.status === 'paused'
+                ? 'Predictions are hidden and automatic matching is paused. Resuming restores retained dates, including overdue predictions.'
+                : 'Pausing hides predictions and stops automatic matching in Cashe.'}
+              {' '}This does not pause billing with your provider.
+            </p>
+          )}
           {!sub && <p className="text-sm text-muted">Catching up…</p>}
 
           {sub && (
             <>
               {/* Stats grid */}
-              <div className="grid grid-cols-2 gap-2">
-                {[
-                  { label: 'Monthly', value: monthlyCost != null ? `S$${monthlyCost.toFixed(2)}` : '—' },
-                  { label: 'Last charge', value: sub.last_amount != null ? `S$${sub.last_amount.toFixed(2)}` : '—' },
+              <StatTiles items={[
+                  { label: 'Monthly', value: monthlyCost != null ? formatCurrency(monthlyCost) : '—' },
+                  { label: 'Last charge', value: sub.last_amount != null ? formatCurrency(sub.last_amount) : '—' },
                   { label: 'Next charge', value: sub.next_expected_date ? sub.next_expected_date.slice(0, 10) : '—' },
-                  { label: 'History', value: `${history.length} linked` },
-                ].map(({ label, value }) => (
-                  <div key={label} className="bg-background rounded-lg p-3 border border-border">
-                    <p className="text-[10px] font-mono uppercase tracking-[0.06em] text-muted">{label}</p>
-                    <p className="text-sm font-display font-bold text-foreground mt-0.5">{value}</p>
-                  </div>
-                ))}
-              </div>
+                  { label: 'History', value: `${history.length} linked` },]} />
 
               {adoptPrompt && (
                 <div className="flex items-center justify-between p-3 rounded-md bg-warning/10 border border-warning/30 text-xs">
@@ -267,37 +284,37 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
                     Transaction merchant is <strong>{adoptPrompt.txMerchant}</strong>. Update subscription for future auto-matching?
                   </span>
                   <div className="flex gap-2 ml-3 shrink-0">
-                    <button
-                      onClick={() => adoptMutation.mutate(adoptPrompt.txMerchant)}
-                      className="text-foreground underline underline-offset-2"
-                    >
+                    <Button type="button" size="sm" variant="outline" onClick={() => adoptMutation.mutate(adoptPrompt.txMerchant)}>
                       Yes
-                    </button>
-                    <button onClick={() => setAdoptPrompt(null)} className="text-muted">
+                    </Button>
+                    <Button type="button" size="sm" variant="ghost" onClick={() => setAdoptPrompt(null)}>
                       No
-                    </button>
+                    </Button>
                   </div>
                 </div>
               )}
 
               {trendData.length >= 2 && (
-                <ChartCard title="Recent charges">
-                  <ResponsiveContainer width="100%" height={120}>
-                    <BarChart data={trendData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
-                      <XAxis dataKey="date" {...CHART_AXIS_PROPS} />
-                      <YAxis hide />
-                      <Tooltip contentStyle={CHART_TOOLTIP_STYLE} cursor={CHART_CURSOR_BAR} />
-                      <Bar dataKey="amount" fill={COLOR_TEAL} radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </ChartCard>
+                <MiniBarChart title="Recent charges" data={trendData} xKey="date" valueKey="amount" valueLabel="Charged" />
               )}
 
-              {pendingUpcomings.length > 0 && (
+              <p className="text-sm text-muted">{subscriptionConfirmationLabels[sub.confirmation_source]}. Future dates and amounts remain estimates.</p>
+              {sub.confirmation_source === 'unknown' && (
+                <Button variant="outline" className="min-h-11" disabled={confirmationMutation.isPending}
+                  onClick={() => confirmationMutation.mutate()}>
+                  {confirmationMutation.isPending ? 'Saving…' : 'Confirm this schedule'}
+                </Button>
+              )}
+
+              {[confirmationMutation.error, pauseMutation.error, matchMutation.error, dismissMutation.error, linkMutation.error].filter(Boolean).map((error, index) => (
+                <p key={index} role="alert" className="text-sm text-destructive">
+                  {error instanceof Error ? error.message : 'Could not update the charge. Try again.'}
+                </p>
+              ))}
+
+              {sub.status !== 'paused' && pendingUpcomings.length > 0 && (
                 <section>
-                  <p className="text-[10px] font-mono font-semibold uppercase tracking-[0.22em] text-muted mb-2">
-                    Upcoming
-                  </p>
+                  <SectionLabel className="mb-2">Upcoming</SectionLabel>
                   <div className="divide-y divide-border">
                     {pendingUpcomings.map((u: UpcomingTransaction) => (
                       <UpcomingRow
@@ -315,15 +332,16 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
               {/* History + link past transactions */}
               <section>
                 <div className="flex items-center justify-between mb-2">
-                  <p className="text-[10px] font-mono font-semibold uppercase tracking-[0.22em] text-muted">
-                    History
-                  </p>
-                  <button
+                  <SectionLabel>History</SectionLabel>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    aria-expanded={showLinkPicker}
                     onClick={() => setShowLinkPicker((v) => !v)}
-                    className="text-xs text-muted hover:text-foreground underline underline-offset-2"
                   >
                     {showLinkPicker ? 'Hide' : 'Link past transaction'}
-                  </button>
+                  </Button>
                 </div>
 
                 {showLinkPicker && (
@@ -343,19 +361,20 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
                           <option value="">Choose transaction…</option>
                           {linkCandidates.map((tx: Transaction) => (
                             <option key={tx.id} value={String(tx.id)}>
-                              {tx.transaction_date.slice(0, 10)} · S${(tx.amount * tx.exchange_rate).toFixed(2)} · {tx.merchant ?? '—'}
+                              {tx.transaction_date.slice(0, 10)} · {sgdEquivalent(tx)} · {tx.merchant ?? '—'}
                             </option>
                           ))}
                         </select>
-                        <button
+                        <Button
+                          type="button"
+                          className="shrink-0"
                           onClick={() => {
                             if (linkSelectedId) linkMutation.mutate(Number(linkSelectedId));
                           }}
                           disabled={!linkSelectedId || linkMutation.isPending}
-                          className="btn-action disabled:opacity-40 shrink-0"
                         >
                           {linkMutation.isPending ? 'Linking…' : 'Link'}
-                        </button>
+                        </Button>
                       </div>
                     )}
                   </div>
@@ -372,7 +391,7 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
                       >
                         <span className="text-xs text-muted">{tx.transaction_date.slice(0, 10)}</span>
                         <span className="text-xs font-medium text-foreground tabular-nums">
-                          S${(tx.amount * tx.exchange_rate).toFixed(2)}
+                          {sgdEquivalent(tx)}
                         </span>
                       </div>
                     ))}
@@ -381,26 +400,12 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
               </section>
 
               {confirmDelete && (
-                <div className="p-3 rounded-md border border-destructive/30 bg-destructive/10 space-y-2">
-                  <p className="text-sm text-foreground">
-                    Delete this subscription permanently? Matched transactions are not deleted.
-                  </p>
-                  <div className="flex justify-end gap-2">
-                    <button
-                      onClick={() => setConfirmDelete(false)}
-                      className="px-3 py-1.5 text-sm text-muted hover:text-foreground"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      onClick={() => deleteMutation.mutate()}
-                      disabled={deleteMutation.isPending}
-                      className="px-3 py-1.5 text-sm bg-destructive text-white rounded-md disabled:opacity-40"
-                    >
-                      {deleteMutation.isPending ? 'Deleting…' : 'Delete'}
-                    </button>
-                  </div>
-                </div>
+                <ConfirmDestructive
+                  message="Delete this subscription permanently? Matched transactions are not deleted."
+                  pending={deleteMutation.isPending}
+                  onConfirm={() => deleteMutation.mutate()}
+                  onCancel={() => setConfirmDelete(false)}
+                />
               )}
             </>
           )}
@@ -413,7 +418,7 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
           onClose={() => setShowEdit(false)}
           onSave={() => {
             setShowEdit(false);
-            qc.invalidateQueries({ queryKey: ['subscriptions'] });
+            invalidateSpendingQueries(qc);
           }}
         />
       )}
@@ -443,12 +448,9 @@ function UpcomingRow({ upcoming, recentTxs, onMatch, onDismiss }: UpcomingRowPro
             <span className="text-xs text-muted">S${upcoming.expected_amount.toFixed(2)}</span>
           )}
         </div>
-        <button
-          onClick={onDismiss}
-          className="text-xs text-muted hover:text-foreground underline underline-offset-2"
-        >
+        <Button type="button" variant="ghost" size="sm" onClick={onDismiss}>
           Dismiss
-        </button>
+        </Button>
       </div>
       <div className="flex gap-2">
         <select
@@ -459,17 +461,18 @@ function UpcomingRow({ upcoming, recentTxs, onMatch, onDismiss }: UpcomingRowPro
           <option value="">Match to transaction…</option>
           {candidates.map((tx) => (
             <option key={tx.id} value={String(tx.id)}>
-              {tx.transaction_date.slice(0, 10)} · S${(tx.amount * tx.exchange_rate).toFixed(2)} · {tx.merchant ?? '—'}
+              {tx.transaction_date.slice(0, 10)} · {sgdEquivalent(tx)} · {tx.merchant ?? '—'}
             </option>
           ))}
         </select>
-        <button
+        <Button
+          type="button"
+          className="shrink-0"
           onClick={() => { if (selectedTxId) onMatch(Number(selectedTxId)); }}
           disabled={!selectedTxId}
-          className="btn-action disabled:opacity-40 shrink-0"
         >
           Match
-        </button>
+        </Button>
       </div>
     </div>
   );

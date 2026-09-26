@@ -1,14 +1,17 @@
 import asyncio
 import logging
 import os
-import re
+import secrets
+import hashlib
+import json
+import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
+from datetime import date, datetime
 from functools import partial
-from typing import Optional
+from typing import Literal, Optional
+from zoneinfo import ZoneInfo
 
-import bcrypt
 from fastapi import FastAPI, Request, Response, HTTPException, Depends, Query
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -16,30 +19,20 @@ import csv
 import io
 from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 
-from src.config import local_now
-from src.web.auth import verify_password, create_session, verify_session, destroy_session
-from src.analytics import (
-    load_summary,
-    get_yoy_comparison,
-)
+from src.storage import Conflict, NotFound, RevisionConflict
+from src import transaction_commands
+from src.money import to_minor_units, from_minor_units
+from src.spending_facts import resolve_money
+from src.config import DEFAULT_TIMEZONE, local_now
+from src.web.auth import LoginRateLimiter, create_session, destroy_session, hash_password, verify_password, verify_session
+from src.web.contracts import BudgetProgress, BulkTransactionRequest, BulkTransactionResultItem, BulkUndoRequest, CaptureFollowup, CaptureIssue, CaptureResolution, CategoryBreakdown, CategoryTrendPoint, DailyTotal, GoalProgress, HealthScore, HomeBriefing, MerchantRanking, MerchantSummary, QueuedResponse, SpendingEvidence, SpendingFacts, SpendingReview, TransactionCorrection, TransactionCreate, TransactionDeletion, TransactionProvenance, TransactionUndo, TransactionV2, TripSummary, UpcomingPlan, UpcomingCalendar, PlanMutationResponse, RecurringReview, RecurringResolution, RefundMatchReview, RefundMatchResolution, DuplicateReview, DuplicateDismissal, DuplicateMergeRequest, DuplicateMergeResult, DuplicateMergeUndoResult, SubscriptionReview, WeekdayPattern, MonthForecast, ScenarioRequest, ScenarioResponse, SpendingSignals, MonthlyFlow
 
 logger = logging.getLogger(__name__)
 
 
-def _normalise_transaction_date(s: str) -> str:
-    """Normalise date strings to full ISO datetime."""
-    if re.match(r'^\d{4}-\d{2}-\d{2}$', s):
-        return s + "T00:00:00"
-    if re.match(r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$', s):
-        return s + ":00"
-    return s
-
-SUMMARY_CACHE_DIR = os.environ.get(
-    "SUMMARY_CACHE_DIR",
-    os.path.join(os.path.dirname(__file__), "..", "data", "summaries")
-)
-
-# DB thread pool: allows concurrent read queries while serialising writes via SQLite WAL mode.
+# Keeps blocking SQLite calls off the event loop. Each Storage serialises its
+# own calls (one lock per instance), so the workers run different users' and
+# the admin database's calls concurrently, never one database's.
 _DB_EXECUTOR = ThreadPoolExecutor(max_workers=4)
 
 
@@ -49,6 +42,45 @@ async def _db(fn, *args, **kwargs):
     return await loop.run_in_executor(_DB_EXECUTOR, partial(fn, *args, **kwargs))
 
 
+def _http_error(exc: ValueError, default: int) -> HTTPException:
+    """Storage's NotFound and Conflict carry their own status; any other
+    ValueError is a bad request with the route's `default` status."""
+    status = 404 if isinstance(exc, NotFound) else 409 if isinstance(exc, Conflict) else default
+    return HTTPException(status_code=status, detail=str(exc))
+
+
+def _parse_bool_setting(value) -> str:
+    if not isinstance(value, bool):
+        raise ValueError("must be a boolean")
+    return "true" if value else "false"
+
+
+def _parse_ranged_setting(cast, low, high, kind):
+    def parse(value) -> str:
+        try:
+            value = cast(value)
+        except (TypeError, ValueError):
+            raise ValueError(f"must be {kind}") from None
+        if not low <= value <= high:
+            raise ValueError(f"must be between {low} and {high}")
+        return str(value)
+    return parse
+
+
+def _is_true(value: str) -> bool:
+    return value == "true"
+
+
+# key → (stored default, read the stored string, validate a PUT value into
+# the string to store). Drives both GET and PUT /api/settings.
+SETTINGS = {
+    "anomaly_multiplier": ("2.0", float, _parse_ranged_setting(float, 1.0, 10.0, "a number")),
+    "velocity_alert_threshold": ("110", int, _parse_ranged_setting(int, 50, 300, "an integer")),
+    **{key: ("false", _is_true, _parse_bool_setting) for key in (
+        "budgets_enabled", "goals_enabled", "trips_enabled", "subscriptions_enabled",
+        "recurring_enabled", "home_briefing_enabled",
+    )},
+}
 VALID_SUBSCRIPTION_FREQUENCIES = {"weekly", "biweekly", "monthly", "quarterly", "annual"}
 
 
@@ -58,47 +90,62 @@ def create_dashboard_app(
     exchange_service=None,
     host_base_url: str = "",
     llm_service=None,
+    timezone: str = DEFAULT_TIMEZONE,
 ) -> FastAPI:
     app = FastAPI(title="Expense Tracker Dashboard")
     app.add_middleware(GZipMiddleware, minimum_size=500)
 
+    oauth_states: dict[str, tuple[str, str, float]] = {}
+    login_limiter = LoginRateLimiter()
+
     @app.get("/oauth/callback")
     async def oauth_callback(request: Request):
         code = request.query_params.get("code")
-        username = request.query_params.get("state")
-        if not code or not username:
-            return Response(content="<h2>Missing code or state.</h2>", media_type="text/html", status_code=400)
+        state = request.query_params.get("state", "")
+        pending = oauth_states.pop(state, None)
+        session = request.cookies.get("session", "")
+        if not code or not pending or pending[2] <= time.monotonic() or pending[1] != session:
+            raise HTTPException(status_code=400, detail="Invalid or expired OAuth state")
+        username = await _db(verify_session, session)
+        if username != pending[0]:
+            raise HTTPException(status_code=400, detail="Invalid OAuth session")
         ctx = user_manager.get(username)
         if not ctx:
             return Response(content="<h2>Unknown user.</h2>", media_type="text/html", status_code=404)
         try:
-            redirect_uri = f"{host_base_url.rstrip('/')}/oauth/callback"
-            loop = asyncio.get_running_loop()
-            await loop.run_in_executor(_DB_EXECUTOR, partial(ctx.poller.complete_reauth, code, username))
+            await _db(ctx.poller.complete_reauth, code, state)
             user_manager.start_poller(username)
-            await loop.run_in_executor(_DB_EXECUTOR, partial(admin_storage.update_user, username, gmail_connected=1))
+            await _db(admin_storage.update_user, username, gmail_connected=1)
             return Response(
                 content="<h2>Gmail connected. You can close this tab.</h2>",
                 media_type="text/html",
             )
         except Exception as e:
-            logger.error(f"OAuth callback failed for {username}: {e}")
-            return Response(content=f"<h2>Connection failed: {e}</h2>", media_type="text/html", status_code=400)
+            logger.warning("OAuth callback failed: %s", type(e).__name__)
+            return Response(content="<h2>Connection failed. Please reconnect from Settings.</h2>", media_type="text/html", status_code=400)
 
     @app.post("/api/login")
     async def login(request: Request):
         body = await request.json()
         username = body.get("username", "")
         password = body.get("password", "")
+        if not isinstance(username, str) or not isinstance(password, str):
+            raise HTTPException(status_code=422, detail="Username and password must be strings")
+        keys = ["user:" + username.casefold(), "ip:" + (request.client.host if request.client else "unknown")]
+        stamp = login_limiter.reserve(keys, time.monotonic())
+        if stamp is None:
+            raise HTTPException(status_code=429, detail="Too many attempts. Try again in 15 minutes.")
         loop = asyncio.get_running_loop()
-        user = await loop.run_in_executor(_DB_EXECUTOR, admin_storage.get_user, username)
+        user = await _db(admin_storage.get_user, username)
         if not user:
             raise HTTPException(status_code=401, detail="Invalid username or password")
         ok = await loop.run_in_executor(None, verify_password, password, user["password_hash"])
         if not ok:
             raise HTTPException(status_code=401, detail="Invalid username or password")
+        login_limiter.clear(keys[0])
+        login_limiter.release(keys[1], stamp)
         user_agent = request.headers.get("User-Agent", "")
-        token = await loop.run_in_executor(_DB_EXECUTOR, create_session, username, user_agent)
+        token = await _db(create_session, username, user_agent)
         secure_cookies = os.environ.get("SECURE_COOKIES", "true") == "true"
         response = JSONResponse({"status": "ok"})
         response.set_cookie(
@@ -116,11 +163,10 @@ def create_dashboard_app(
 
     async def require_auth(request: Request) -> str:
         session = request.cookies.get("session")
-        loop = asyncio.get_running_loop()
-        username = await loop.run_in_executor(_DB_EXECUTOR, verify_session, session) if session else None
+        username = await _db(verify_session, session) if session else None
         if not username:
             raise HTTPException(status_code=401, detail="Not authenticated")
-        user = await loop.run_in_executor(_DB_EXECUTOR, admin_storage.get_user, username)
+        user = await _db(admin_storage.get_user, username)
         if user and user["force_password_change"] and request.url.path not in _FORCE_PW_ALLOWED:
             raise HTTPException(status_code=403, detail="Password change required")
         return username
@@ -143,7 +189,7 @@ def create_dashboard_app(
     async def logout(request: Request, response: Response):
         session = request.cookies.get("session")
         if session:
-            destroy_session(session)
+            await _db(destroy_session, session)
         response.delete_cookie("session", httponly=True, samesite="lax")
         return {"status": "ok"}
 
@@ -167,12 +213,234 @@ def create_dashboard_app(
             },
         }
 
+    @app.get("/api/v2/capture/issues", response_model=list[CaptureIssue])
+    async def capture_issues(limit: int = Query(50, ge=1, le=100), offset: int = Query(0, ge=0), include_handled: bool = False, storage=Depends(_get_storage)):
+        return await _db(storage.list_capture_issues, limit, offset, include_handled)
+
+    @app.post("/api/v2/capture/issues/{event_id}/resolve", response_model=CaptureResolution)
+    async def resolve_capture_issue(event_id: int, storage=Depends(_get_storage)):
+        return await change_capture_resolution(storage, event_id, True)
+
+    @app.post("/api/v2/capture/issues/{event_id}/reopen", response_model=CaptureResolution)
+    async def reopen_capture_issue(event_id: int, storage=Depends(_get_storage)):
+        return await change_capture_resolution(storage, event_id, False)
+
+    async def change_capture_resolution(storage, event_id, handled):
+        try:
+            return await _db(storage.set_capture_issue_handled, event_id, handled)
+        except ValueError as exc:
+            raise _http_error(exc, 409)
+
+    @app.post("/api/v2/capture/issues/{event_id}/retry", response_model=QueuedResponse)
+    async def retry_capture_issue(event_id: int, storage=Depends(_get_storage)):
+        try:
+            await _db(storage.retry_source_event, event_id)
+        except ValueError as exc:
+            raise _http_error(exc, 409)
+        return QueuedResponse()
+
+    @app.get("/api/v2/capture/followups", response_model=list[CaptureFollowup])
+    async def capture_followups(limit: int = Query(50, ge=1, le=100), offset: int = Query(0, ge=0), storage=Depends(_get_storage)):
+        return await _db(storage.list_ingestion_effects, limit, offset)
+
+    @app.post("/api/v2/capture/followups/{effect_id}/retry", response_model=QueuedResponse)
+    async def retry_capture_followup(effect_id: int, storage=Depends(_get_storage)):
+        try:
+            await _db(storage.retry_ingestion_effect, effect_id)
+        except ValueError as exc:
+            raise _http_error(exc, 409)
+        return QueuedResponse()
+
+    @app.get("/api/v2/spending/month", response_model=SpendingFacts)
+    async def month_spending(as_of: date | None = None, storage=Depends(_get_storage)):
+        try:
+            return await _db(storage.get_month_spending_facts, as_of, timezone)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from None
+
+    @app.put("/api/v2/plan/upcoming/{upcoming_id}", response_model=PlanMutationResponse)
+    async def update_planned_charge(upcoming_id: int, body: dict, storage=Depends(_get_storage)):
+        try:
+            await _db(storage.update_planned_charge, upcoming_id, body)
+        except ValueError as exc:
+            raise _http_error(exc, 422) from None
+        return {"status": "ok"}
+
+    @app.post("/api/v2/plan/upcoming/{upcoming_id}/dismiss", response_model=PlanMutationResponse)
+    async def dismiss_planned_charge(upcoming_id: int, storage=Depends(_get_storage)):
+        try:
+            await _db(storage.dismiss_planned_charge, upcoming_id)
+        except ValueError as exc:
+            raise _http_error(exc, 409) from None
+        return {"status": "ok"}
+
+    @app.get("/api/v2/plan/upcoming", response_model=UpcomingPlan)
+    async def upcoming_plan(days: int = Query(30, ge=1, le=90), limit: int = Query(50, ge=1, le=100),
+                            offset: int = Query(0, ge=0), on_date: date | None = Query(None, alias="date"),
+                            storage=Depends(_get_storage)):
+        return await _db(storage.get_upcoming_plan, days, timezone, limit, offset, on_date)
+
+    @app.get("/api/v2/plan/upcoming/calendar", response_model=UpcomingCalendar)
+    async def upcoming_calendar(start: date, end: date, storage=Depends(_get_storage)):
+        try:
+            return await _db(storage.get_upcoming_calendar, start, end, timezone)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from None
+
+    @app.get("/api/v2/home", response_model=HomeBriefing)
+    async def home_briefing(username: str = Depends(require_auth)):
+        ctx = user_manager.get(username)
+        report = await _db(ctx.storage.get_home_briefing, timezone)
+        poller = ctx.poller
+        capture_health = await _db(ctx.storage.get_capture_health)
+        report["freshness"] = {
+            "gmail_connected": bool(poller and poller.service),
+            "gmail_last_checked": getattr(poller, "last_poll_at", None),
+            "gmail_needs_reconnection": bool(getattr(poller, "last_auth_error", None)),
+            "last_capture_processed_at": capture_health["last_capture_processed_at"],
+        }
+        return report
+
+    @app.get("/api/v2/spending/day", response_model=SpendingFacts)
+    async def day_spending(as_of: date | None = None, storage=Depends(_get_storage)):
+        try:
+            return await _db(storage.get_day_spending_facts, as_of, timezone)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from None
+
+    @app.get("/api/v2/spending/week", response_model=SpendingFacts)
+    async def week_spending(as_of: date | None = None, storage=Depends(_get_storage)):
+        try:
+            return await _db(storage.get_week_spending_facts, as_of, timezone)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from None
+
+    @app.get("/api/v2/recurring/review", response_model=RecurringReview)
+    async def recurring_review(
+        limit: int = Query(50, ge=1, le=100), offset: int = Query(0, ge=0),
+        storage=Depends(_get_storage),
+    ):
+        return await _db(storage.get_recurring_review, limit=limit, offset=offset)
+
+    @app.get("/api/v2/subscriptions/review", response_model=SubscriptionReview)
+    async def subscription_review(storage=Depends(_get_storage)):
+        return await _db(storage.get_subscription_review)
+
+    @app.post("/api/v2/recurring/suggestions/{suggestion_id}/{action}", response_model=RecurringResolution)
+    async def resolve_recurring_review(
+        suggestion_id: str, action: Literal["accept", "dismiss"], storage=Depends(_get_storage),
+    ):
+        try:
+            sub_id = await _db(storage.resolve_recurring_review, suggestion_id, action)
+        except ValueError as exc:
+            raise _http_error(exc, 404) from None
+        return {"status": "ok", "subscription_id": sub_id}
+
+    @app.get("/api/v2/refund-matches/review", response_model=RefundMatchReview)
+    async def refund_match_review(
+        limit: int = Query(50, ge=1, le=100), offset: int = Query(0, ge=0),
+        storage=Depends(_get_storage),
+    ):
+        return await _db(storage.get_refund_match_review, limit=limit, offset=offset)
+
+    @app.post("/api/v2/refund-matches/{refund_transaction_id}/{action}", response_model=RefundMatchResolution)
+    async def resolve_refund_match(
+        refund_transaction_id: int, action: Literal["accept", "dismiss"], storage=Depends(_get_storage),
+    ):
+        try:
+            await _db(storage.resolve_refund_match, refund_transaction_id, action)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from None
+        return {"status": "ok"}
+
+    @app.get("/api/v2/duplicates/review", response_model=DuplicateReview)
+    async def duplicate_review(
+        limit: int = Query(50, ge=1, le=100), offset: int = Query(0, ge=0),
+        storage=Depends(_get_storage),
+    ):
+        return await _db(storage.get_duplicate_review, limit=limit, offset=offset)
+
+    @app.post("/api/v2/duplicates/{transaction_a_id}/{transaction_b_id}/dismiss", response_model=DuplicateDismissal)
+    async def dismiss_duplicate(transaction_a_id: int, transaction_b_id: int, storage=Depends(_get_storage)):
+        try:
+            await _db(storage.dismiss_duplicate, transaction_a_id, transaction_b_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from None
+        return {"status": "ok"}
+
+    @app.post("/api/v2/duplicates/merge", response_model=DuplicateMergeResult)
+    async def merge_duplicates(body: DuplicateMergeRequest, storage=Depends(_get_storage)):
+        try:
+            merge_id = await _db(storage.merge_transactions, body.survivor_id, body.loser_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from None
+        return {"status": "ok", "merge_id": merge_id}
+
+    @app.post("/api/v2/duplicates/merges/{merge_id}/undo", response_model=DuplicateMergeUndoResult)
+    async def undo_duplicate_merge(merge_id: int, storage=Depends(_get_storage)):
+        try:
+            await _db(storage.undo_transaction_merge, merge_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from None
+        return {"status": "ok"}
+
+    @app.get("/api/v2/spending/review", response_model=SpendingReview)
+    async def spending_review(
+        limit: int = Query(50, ge=1, le=100), offset: int = Query(0, ge=0),
+        storage=Depends(_get_storage),
+    ):
+        return await _db(storage.get_spending_review, timezone=timezone, limit=limit, offset=offset)
+
+    @app.get("/api/v2/spending/evidence", response_model=SpendingEvidence)
+    async def spending_evidence(
+        start: date, end: date, category: str | None = None, merchant: str | None = None,
+        weekday: int | None = Query(None, ge=0, le=6),
+        measure: Literal["spending", "income", "unresolved"] = "spending",
+        limit: int = Query(50, ge=1, le=100), offset: int = Query(0, ge=0),
+        storage=Depends(_get_storage),
+    ):
+        if end < start:
+            raise HTTPException(status_code=422, detail="End must not precede start")
+        return await _db(storage.get_spending_evidence, start, end, timezone=timezone,
+                         category=category, merchant=merchant, weekday=weekday, measure=measure, limit=limit, offset=offset)
+
+    @app.get("/api/v2/spending/signals", response_model=SpendingSignals)
+    async def spending_signals(as_of: date | None = None, storage=Depends(_get_storage)):
+        return await _db(storage.get_spending_signals, as_of, timezone)
+
+    @app.get("/api/v2/spending/monthly", response_model=list[MonthlyFlow])
+    async def spending_monthly(months: int = Query(6, ge=1, le=36), storage=Depends(_get_storage)):
+        return await _db(storage.get_monthly_flows, months, None, timezone)
+
+    @app.get("/api/v2/spending/weekday-pattern", response_model=WeekdayPattern)
+    async def weekday_pattern(weeks: int = Query(8, ge=1, le=52), storage=Depends(_get_storage)):
+        try:
+            return await _db(storage.get_weekday_pattern, None, weeks, timezone)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from None
+
+    @app.get("/api/v2/forecast/month", response_model=MonthForecast)
+    async def month_forecast(as_of: date | None = None, storage=Depends(_get_storage)):
+        try:
+            return await _db(storage.get_month_forecast, as_of, timezone)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from None
+
+    @app.post("/api/v2/forecast/scenario", response_model=ScenarioResponse)
+    async def forecast_scenario(request: ScenarioRequest, storage=Depends(_get_storage)):
+        if not request.adjustments:
+            raise HTTPException(status_code=422, detail="At least one adjustment is required")
+        adjustments = [a.model_dump(exclude_none=True) for a in request.adjustments]
+        try:
+            return await _db(storage.get_forecast_scenario, adjustments, None, timezone)
+        except (KeyError, ValueError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from None
+
     # ── Current user ──────────────────────────────────────────────────────────
 
     @app.get("/api/users/me")
     async def get_current_user(username: str = Depends(require_auth)):
-        loop = asyncio.get_running_loop()
-        user = await loop.run_in_executor(_DB_EXECUTOR, admin_storage.get_user, username)
+        user = await _db(admin_storage.get_user, username)
         if user is None:
             raise HTTPException(status_code=401, detail="User not found")
         return {
@@ -193,35 +461,32 @@ def create_dashboard_app(
         if not new_password or len(new_password) < 8:
             raise HTTPException(status_code=422, detail="new_password must be at least 8 characters")
         loop = asyncio.get_running_loop()
-        user = await loop.run_in_executor(_DB_EXECUTOR, admin_storage.get_user, username)
+        user = await _db(admin_storage.get_user, username)
         ok = await loop.run_in_executor(None, verify_password, current_password, user["password_hash"])
         if not ok:
             raise HTTPException(status_code=401, detail="Current password is incorrect")
-        new_hash = await loop.run_in_executor(None, lambda: bcrypt.hashpw(new_password.encode(), bcrypt.gensalt()).decode())
-        await loop.run_in_executor(_DB_EXECUTOR, lambda: admin_storage.update_user(username, password_hash=new_hash, force_password_change=0))
+        new_hash = await loop.run_in_executor(None, hash_password, new_password)
+        await _db(admin_storage.update_user, username, password_hash=new_hash, force_password_change=0)
         return {"status": "ok"}
 
     # ── Session management ────────────────────────────────────────────────────
 
     @app.get("/api/sessions")
     async def list_sessions(request: Request, username: str = Depends(require_auth)):
-        loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(_DB_EXECUTOR, admin_storage.list_sessions, username)
+        return await _db(admin_storage.list_sessions, username)
 
     @app.delete("/api/sessions")
     async def logout_all_other_sessions(request: Request, username: str = Depends(require_auth)):
         current_token = request.cookies.get("session")
-        loop = asyncio.get_running_loop()
-        await loop.run_in_executor(_DB_EXECUTOR, partial(admin_storage.destroy_all_sessions, username, except_token=current_token))
+        await _db(admin_storage.destroy_all_sessions, username, except_token=current_token)
         return {"status": "ok"}
 
     @app.delete("/api/sessions/{token}")
     async def logout_session(token: str, username: str = Depends(require_auth)):
-        loop = asyncio.get_running_loop()
-        sessions = await loop.run_in_executor(_DB_EXECUTOR, admin_storage.list_sessions, username)
+        sessions = await _db(admin_storage.list_sessions, username)
         if not any(s["token"] == token for s in sessions):
             raise HTTPException(status_code=404, detail="Session not found")
-        await loop.run_in_executor(_DB_EXECUTOR, admin_storage.destroy_session, token)
+        await _db(admin_storage.destroy_session, token)
         return {"status": "ok"}
 
     # ── Onboarding ────────────────────────────────────────────────────────────
@@ -229,12 +494,12 @@ def create_dashboard_app(
     @app.put("/api/onboarding/preferences")
     async def set_onboarding_preferences(request: Request, username: str = Depends(require_auth)):
         body = await request.json()
-        loop = asyncio.get_running_loop()
-        await loop.run_in_executor(_DB_EXECUTOR, lambda: admin_storage.update_user(
+        await _db(
+            admin_storage.update_user,
             username,
             wants_gmail=1 if body.get("wants_gmail", True) else 0,
             wants_apple_wallet=1 if body.get("wants_apple_wallet", True) else 0,
-        ))
+        )
         return {"status": "ok"}
 
     @app.get("/api/onboarding/gmail/connect-url")
@@ -243,13 +508,17 @@ def create_dashboard_app(
         if not ctx:
             raise HTTPException(status_code=503, detail="User context not ready — please try again")
         redirect_uri = f"{host_base_url.rstrip('/')}/oauth/callback"
-        url = ctx.poller.get_auth_url(redirect_uri=redirect_uri, state=username)
+        for token, pending in list(oauth_states.items()):
+            if pending[0] == username or pending[2] <= time.monotonic():
+                del oauth_states[token]
+        state = secrets.token_urlsafe(32)
+        url = ctx.poller.get_auth_url(redirect_uri=redirect_uri, state=state)
+        oauth_states[state] = (username, request.cookies["session"], time.monotonic() + 600)
         return {"url": url}
 
     @app.post("/api/onboarding/telegram/link-token")
     async def create_telegram_link_token(username: str = Depends(require_auth)):
-        loop = asyncio.get_running_loop()
-        token = await loop.run_in_executor(_DB_EXECUTOR, admin_storage.create_telegram_link_token, username)
+        token = await _db(admin_storage.create_telegram_link_token, username)
         return {"token": token}
 
     @app.get("/api/onboarding/webhook-url")
@@ -259,16 +528,32 @@ def create_dashboard_app(
 
     @app.put("/api/onboarding/complete")
     async def mark_onboarding_complete(username: str = Depends(require_auth)):
-        loop = asyncio.get_running_loop()
-        await loop.run_in_executor(_DB_EXECUTOR, partial(admin_storage.update_user, username, onboarding_complete=1))
+        await _db(admin_storage.update_user, username, onboarding_complete=1)
+        return {"status": "ok"}
+
+    @app.get("/api/connections/apple-wallet")
+    async def wallet_connection(storage=Depends(_get_storage)):
+        return {
+            "configured": bool(await _db(storage.get_setting, "wallet_credential_hash", "")),
+            "required": await _db(storage.get_setting, "wallet_auth_required", "false") == "true",
+        }
+
+    @app.post("/api/connections/apple-wallet/credential")
+    async def create_wallet_credential(storage=Depends(_get_storage)):
+        token = secrets.token_urlsafe(32)
+        await _db(storage.set_setting, "wallet_credential_hash", hashlib.sha256(token.encode()).hexdigest())
+        return JSONResponse({"token": token}, headers={"Cache-Control": "no-store"})
+
+    @app.delete("/api/connections/apple-wallet/credential")
+    async def revoke_wallet_credential(storage=Depends(_get_storage)):
+        await _db(storage.revoke_wallet_credential)
         return {"status": "ok"}
 
     # ── Connection management ─────────────────────────────────────────────────
 
     @app.delete("/api/connections/telegram")
     async def disconnect_telegram(username: str = Depends(require_auth)):
-        loop = asyncio.get_running_loop()
-        await loop.run_in_executor(_DB_EXECUTOR, partial(admin_storage.update_user, username, telegram_chat_id=None))
+        await _db(admin_storage.update_user, username, telegram_chat_id=None)
         return {"status": "ok"}
 
     @app.delete("/api/connections/gmail")
@@ -277,7 +562,6 @@ def create_dashboard_app(
         ctx = user_manager.get(username)
         if ctx and ctx.poller and os.path.exists(ctx.poller.token_path):
             try:
-                import json
                 with open(ctx.poller.token_path) as f:
                     token_data = json.load(f)
                 access_token = token_data.get("token") or token_data.get("access_token")
@@ -296,30 +580,8 @@ def create_dashboard_app(
                 pass
         if ctx and ctx.poller:
             ctx.poller.stop()
-        loop = asyncio.get_running_loop()
-        await loop.run_in_executor(_DB_EXECUTOR, partial(admin_storage.update_user, username, gmail_connected=0))
+        await _db(admin_storage.update_user, username, gmail_connected=0)
         return {"status": "ok"}
-
-    @app.get("/api/connections/gmail/connect-url")
-    async def gmail_reconnect_url(request: Request, username: str = Depends(require_auth)):
-        ctx = user_manager.get(username)
-        if not ctx:
-            raise HTTPException(status_code=503, detail="User context not ready — please try again")
-        redirect_uri = f"{host_base_url.rstrip('/')}/oauth/callback"
-        url = ctx.poller.get_auth_url(redirect_uri=redirect_uri, state=username)
-        return {"url": url}
-
-    @app.get("/api/summary")
-    async def summary(
-        start_date: Optional[str] = None,
-        end_date: Optional[str] = None,
-        username: str = Depends(require_auth),
-    ):
-        storage = user_manager.get(username).storage
-        today = local_now()
-        start = start_date or f"{today.year}-{today.month:02d}-01"
-        end = end_date or today.strftime("%Y-%m-%d")
-        return await _db(storage.get_spending_summary, start_date=start, end_date=end)
 
     @app.get("/api/transactions")
     async def transactions(
@@ -330,9 +592,8 @@ def create_dashboard_app(
         merchant: Optional[str] = None,
         limit: int = 50,
         offset: int = 0,
-        username: str = Depends(require_auth),
+        storage=Depends(_get_storage),
     ):
-        storage = user_manager.get(username).storage
         return await _db(storage.query_transactions,
             start_date=start_date,
             end_date=end_date,
@@ -349,9 +610,8 @@ def create_dashboard_app(
         category: Optional[str] = None,
         merchant_search: Optional[str] = None,
         merchant: Optional[str] = None,
-        username: str = Depends(require_auth),
+        storage=Depends(_get_storage),
     ):
-        storage = user_manager.get(username).storage
         rows = await _db(storage.query_transactions,
             start_date=start_date,
             end_date=end_date,
@@ -366,13 +626,21 @@ def create_dashboard_app(
         writer = csv.DictWriter(output, fieldnames=fieldnames)
         writer.writeheader()
         for tx in rows:
+            # reporting_minor_units (R02 canonical money) rather than
+            # amount * exchange_rate — a legacy exchange_rate of 1.0 is a
+            # silent unresolved fallback, not real conversion evidence, and
+            # the raw multiplication has no currency validation. Leave
+            # amount_sgd blank rather than fabricate a face-value SGD figure
+            # for an unresolved conversion.
+            minor, _status = resolve_money(tx)
+            amount_sgd = float(from_minor_units(minor, "SGD")) if minor is not None else ""
             writer.writerow({
                 "date": (tx.get("transaction_date") or "")[:10],
                 "merchant": tx.get("merchant") or "",
                 "amount": tx.get("amount") if tx.get("amount") is not None else "",
                 "currency": tx.get("currency") or "SGD",
                 "exchange_rate": tx.get("exchange_rate") if tx.get("exchange_rate") is not None else 1.0,
-                "amount_sgd": round((tx.get("amount") or 0) * (tx.get("exchange_rate") or 1.0), 2),
+                "amount_sgd": amount_sgd,
                 "type": tx.get("type") or "expense",
                 "category": tx.get("category") or "",
                 "source": tx.get("source") or "",
@@ -386,77 +654,211 @@ def create_dashboard_app(
             headers={"Content-Disposition": f'attachment; filename="{filename}"'},
         )
 
-    @app.get("/api/transactions/{tx_id}")
-    async def get_transaction(tx_id: int, username: str = Depends(require_auth)):
-        storage = user_manager.get(username).storage
+    @app.get("/api/v2/transactions", response_model=list[TransactionV2])
+    async def list_transactions_v2(
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        category: Optional[str] = None,
+        source: Optional[str] = None,
+        merchant_search: Optional[str] = None,
+        merchant: Optional[str] = None,
+        type: Optional[Literal["expense", "income", "refund", "transfer"]] = None,
+        trip_id: Optional[int] = None,
+        needs_review: Optional[bool] = None,
+        limit: int = Query(20, ge=1, le=100),
+        offset: int = Query(0, ge=0),
+        storage=Depends(_get_storage),
+    ):
+        rows = await _db(
+            storage.get_transactions_v2,
+            start_date=start_date, end_date=end_date, category=category, source=source,
+            merchant_search=merchant_search or merchant, type=type, trip_id=trip_id,
+            needs_review=needs_review, limit=limit, offset=offset,
+        )
+        return await _db(transaction_commands.to_v2_many, rows, storage)
+
+    @app.get("/api/v2/transactions/daily-totals", response_model=list[DailyTotal])
+    async def transactions_daily_totals(start: date, end: date, storage=Depends(_get_storage)):
+        if end < start:
+            raise HTTPException(status_code=422, detail="End must not precede start")
+        return await _db(storage.get_daily_totals, start, end, timezone)
+
+    @app.get("/api/v2/spending/breakdown", response_model=CategoryBreakdown)
+    async def spending_breakdown(start: date, end: date, storage=Depends(_get_storage)):
+        """Category totals for [start, end] on the same shared-facts rules as
+        /api/v2/home's hero (spending_facts.py), not the legacy SQL
+        aggregates behind /api/v2/overview/* — see the increment-3 finding in
+        docs/plans/2026-09-16-cashe-design-language-restoration.md."""
+        if end < start:
+            raise HTTPException(status_code=422, detail="End must not precede start")
+        return await _db(storage.get_category_breakdown, start, end, timezone)
+
+    @app.get("/api/v2/spending/merchants", response_model=list[MerchantRanking])
+    async def spending_merchants(start: date, end: date, category: Optional[str] = None,
+                                  limit: int = Query(10, ge=1, le=50), storage=Depends(_get_storage)):
+        """Same shared-facts rules as /api/v2/spending/breakdown — a merchant
+        ranking scoped to a selected category always agrees with that
+        category's breakdown total for the identical period."""
+        if end < start:
+            raise HTTPException(status_code=422, detail="End must not precede start")
+        return await _db(storage.get_merchant_ranking_facts, start, end, timezone, category, limit)
+
+    @app.get("/api/v2/spending/trend-by-category", response_model=list[CategoryTrendPoint])
+    async def spending_trend_by_category(start: date, end: date, categories: Optional[str] = None,
+                                          storage=Depends(_get_storage)):
+        """Same shared-facts rules as /api/v2/spending/breakdown and
+        /transactions/daily-totals — not storage.get_trend_by_category's
+        legacy SQL, which has no timezone conversion on transaction_date.
+        `categories` is a comma-separated allowlist (the frontend's "at most
+        three selectable categories" default)."""
+        if end < start:
+            raise HTTPException(status_code=422, detail="End must not precede start")
+        category_list = [c for c in categories.split(",") if c] if categories else None
+        return await _db(storage.get_category_daily_trend, start, end, timezone, category_list)
+
+    @app.get("/api/v2/transactions/{tx_id}", response_model=TransactionV2)
+    async def get_transaction_v2(tx_id: int, storage=Depends(_get_storage)):
         tx = await _db(storage.get_transaction, tx_id)
         if not tx:
             raise HTTPException(status_code=404, detail="Transaction not found")
-        return tx
+        return transaction_commands.to_v2(tx, storage)
+
+    @app.get("/api/v2/transactions/{tx_id}/provenance", response_model=TransactionProvenance)
+    async def get_transaction_provenance(tx_id: int, storage=Depends(_get_storage)):
+        try:
+            return await _db(storage.get_transaction_provenance, tx_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
+
+    @app.post("/api/v2/transactions", response_model=TransactionV2, status_code=201)
+    async def create_transaction_v2(payload: TransactionCreate, request: Request, storage=Depends(_get_storage)):
+        body = payload.model_dump(exclude_none=True)
+        try:
+            return await _db(
+                transaction_commands.create_web, storage, body,
+                source_id=f"manual_{uuid.uuid4().hex[:12]}",
+                request_key=request.headers.get("Idempotency-Key"), timezone=timezone,
+            )
+        except ValueError as e:
+            raise _http_error(e, 400)
+
+    @app.post("/api/v2/transactions/bulk", response_model=list[BulkTransactionResultItem])
+    async def bulk_correct_transactions(payload: BulkTransactionRequest, storage=Depends(_get_storage)):
+        if not payload.transaction_ids:
+            raise HTTPException(status_code=422, detail="No transactions selected")
+        if len(payload.transaction_ids) > 200:
+            raise HTTPException(status_code=422, detail="At most 200 transactions per batch")
+        if payload.category is None and payload.type is None:
+            raise HTTPException(status_code=422, detail="Nothing to change")
+        return await _db(
+            storage.bulk_correct, payload.transaction_ids,
+            category=payload.category, type=payload.type,
+            remember_category=payload.remember_category,
+            expected_revisions=payload.expected_revisions,
+        )
+
+    @app.post("/api/v2/transactions/bulk/undo", response_model=list[BulkTransactionResultItem])
+    async def bulk_undo_transactions(payload: BulkUndoRequest, storage=Depends(_get_storage)):
+        if not payload.transaction_ids:
+            raise HTTPException(status_code=422, detail="No transactions selected")
+        if len(payload.transaction_ids) > 200:
+            raise HTTPException(status_code=422, detail="At most 200 transactions per batch")
+        return await _db(storage.bulk_undo, payload.transaction_ids, expected_revisions=payload.expected_revisions)
+
+    @app.delete("/api/v2/transactions/{tx_id}", response_model=TransactionDeletion)
+    async def delete_transaction_v2(tx_id: int, storage=Depends(_get_storage)):
+        try:
+            return await _db(transaction_commands.delete, storage, tx_id)
+        except ValueError:
+            raise HTTPException(status_code=404, detail="Transaction not found")
+
+    @app.put("/api/v2/transactions/{tx_id}", response_model=TransactionV2)
+    async def update_transaction_v2(tx_id: int, correction: TransactionCorrection, storage=Depends(_get_storage)):
+        tx = await _db(storage.get_transaction, tx_id)
+        if not tx:
+            raise HTTPException(status_code=404, detail="Transaction not found")
+        fields = correction.model_dump(
+            exclude={"remember_category", "expected_revision"}, exclude_none=True,
+        )
+        # exclude_none drops an explicit null the same as an omitted field —
+        # only refund_of_transaction_id needs "explicit null" to mean unlink,
+        # so restore it from the raw payload when the client actually sent it.
+        if "refund_of_transaction_id" in correction.model_fields_set:
+            fields["refund_of_transaction_id"] = correction.refund_of_transaction_id
+        if not fields:
+            raise HTTPException(status_code=400, detail="No valid fields to update")
+        try:
+            return await _db(
+                transaction_commands.correct, storage, tx_id, fields,
+                remember_category=correction.remember_category,
+                expected_revision=correction.expected_revision,
+            )
+        except RevisionConflict as exc:
+            raise HTTPException(status_code=409, detail={
+                "message": str(exc), "current": transaction_commands.to_v2(exc.current, storage),
+            })
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+
+    @app.post("/api/v2/transactions/{tx_id}/undo", response_model=TransactionV2)
+    async def undo_transaction_v2(tx_id: int, payload: TransactionUndo | None = None, storage=Depends(_get_storage)):
+        expected_revision = payload.expected_revision if payload else None
+        try:
+            return await _db(transaction_commands.undo, storage, tx_id, expected_revision=expected_revision)
+        except RevisionConflict as exc:
+            raise HTTPException(status_code=409, detail={
+                "message": str(exc), "current": transaction_commands.to_v2(exc.current, storage),
+            })
+        except ValueError as exc:
+            raise _http_error(exc, 400)
+
+    @app.post("/api/v2/transactions/{tx_id}/restore", response_model=TransactionV2)
+    async def restore_transaction_v2(tx_id: int, storage=Depends(_get_storage)):
+        try:
+            return await _db(transaction_commands.restore, storage, tx_id)
+        except ValueError as exc:
+            raise _http_error(exc, 409)
 
     @app.post("/api/transactions")
-    async def create_transaction(request: Request, username: str = Depends(require_auth)):
-        storage = user_manager.get(username).storage
+    async def create_transaction(request: Request, storage=Depends(_get_storage)):
         body = await request.json()
+        if not isinstance(body, dict):
+            raise HTTPException(status_code=400, detail="Transaction must be an object")
         amount = body.get("amount")
         if amount is None:
             raise HTTPException(status_code=400, detail="amount is required")
-        try:
-            amount = float(amount)
-        except (TypeError, ValueError):
-            raise HTTPException(status_code=400, detail="amount must be a number")
-
         tx_type = body.get("type", "expense")
         if tx_type not in ("expense", "income"):
             raise HTTPException(status_code=400, detail="type must be 'expense' or 'income'")
 
-        source = body.get("source", "manual")
-        source_id = f"manual_{uuid.uuid4().hex[:12]}"
-        merchant = body.get("merchant")
-        description = body.get("description")
-        category = body.get("category")
-        currency = body.get("currency", "SGD")
-        exchange_rate = body.get("exchange_rate", 1.0)
-        transaction_date = body.get("transaction_date") or local_now().strftime("%Y-%m-%d %H:%M:%S")
-        transaction_date = _normalise_transaction_date(transaction_date)
-
         try:
-            tx_id = await _db(storage.insert_transaction,
-                source=source,
-                source_id=source_id,
-                amount=amount,
-                merchant=merchant,
-                description=description,
-                category=category,
-                currency=currency,
-                exchange_rate=exchange_rate,
-                transaction_date=transaction_date,
-                tx_type=tx_type,
+            return await _db(
+                storage.create_web_transaction, body,
+                source_id=f"manual_{uuid.uuid4().hex[:12]}",
+                request_key=request.headers.get("Idempotency-Key"), timezone=timezone,
             )
         except ValueError as e:
-            raise HTTPException(status_code=409, detail=str(e))
-
-        return await _db(storage.get_transaction, tx_id)
+            raise _http_error(e, 400)
 
     @app.put("/api/transactions/{tx_id}")
-    async def update_transaction(tx_id: int, request: Request, username: str = Depends(require_auth)):
-        storage = user_manager.get(username).storage
+    async def update_transaction(tx_id: int, request: Request, storage=Depends(_get_storage)):
         tx = await _db(storage.get_transaction, tx_id)
         if not tx:
             raise HTTPException(status_code=404, detail="Transaction not found")
         body = await request.json()
         allowed = {"merchant", "amount", "currency", "exchange_rate", "category", "description", "transaction_date", "type"}
+        if not isinstance(body, dict):
+            raise HTTPException(status_code=422, detail="Correction must be an object")
         fields = {k: v for k, v in body.items() if k in allowed}
-        if "transaction_date" in fields:
-            fields["transaction_date"] = _normalise_transaction_date(fields["transaction_date"])
         if not fields:
             raise HTTPException(status_code=400, detail="No valid fields to update")
-        await _db(storage.update_transaction, tx_id, **fields)
-        # Auto-learn merchant override when category changes
-        if "category" in fields and fields["category"] != tx.get("category"):
-            merchant = fields.get("merchant") or tx.get("merchant")
-            if merchant:
-                await _db(storage.set_merchant_override, merchant, fields["category"])
+        remember = body.get("remember_category", False)
+        if not isinstance(remember, bool):
+            raise HTTPException(status_code=422, detail="remember_category must be a boolean")
+        try:
+            await _db(storage.update_transaction, tx_id, remember_category=remember, **fields)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
         return await _db(storage.get_transaction, tx_id)
 
     @app.delete("/api/transactions/{tx_id}")
@@ -494,8 +896,7 @@ def create_dashboard_app(
         try:
             await _db(storage.add_category, name, keywords, icon, color, cat_type=cat_type)
         except ValueError as e:
-            status_code = 422 if "cat_type" in str(e) else 409
-            raise HTTPException(status_code=status_code, detail=str(e))
+            raise _http_error(e, 422)
         return {"status": "ok", "name": name}
 
     @app.put("/api/categories/{name}")
@@ -511,10 +912,7 @@ def create_dashboard_app(
                 cat_type=cat_type,
             )
         except ValueError as e:
-            if "cat_type" in str(e):
-                raise HTTPException(status_code=422, detail=str(e))
-            status_code = 409 if "already used" in str(e) else 404
-            raise HTTPException(status_code=status_code, detail=str(e))
+            raise _http_error(e, 422)
         return {"status": "ok", "name": name}
 
     @app.delete("/api/categories/{name}")
@@ -537,25 +935,6 @@ def create_dashboard_app(
 
     VALID_TAGS = {"online", "subscription", "foreign", "essential", "recurring"}
 
-    @app.get("/api/merchant-intelligence")
-    async def merchant_intelligence_list(
-        sort_by: str = "total_spent",
-        tag: Optional[str] = None,
-        category: Optional[str] = None,
-        search: Optional[str] = None,
-        limit: int = 25,
-        offset: int = 0,
-        storage=Depends(_get_storage),
-    ):
-        return await _db(storage.get_merchant_list,
-            sort_by=sort_by,
-            tag_filter=tag,
-            category_filter=category,
-            name_search=search,
-            limit=limit,
-            offset=offset,
-        )
-
     @app.get("/api/merchant-intelligence/{merchant}/trend")
     async def merchant_trend(merchant: str, storage=Depends(_get_storage)):
         return await _db(storage.get_merchant_trend, merchant)
@@ -577,155 +956,119 @@ def create_dashboard_app(
         await _db(storage.set_merchant_notes, merchant, notes)
         return await _db(storage.get_merchant_tags, merchant)
 
-    @app.get("/api/merchant-intelligence/{merchant}")
-    async def merchant_intelligence_profile(merchant: str, storage=Depends(_get_storage)):
+    @app.put("/api/merchant-intelligence/{merchant}/alias")
+    async def merchant_set_alias(merchant: str, request: Request, storage=Depends(_get_storage)):
+        body = await request.json()
+        await _db(storage.set_merchant_alias, merchant, body.get("display_name", ""))
+        profile = await _db(storage.get_merchant_profile, merchant)
+        return {"merchant": merchant, "display_name": profile["display_name"] if profile else merchant}
+
+    @app.get("/api/merchant-intelligence/{merchant}/rule-impact")
+    async def merchant_rule_impact(merchant: str, storage=Depends(_get_storage)):
+        overrides = await _db(storage.get_merchant_overrides)
+        category = overrides.get(merchant)
+        if category is None:
+            raise HTTPException(status_code=404, detail="No category rule for this merchant")
+        count = await _db(storage.get_category_rule_impact, merchant, category)
+        return {"merchant": merchant, "category": category, "differing_count": count}
+
+    @app.post("/api/merchant-intelligence/{merchant}/apply-rule")
+    async def merchant_apply_rule(merchant: str, storage=Depends(_get_storage)):
+        overrides = await _db(storage.get_merchant_overrides)
+        category = overrides.get(merchant)
+        if category is None:
+            raise HTTPException(status_code=404, detail="No category rule for this merchant")
+        updated = await _db(storage.apply_category_rule_to_existing, merchant, category)
+        return {"status": "ok", "updated_count": updated}
+
+    def _merchant_to_v2(d: dict) -> dict:
+        # total_sgd/avg_amount_sgd can be NULL if every transaction for this
+        # merchant has an unresolved FX conversion (SUM/AVG over an all-NULL
+        # group) — same latent gap the v1 route has always had (silently
+        # returns null); _sgd_money can't represent "unresolved" here (no
+        # per-merchant conversion_status), so it's treated as zero rather
+        # than crashing the route.
+        return {
+            "merchant": d["merchant"],
+            "display_name": d.get("display_name") or d["merchant"],
+            "total": _sgd_money(d["total_sgd"] or 0.0),
+            "transaction_count": d["transaction_count"],
+            "avg_amount": _sgd_money(d["avg_amount_sgd"] or 0.0),
+            # get_merchant_profile (unlike get_merchant_list) doesn't select a
+            # category column at all — same v1 gap, not introduced here.
+            "category": d.get("category"),
+            "first_seen": d["first_seen"],
+            "last_seen": d["last_seen"],
+            "tags": d["tags"],
+            "notes": d["notes"],
+        }
+
+    @app.get("/api/v2/merchants", response_model=list[MerchantSummary])
+    async def merchant_list_v2(
+        sort_by: str = "total_spent",
+        tag: Optional[str] = None,
+        category: Optional[str] = None,
+        search: Optional[str] = None,
+        limit: int = 25,
+        offset: int = 0,
+        storage=Depends(_get_storage),
+    ):
+        rows = await _db(storage.get_merchant_list,
+            sort_by=sort_by,
+            tag_filter=tag,
+            category_filter=category,
+            name_search=search,
+            limit=limit,
+            offset=offset,
+        )
+        return [_merchant_to_v2(r) for r in rows]
+
+    @app.get("/api/v2/merchants/{merchant}", response_model=MerchantSummary)
+    async def merchant_profile_v2(merchant: str, storage=Depends(_get_storage)):
         profile = await _db(storage.get_merchant_profile, merchant)
         if not profile:
             raise HTTPException(status_code=404, detail="Merchant not found")
-        return profile
+        return _merchant_to_v2(profile)
 
-    @app.get("/api/balance")
-    async def balance(start_date: Optional[str] = None, end_date: Optional[str] = None, storage=Depends(_get_storage)):
-        today = local_now()
-        start = start_date or f"{today.year}-{today.month:02d}-01"
-        end = end_date or today.strftime("%Y-%m-%d")
-        return await _db(storage.get_balance, start, end)
-
-    @app.get("/api/health-score")
-    async def health_score(months: int = 1, storage=Depends(_get_storage)):
+    @app.get("/api/v2/analytics/health-score", response_model=HealthScore)
+    async def health_score_v2(months: int = 1, storage=Depends(_get_storage)):
         if months < 1 or months > 12:
             raise HTTPException(status_code=400, detail="months must be between 1 and 12")
-        return await _db(storage.get_health_score, months=months)
+        return await _db(storage.get_health_score, months, timezone)
 
-    @app.get("/api/income-vs-expense")
-    async def income_vs_expense(months: int = 6, storage=Depends(_get_storage)):
+    def _default_month_range(start_date: Optional[str], end_date: Optional[str]) -> tuple[str, str]:
         today = local_now()
-        results = []
-        for i in range(months):
-            m = today.month - i
-            y = today.year
-            while m <= 0:
-                m += 12
-                y -= 1
-            m_start = f"{y}-{m:02d}-01"
-            if m == 12:
-                m_end = f"{y+1}-01-01"
-            else:
-                m_end = f"{y}-{m+1:02d}-01"
-            b = await _db(storage.get_balance, m_start, m_end)
-            results.append({"month": m_start[:7], "income": b["income"], "expenses": b["expenses"]})
-        return list(reversed(results))
-
-    @app.get("/api/trend")
-    async def trend(start_date: Optional[str] = None, end_date: Optional[str] = None, storage=Depends(_get_storage)):
-        today = local_now()
-        start = start_date or f"{today.year}-{today.month:02d}-01"
-        end = end_date or today.strftime("%Y-%m-%d")
-        return await _db(storage.get_trend, start, end)
-
-    @app.get("/api/trend/by-category")
-    async def trend_by_category(start_date: Optional[str] = None, end_date: Optional[str] = None, storage=Depends(_get_storage)):
-        today = local_now()
-        start = start_date or f"{today.year}-{today.month:02d}-01"
-        end = end_date or today.strftime("%Y-%m-%d")
-        return await _db(storage.get_trend_by_category, start, end)
+        return (
+            start_date or f"{today.year}-{today.month:02d}-01",
+            end_date or today.strftime("%Y-%m-%d"),
+        )
 
     @app.get("/api/merchants")
     async def merchants(start_date: Optional[str] = None, end_date: Optional[str] = None, storage=Depends(_get_storage)):
-        today = local_now()
-        start = start_date or f"{today.year}-{today.month:02d}-01"
-        end = end_date or today.strftime("%Y-%m-%d")
-        return await _db(storage.get_merchants_in_range, start, end)
+        return await _db(storage.get_merchants_in_range, *_default_month_range(start_date, end_date))
 
-    @app.get("/api/insights")
-    async def insights(start_date: Optional[str] = None, end_date: Optional[str] = None, storage=Depends(_get_storage)):
-        today = local_now()
-        start = start_date or f"{today.year}-{today.month:02d}-01"
-        end = end_date or today.strftime("%Y-%m-%d")
-        return {
-            "merchants": await _db(storage.get_merchant_ranking, start, end),
-            "average_daily": await _db(storage.get_average_daily, start, end),
-        }
+    def _sgd_money(value: float) -> dict:
+        return {"minor_units": to_minor_units(value, "SGD"), "currency": "SGD"}
 
     @app.get("/api/recurring")
     async def recurring(storage=Depends(_get_storage)):
         return await _db(storage.get_recurring_transactions)
 
-    @app.get("/api/analytics/comparison")
-    async def analytics_comparison(
-        period: str = "month",
-        date: Optional[str] = None,
-        storage=Depends(_get_storage),
-    ):
-        return await _db(storage.comparison, period=period, date=date)
-
-
-    @app.get("/api/analytics/merchants")
-    async def analytics_merchants(
-        limit: int = 10,
-        merchant: Optional[str] = None,
-        storage=Depends(_get_storage),
-    ):
-        top = await _db(storage.top_merchants_by_period, limit=limit)
-        trend = await _db(storage.merchant_trend_chart, merchant) if merchant else None
-        return {"top": top, "trend": trend}
-
-
-    @app.get("/api/analytics/velocity")
-    async def analytics_velocity(storage=Depends(_get_storage)):
-        return await _db(storage.spending_velocity)
-
-
-    @app.get("/api/analytics/alerts")
-    async def analytics_alerts(storage=Depends(_get_storage)):
-        multiplier = float(await _db(storage.get_setting, "anomaly_multiplier", "2.0"))
-        anomalies = await _db(storage.spending_anomalies, multiplier=multiplier)
-        if llm_service:
-            for a in anomalies:
-                try:
-                    a["explanation"] = llm_service.explain_anomaly(
-                        a["merchant"], a["amount"], a.get("avg_amount", a["amount"]), a["category"]
-                    )
-                except Exception:
-                    a["explanation"] = ""
-        return {
-            "anomalies": anomalies,
-            "new_merchants": await _db(storage.new_merchants),
-        }
-
-
-    @app.get("/api/analytics/summaries")
-    async def analytics_summaries(storage=Depends(_get_storage)):
-        loop = asyncio.get_running_loop()
-        monthly = await loop.run_in_executor(_DB_EXECUTOR, load_summary, SUMMARY_CACHE_DIR, "monthly")
-        weekly = await loop.run_in_executor(_DB_EXECUTOR, load_summary, SUMMARY_CACHE_DIR, "weekly")
-        return {"monthly": monthly, "weekly": weekly}
-
-
-    @app.get("/api/analytics/yoy")
-    async def get_yoy_endpoint(months: int = Query(default=12, ge=1, le=60), storage=Depends(_get_storage)):
-        return await _db(get_yoy_comparison, storage._conn, months)
-
-
     @app.get("/api/analytics/insight")
     async def get_analytics_insight(storage=Depends(_get_storage)):
-        import json as _json
         content_str = await _db(storage.get_setting, "llm_insight_content", "")
         generated_at = await _db(storage.get_setting, "llm_insight_generated_at", "")
         if not content_str:
             return {"content": None, "generated_at": None, "is_stale": True}
         try:
-            content = _json.loads(content_str)
+            content = json.loads(content_str)
         except Exception:
             content = None
         is_stale = True
         if generated_at:
-            from datetime import timedelta
             try:
                 gen = datetime.fromisoformat(generated_at)
                 if gen.tzinfo is None:
-                    from zoneinfo import ZoneInfo
-                    from src.config import DEFAULT_TIMEZONE
                     gen = gen.replace(tzinfo=ZoneInfo(DEFAULT_TIMEZONE))
                 is_stale = (local_now() - gen).total_seconds() > 25 * 3600
             except Exception:
@@ -733,161 +1076,33 @@ def create_dashboard_app(
         return {"content": content, "generated_at": generated_at, "is_stale": is_stale}
 
 
-    @app.get("/api/analytics/insight/weekly")
-    async def get_weekly_insight(storage=Depends(_get_storage)):
-        import json as _json
-        content_str = await _db(storage.get_setting, "llm_weekly_insight_content", "")
-        generated_at = await _db(storage.get_setting, "llm_weekly_insight_generated_at", "")
-        if not content_str:
-            return {"content": None, "generated_at": None, "is_stale": True}
-        try:
-            content = _json.loads(content_str)
-        except Exception:
-            content = None
-        is_stale = True
-        if generated_at:
-            try:
-                gen = datetime.fromisoformat(generated_at)
-                if gen.tzinfo is None:
-                    from zoneinfo import ZoneInfo
-                    from src.config import DEFAULT_TIMEZONE
-                    gen = gen.replace(tzinfo=ZoneInfo(DEFAULT_TIMEZONE))
-                is_stale = (local_now() - gen).total_seconds() > 8 * 24 * 3600  # stale after 8 days
-            except Exception:
-                pass
-        return {"content": content, "generated_at": generated_at, "is_stale": is_stale}
-
-    @app.get("/api/analytics/insight/monthly")
-    async def get_monthly_insight(storage=Depends(_get_storage)):
-        import json as _json
-        content_str = await _db(storage.get_setting, "llm_monthly_insight_content", "")
-        generated_at = await _db(storage.get_setting, "llm_monthly_insight_generated_at", "")
-        if not content_str:
-            return {"content": None, "generated_at": None, "is_stale": True}
-        try:
-            content = _json.loads(content_str)
-        except Exception:
-            content = None
-        is_stale = True
-        if generated_at:
-            try:
-                gen = datetime.fromisoformat(generated_at)
-                if gen.tzinfo is None:
-                    from zoneinfo import ZoneInfo
-                    from src.config import DEFAULT_TIMEZONE
-                    gen = gen.replace(tzinfo=ZoneInfo(DEFAULT_TIMEZONE))
-                is_stale = (local_now() - gen).total_seconds() > 35 * 24 * 3600  # stale after 35 days
-            except Exception:
-                pass
-        return {"content": content, "generated_at": generated_at, "is_stale": is_stale}
+    async def _read_settings(storage) -> dict:
+        stored = await _db(storage.get_settings, SETTINGS)
+        return {key: read(stored.get(key, default)) for key, (default, read, _) in SETTINGS.items()}
 
     @app.get("/api/settings")
     async def get_settings(storage=Depends(_get_storage)):
-        return {
-            "anomaly_multiplier": float(await _db(storage.get_setting, "anomaly_multiplier", "2.0")),
-            "velocity_alert_threshold": int(await _db(storage.get_setting, "velocity_alert_threshold", "110")),
-            "budgets_enabled": await _db(storage.get_setting, "budgets_enabled", "false") == "true",
-            "goals_enabled": await _db(storage.get_setting, "goals_enabled", "false") == "true",
-            "trips_enabled": await _db(storage.get_setting, "trips_enabled", "false") == "true",
-            "subscriptions_enabled": await _db(storage.get_setting, "subscriptions_enabled", "false") == "true",
-            "recurring_enabled": await _db(storage.get_setting, "recurring_enabled", "false") == "true",
-            "category_colors_snapped_v2": await _db(storage.get_setting, "category_colors_snapped_v2", "false"),
-        }
+        return await _read_settings(storage)
 
     @app.put("/api/settings")
     async def update_settings(request: Request, storage=Depends(_get_storage)):
         body = await request.json()
         errors = {}
         validated = {}
-
-        if "anomaly_multiplier" in body:
-            val = body["anomaly_multiplier"]
+        for key, value in body.items():
+            if key not in SETTINGS:
+                continue
+            parse = SETTINGS[key][2]
             try:
-                val = float(val)
-            except (TypeError, ValueError):
-                errors["anomaly_multiplier"] = "must be a number"
-            else:
-                if not (1.0 <= val <= 10.0):
-                    errors["anomaly_multiplier"] = "must be between 1.0 and 10.0"
-                else:
-                    validated["anomaly_multiplier"] = str(val)
-
-        if "velocity_alert_threshold" in body:
-            val = body["velocity_alert_threshold"]
-            try:
-                val = int(val)
-            except (TypeError, ValueError):
-                errors["velocity_alert_threshold"] = "must be an integer"
-            else:
-                if not (50 <= val <= 300):
-                    errors["velocity_alert_threshold"] = "must be between 50 and 300"
-                else:
-                    validated["velocity_alert_threshold"] = str(val)
-
-        if "budgets_enabled" in body:
-            val = body["budgets_enabled"]
-            if not isinstance(val, bool):
-                errors["budgets_enabled"] = "must be a boolean"
-            else:
-                validated["budgets_enabled"] = "true" if val else "false"
-
-        if "goals_enabled" in body:
-            val = body["goals_enabled"]
-            if not isinstance(val, bool):
-                errors["goals_enabled"] = "must be a boolean"
-            else:
-                validated["goals_enabled"] = "true" if val else "false"
-
-        if "trips_enabled" in body:
-            val = body["trips_enabled"]
-            if not isinstance(val, bool):
-                errors["trips_enabled"] = "must be a boolean"
-            else:
-                validated["trips_enabled"] = "true" if val else "false"
-
-        if "subscriptions_enabled" in body:
-            val = body["subscriptions_enabled"]
-            if not isinstance(val, bool):
-                errors["subscriptions_enabled"] = "must be a boolean"
-            else:
-                validated["subscriptions_enabled"] = "true" if val else "false"
-
-        if "recurring_enabled" in body:
-            val = body["recurring_enabled"]
-            if not isinstance(val, bool):
-                errors["recurring_enabled"] = "must be a boolean"
-            else:
-                validated["recurring_enabled"] = "true" if val else "false"
-
-        if "category_colors_snapped_v2" in body:
-            validated["category_colors_snapped_v2"] = str(body["category_colors_snapped_v2"])
-
-        if "category_colors_pre_v2" in body:
-            validated["category_colors_pre_v2"] = str(body["category_colors_pre_v2"])
-
+                validated[key] = parse(value)
+            except ValueError as exc:
+                errors[key] = str(exc)
         if errors:
             raise HTTPException(status_code=422, detail=errors)
-
-        # Write all-or-nothing after validation
-        for key, value in validated.items():
-            await _db(storage.set_setting, key, value)
-
-        return {
-            "anomaly_multiplier": float(await _db(storage.get_setting, "anomaly_multiplier", "2.0")),
-            "velocity_alert_threshold": int(await _db(storage.get_setting, "velocity_alert_threshold", "110")),
-            "budgets_enabled": await _db(storage.get_setting, "budgets_enabled", "false") == "true",
-            "goals_enabled": await _db(storage.get_setting, "goals_enabled", "false") == "true",
-            "trips_enabled": await _db(storage.get_setting, "trips_enabled", "false") == "true",
-            "subscriptions_enabled": await _db(storage.get_setting, "subscriptions_enabled", "false") == "true",
-            "recurring_enabled": await _db(storage.get_setting, "recurring_enabled", "false") == "true",
-            "category_colors_snapped_v2": await _db(storage.get_setting, "category_colors_snapped_v2", "false"),
-        }
+        await _db(storage.set_settings, validated)
+        return await _read_settings(storage)
 
     # ── Budgets ──────────────────────────────────────────────────────────
-
-    @app.get("/api/budgets")
-    async def list_budgets(storage=Depends(_get_storage)):
-        return await _db(storage.get_budgets)
 
     @app.post("/api/budgets")
     async def create_budget(request: Request, storage=Depends(_get_storage)):
@@ -910,9 +1125,19 @@ def create_dashboard_app(
         row = await _db(storage.get_budget, budget_id)
         return dict(row)
 
-    @app.get("/api/budgets/progress")
-    async def budget_progress(storage=Depends(_get_storage)):
-        return await _db(storage.get_budget_progress)
+    @app.get("/api/v2/budgets/progress", response_model=list[BudgetProgress])
+    async def budget_progress_v2(storage=Depends(_get_storage)):
+        rows = await _db(storage.get_budget_progress)
+        return [
+            {
+                **row,
+                "budget_amount": _sgd_money(row["budget_amount"]),
+                "spent": _sgd_money(row["spent"]),
+                "remaining": _sgd_money(row["remaining"]),
+                "projected": _sgd_money(row["projected"]),
+            }
+            for row in rows
+        ]
 
     @app.put("/api/budgets/{budget_id}")
     async def update_budget(budget_id: int, request: Request, storage=Depends(_get_storage)):
@@ -941,13 +1166,36 @@ def create_dashboard_app(
 
     # ── Goals ──────────────────────────────────────────────────────────────
 
-    @app.get("/api/goals")
-    async def list_goals(storage=Depends(_get_storage)):
-        goals = await _db(storage.get_goals)
+    @app.get("/api/v2/goals", response_model=list[GoalProgress])
+    async def list_goals_v2(storage=Depends(_get_storage)):
         results = []
-        for g in goals:
-            progress = await _db(storage.get_goal_progress, g["id"])
-            results.append(progress if progress else g)
+        for progress in await _db(storage.get_all_goal_progress):
+            results.append({
+                "id": progress["id"],
+                "name": progress["name"],
+                "target_amount": _sgd_money(progress["target_amount"]),
+                "saved_amount": _sgd_money(progress["saved_amount"]),
+                "target_date": progress["target_date"],
+                "status": progress["status"],
+                "percent": progress["percent"],
+                "monthly_rate": _sgd_money(progress["monthly_rate"]) if progress["monthly_rate"] is not None else None,
+                "rate_window": progress["rate_window"],
+                "months_to_target": progress["months_to_target"],
+                "on_track": progress["on_track"],
+                "contributions": [
+                    {
+                        "id": c["id"],
+                        "goal_id": c["goal_id"],
+                        "amount": _sgd_money(c["amount"]),
+                        "month": c["month"],
+                        "contributed_date": c["contributed_date"],
+                        "source": c["source"],
+                        "note": c["note"],
+                        "created_at": c["created_at"],
+                    }
+                    for c in progress["contributions"]
+                ],
+            })
         return results
 
     @app.post("/api/goals")
@@ -1014,12 +1262,6 @@ def create_dashboard_app(
         except ValueError as e:
             raise HTTPException(status_code=404, detail=str(e))
         return await _db(storage.get_goal_progress, goal_id)
-
-    @app.get("/api/goals/{goal_id}/contributions")
-    async def goal_contributions(goal_id: int, storage=Depends(_get_storage)):
-        if not await _db(storage.get_goal, goal_id):
-            raise HTTPException(status_code=404, detail="Goal not found")
-        return await _db(storage.get_contributions, goal_id)
 
     @app.put("/api/goals/{goal_id}/contributions/{contribution_id}")
     async def update_contribution(goal_id: int, contribution_id: int, request: Request, storage=Depends(_get_storage)):
@@ -1108,6 +1350,26 @@ def create_dashboard_app(
             raise HTTPException(status_code=404, detail=str(e))
         return await _db(storage.get_trip, trip_id)
 
+    @app.post("/api/v2/trips/{trip_id}/baseline-exclusion")
+    async def set_trip_baseline_exclusion(trip_id: int, request: Request, storage=Depends(_get_storage)):
+        body = await request.json()
+        excluded = body.get("excluded")
+        if not isinstance(excluded, bool):
+            raise HTTPException(status_code=422, detail="excluded must be a boolean")
+        count = await _db(storage.set_trip_baseline_exclusion, trip_id, excluded)
+        return {"status": "ok", "transactions_updated": count}
+
+    @app.post("/api/v2/baseline-exclusion/period")
+    async def set_period_baseline_exclusion(request: Request, storage=Depends(_get_storage)):
+        body = await request.json()
+        start, end, excluded = body.get("start"), body.get("end"), body.get("excluded")
+        if not isinstance(start, str) or not isinstance(end, str) or end < start:
+            raise HTTPException(status_code=422, detail="start/end must be ISO dates with start <= end")
+        if not isinstance(excluded, bool):
+            raise HTTPException(status_code=422, detail="excluded must be a boolean")
+        count = await _db(storage.set_period_baseline_exclusion, start, end, excluded)
+        return {"status": "ok", "transactions_updated": count}
+
     @app.delete("/api/trips/{trip_id}")
     async def delete_trip(trip_id: int, storage=Depends(_get_storage)):
         try:
@@ -1122,6 +1384,28 @@ def create_dashboard_app(
         if summary is None:
             raise HTTPException(status_code=404, detail="Trip not found")
         return summary
+
+    @app.get("/api/v2/trips/{trip_id}/summary", response_model=TripSummary)
+    async def trip_summary_v2(trip_id: int, storage=Depends(_get_storage)):
+        summary = await _db(storage.get_trip_summary, trip_id)
+        if summary is None:
+            raise HTTPException(status_code=404, detail="Trip not found")
+        return {
+            "trip": summary["trip"],
+            "total": _sgd_money(summary["total_sgd"]),
+            "transaction_count": summary["transaction_count"],
+            "days": summary["days"],
+            "daily_average": _sgd_money(summary["daily_average_sgd"]),
+            "currencies_used": summary["currencies_used"],
+            "by_category": [
+                {"category": c["category"], "amount": _sgd_money(c["amount_sgd"]), "count": c["count"]}
+                for c in summary["by_category"]
+            ],
+            "by_day": [
+                {"date": d["date"], "amount": _sgd_money(d["amount_sgd"])}
+                for d in summary["by_day"]
+            ],
+        }
 
     @app.get("/api/trips/{trip_id}/transactions")
     async def trip_transactions(
@@ -1152,33 +1436,17 @@ def create_dashboard_app(
         await _db(storage.delist_transaction, trip_id, tx_id)
         return {"status": "ok"}
 
-    @app.get("/api/trips/{trip_id}/transactions/{tx_id}/membership")
-    async def check_trip_membership(trip_id: int, tx_id: int, storage=Depends(_get_storage)):
-        return {"in_trip": await _db(storage.is_in_trip, trip_id, tx_id)}
+    @app.get("/api/transactions/{tx_id}/trips")
+    async def transaction_trips(tx_id: int, storage=Depends(_get_storage)):
+        return {"trip_ids": await _db(storage.get_trip_ids_for_transaction, tx_id)}
 
     # ── Subscriptions ──────────────────────────────────────────────────────────
 
-    @app.get("/api/subscriptions/summary")
-    async def get_subscription_summary(storage=Depends(_get_storage)):
-        return await _db(storage.get_subscription_summary)
-
     @app.get("/api/subscriptions")
     async def list_subscriptions(storage=Depends(_get_storage)):
-        subs = await _db(storage.list_subscriptions)
+        subs = await _db(storage.list_subscriptions_enriched)
         summary = await _db(storage.get_subscription_summary)
-        enriched = []
-        for sub in subs:
-            last_amount = await _db(storage.get_subscription_last_amount, sub["id"])
-            upcoming = await _db(storage.list_upcoming_transactions, sub["id"])
-            pending = [u for u in upcoming if u["status"] == "pending"]
-            next_upcoming = pending[0] if pending else None
-            enriched.append({
-                **sub,
-                "last_amount": last_amount,
-                "next_expected_date": next_upcoming["expected_date"] if next_upcoming else None,
-                "next_upcoming_id": next_upcoming["id"] if next_upcoming else None,
-            })
-        return {"subscriptions": enriched, "summary": summary}
+        return {"subscriptions": subs, "summary": summary}
 
     def _validate_billing_day(day) -> None:
         """Raise HTTPException 422 if billing_day is present but out of range."""
@@ -1204,8 +1472,17 @@ def create_dashboard_app(
             billing_day=body.get("billing_day"),
             label=body.get("label"),
             notes=body.get("notes"),
+            confirmation_source="user",
         )
         return await _db(storage.get_subscription, sub_id)
+
+    @app.post("/api/subscriptions/{sub_id}/confirm", response_model=PlanMutationResponse)
+    async def confirm_subscription(sub_id: int, storage=Depends(_get_storage)):
+        try:
+            await _db(storage.confirm_subscription, sub_id)
+        except ValueError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+        return {"status": "ok"}
 
     @app.put("/api/subscriptions/{sub_id}")
     async def update_subscription(sub_id: int, body: dict, storage=Depends(_get_storage)):
@@ -1219,7 +1496,7 @@ def create_dashboard_app(
         try:
             await _db(storage.update_subscription, sub_id, **body)
         except ValueError as e:
-            raise HTTPException(status_code=404, detail=str(e))
+            raise _http_error(e, 422)
         return await _db(storage.get_subscription, sub_id)
 
     @app.delete("/api/subscriptions/{sub_id}")
@@ -1250,11 +1527,10 @@ def create_dashboard_app(
         if not upcoming or upcoming["subscription_id"] != sub_id:
             raise HTTPException(status_code=404, detail="Upcoming transaction not found")
         transaction_id = body.get("transaction_id")
-        if not transaction_id:
-            raise HTTPException(status_code=422, detail="transaction_id required")
-        if not await _db(storage.get_transaction, transaction_id):
-            raise HTTPException(status_code=404, detail="Transaction not found")
-        await _db(storage.match_upcoming_transaction, upcoming_id, transaction_id)
+        try:
+            await _db(storage.match_upcoming_transaction, upcoming_id, transaction_id)
+        except ValueError as e:
+            raise _http_error(e, 422)
         return {"status": "ok"}
 
     @app.post("/api/subscriptions/{sub_id}/upcoming/{upcoming_id}/dismiss")
@@ -1262,18 +1538,19 @@ def create_dashboard_app(
         upcoming = await _db(storage.get_upcoming_transaction, upcoming_id)
         if not upcoming or upcoming["subscription_id"] != sub_id:
             raise HTTPException(status_code=404, detail="Upcoming transaction not found")
-        await _db(storage.dismiss_upcoming_transaction, upcoming_id)
+        try:
+            await _db(storage.dismiss_planned_charge, upcoming_id)
+        except ValueError as e:
+            raise _http_error(e, 404)
         return {"status": "ok"}
 
     @app.post("/api/subscriptions/{sub_id}/link-transaction", status_code=201)
     async def link_transaction(sub_id: int, body: dict, storage=Depends(_get_storage)):
         tx_id = body.get("transaction_id")
-        if not isinstance(tx_id, int):
-            raise HTTPException(status_code=422, detail="transaction_id must be an integer")
         try:
             await _db(storage.link_transaction_to_subscription, sub_id, tx_id)
         except ValueError as e:
-            raise HTTPException(status_code=404, detail=str(e))
+            raise _http_error(e, 422)
         return {"status": "ok"}
 
     # Serve React SPA
@@ -1288,8 +1565,11 @@ def create_dashboard_app(
 
         @app.get("/{full_path:path}")
         async def serve_spa(full_path: str):
+            # Unknown API paths are a 404, not the SPA shell with a 200.
+            if full_path == "api" or full_path.startswith("api/"):
+                raise HTTPException(status_code=404, detail="Not found")
             file_path = os.path.join(static_dist, full_path)
-            if os.path.isfile(file_path) and not full_path.startswith("api"):
+            if os.path.isfile(file_path):
                 return FileResponse(file_path)
             return FileResponse(os.path.join(static_dist, "index.html"))
 
