@@ -10,6 +10,7 @@ import { X } from 'lucide-react';
 import { formatCurrency, isCreditType } from '@/lib/utils';
 import { ALL_TAGS } from '@/lib/merchants';
 import { MiniBarChart } from '@/components/charts/MiniBarChart';
+import { SectionLabel, StatTiles } from '@/components/ui/detail-panel';
 
 export function MerchantProfile({
   merchant,
@@ -151,19 +152,11 @@ export function MerchantProfile({
       {/* Scrollable body */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
       {/* Stats row */}
-      <div className="grid grid-cols-2 gap-2">
-        {[
+      <StatTiles items={[
           { label: 'Total Spent', value: formatCurrency(profile.total.minor_units / 100) },
           { label: 'Transactions', value: String(profile.transaction_count) },
           { label: 'Average', value: formatCurrency(profile.avg_amount.minor_units / 100) },
-          { label: 'Last Seen', value: profile.last_seen ?? '—' },
-        ].map(({ label, value }) => (
-          <div key={label} className="bg-background rounded-lg p-3 border border-border">
-            <p className="text-2xs font-mono uppercase tracking-[0.06em] text-muted">{label}</p>
-            <p className="text-sm font-display font-bold text-foreground mt-0.5">{value}</p>
-          </div>
-        ))}
-      </div>
+          { label: 'Last Seen', value: profile.last_seen ?? '—' },]} />
 
       {/* Spend trend — ChartCard used here (Recharts does not support CSS custom properties; all values come from chartTheme.ts) */}
       {chartData.length > 0 && (
@@ -172,7 +165,7 @@ export function MerchantProfile({
 
       {/* Tags */}
       <div>
-        <p className="text-2xs font-mono font-semibold uppercase tracking-[0.22em] text-muted mb-2">Tags</p>
+        <SectionLabel className="mb-2">Tags</SectionLabel>
         <div className="flex flex-wrap gap-2">
           {ALL_TAGS.map((tag) => {
             const active = (profile.tags ?? []).includes(tag);
@@ -187,7 +180,7 @@ export function MerchantProfile({
 
       {/* Display name — cosmetic only; never rewrites the recorded merchant string above */}
       <div>
-        <p className="text-2xs font-mono font-semibold uppercase tracking-[0.22em] text-muted mb-2">Display name</p>
+        <SectionLabel className="mb-2">Display name</SectionLabel>
         <input
           type="text"
           value={displayName}
@@ -206,7 +199,7 @@ export function MerchantProfile({
           only previews/backfills it, never creates or edits the rule. */}
       {ruleImpact && (
         <div>
-          <p className="text-2xs font-mono font-semibold uppercase tracking-[0.22em] text-muted mb-2">Category rule</p>
+          <SectionLabel className="mb-2">Category rule</SectionLabel>
           <div className="bg-background rounded-lg p-3 border border-border space-y-2">
             <p className="text-sm text-foreground">New transactions from this merchant are categorized <strong>{ruleImpact.category}</strong>.</p>
             {ruleImpact.differing_count > 0 ? (
@@ -233,7 +226,7 @@ export function MerchantProfile({
 
       {/* Notes */}
       <div>
-        <p className="text-2xs font-mono font-semibold uppercase tracking-[0.22em] text-muted mb-2">Notes</p>
+        <SectionLabel className="mb-2">Notes</SectionLabel>
         <textarea
           value={notes}
           onChange={(e) => setNotes(e.target.value)}

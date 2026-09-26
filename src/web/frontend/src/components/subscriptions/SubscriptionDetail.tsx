@@ -6,13 +6,19 @@ import { Button } from '@/components/ui/button';
 import { api, type Subscription, type Transaction, type UpcomingTransaction } from '@/api/client';
 import { SubscriptionForm } from './SubscriptionForm';
 import { invalidateSpendingQueries } from '@/hooks/useTransactions';
-import { toDateStr } from '@/lib/utils';
+import { toDateStr, formatCurrency } from '@/lib/utils';
 import { FREQUENCY_LABELS } from '@/lib/subscriptionFrequency';
 import { MiniBarChart } from '@/components/charts/MiniBarChart';
+import { ConfirmDestructive, SectionLabel, StatTiles } from '@/components/ui/detail-panel';
 
 interface SubscriptionDetailProps {
   subId: number;
   onClose: () => void;
+}
+
+// A linked charge in SGD, or why it can't be shown.
+function sgdEquivalent(tx: Transaction): string {
+  return tx.exchange_rate == null ? 'Conversion unresolved' : formatCurrency(tx.amount * tx.exchange_rate);
 }
 
 const FREQUENCY_MONTHLY_FACTOR: Record<Subscription['frequency'], number> = {
@@ -266,19 +272,11 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
           {sub && (
             <>
               {/* Stats grid */}
-              <div className="grid grid-cols-2 gap-2">
-                {[
-                  { label: 'Monthly', value: monthlyCost != null ? `S$${monthlyCost.toFixed(2)}` : '—' },
-                  { label: 'Last charge', value: sub.last_amount != null ? `S$${sub.last_amount.toFixed(2)}` : '—' },
+              <StatTiles items={[
+                  { label: 'Monthly', value: monthlyCost != null ? formatCurrency(monthlyCost) : '—' },
+                  { label: 'Last charge', value: sub.last_amount != null ? formatCurrency(sub.last_amount) : '—' },
                   { label: 'Next charge', value: sub.next_expected_date ? sub.next_expected_date.slice(0, 10) : '—' },
-                  { label: 'History', value: `${history.length} linked` },
-                ].map(({ label, value }) => (
-                  <div key={label} className="bg-background rounded-lg p-3 border border-border">
-                    <p className="text-2xs font-mono uppercase tracking-[0.06em] text-muted">{label}</p>
-                    <p className="text-sm font-display font-bold text-foreground mt-0.5">{value}</p>
-                  </div>
-                ))}
-              </div>
+                  { label: 'History', value: `${history.length} linked` },]} />
 
               {adoptPrompt && (
                 <div className="flex items-center justify-between p-3 rounded-md bg-warning/10 border border-warning/30 text-xs">
@@ -316,9 +314,7 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
 
               {sub.status !== 'paused' && pendingUpcomings.length > 0 && (
                 <section>
-                  <p className="text-2xs font-mono font-semibold uppercase tracking-[0.22em] text-muted mb-2">
-                    Upcoming
-                  </p>
+                  <SectionLabel className="mb-2">Upcoming</SectionLabel>
                   <div className="divide-y divide-border">
                     {pendingUpcomings.map((u: UpcomingTransaction) => (
                       <UpcomingRow
@@ -336,9 +332,7 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
               {/* History + link past transactions */}
               <section>
                 <div className="flex items-center justify-between mb-2">
-                  <p className="text-2xs font-mono font-semibold uppercase tracking-[0.22em] text-muted">
-                    History
-                  </p>
+                  <SectionLabel>History</SectionLabel>
                   <Button
                     type="button"
                     variant="ghost"
@@ -367,7 +361,7 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
                           <option value="">Choose transaction…</option>
                           {linkCandidates.map((tx: Transaction) => (
                             <option key={tx.id} value={String(tx.id)}>
-                              {tx.transaction_date.slice(0, 10)} · {tx.exchange_rate == null ? 'Conversion unresolved' : `S$${(tx.amount * tx.exchange_rate).toFixed(2)}`} · {tx.merchant ?? '—'}
+                              {tx.transaction_date.slice(0, 10)} · {sgdEquivalent(tx)} · {tx.merchant ?? '—'}
                             </option>
                           ))}
                         </select>
@@ -397,7 +391,7 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
                       >
                         <span className="text-xs text-muted">{tx.transaction_date.slice(0, 10)}</span>
                         <span className="text-xs font-medium text-foreground tabular-nums">
-                          {tx.exchange_rate == null ? 'Conversion unresolved' : `S$${(tx.amount * tx.exchange_rate).toFixed(2)}`}
+                          {sgdEquivalent(tx)}
                         </span>
                       </div>
                     ))}
@@ -406,24 +400,12 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
               </section>
 
               {confirmDelete && (
-                <div className="p-3 rounded-md border border-destructive/30 bg-destructive/10 space-y-2">
-                  <p className="text-sm text-foreground">
-                    Delete this subscription permanently? Matched transactions are not deleted.
-                  </p>
-                  <div className="flex justify-end gap-2">
-                    <Button type="button" variant="ghost" onClick={() => setConfirmDelete(false)}>
-                      Cancel
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="destructive"
-                      onClick={() => deleteMutation.mutate()}
-                      disabled={deleteMutation.isPending}
-                    >
-                      {deleteMutation.isPending ? 'Deleting…' : 'Delete'}
-                    </Button>
-                  </div>
-                </div>
+                <ConfirmDestructive
+                  message="Delete this subscription permanently? Matched transactions are not deleted."
+                  pending={deleteMutation.isPending}
+                  onConfirm={() => deleteMutation.mutate()}
+                  onCancel={() => setConfirmDelete(false)}
+                />
               )}
             </>
           )}
@@ -479,7 +461,7 @@ function UpcomingRow({ upcoming, recentTxs, onMatch, onDismiss }: UpcomingRowPro
           <option value="">Match to transaction…</option>
           {candidates.map((tx) => (
             <option key={tx.id} value={String(tx.id)}>
-              {tx.transaction_date.slice(0, 10)} · {tx.exchange_rate == null ? 'Conversion unresolved' : `S$${(tx.amount * tx.exchange_rate).toFixed(2)}`} · {tx.merchant ?? '—'}
+              {tx.transaction_date.slice(0, 10)} · {sgdEquivalent(tx)} · {tx.merchant ?? '—'}
             </option>
           ))}
         </select>

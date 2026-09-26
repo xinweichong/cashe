@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { X } from 'lucide-react';
 import { api } from '@/api/client';
 import { Button } from '@/components/ui/button';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import { getBudgetTone, formatCurrency } from '@/lib/utils';
 import { useBudget } from './planHooks';
+import { ConfirmDestructive, DetailHeader, DetailLoading, StatTiles } from '@/components/ui/detail-panel';
 
 export function BudgetDetail({ budgetId, onClose }: { budgetId: number; onClose: () => void }) {
   const qc = useQueryClient();
@@ -33,15 +33,7 @@ export function BudgetDetail({ budgetId, onClose }: { budgetId: number; onClose:
   });
 
   if (!b) {
-    return (
-      <div className="flex flex-col h-full">
-        <div className="shrink-0 flex items-start justify-between p-4 border-b border-border">
-          <h2 className="text-lg font-bold font-display tracking-tight text-foreground">Budget</h2>
-          <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close"><X className="w-4 h-4" /></Button>
-        </div>
-        <div className="flex-1 overflow-y-auto p-4"><p className="text-sm text-muted">Catching up…</p></div>
-      </div>
-    );
+    return <DetailLoading title="Budget" onClose={onClose} />;
   }
 
   const budgetAmount = b.budget_amount.minor_units / 100;
@@ -52,29 +44,15 @@ export function BudgetDetail({ budgetId, onClose }: { budgetId: number; onClose:
 
   return (
     <div className="flex flex-col h-full">
-      <div className="shrink-0 flex items-start justify-between p-4 border-b border-border">
-        <div>
-          <h2 className="text-lg font-bold font-display tracking-tight text-foreground">{b.label}</h2>
-          <p className="text-xs text-muted capitalize mt-0.5">{b.period} budget</p>
-        </div>
-        <Button variant="ghost" size="icon" className="shrink-0" onClick={onClose} aria-label="Close"><X className="w-4 h-4" /></Button>
-      </div>
+      <DetailHeader title={b.label} subtitle={<p className="text-xs text-muted capitalize mt-0.5">{b.period} budget</p>} onClose={onClose} />
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         <ProgressBar percent={b.percent} label={`${b.label} budget used`} tone={toneName === 'warn' ? 'warm' : toneName} className="h-2.5" />
-        <div className="grid grid-cols-2 gap-2">
-          {[
+        <StatTiles items={[
             { label: 'Spent', value: formatCurrency(spent), color },
             { label: 'Budget', value: formatCurrency(budgetAmount) },
             { label: b.status === 'over_budget' ? 'Over' : 'Remaining', value: b.status === 'over_budget' ? formatCurrency(spent - budgetAmount) : formatCurrency(remaining) },
-            { label: 'Projected', value: formatCurrency(projected) },
-          ].map(({ label, value, color: c }) => (
-            <div key={label} className="bg-background rounded-lg p-3 border border-border">
-              <p className="text-2xs font-mono uppercase tracking-[0.06em] text-muted">{label}</p>
-              <p className="text-sm font-display font-bold mt-0.5" style={c ? { color: c } : undefined}>{value}</p>
-            </div>
-          ))}
-        </div>
+            { label: 'Projected', value: formatCurrency(projected) },]} />
 
         {editing ? (
           <div className="border border-border rounded-lg p-3 space-y-3">
@@ -106,15 +84,12 @@ export function BudgetDetail({ budgetId, onClose }: { budgetId: number; onClose:
         )}
 
         {confirmDelete && (
-          <div className="p-3 rounded-md border border-destructive/30 bg-destructive/10 space-y-2">
-            <p className="text-sm text-foreground">Delete budget "{b.label}"? Past spending isn't affected.</p>
-            <div className="flex justify-end gap-2">
-              <Button type="button" variant="ghost" onClick={() => setConfirmDelete(false)}>Cancel</Button>
-              <Button type="button" variant="destructive" onClick={() => deleteMutation.mutate()} disabled={deleteMutation.isPending}>
-                {deleteMutation.isPending ? 'Deleting…' : 'Delete'}
-              </Button>
-            </div>
-          </div>
+          <ConfirmDestructive
+            message={`Delete budget "${b.label}"? Past spending isn't affected.`}
+            pending={deleteMutation.isPending}
+            onConfirm={() => deleteMutation.mutate()}
+            onCancel={() => setConfirmDelete(false)}
+          />
         )}
       </div>
     </div>

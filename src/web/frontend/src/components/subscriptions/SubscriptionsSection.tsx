@@ -133,7 +133,7 @@ export function SubscriptionsSection({ selectedSubId, onSelectSub }: Subscriptio
                 </div>
               </div>
               <span className="text-sm tabular-nums text-foreground shrink-0 ml-2">
-                {sub.last_amount != null ? `S$${sub.last_amount.toFixed(2)}` : '—'}
+                {sub.last_amount != null ? formatCurrency(sub.last_amount) : '—'}
               </span>
             </SelectableRow>
           ))}

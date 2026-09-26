@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { springs } from '@/lib/motionPresets';
 import { getGoalTone, formatCurrencyWhole } from '@/lib/utils';
 import { useGoals } from './planHooks';
+import { ConfirmDestructive, DetailHeader, DetailLoading, SectionLabel } from '@/components/ui/detail-panel';
 
 function ProgressRing({ percent, color }: { percent: number; color: string }) {
   const r = 40;
@@ -106,15 +107,7 @@ export function GoalDetail({ goalId, onClose }: { goalId: number; onClose: () =>
   };
 
   if (!g) {
-    return (
-      <div className="flex flex-col h-full">
-        <div className="shrink-0 flex items-start justify-between p-4 border-b border-border">
-          <h2 className="text-lg font-bold font-display tracking-tight text-foreground">Goal</h2>
-          <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close"><X className="w-4 h-4" /></Button>
-        </div>
-        <div className="flex-1 overflow-y-auto p-4"><p className="text-sm text-muted">Catching up…</p></div>
-      </div>
-    );
+    return <DetailLoading title="Goal" onClose={onClose} />;
   }
 
   const onTrackColor =
@@ -135,13 +128,11 @@ export function GoalDetail({ goalId, onClose }: { goalId: number; onClose: () =>
 
   return (
     <div className="flex flex-col h-full">
-      <div className="shrink-0 flex items-start justify-between p-4 border-b border-border">
-        <div>
-          <h2 className="text-lg font-bold font-display tracking-tight text-foreground">{g.name}</h2>
-          {g.target_date && <p className="text-xs text-muted font-mono mt-0.5">Deadline: {g.target_date}</p>}
-        </div>
-        <Button variant="ghost" size="icon" className="shrink-0" onClick={onClose} aria-label="Close"><X className="w-4 h-4" /></Button>
-      </div>
+      <DetailHeader
+        title={g.name}
+        subtitle={g.target_date && <p className="text-xs text-muted font-mono mt-0.5">Deadline: {g.target_date}</p>}
+        onClose={onClose}
+      />
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         <div className="flex items-start gap-4">
@@ -224,19 +215,16 @@ export function GoalDetail({ goalId, onClose }: { goalId: number; onClose: () =>
         )}
 
         {confirmDelete && (
-          <div className="p-3 rounded-md border border-destructive/30 bg-destructive/10 space-y-2">
-            <p className="text-sm text-foreground">Delete goal "{g.name}"? This also removes all of its contribution history.</p>
-            <div className="flex justify-end gap-2">
-              <Button type="button" variant="ghost" onClick={() => setConfirmDelete(false)}>Cancel</Button>
-              <Button type="button" variant="destructive" onClick={() => deleteMutation.mutate()} disabled={deleteMutation.isPending}>
-                {deleteMutation.isPending ? 'Deleting…' : 'Delete'}
-              </Button>
-            </div>
-          </div>
+          <ConfirmDestructive
+            message={`Delete goal "${g.name}"? This also removes all of its contribution history.`}
+            pending={deleteMutation.isPending}
+            onConfirm={() => deleteMutation.mutate()}
+            onCancel={() => setConfirmDelete(false)}
+          />
         )}
 
         <section>
-          <p className="text-2xs font-mono font-semibold uppercase tracking-[0.22em] text-muted mb-2">Contribution History</p>
+          <SectionLabel className="mb-2">Contribution History</SectionLabel>
           {g.contributions.length === 0 ? (
             <p className="text-xs text-muted italic">No contributions yet.</p>
           ) : (
