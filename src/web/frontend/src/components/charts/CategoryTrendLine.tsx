@@ -1,11 +1,10 @@
 import { useMemo } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, ReferenceLine,
 } from 'recharts';
-import { Button } from '@/components/ui/button';
 import { formatCurrency, formatShortDate, getCategoryColor } from '@/lib/utils';
 import { formatDateTick, formatDateLabel, useChartTheme, useChartMotion, CHART_Y_DOMAIN } from '@/lib/chartTheme';
+import { DayStepper, NoTrendData } from './DayStepper';
 
 interface CategoryTrendLineProps {
   data: Record<string, string | number | null>[];
@@ -26,7 +25,7 @@ export function CategoryTrendLine({ data, selectedDate, onSelectDate }: Category
   }, [data]);
 
   if (!data || data.length === 0) {
-    return <div className="w-full h-full min-h-[160px] flex items-center justify-center text-muted text-sm">No trend data</div>;
+    return <NoTrendData />;
   }
 
   const activeIndex = selectedDate ? data.findIndex((d) => d.date === selectedDate) : -1;
@@ -83,19 +82,16 @@ export function CategoryTrendLine({ data, selectedDate, onSelectDate }: Category
       </ResponsiveContainer>
       </div>
       {onSelectDate && (
-        <div className="flex items-center justify-between gap-2 mt-2" data-testid="category-trend-day-readout">
-          <Button type="button" variant="ghost" size="icon" onClick={() => step(-1)} disabled={activeIndex === 0} aria-label="Previous day">
-            <ChevronLeft size={16} aria-hidden />
-          </Button>
-          <p className="text-sm font-mono tabular-nums text-center">
-            {activeIndex >= 0
-              ? <>{formatShortDate(String(data[activeIndex].date))} · <span className="font-semibold text-foreground">{formatCurrency(dayTotal(data[activeIndex]))}</span> charted</>
-              : <span className="text-muted">Select a day to break it down</span>}
-          </p>
-          <Button type="button" variant="ghost" size="icon" onClick={() => step(1)} disabled={activeIndex === -1 || activeIndex >= data.length - 1} aria-label="Next day">
-            <ChevronRight size={16} aria-hidden />
-          </Button>
-        </div>
+        <DayStepper
+          testId="category-trend-day-readout"
+          canPrev={activeIndex !== 0}
+          canNext={activeIndex !== -1 && activeIndex < data.length - 1}
+          onStep={step}
+        >
+          {activeIndex >= 0
+            ? <>{formatShortDate(String(data[activeIndex].date))} · <span className="font-semibold text-foreground">{formatCurrency(dayTotal(data[activeIndex]))}</span> charted</>
+            : <span className="text-muted">Select a day to break it down</span>}
+        </DayStepper>
       )}
     </div>
   );

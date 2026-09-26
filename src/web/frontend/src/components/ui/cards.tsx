@@ -27,23 +27,9 @@ export function PageCard({ title, action, children, className, contentClassName,
 }
 
 // ── ChartCard ─────────────────────────────────────────────────────────────────
-interface ChartCardProps {
-  title: string;
-  action?: ReactNode;
-  children: ReactNode;
-  className?: string;
-}
-
-export function ChartCard({ title, action, children, className }: ChartCardProps) {
-  return (
-    <Card className={cn(className)}>
-      <div className="flex flex-row items-center justify-between p-4 gap-2">
-        <h2 className="min-w-0 text-base font-semibold text-foreground font-display">{title}</h2>
-        {action && <div className="shrink-0 ml-2">{action}</div>}
-      </div>
-      <CardContent className="p-0">{children}</CardContent>
-    </Card>
-  );
+// A PageCard whose content runs edge to edge (charts size themselves).
+export function ChartCard(props: Omit<PageCardProps, 'contentClassName'>) {
+  return <PageCard {...props} contentClassName="p-0" />;
 }
 
 // ── HeroCard ─────────────────────────────────────────────────────────────────

@@ -158,7 +158,6 @@ export function MerchantProfile({
           { label: 'Average', value: formatCurrency(profile.avg_amount.minor_units / 100) },
           { label: 'Last Seen', value: profile.last_seen ?? '—' },]} />
 
-      {/* Spend trend — ChartCard used here (Recharts does not support CSS custom properties; all values come from chartTheme.ts) */}
       {chartData.length > 0 && (
         <MiniBarChart title="Monthly Spend" data={chartData} xKey="month" valueKey="Total" valueLabel="Spent" />
       )}
