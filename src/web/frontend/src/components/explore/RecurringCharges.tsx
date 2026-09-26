@@ -3,9 +3,8 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '@/api/client';
 import { formatMoney, type Money } from '@/api/briefing';
 import { PageCard } from '@/components/ui/cards';
-import { Skeleton } from '@/components/ui/skeleton';
-import { LoadFailed } from '@/components/ui/LoadFailed';
 import { formatChange } from '@/components/explore/format';
+import { QueryState } from '@/components/ui/QueryState';
 
 // Shared by Explore's patterns and Plan's phone Subs lens (recurring cost
 // changes live with subscriptions on the phone).
@@ -39,7 +38,7 @@ export function QuestionCard({ title, isError, onRetry, isReady, children, actio
   // an error screen — only show LoadFailed when there is nothing to show yet.
   return (
     <PageCard title={title} action={action}>
-      {isError && !isReady ? <div role="alert"><LoadFailed onRetry={onRetry} /></div> : !isReady ? <div role="status"><span className="sr-only">Loading…</span><Skeleton className="h-20 w-full" /></div> : children}
+      <QueryState data={isReady ? true : null} isError={isError} onRetry={onRetry}>{() => children}</QueryState>
     </PageCard>
   );
 }

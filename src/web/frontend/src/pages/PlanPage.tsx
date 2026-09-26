@@ -35,6 +35,7 @@ import { useSettings } from '@/hooks/useSettings';
 import { useHomeBriefing, useMonthForecast } from '@/hooks/useBriefing';
 import { useUrlParams } from '@/hooks/useUrlParams';
 import { frequencyLabel } from '@/lib/subscriptionFrequency';
+import { QueryState } from '@/components/ui/QueryState';
 
 const amountBasisLabels: Record<'matched_charge' | 'user' | 'unknown', string> = {
   matched_charge: 'Amount based on your last confirmed charge',
@@ -127,7 +128,7 @@ function ProjectionHero() {
   const { data, isError, refetch } = useMonthForecast();
   return (
     <HeroCard title="This month's projection" className="col-span-2">
-      {isError && !data ? <div role="alert"><LoadFailed onRetry={() => void refetch()} /></div> : !data ? <div role="status"><span className="sr-only">Loading…</span><Skeleton className="h-20 w-full" /></div> :
+      <QueryState data={data} isError={isError} onRetry={() => void refetch()}>{(data) =>
         data.projected_total == null ? <>
           <p className="text-muted">Not enough recorded history yet to project the rest of this month — at least 4 weeks of history is needed for each remaining weekday.</p>
           <ProjectionComparisonFallback data={data} />
@@ -144,7 +145,7 @@ function ProjectionHero() {
             {data.assumptions.map((assumption, i) => <li key={i}>{assumption}</li>)}
           </ul>
         </details>
-      </>}
+      </>}</QueryState>
     </HeroCard>
   );
 }
@@ -163,7 +164,7 @@ function ProjectionGlance() {
   const whole = (m: { minor_units: number }) => formatCurrencyWhole(m.minor_units / 100);
   return (
     <HeroCard title={`On pace · ${month}`} className="p-4" glowColor={!target || !projected ? 'warm' : over ? 'coral' : 'teal'}>
-      {isError && !data ? <div role="alert"><LoadFailed onRetry={() => void refetch()} /></div> : !data ? <div role="status"><span className="sr-only">Loading…</span><Skeleton className="h-10 w-44" /><Skeleton className="mt-3 h-3 w-full" /></div> :
+      <QueryState data={data} isError={isError} onRetry={() => void refetch()} skeleton={<><Skeleton className="h-10 w-44" /><Skeleton className="mt-3 h-3 w-full" /></>}>{(data) =>
         projected == null ? <>
           <p className="font-display text-4xl font-bold tracking-tight tabular-nums">{formatMoney(data.recorded_actual)}</p>
           <p className="mt-1 text-xs text-muted">Recorded so far. A projection needs about 4 weeks of history.</p>
@@ -179,7 +180,7 @@ function ProjectionGlance() {
             {data.remaining_variable_estimate && <span className="inline-flex items-center gap-1.5"><StatusDot tone="notable" />{whole(data.remaining_variable_estimate)} est.</span>}
           </p>
           {!!data.unpriced_commitment_count && <p className="mt-1 text-xs text-warning">{data.unpriced_commitment_count} upcoming charge{data.unpriced_commitment_count > 1 ? 's' : ''} with no amount not included.</p>}
-        </>}
+        </>}</QueryState>
     </HeroCard>
   );
 }
@@ -310,7 +311,7 @@ function SelectedDayDetail({ date }: { date: string }) {
   const report = query.data;
   return (
     <PageCard title={`Charges on ${formatShortDate(date)}`}>
-      {query.isError && !report ? <div role="alert"><LoadFailed onRetry={() => void query.refetch()} /></div> : !report ? <div role="status"><span className="sr-only">Loading…</span><Skeleton className="h-20 w-full" /></div> :
+      <QueryState data={report} isError={query.isError} onRetry={() => void query.refetch()}>{(report) =>
         !report.items.length ? <p className="text-muted">No recorded pending charges on this day.</p> : <>
         <ol>
           {report.items.map(item => <li key={item.id} className="py-3 border-b border-border last:border-0 flex justify-between gap-4">
@@ -323,7 +324,7 @@ function SelectedDayDetail({ date }: { date: string }) {
           <span className="text-sm text-muted">{report.total} charges</span>
           <Button variant="outline" size="sm" disabled={offset + 50 >= report.total} onClick={() => setOffset(offset + 50)}>Next</Button>
         </nav>}
-      </>}
+      </>}</QueryState>
     </PageCard>
   );
 }
@@ -454,9 +455,7 @@ export function PlanPage() {
     const lensAction = (label: string, onClick: () => void) => <LensAction label={label} onClick={onClick} />;
     const soonPanel = <div className="flex h-full flex-col">
       <div className="flex-1 px-4 pt-3">
-        {query.isError && !report ? <div role="alert"><LoadFailed onRetry={() => void query.refetch()} /></div>
-          : !report ? <div role="status"><span className="sr-only">Loading upcoming charges…</span><Skeleton className="h-24 w-full" /></div>
-          : !report.enabled ? <>
+        <QueryState data={report} isError={query.isError} onRetry={() => void query.refetch()} skeleton={<Skeleton className="h-24 w-full" />} loadingLabel="Loading upcoming charges…">{(report) => !report.enabled ? <>
             <p className="text-sm">Enable Subscriptions in Settings to see your recorded schedules here.</p>
             <Link to="/settings" className="text-teal min-h-11 inline-flex items-center">Open Settings</Link>
           </> : <>
@@ -469,7 +468,7 @@ export function PlanPage() {
               </SelectableRow>
             ))}
             {!report.items.length && <p className="mt-2 text-sm text-muted">No pending charges recorded in this window.</p>}
-          </>}
+          </>}</QueryState>
       </div>
       {report?.enabled && lensAction(`Timeline and calendar${report.total ? ` · ${report.total}` : ''}`, () => openDrill('timeline'))}
     </div>;

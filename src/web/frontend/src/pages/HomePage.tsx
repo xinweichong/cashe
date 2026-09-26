@@ -12,7 +12,7 @@ import { HeroCard, PageCard } from '@/components/ui/cards';
 import { HeroAmount } from '@/components/ui/HeroAmount';
 import { StatCard } from '@/components/ui/StatCard';
 import { ActivityRowShell } from '@/components/ui/ActivityRowShell';
-import { LoadFailed } from '@/components/ui/LoadFailed';
+import { LoadFailed, RetryLink } from '@/components/ui/LoadFailed';
 import { Skeleton } from '@/components/ui/skeleton';
 import { TrendLine } from '@/components/charts/TrendLine';
 import { CategoryDonut } from '@/components/charts/CategoryDonut';
@@ -194,7 +194,7 @@ export function HomePage() {
   const merchantList = selectedCategory && <>
     {merchantsQuery.data ? (
       <>
-        {merchantsQuery.isError && <p className="text-xs text-warning">Couldn't refresh merchants for {selectedCategory} — showing the last loaded data. <Button type="button" variant="link" size="sm" className="h-auto min-h-11 p-0 align-baseline" onClick={() => void merchantsQuery.refetch()}>Retry</Button></p>}
+        {merchantsQuery.isError && <p className="text-xs text-warning">Couldn't refresh merchants for {selectedCategory} — showing the last loaded data. <RetryLink onRetry={() => void merchantsQuery.refetch()} /></p>}
         {merchantsQuery.data.length ? (
           <ul className="space-y-2">
             {merchantsQuery.data.map((m) => (
@@ -211,7 +211,7 @@ export function HomePage() {
     ) : merchantsQuery.isLoading ? (
       <Skeleton className="h-[100px] w-full" />
     ) : (
-      <p className="text-sm text-muted">Couldn't load merchants for {selectedCategory}. <Button type="button" variant="link" size="sm" className="h-auto min-h-11 p-0 align-baseline" onClick={() => void merchantsQuery.refetch()}>Retry</Button></p>
+      <p className="text-sm text-muted">Couldn't load merchants for {selectedCategory}. <RetryLink onRetry={() => void merchantsQuery.refetch()} /></p>
     )}
   </>;
   // Lead with the strongest change and its evidence; the rest of the
@@ -311,7 +311,7 @@ export function HomePage() {
         {trendQuery.data ? <>
           <div className="flex-1 min-h-0"><TrendLine data={trendPoints} selectedDate={selectedDate} onSelectDate={setSelectedDate} chartHeight={124} fill /></div>
           {selectedDate && <Link className="text-sm text-teal min-h-11 inline-flex items-center" to={withReturn(`/evidence?start=${selectedDate}&end=${selectedDate}&measure=spending`)}>View this day's records</Link>}
-        </> : trendQuery.isLoading ? <Skeleton className="h-[168px] w-full" /> : <p className="text-sm text-muted">Couldn't load the daily trend. <Button type="button" variant="link" size="sm" className="h-auto min-h-11 p-0 align-baseline" onClick={() => void trendQuery.refetch()}>Retry</Button></p>}
+        </> : trendQuery.isLoading ? <Skeleton className="h-[168px] w-full" /> : <p className="text-sm text-muted">Couldn't load the daily trend. <RetryLink onRetry={() => void trendQuery.refetch()} /></p>}
       </div> },
       { value: 'changed', label: 'Changed', panel: <div className="flex h-full flex-col">
         <div className="flex-1 px-3 pt-2">
@@ -349,13 +349,13 @@ export function HomePage() {
           {spending_target && <Badge tone={overTarget ? 'warm' : 'saved'} className="font-mono">{overTarget ? 'over target' : 'under target'}</Badge>}
         </div>
         {facts.current.status !== 'complete' && <p className="mt-1 text-xs text-muted">{facts.current.status === 'partial' ? 'Known subtotal · some records need review.' : 'Includes indicative currency conversions.'}</p>}
-        {query.isError && <p role="alert" className="mt-1 text-xs text-warning">Couldn’t refresh. <Button type="button" variant="link" size="sm" className="h-auto min-h-11 p-0 align-baseline" onClick={() => void query.refetch()}>Retry</Button></p>}
+        {query.isError && <p role="alert" className="mt-1 text-xs text-warning">Couldn’t refresh. <RetryLink onRetry={() => void query.refetch()} /></p>}
         <div className="mt-3">
           {breakdownQuery.data
             ? <CategoryDonut data={categoryTotals} selected={null} onSelect={(category) => category && openDrill('category', category)} showLegend size="compact" />
             : breakdownQuery.isLoading
               ? <div className="flex items-center gap-3"><Skeleton className="h-[112px] w-[112px] shrink-0 rounded-full" /><Skeleton className="h-24 flex-1" /></div>
-              : <p className="text-sm text-muted">Couldn't load the category mix. <Button type="button" variant="link" size="sm" className="h-auto min-h-11 p-0 align-baseline" onClick={() => void breakdownQuery.refetch()}>Retry</Button></p>}
+              : <p className="text-sm text-muted">Couldn't load the category mix. <RetryLink onRetry={() => void breakdownQuery.refetch()} /></p>}
         </div>
       </HeroCard>
     );
@@ -417,7 +417,7 @@ export function HomePage() {
   return (
     <div className={PAGE}>
       {header(<p className="text-muted">Through {facts.as_of} · {facts.timezone}{refreshing && <span role="status"> · Updating…</span>}</p>)}
-      {query.isError && <p role="alert" className="text-warning">Couldn’t refresh. This briefing may be out of date. <Button type="button" variant="link" size="sm" className="h-auto min-h-11 p-0 align-baseline" onClick={() => void query.refetch()}>Retry</Button></p>}
+      {query.isError && <p role="alert" className="text-warning">Couldn’t refresh. This briefing may be out of date. <RetryLink onRetry={() => void query.refetch()} /></p>}
 
       <div className={BAND}>
         <HeroCard
@@ -437,7 +437,7 @@ export function HomePage() {
           <div className="mt-5 pt-5 border-t border-border">
             {breakdownQuery.data ? (
               <>
-                {breakdownQuery.isError && <p className="text-xs text-warning mb-2">Couldn't refresh the category mix — showing the last loaded data. <Button type="button" variant="link" size="sm" className="h-auto min-h-11 p-0 align-baseline" onClick={() => void breakdownQuery.refetch()}>Retry</Button></p>}
+                {breakdownQuery.isError && <p className="text-xs text-warning mb-2">Couldn't refresh the category mix — showing the last loaded data. <RetryLink onRetry={() => void breakdownQuery.refetch()} /></p>}
                 <CategoryDonut
                   data={categoryTotals}
                   selected={selectedCategory}
@@ -468,7 +468,7 @@ export function HomePage() {
             ) : breakdownQuery.isLoading ? (
               <Skeleton className="h-[220px] w-full" />
             ) : (
-              <p className="text-sm text-muted">Couldn't load the category mix. <Button type="button" variant="link" size="sm" className="h-auto min-h-11 p-0 align-baseline" onClick={() => void breakdownQuery.refetch()}>Retry</Button></p>
+              <p className="text-sm text-muted">Couldn't load the category mix. <RetryLink onRetry={() => void breakdownQuery.refetch()} /></p>
             )}
           </div>
         </HeroCard>
@@ -510,14 +510,14 @@ export function HomePage() {
           <PageCard title="Daily trend" className="lg:col-span-8">
             {trendQuery.data ? (
               <>
-                {trendQuery.isError && <p className="text-xs text-warning mb-1">Couldn't refresh the daily trend — showing the last loaded data. <Button type="button" variant="link" size="sm" className="h-auto min-h-11 p-0 align-baseline" onClick={() => void trendQuery.refetch()}>Retry</Button></p>}
+                {trendQuery.isError && <p className="text-xs text-warning mb-1">Couldn't refresh the daily trend — showing the last loaded data. <RetryLink onRetry={() => void trendQuery.refetch()} /></p>}
                 <TrendLine data={trendPoints} selectedDate={selectedDate} onSelectDate={setSelectedDate} />
                 {selectedDate && <Link className="text-sm text-teal min-h-11 inline-flex items-center mt-1" to={withReturn(`/evidence?start=${selectedDate}&end=${selectedDate}&measure=spending`)}>View this day's records</Link>}
               </>
             ) : trendQuery.isLoading ? (
               <Skeleton className="h-[160px] w-full" />
             ) : (
-              <p className="text-sm text-muted">Couldn't load the daily trend. <Button type="button" variant="link" size="sm" className="h-auto min-h-11 p-0 align-baseline" onClick={() => void trendQuery.refetch()}>Retry</Button></p>
+              <p className="text-sm text-muted">Couldn't load the daily trend. <RetryLink onRetry={() => void trendQuery.refetch()} /></p>
             )}
           </PageCard>
           <PageCard title="What changed" className="lg:col-span-4">

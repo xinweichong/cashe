@@ -34,6 +34,7 @@ import { useTrips } from '@/components/plan/planHooks';
 import { useCategories } from '@/hooks/useCategories';
 import { useUrlParams } from '@/hooks/useUrlParams';
 import { SignedChange } from '@/components/ui/SignedChange';
+import { QueryState } from '@/components/ui/QueryState';
 
 const WEEKDAY_LABELS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
@@ -265,11 +266,7 @@ function SpendingOverTime({ compactChips = false }: { compactChips?: boolean }) 
             <h3 className="text-sm font-semibold">All spending on {formatShortDate(selectedDay)}</h3>
             <Button type="button" variant="ghost" size="sm" onClick={() => updateParams({ day: null, dayCategory: null })}>Clear day</Button>
           </div>
-          {dayBreakdown.isError && !dayBreakdown.data ? (
-            <div role="alert"><LoadFailed onRetry={() => void dayBreakdown.refetch()} /></div>
-          ) : !dayBreakdown.data ? (
-            <div role="status"><span className="sr-only">Loading…</span><Skeleton className="h-20 w-full" /></div>
-          ) : !dayRows.length ? (
+          <QueryState data={dayBreakdown.data} isError={dayBreakdown.isError} onRetry={() => void dayBreakdown.refetch()}>{() => !dayRows.length ? (
             <p className="text-sm text-muted">No recorded spending on this day.</p>
           ) : dayRows.map(([category, amount]) => (
             <div key={category}>
@@ -283,25 +280,21 @@ function SpendingOverTime({ compactChips = false }: { compactChips?: boolean }) 
               </SelectableRow>
               {dayCategory === category && (
                 <div className="pl-5 py-2">
-                  {dayMerchants.isError && !dayMerchants.data ? (
-                    <div role="alert"><LoadFailed onRetry={() => void dayMerchants.refetch()} /></div>
-                  ) : !dayMerchants.data ? (
-                    <div role="status"><span className="sr-only">Loading…</span><Skeleton className="h-12 w-full" /></div>
-                  ) : dayMerchants.data.map((m) => (
+                  <QueryState data={dayMerchants.data} isError={dayMerchants.isError} onRetry={() => void dayMerchants.refetch()} skeleton={<Skeleton className="h-12 w-full" />}>{(dayMerchantsData) => dayMerchantsData.map((m) => (
                     <RankedBar
                       key={m.merchant}
                       label={m.merchant}
                       value={m.total.minor_units}
-                      max={Math.max(1, ...dayMerchants.data!.map((x) => x.total.minor_units))}
+                      max={Math.max(1, ...dayMerchantsData.map((x) => x.total.minor_units))}
                       href={evidenceLink(dayPeriod, category, 'spending', m.merchant)}
                       secondaryHref={merchantProfileLink(m.merchant)}
                     />
-                  ))}
+                  ))}</QueryState>
                   <Link className="text-sm text-teal min-h-11 inline-flex items-center" to={evidenceLink(dayPeriod, category)}>All {category} on this day</Link>
                 </div>
               )}
             </div>
-          ))}
+          ))}</QueryState>
         </section>
       )}
     </PageCard>
@@ -354,11 +347,11 @@ function MerchantRanking({ facts }: { facts: SpendingFacts | undefined }) {
         {category && <StatusDot color={getCategoryColor(category)} />}
         Ranked by spending this month{category ? ` in ${category}` : ''}.
       </p>
-      {isError && !data ? <div role="alert"><LoadFailed onRetry={() => void refetch()} /></div> : !data ? <div role="status"><span className="sr-only">Loading…</span><Skeleton className="h-20 w-full" /></div> : !data.length ? <p className="text-muted">{category ? `No ${category} spending this month yet.` : 'No spending this month yet.'}</p> :
+      <QueryState data={data} isError={isError} onRetry={() => void refetch()}>{(data) => !data.length ? <p className="text-muted">{category ? `No ${category} spending this month yet.` : 'No spending this month yet.'}</p> :
         data.map(m => <RankedBar key={m.merchant} label={m.merchant} value={m.total.minor_units} max={max}
           color={category ? getCategoryColor(category) : undefined}
           href={period ? evidenceLink(period, category || undefined, 'spending', m.merchant) : undefined}
-          secondaryHref={merchantProfileLink(m.merchant)} />)}
+          secondaryHref={merchantProfileLink(m.merchant)} />)}</QueryState>
     </PageCard>
   );
 }
