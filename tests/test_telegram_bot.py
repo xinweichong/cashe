@@ -21,7 +21,7 @@ async def test_manual_commands_reject_nonfinite_values_without_followups(bot_ser
         await getattr(bot_service, command)(update, context)
         assign.assert_not_called()
     assert bot_service.storage.query_transactions(limit=50) == []
-    assert 'Couldn’t save' in update.message.reply_text.call_args.args[0]
+    assert "Couldn't save" in update.message.reply_text.call_args.args[0]
 
 
 @pytest.mark.asyncio
@@ -64,7 +64,7 @@ async def test_manual_trip_failure_preserves_capture_and_success_reply(bot_servi
     with patch.object(storage, 'enlist_transaction', side_effect=RuntimeError('private failure')):
         await getattr(bot_service, command)(update, SimpleNamespace(args=['12', 'Cafe']))
     tx = storage.query_transactions(limit=50)[0]
-    assert 'cash, caught.' in update.message.reply_text.call_args.args[0]
+    assert 'Captured.' in update.message.reply_text.call_args.args[0]
     assert storage.list_ingestion_effects()[0]['status'] == 'failed'
     IngestionPipeline(storage).retry_pending()
     assert storage.is_in_trip(trip_id, tx['id'])
@@ -84,7 +84,7 @@ async def test_busy_outbox_worker_does_not_block_manual_confirmation(bot_service
         tx = storage.query_transactions(limit=50)[0]
         assert storage.list_ingestion_effects()[0]['status'] == 'pending'
         assert not storage.is_in_trip(trip_id, tx['id'])
-        assert 'cash, caught.' in update.message.reply_text.call_args.args[0]
+        assert 'Captured.' in update.message.reply_text.call_args.args[0]
     IngestionPipeline(storage).retry_pending()
     assert storage.is_in_trip(trip_id, tx['id'])
 
@@ -1122,7 +1122,7 @@ class TestBuildContextLineAnomalyMedian:
 class TestAddCommandConfirmation:
     @pytest.mark.asyncio
     async def test_add_uses_brand_hook_format(self, bot_service, in_memory_db):
-        """_add confirmation should use 'cash, caught. [$amount · merchant]' format."""
+        """_add confirmation should use 'Captured. *merchant* · $amount' format."""
         bot_service.storage.get_category_icon_map = MagicMock(return_value={})
         bot_service._build_context_line = MagicMock(return_value="")
 
@@ -1135,12 +1135,11 @@ class TestAddCommandConfirmation:
 
         update.message.reply_text.assert_called_once()
         text = update.message.reply_text.call_args[0][0]
-        assert text.startswith("cash, caught.")
+        assert text.startswith("Captured.")
         assert "$12.50" in text
         assert "Starbucks" in text
-        # No parse_mode="Markdown" on the new format
         call_kwargs = update.message.reply_text.call_args.kwargs
-        assert call_kwargs.get("parse_mode") is None
+        assert call_kwargs.get("parse_mode") == "Markdown"
 
     @pytest.mark.asyncio
     async def test_add_appends_context_line_when_present(self, bot_service, in_memory_db):
@@ -1156,9 +1155,9 @@ class TestAddCommandConfirmation:
         await bot_service._add(update, context)
 
         text = update.message.reply_text.call_args[0][0]
-        assert "cash, caught." in text
+        assert "Captured." in text
         assert "Budget 82% used" in text
-        assert text.index("cash, caught.") < text.index("Budget 82% used")
+        assert text.index("Captured.") < text.index("Budget 82% used")
 
     @pytest.mark.asyncio
     async def test_add_no_context_line_no_trailing_newline(self, bot_service, in_memory_db):
@@ -1181,7 +1180,7 @@ class TestAddCommandConfirmation:
 class TestCashCommandConfirmation:
     @pytest.mark.asyncio
     async def test_cash_uses_brand_hook_format(self, bot_service, in_memory_db):
-        """_cash confirmation should use 'cash, caught. [$amount · merchant]' format."""
+        """_cash confirmation should use 'Captured. *merchant* · $amount' format."""
         bot_service.storage.get_category_icon_map = MagicMock(return_value={})
         bot_service._build_context_line = MagicMock(return_value="")
 
@@ -1194,11 +1193,11 @@ class TestCashCommandConfirmation:
 
         update.message.reply_text.assert_called_once()
         text = update.message.reply_text.call_args[0][0]
-        assert text.startswith("cash, caught.")
+        assert text.startswith("Captured.")
         assert "$8.00" in text
         assert "Hawker" in text
         call_kwargs = update.message.reply_text.call_args.kwargs
-        assert call_kwargs.get("parse_mode") is None
+        assert call_kwargs.get("parse_mode") == "Markdown"
 
     @pytest.mark.asyncio
     async def test_cash_appends_context_line_when_present(self, bot_service, in_memory_db):
@@ -1214,7 +1213,7 @@ class TestCashCommandConfirmation:
         await bot_service._cash(update, context)
 
         text = update.message.reply_text.call_args[0][0]
-        assert "cash, caught." in text
+        assert "Captured." in text
         assert "Hawker — 3× this week." in text
 
 

@@ -254,6 +254,8 @@ class UserManager:
             if ctx:
                 if self._llm_service:
                     _generate_llm_insight(ctx.storage, self._llm_service)
+                    _generate_llm_daily_insight(ctx.storage, self._llm_service)
+                    _generate_llm_weekly_insight(ctx.storage, self._llm_service)
                 if bot:
                     bot.notify_daily_digest(username)
                     _check_budget_alerts(ctx.storage, bot, username)
@@ -407,3 +409,104 @@ def _generate_llm_insight(storage, llm_service) -> None:
         logger.info("LLM insight cached successfully")
     except Exception as e:
         logger.warning("LLM insight generation failed: %s", e)
+
+
+def _period_income_expense(storage, start: str, end: str) -> tuple[float, float]:
+    """R02 canonical income/expense totals for an inclusive date range.
+
+    Uses reporting_minor_units rather than a raw amount * exchange_rate
+    recompute — a legacy exchange_rate of 1.0 is a silent unresolved
+    fallback, not real conversion evidence.
+    """
+    row = storage._conn.execute(
+        """SELECT
+             COALESCE(SUM(CASE WHEN type='income' THEN reporting_minor_units END), 0) / 100.0 AS income,
+             COALESCE(SUM(CASE WHEN (type IS NULL OR type='expense') THEN reporting_minor_units END), 0) / 100.0 AS expenses
+           FROM transactions
+           WHERE DATE(transaction_date) BETWEEN ? AND ?""",
+        (start, end),
+    ).fetchone()
+    return row["income"], row["expenses"]
+
+
+def _period_top_categories(storage, start: str, end: str, limit: int = 5) -> list[dict]:
+    rows = storage._conn.execute(
+        """SELECT category, COALESCE(SUM(reporting_minor_units), 0) / 100.0 AS total
+           FROM transactions
+           WHERE (type IS NULL OR type = 'expense') AND category IS NOT NULL
+             AND DATE(transaction_date) BETWEEN ? AND ?
+           GROUP BY category ORDER BY total DESC LIMIT ?""",
+        (start, end, limit),
+    ).fetchall()
+    return [{"name": r["category"], "amount": round(r["total"], 2), "change_pct": None} for r in rows]
+
+
+def _generate_llm_daily_insight(storage, llm_service) -> None:
+    """Generate an LLM narrative for yesterday's spending, cached for the
+    morning digest and /yesterday. Skipped (leaving any prior cache stale)
+    when nothing was spent yesterday — there's nothing to narrate."""
+    import json
+    from datetime import timedelta
+    from src.config import local_now
+
+    logger.info("Generating daily LLM insight...")
+    try:
+        now = local_now()
+        yesterday = (now - timedelta(days=1)).strftime("%Y-%m-%d")
+        income, expense = _period_income_expense(storage, yesterday, yesterday)
+        if expense <= 0:
+            logger.info("Skipping daily LLM insight: nothing spent yesterday")
+            return
+        summary_dict = {
+            "period_label": "Yesterday",
+            "total_expense": round(expense, 2),
+            "total_income": round(income, 2),
+            "savings_rate": None,
+            "change_vs_last_month_pct": None,
+            "top_categories": _period_top_categories(storage, yesterday, yesterday),
+            "velocity_status": None,
+        }
+        result = llm_service.generate_period_insight(summary_dict)
+        storage.set_setting("llm_daily_insight_content", json.dumps(result))
+        storage.set_setting("llm_daily_insight_generated_at", now.isoformat())
+        logger.info("Daily LLM insight cached successfully")
+    except Exception as e:
+        logger.warning("Daily LLM insight generation failed: %s", e)
+
+
+def _generate_llm_weekly_insight(storage, llm_service) -> None:
+    """Generate an LLM narrative for the current week to date, cached for /week."""
+    import json
+    from src.analytics import get_category_comparison, get_period_comparison
+    from src.config import local_now
+
+    logger.info("Generating weekly LLM insight...")
+    try:
+        now = local_now()
+        comparison = get_period_comparison(storage._conn, period="week")
+        start, end = comparison["current_start"], comparison["current_end"]
+        income, expense = _period_income_expense(storage, start, end)
+        if expense <= 0:
+            logger.info("Skipping weekly LLM insight: nothing spent this week")
+            return
+        savings_rate = round((income - expense) / income * 100, 1) if income > 0 else None
+        categories = get_category_comparison(storage._conn, period="week")
+        top_cats = [
+            {"name": c["category"], "amount": c["current"], "change_pct": c["change_percent"]}
+            for c in categories[:5]
+        ]
+        summary_dict = {
+            "period_label": "This week",
+            "total_expense": round(expense, 2),
+            "total_income": round(income, 2),
+            "savings_rate": savings_rate,
+            "change_vs_last_month_pct": comparison.get("change_percent"),
+            "top_categories": top_cats,
+            "velocity_status": None,
+        }
+        result = llm_service.generate_period_insight(summary_dict)
+        storage.set_setting("llm_weekly_insight_content", json.dumps(result))
+        storage.set_setting("llm_weekly_insight_generated_at", now.isoformat())
+        logger.info("Weekly LLM insight cached successfully")
+    except Exception as e:
+        logger.warning("Weekly LLM insight generation failed: %s", e)

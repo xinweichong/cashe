@@ -40,15 +40,23 @@ async def test_digest_reconciles_daily_monthly_facts_without_legacy_queries_or_p
     bot.storage.set_setting('llm_insight_content', '{"narrative":"STALE PRIVATE TEXT"}')
     with patch.object(bot.storage, 'get_spending_summary', side_effect=AssertionError('legacy')), patch.object(bot.storage, 'spending_velocity', side_effect=AssertionError('legacy')), patch.object(bot.storage, 'new_merchants', side_effect=AssertionError('legacy')), patch.object(bot.storage, 'get_spending_evidence', side_effect=AssertionError('evidence list')):
         text = await digest(bot)
-    daily, monthly = text.split('*Month to date*')
-    assert 'Morning Digest' in daily
-    assert 'Spending: `S$10.01`' in daily
-    assert 'Recorded net flow: `S$-7.01`' in daily
-    assert 'Spending: `S$15.01`' in monthly
-    assert 'Recorded net flow: `S$-12.01`' in monthly
+    assert 'Morning Digest' in text
+    assert 'Yesterday: S$10.01 · complete' in text
+    assert 'Month to date: S$15.01' in text
+    assert 'Net flow: S$-12.01' in text
+    # No generated_at was set alongside the stale content, so it must not leak.
     assert 'STALE PRIVATE TEXT' not in text
     assert 'private raw' not in text
     assert bot.app.bot.send_message.call_args.kwargs['reply_markup'] is not None
+
+
+@pytest.mark.asyncio
+async def test_digest_shows_fresh_narrative_generated_this_morning(bot):
+    add(bot.storage, 'Yesterday', '2026-09-07', 12)
+    bot.storage.set_setting('llm_insight_content', '{"narrative":"Food is running ahead of last month."}')
+    bot.storage.set_setting('llm_insight_generated_at', bot._local_now().isoformat())
+    text = await digest(bot)
+    assert 'Food is running ahead of last month.' in text
 
 
 @pytest.mark.asyncio
@@ -57,10 +65,9 @@ async def test_digest_crosses_year_and_leap_month_without_mixing_totals(bot, tod
     bot._local_now.return_value = today
     add(bot.storage, 'Prior month', previous, 12)
     add(bot.storage, 'Current month', today.date().isoformat(), 3)
-    daily, monthly = (await digest(bot)).split('*Month to date*')
-    assert f'Daily Summary ({previous} to {previous})' in daily
-    assert 'Spending: `S$12.00`' in daily
-    assert 'Spending: `S$3.00`' in monthly
+    text = await digest(bot)
+    assert 'Yesterday: S$12.00' in text
+    assert 'Month to date: S$3.00' in text
 
 
 @pytest.mark.asyncio
@@ -68,11 +75,9 @@ async def test_digest_preserves_partial_and_indicative_states(bot):
     add(bot.storage, 'Unknown', '2026-09-07', currency='USD', rate=None)
     add(bot.storage, 'Estimated', '2026-09-08', currency='USD', rate=1.3)
     text = await digest(bot)
-    daily, monthly = text.split('*Month to date*')
-    assert 'Spending known subtotal: `S$0.00`' in daily
-    assert 'Spending known subtotal: `S$13.00`' in monthly
-    assert 'Comparison unavailable' in daily
-    assert 'Currency conversions are indicative estimates.' in monthly
+    assert 'Yesterday: S$0.00 · partial' in text
+    assert 'Month to date: S$13.00' in text
+    assert '· partial' in text.split('Month to date:', 1)[1]
 
 
 @pytest.mark.asyncio
@@ -98,26 +103,24 @@ async def test_digest_uses_explicit_user_storage_and_releases_lock_before_delive
 
 
 @pytest.mark.asyncio
-async def test_digest_projects_timezone_and_bounds_compact_category_labels(bot):
+async def test_digest_projects_timezone(bot):
     add(bot.storage, 'Boundary', '2026-09-06T18:00:00+00:00', 12)
-    bot.storage.update_transaction(1, category='_*' * 10000)
     text = await digest(bot)
-    assert 'Spending: `S$12.00`' in text.split('*Month to date*')[0]
-    assert len(text.encode('utf-16-le')) // 2 < 4096
+    assert 'Yesterday: S$12.00' in text
     bot.timezone = 'America/Los_Angeles'
     text = await digest(bot)
-    assert 'Spending: `S$0.00`' in text.split('*Month to date*')[0]
+    assert 'Yesterday: S$0.00' in text
 
 
 @pytest.mark.asyncio
-async def test_digest_empty_and_undated_states_do_not_claim_complete_capture(bot):
+async def test_digest_empty_state_has_no_net_flow_line(bot):
     text = await digest(bot)
-    assert 'No income recorded.' in text
-    assert "don't prove every purchase was captured" in text
-    add(bot.storage, 'Undated', None)
-    text = await digest(bot)
-    assert text.count('1 undated records') == 2
-    assert text.count('Status: partial') == 2
+    assert 'Net flow:' not in text
+    assert 'Yesterday: S$0.00 · complete' in text
+
+
+@pytest.mark.asyncio
+async def test_digest_does_not_send_without_a_chat_id(bot):
     bot.chat_id = None
     bot.app.bot.send_message.reset_mock()
     await bot._send_daily_digest()

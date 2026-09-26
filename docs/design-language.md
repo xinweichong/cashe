@@ -547,8 +547,10 @@ All Recharts configuration centralised in `src/lib/chartTheme.ts`. Never inline 
 - "Let's get started" / "Hey there" / any greeting that wastes a line
 - "Uh oh, something went wrong" — too cute for a finance product
 - "We couldn't process that. Please try again." — passive, jargon-y
-- Emojis in microcopy. (Category icons are emoji — that's fine. Microcopy emojis — no.)
+- Emojis in web/app microcopy. (Category icons are emoji — that's fine. Microcopy emojis — no.) **Telegram is the one exception — see below.**
 - Exclamation marks. (One allowed per page maximum, and only for genuine celebration. The hook "cash, caught." uses a period, not an exclamation.)
+
+**Telegram exception:** the bot has no colour, iconography, or layout to lean on — text is the entire surface. There, a small, consistent set of emoji stand in for what colour/icons do elsewhere: marking message identity (💰 income, 💸 uncategorized pick, ✈️ trip context, 🚨 budget exceeded, ⚠️ budget warning, 🔄 recurring) and giving buttons a scannable glyph (📅 📊 ➕ etc.). This is deliberate personality, not decoration for its own sake — it's how cashe-the-bot reads as a real correspondent texting you back rather than a form response. Keep it to one glyph per message/button, drawn from a consistent small set, never stacked or used mid-sentence. All other voice rules (no exclamation marks, no cheerleading, matter-of-fact tone) still apply in full — the emoji marks *what kind* of message this is, the words still carry the meaning.
 
 ### 8.3 Copy migrations
 
