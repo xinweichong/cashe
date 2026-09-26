@@ -27,7 +27,7 @@ import {
 import { useCurrentUser, useInvalidateCurrentUser } from '@/hooks/useCurrentUser';
 import { useAuth } from '@/hooks/useAuthContext';
 import { api, type Category, type SessionInfo } from '@/api/client';
-import { setCategoryColors, getCategoryColor } from '@/lib/utils';
+import { getCategoryColor } from '@/lib/utils';
 import { staggerContainerVariants, staggerItemVariants } from '@/lib/motionPresets';
 import {
   Pencil, Trash2, Plus, X, ChevronDown,
@@ -96,10 +96,6 @@ export function SettingsPage() {
   const createCat = useCreateCategory();
   const updateCat = useUpdateCategory();
   const deleteCat = useDeleteCategory();
-
-  useEffect(() => {
-    if (categories) setCategoryColors(categories);
-  }, [categories]);
 
   const deleteOverride = useMutation({
     mutationFn: (merchant: string) => api.deleteMerchantOverride(merchant),

@@ -80,12 +80,7 @@ SETTINGS = {
         "budgets_enabled", "goals_enabled", "trips_enabled", "subscriptions_enabled",
         "recurring_enabled", "home_briefing_enabled",
     )},
-    "category_colors_snapped_v2": ("false", str, str),
 }
-# Accepted by PUT but never returned.
-WRITE_ONLY_SETTINGS = {"category_colors_pre_v2": str}
-
-
 VALID_SUBSCRIPTION_FREQUENCIES = {"weekly", "biweekly", "monthly", "quarterly", "annual"}
 
 
@@ -1095,9 +1090,9 @@ def create_dashboard_app(
         errors = {}
         validated = {}
         for key, value in body.items():
-            parse = SETTINGS[key][2] if key in SETTINGS else WRITE_ONLY_SETTINGS.get(key)
-            if parse is None:
+            if key not in SETTINGS:
                 continue
+            parse = SETTINGS[key][2]
             try:
                 validated[key] = parse(value)
             except ValueError as exc:

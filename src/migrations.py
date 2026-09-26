@@ -4,6 +4,7 @@ The existing schema remains the baseline. Never edit a released migration;
 append a new version instead. Source evidence deliberately survives deletion
 of a transaction and is not exposed by ordinary transaction responses.
 """
+import json
 import sqlite3
 
 
@@ -40,6 +41,65 @@ def _backfill_upcoming_amount_basis(conn: sqlite3.Connection) -> None:
         "UPDATE upcoming_transactions SET amount_basis = 'matched_charge' "
         "WHERE expected_amount IS NOT NULL AND amount_basis = 'unknown'"
     )
+
+
+# The category palette as of the colour-snap migration (23). A frozen copy:
+# the frontend palette may change later, but this migration must not.
+_SNAP_PALETTE = (
+    "#00D4AA", "#2DD4BF", "#34D399", "#84CC16", "#EAB308",
+    "#FBBF24", "#F97316", "#FB923C", "#FB7185", "#FF6B6B",
+)
+
+
+def _nearest_palette_colour(hex_colour: str) -> str:
+    """Nearest _SNAP_PALETTE entry by RGB distance; the first entry for an
+    unparseable colour (the frontend's former nearestSpectrum)."""
+    raw = hex_colour.lstrip("#")
+    try:
+        if len(raw) != 6:
+            raise ValueError
+        target = tuple(int(raw[i:i + 2], 16) for i in (0, 2, 4))
+    except ValueError:
+        return _SNAP_PALETTE[0]
+
+    def distance(candidate: str) -> int:
+        rgb = tuple(int(candidate[1:][i:i + 2], 16) for i in (0, 2, 4))
+        return sum((a - b) ** 2 for a, b in zip(target, rgb))
+    return min(_SNAP_PALETTE, key=distance)
+
+
+def _snap_category_colours(conn: sqlite3.Connection) -> None:
+    """Snap custom category colours to the palette, once per database.
+
+    Replaces a one-off step the web app used to run from the browser on
+    every categories refetch. A database the browser already snapped has
+    category_colors_snapped_v2 = 'true' and is left alone. The previous
+    colours are saved to category_colors_pre_v2 first. A snap that would
+    give two categories the same colour is skipped, as the category API
+    rejected it before."""
+    tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    if not {"categories", "app_settings"} <= tables:
+        return
+    if "color" not in {r[1] for r in conn.execute("PRAGMA table_info(categories)")}:
+        return
+    done = conn.execute("SELECT value FROM app_settings WHERE key = 'category_colors_snapped_v2'").fetchone()
+    if done and done[0] == "true":
+        return
+    rows = conn.execute("SELECT name, color FROM categories ORDER BY rowid").fetchall()
+    set_setting = """INSERT INTO app_settings (key, value) VALUES (?, ?)
+                     ON CONFLICT(key) DO UPDATE SET value = excluded.value"""
+    conn.execute(set_setting, ("category_colors_pre_v2", json.dumps({name: colour for name, colour in rows})))
+    used = {colour for _, colour in rows if colour}
+    for name, colour in rows:
+        if not colour or colour in _SNAP_PALETTE:
+            continue
+        snapped = _nearest_palette_colour(colour)
+        if snapped in used:
+            continue
+        conn.execute("UPDATE categories SET color = ? WHERE name = ?", (snapped, name))
+        used.discard(colour)
+        used.add(snapped)
+    conn.execute(set_setting, ("category_colors_snapped_v2", "true"))
 
 
 MIGRATIONS = (
@@ -388,6 +448,9 @@ MIGRATIONS = (
         # correctness bug — unlike refund_of_transaction_id or the
         # canonical-money columns, which are.
         _add_column_if_table_exists("transactions", "excluded_from_baseline INTEGER NOT NULL DEFAULT 0"),
+    )),
+    (23, (
+        _snap_category_colours,
     )),
 )
 

@@ -2,7 +2,7 @@ import { MotionConfig } from 'framer-motion';
 import { ThemeProvider } from '@/hooks/ThemeProvider';
 import { lazy, Suspense, useEffect, useState, type ComponentType } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from '@/hooks/useAuth';
 import { useAuth } from '@/hooks/useAuthContext';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
@@ -11,11 +11,10 @@ import { ExplorePage } from '@/pages/ExplorePage';
 import { LegacyRedirect } from '@/components/layout/LegacyRedirect';
 import { AppShell } from '@/components/layout/AppShell';
 import { SplashScreen } from '@/components/ui/SplashScreen';
-import { api } from '@/api/client';
-import { setCategoryColors, nearestSpectrum } from '@/lib/utils';
+import { setCategoryColors } from '@/lib/utils';
 import { ToastProvider } from '@/components/ui/toast';
-import { SPECTRUM_PALETTE } from '@/lib/chartTheme';
 import { useSettings } from '@/hooks/useSettings';
+import { useCategories } from '@/hooks/useCategories';
 
 // A lazy route that can start downloading before it renders. If its chunk
 // has already arrived when a route mounts, it renders directly instead of
@@ -96,60 +95,11 @@ const queryClient = new QueryClient({
   },
 });
 
-async function snapCategoryColorsIfNeeded(
-  categories: { name: string; color: string | null }[]
-) {
-  try {
-    const settingsRes = await fetch('/api/settings');
-    if (!settingsRes.ok) return;
-    const settings = await settingsRes.json();
-    if (settings.category_colors_snapped_v2 === 'true') return;
-
-    // Backup current colors before snapping
-    await fetch('/api/settings', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        category_colors_pre_v2: JSON.stringify(
-          categories.reduce((acc, c) => ({ ...acc, [c.name]: c.color }), {} as Record<string, string | null>)
-        ),
-      }),
-    });
-
-    // Snap each non-spectrum custom color to its nearest spectrum match
-    for (const cat of categories) {
-      if (!cat.color) continue;
-      if (SPECTRUM_PALETTE.includes(cat.color)) continue;
-      const snapped = nearestSpectrum(cat.color);
-      await fetch(`/api/categories/${encodeURIComponent(cat.name)}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ color: snapped }),
-      });
-    }
-
-    // Mark as done so this never runs again
-    await fetch('/api/settings', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ category_colors_snapped_v2: 'true' }),
-    });
-  } catch (err) {
-    console.warn('[cashe] color snap migration failed:', err);
-  }
-}
-
+// Keeps category colours in sync app-wide whenever categories load or change.
 function CategoryColorLoader() {
-  const { data: categories } = useQuery({
-    queryKey: ['categories'],
-    queryFn: () => api.getCategories(),
-  });
+  const { data: categories } = useCategories();
   useEffect(() => {
-    if (categories) {
-      setCategoryColors(categories);
-      // Fire-and-forget: non-fatal, only runs once
-      void snapCategoryColorsIfNeeded(categories);
-    }
+    if (categories) setCategoryColors(categories);
   }, [categories]);
   return null;
 }

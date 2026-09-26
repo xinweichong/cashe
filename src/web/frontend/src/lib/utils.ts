@@ -137,27 +137,6 @@ export function getCategoryColor(category: string): string {
 /** Re-exported palette for the category color picker in Settings. */
 export const PALETTE = SPECTRUM_PALETTE;
 
-/** Find the nearest spectrum color to `hex` by Euclidean distance in RGB. */
-export function nearestSpectrum(hex: string): string {
-  const target = hexToRgb(hex);
-  if (!target) return SPECTRUM_PALETTE[0];
-  let best = SPECTRUM_PALETTE[0];
-  let bestDist = Infinity;
-  for (const candidate of SPECTRUM_PALETTE) {
-    const c = hexToRgb(candidate)!;
-    const d = (target.r - c.r) ** 2 + (target.g - c.g) ** 2 + (target.b - c.b) ** 2;
-    if (d < bestDist) { bestDist = d; best = candidate; }
-  }
-  return best;
-}
-
-function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
-  const m = hex.replace('#', '').match(/^([0-9a-f]{6})$/i);
-  if (!m) return null;
-  const n = parseInt(m[1], 16);
-  return { r: (n >> 16) & 0xff, g: (n >> 8) & 0xff, b: n & 0xff };
-}
-
 /** Format a Date to "YYYY-MM-DD" in local time. */
 export function toDateStr(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
