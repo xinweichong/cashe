@@ -173,6 +173,7 @@ class SubscriptionMatcher:
         upcomings = self.storage.list_upcoming_transactions(sub_id)
         existing_periods = {u["schedule_period_date"] for u in upcomings}
         cursor = max((u["schedule_period_date"] for u in upcomings), default=None)
+        expected = None  # (amount, basis_tx_id), inferred on first use
 
         for _ in range(_MAX_GENERATION_STEPS):
             next_date_str = compute_next_billing_date(frequency, billing_day, last_date=cursor)
@@ -182,7 +183,9 @@ class SubscriptionMatcher:
                 break
             if next_date < today or next_date_str in existing_periods:
                 continue
-            expected_amount, basis_tx_id = self._infer_expected_amount(sub_id)
+            if expected is None:
+                expected = self._infer_expected_amount(sub_id)
+            expected_amount, basis_tx_id = expected
             self.storage.create_upcoming_transaction(
                 sub_id, next_date_str, expected_amount, amount_basis_transaction_id=basis_tx_id,
             )

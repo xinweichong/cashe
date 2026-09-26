@@ -671,14 +671,30 @@ class Storage:
         return dict(row) if row else None
 
     @_locked
-    def get_refunds_of(self, tx_id: int) -> list[dict]:
-        """Reverse lookup: every refund currently linked to `tx_id` as its
-        original purchase (evidence only, R05 sub-project 2)."""
+    def get_transactions_by_ids(self, ids) -> dict[int, dict]:
+        ids = list(set(ids))
+        if not ids:
+            return {}
         rows = self._conn.execute(
-            "SELECT * FROM transactions WHERE refund_of_transaction_id = ? ORDER BY transaction_date",
-            (tx_id,),
+            f"SELECT * FROM transactions WHERE id IN ({','.join('?' * len(ids))})", ids
         ).fetchall()
-        return [dict(r) for r in rows]
+        return {r["id"]: dict(r) for r in rows}
+
+    @_locked
+    def get_refunds_for_ids(self, ids) -> dict[int, list[dict]]:
+        """Every refund linked to each purchase id as its original purchase
+        (evidence only, R05 sub-project 2), in one query."""
+        ids = list(set(ids))
+        refunds: dict[int, list[dict]] = {i: [] for i in ids}
+        if not ids:
+            return refunds
+        rows = self._conn.execute(
+            f"""SELECT * FROM transactions WHERE refund_of_transaction_id IN ({','.join('?' * len(ids))})
+                ORDER BY transaction_date""", ids,
+        ).fetchall()
+        for r in rows:
+            refunds[r["refund_of_transaction_id"]].append(dict(r))
+        return refunds
 
     @_locked
     def get_refund_match_review(self, limit: int = 50, offset: int = 0) -> dict:
@@ -2043,24 +2059,15 @@ class Storage:
         for b in budgets:
             start, end = _get_budget_period(b["period"])
 
-            if b["category"] is None:
-                spent_row = self._conn.execute(
-                    f"""SELECT COALESCE(SUM({_SIGNED_SGD}), 0) as total
-                       FROM transactions
-                       WHERE (type IS NULL OR type = 'expense' OR type = 'refund')
-                         AND DATE(transaction_date) BETWEEN ? AND ?""",
-                    (start, end),
-                ).fetchone()
-            else:
-                spent_row = self._conn.execute(
-                    f"""SELECT COALESCE(SUM({_SIGNED_SGD}), 0) as total
-                       FROM transactions
-                       WHERE (type IS NULL OR type = 'expense' OR type = 'refund') AND category = ?
-                         AND DATE(transaction_date) BETWEEN ? AND ?""",
-                    (b["category"], start, end),
-                ).fetchone()
-
-            spent = spent_row["total"]
+            # A NULL category is the overall budget: every category counts.
+            spent = self._conn.execute(
+                f"""SELECT COALESCE(SUM({_SIGNED_SGD}), 0) as total
+                   FROM transactions
+                   WHERE (type IS NULL OR type = 'expense' OR type = 'refund')
+                     AND (? IS NULL OR category = ?)
+                     AND DATE(transaction_date) BETWEEN ? AND ?""",
+                (b["category"], b["category"], start, end),
+            ).fetchone()["total"]
             budget_amount = b["amount"]
             remaining = budget_amount - spent
             percent = round(spent / budget_amount * 100, 1) if budget_amount > 0 else 0.0
@@ -2254,6 +2261,10 @@ class Storage:
                 (row["goal_id"],),
             )
         self._conn.commit()
+
+    @_locked
+    def get_all_goal_progress(self) -> list[dict]:
+        return [self.get_goal_progress(g["id"]) for g in self.get_goals()]
 
     @_locked
     def get_goal_progress(self, goal_id: int) -> Optional[dict]:
@@ -2758,6 +2769,66 @@ class Storage:
         return [dict(r) for r in rows]
 
     @_locked
+    def list_subscriptions_enriched(self) -> list[dict]:
+        """list_subscriptions plus each one's last matched SGD amount and, for
+        an active or possibly-cancelled subscription, its next pending charge."""
+        last_amounts = self._subscription_last_amounts()
+        next_pending = self._next_pending_upcoming()
+        enriched = []
+        for sub in self.list_subscriptions():
+            upcoming = next_pending.get(sub["id"]) if sub["status"] in ("active", "possibly_cancelled") else None
+            enriched.append({
+                **sub,
+                "last_amount": last_amounts.get(sub["id"]),
+                "next_expected_date": upcoming["expected_date"] if upcoming else None,
+                "next_upcoming_id": upcoming["id"] if upcoming else None,
+            })
+        return enriched
+
+    def _next_pending_upcoming(self) -> dict[int, dict]:
+        """Each subscription's earliest pending upcoming charge. Not locked —
+        only called from within locked methods."""
+        rows = self._conn.execute(
+            """SELECT id, subscription_id, expected_date FROM (
+                   SELECT id, subscription_id, expected_date,
+                          ROW_NUMBER() OVER (PARTITION BY subscription_id ORDER BY expected_date, id) AS rn
+                   FROM upcoming_transactions WHERE status = 'pending')
+               WHERE rn = 1"""
+        ).fetchall()
+        return {r["subscription_id"]: dict(r) for r in rows}
+
+    def _subscription_recent_matches(self, limit: int) -> dict[int, list[dict]]:
+        """Each subscription's `limit` most recent matched transactions, newest
+        first. Not locked — only called from within locked methods."""
+        matches: dict[int, list[dict]] = {}
+        for r in self._conn.execute(
+            """SELECT * FROM (
+                   SELECT t.*, u.subscription_id AS _subscription_id,
+                          ROW_NUMBER() OVER (PARTITION BY u.subscription_id ORDER BY t.transaction_date DESC) AS _rn
+                   FROM transactions t JOIN upcoming_transactions u ON u.matched_transaction_id = t.id
+                   WHERE u.status = 'matched')
+               WHERE _rn <= ? ORDER BY _subscription_id, _rn""", (limit,),
+        ):
+            tx = dict(r)
+            sub_id = tx.pop("_subscription_id")
+            tx.pop("_rn")
+            matches.setdefault(sub_id, []).append(tx)
+        return matches
+
+    def _subscription_last_amounts(self) -> dict[int, float | None]:
+        """Each subscription's most recent matched charge in SGD. Not locked —
+        only called from within locked methods."""
+        rows = self._conn.execute(
+            f"""SELECT subscription_id, sgd_amount FROM (
+                   SELECT u.subscription_id, {_SGD_T} AS sgd_amount,
+                          ROW_NUMBER() OVER (PARTITION BY u.subscription_id ORDER BY t.transaction_date DESC) AS rn
+                   FROM upcoming_transactions u JOIN transactions t ON t.id = u.matched_transaction_id
+                   WHERE u.status = 'matched')
+               WHERE rn = 1"""
+        ).fetchall()
+        return {r["subscription_id"]: r["sgd_amount"] for r in rows}
+
+    @_locked
     def update_subscription(self, sub_id: int, **fields) -> None:
         if not self.get_subscription(sub_id):
             raise ValueError("subscription not found")
@@ -2802,11 +2873,12 @@ class Storage:
         rows = self._conn.execute(
             "SELECT id, frequency, status FROM subscriptions WHERE status NOT IN ('cancelled')"
         ).fetchall()
+        last_amounts = self._subscription_last_amounts()
         monthly_total = 0.0
         active = 0
         possibly_cancelled = 0
         for row in rows:
-            last_amount = self._get_subscription_last_amount(row["id"])
+            last_amount = last_amounts.get(row["id"])
             if row["status"] == "active":
                 active += 1
                 monthly_total += _to_monthly(last_amount or 0.0, row["frequency"])
@@ -2836,11 +2908,13 @@ class Storage:
         overdue: list[dict] = []
         price_changes: list[dict] = []
         annual_renewals: list[dict] = []
+        recent_matches = self._subscription_recent_matches(3)
+        next_pending = self._next_pending_upcoming()
 
         for sub in subs:
             sub_id = sub["id"]
             interval_days = FREQUENCY_DAYS.get(sub["frequency"], 30)
-            matched = self.get_subscription_matched_transactions(sub_id, limit=3)
+            matched = recent_matches.get(sub_id, [])
 
             if sub["status"] == "possibly_cancelled" and matched:
                 last_dt = datetime.strptime(matched[0]["transaction_date"][:10], "%Y-%m-%d").date()
@@ -2870,12 +2944,7 @@ class Storage:
                     })
 
             if sub["frequency"] == "annual" and sub["status"] in ("active", "possibly_cancelled"):
-                upcoming_row = self._conn.execute(
-                    """SELECT expected_date FROM upcoming_transactions
-                       WHERE subscription_id = ? AND status = 'pending'
-                       ORDER BY expected_date ASC LIMIT 1""",
-                    (sub_id,),
-                ).fetchone()
+                upcoming_row = next_pending.get(sub_id)
                 if upcoming_row:
                     next_date = datetime.strptime(upcoming_row["expected_date"], "%Y-%m-%d").date()
                     days_until = (next_date - today).days
@@ -2895,24 +2964,6 @@ class Storage:
                         })
 
         return {"overdue": overdue, "price_changes": price_changes, "annual_renewals": annual_renewals}
-
-    def _get_subscription_last_amount(self, sub_id: int) -> float | None:
-        """Not locked — only called from within locked methods."""
-        row = self._conn.execute(
-            f"""SELECT {_SGD_T} AS sgd_amount
-               FROM upcoming_transactions u
-               JOIN transactions t ON t.id = u.matched_transaction_id
-               WHERE u.subscription_id = ? AND u.status = 'matched'
-               ORDER BY t.transaction_date DESC
-               LIMIT 1""",
-            (sub_id,),
-        ).fetchone()
-        return row["sgd_amount"] if row else None
-
-    @_locked
-    def get_subscription_last_amount(self, sub_id: int) -> float | None:
-        """Public accessor for the most recent matched SGD amount."""
-        return self._get_subscription_last_amount(sub_id)
 
     # ── Upcoming Transactions ──────────────────────────────────────
 

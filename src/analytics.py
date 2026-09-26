@@ -67,6 +67,20 @@ def _query_total(conn: sqlite3.Connection, start: str, end: str, category: str |
     return row["total"]
 
 
+def _category_totals(conn: sqlite3.Connection, start: str, end: str) -> dict[str, float]:
+    """_query_total for every category at once."""
+    rows = conn.execute(
+        """SELECT category,
+                  COALESCE(SUM(CASE WHEN type = 'refund' THEN -reporting_minor_units ELSE reporting_minor_units END), 0) / 100.0 AS total
+           FROM transactions
+           WHERE (type IS NULL OR type = 'expense' OR type = 'refund') AND category IS NOT NULL
+             AND DATE(transaction_date) >= ? AND DATE(transaction_date) <= ?
+           GROUP BY category""",
+        [start, end],
+    ).fetchall()
+    return {r["category"]: r["total"] for r in rows}
+
+
 def get_period_comparison(
     conn: sqlite3.Connection, period: str = "month", date: str | None = None
 ) -> dict:
@@ -117,11 +131,13 @@ def get_category_comparison(
         [prev_start, end],
     ).fetchall()
 
+    current_totals = _category_totals(conn, start, end)
+    previous_totals = _category_totals(conn, prev_start, prev_end)
     results = []
     for row in categories:
         cat = row["category"]
-        current = _query_total(conn, start, end, cat)
-        previous = _query_total(conn, prev_start, prev_end, cat)
+        current = current_totals.get(cat, 0.0)
+        previous = previous_totals.get(cat, 0.0)
         change = current - previous
         change_pct = (change / previous * 100) if previous > 0 else (None if current > 0 else 0)
         results.append({

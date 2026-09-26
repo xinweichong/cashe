@@ -40,17 +40,28 @@ def _refund_warning(purchase: dict, refund_currency: str, total_refunded: float)
 
 def to_v2(tx: dict, storage) -> dict:
     """A transaction row as the public v2 Transaction shape."""
-    refund_of = None
-    target_id = tx.get("refund_of_transaction_id")
-    if target_id is not None:
-        purchase = storage.get_transaction(target_id)
-        if purchase is not None:
-            siblings = storage.get_refunds_of(purchase["id"])
-            total_refunded = sum(s["amount"] for s in siblings)
-            warning = _refund_warning(purchase, tx.get("currency") or "SGD", total_refunded)
-            refund_of = _refund_evidence(purchase, warning=warning)
+    return to_v2_many([tx], storage)[0]
 
-    refunded_by = [_refund_evidence(r) for r in storage.get_refunds_of(tx["id"])]
+
+def to_v2_many(rows: list[dict], storage) -> list[dict]:
+    """to_v2 for a page of rows, with two queries for the whole page's refund
+    links rather than up to three per row."""
+    purchases = storage.get_transactions_by_ids(
+        tx["refund_of_transaction_id"] for tx in rows if tx.get("refund_of_transaction_id") is not None
+    )
+    refunds = storage.get_refunds_for_ids([tx["id"] for tx in rows] + list(purchases))
+    return [_to_v2(tx, purchases, refunds) for tx in rows]
+
+
+def _to_v2(tx: dict, purchases: dict[int, dict], refunds: dict[int, list[dict]]) -> dict:
+    refund_of = None
+    purchase = purchases.get(tx.get("refund_of_transaction_id"))
+    if purchase is not None:
+        total_refunded = sum(s["amount"] for s in refunds[purchase["id"]])
+        warning = _refund_warning(purchase, tx.get("currency") or "SGD", total_refunded)
+        refund_of = _refund_evidence(purchase, warning=warning)
+
+    refunded_by = [_refund_evidence(r) for r in refunds[tx["id"]]]
 
     original_minor = tx.get("original_minor_units")
     reporting_minor = tx.get("reporting_minor_units")

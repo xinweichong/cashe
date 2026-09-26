@@ -326,7 +326,7 @@ class TestRefundLinking:
         storage.update_transaction(refund_id, type="expense")
         assert storage.get_transaction(refund_id)["refund_of_transaction_id"] is None
 
-    def test_get_refunds_of_returns_linked_refunds(self, storage):
+    def test_get_refunds_for_ids_returns_linked_refunds(self, storage):
         purchase_id = storage.insert_transaction(
             source="manual", source_id="p16", amount=100.0, transaction_date="2026-04-16", tx_type="expense",
         )
@@ -346,14 +346,14 @@ class TestRefundLinking:
         storage.update_transaction(refund2_id, refund_of_transaction_id=purchase_id)
         storage.update_transaction(unrelated_refund_id, refund_of_transaction_id=other_purchase_id)
 
-        refunds = storage.get_refunds_of(purchase_id)
+        refunds = storage.get_refunds_for_ids([purchase_id])[purchase_id]
         assert {r["id"] for r in refunds} == {refund1_id, refund2_id}
 
-    def test_get_refunds_of_returns_empty_for_unlinked_purchase(self, storage):
+    def test_get_refunds_for_ids_returns_empty_for_unlinked_purchase(self, storage):
         purchase_id = storage.insert_transaction(
             source="manual", source_id="p18", amount=100.0, transaction_date="2026-04-16", tx_type="expense",
         )
-        assert storage.get_refunds_of(purchase_id) == []
+        assert storage.get_refunds_for_ids([purchase_id])[purchase_id] == []
 
     def test_deleting_linked_purchase_clears_the_link(self, storage):
         purchase_id = storage.insert_transaction(

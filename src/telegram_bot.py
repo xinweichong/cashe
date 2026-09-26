@@ -1135,13 +1135,7 @@ class TelegramBotService:
             return
         loop = asyncio.get_running_loop()
         summary = await loop.run_in_executor(None, ctx.storage.get_subscription_summary)
-        subs = await loop.run_in_executor(None, ctx.storage.list_subscriptions)
-        upcoming_map: dict[int, str] = {}
-        for sub in subs:
-            rows = await loop.run_in_executor(None, ctx.storage.list_upcoming_transactions, sub["id"])
-            pending = [u for u in rows if u["status"] == "pending"]
-            if pending:
-                upcoming_map[sub["id"]] = pending[0]["expected_date"]
+        subs = await loop.run_in_executor(None, ctx.storage.list_subscriptions_enriched)
 
         active_subs = [s for s in subs if s["status"] not in ("cancelled",)]
         if not active_subs:
@@ -1159,11 +1153,11 @@ class TelegramBotService:
             label = sub.get("label") or sub["merchant"]
             freq = sub["frequency"]
             amount_str = f"${sub['last_amount']:.2f}" if sub.get("last_amount") is not None else "—"
-            next_date = upcoming_map.get(sub["id"], "—")
+            next_date = (sub["next_expected_date"] or "—")[:10]
             status_tag = " ⚠" if sub["status"] == "possibly_cancelled" else ""
             lines.append(
                 f"🔄 *{self._escape_md(label)}*{status_tag}\n"
-                f"  {amount_str} · {freq} · Next: {next_date[:10] if next_date != '—' else '—'}"
+                f"  {amount_str} · {freq} · Next: {next_date}"
             )
         await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
 

@@ -414,8 +414,7 @@ def weekday_pattern(conn, as_of: date | None = None, weeks: int = 8, timezone: s
     current_week_start = as_of - timedelta(days=as_of.weekday())
     end = current_week_start - timedelta(days=1)
     start = end - timedelta(days=weeks * 7 - 1)
-    excluded_ids = {row[0] for row in conn.execute(
-        "SELECT id FROM transactions WHERE excluded_from_baseline = 1")}
+    excluded_ids = _excluded_ids(conn)
     rows = [row for row in _spending_rows(_rows(conn, start, end, timezone), start, end)
             if row["id"] not in excluded_ids]
     by_weekday: dict[int, list[int]] = {i: [] for i in range(7)}

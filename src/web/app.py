@@ -659,7 +659,7 @@ def create_dashboard_app(
             merchant_search=merchant_search or merchant, type=type, trip_id=trip_id,
             needs_review=needs_review, limit=limit, offset=offset,
         )
-        return [transaction_commands.to_v2(tx, storage) for tx in rows]
+        return await _db(transaction_commands.to_v2_many, rows, storage)
 
     @app.get("/api/v2/transactions/daily-totals", response_model=list[DailyTotal])
     async def transactions_daily_totals(start: date, end: date, username: str = Depends(require_auth)):
@@ -1262,12 +1262,8 @@ def create_dashboard_app(
 
     @app.get("/api/v2/goals", response_model=list[GoalProgress])
     async def list_goals_v2(storage=Depends(_get_storage)):
-        goals = await _db(storage.get_goals)
         results = []
-        for g in goals:
-            progress = await _db(storage.get_goal_progress, g["id"])
-            if not progress:
-                continue
+        for progress in await _db(storage.get_all_goal_progress):
             results.append({
                 "id": progress["id"],
                 "name": progress["name"],
@@ -1543,21 +1539,9 @@ def create_dashboard_app(
 
     @app.get("/api/subscriptions")
     async def list_subscriptions(storage=Depends(_get_storage)):
-        subs = await _db(storage.list_subscriptions)
+        subs = await _db(storage.list_subscriptions_enriched)
         summary = await _db(storage.get_subscription_summary)
-        enriched = []
-        for sub in subs:
-            last_amount = await _db(storage.get_subscription_last_amount, sub["id"])
-            upcoming = await _db(storage.list_upcoming_transactions, sub["id"])
-            pending = [u for u in upcoming if u["status"] == "pending" and sub["status"] in ("active", "possibly_cancelled")]
-            next_upcoming = pending[0] if pending else None
-            enriched.append({
-                **sub,
-                "last_amount": last_amount,
-                "next_expected_date": next_upcoming["expected_date"] if next_upcoming else None,
-                "next_upcoming_id": next_upcoming["id"] if next_upcoming else None,
-            })
-        return {"subscriptions": enriched, "summary": summary}
+        return {"subscriptions": subs, "summary": summary}
 
     def _validate_billing_day(day) -> None:
         """Raise HTTPException 422 if billing_day is present but out of range."""

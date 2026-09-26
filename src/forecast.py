@@ -14,7 +14,7 @@ from src.config import DEFAULT_TIMEZONE, local_now
 # enforcement — reused here rather than reimplemented so the forecast agrees
 # with every other money surface on refund netting, transfer exclusion, and
 # canonical-money resolution by construction, not by parallel maintenance.
-from src.spending_facts import _period as period_totals, _rows as ledger_rows, _signed as signed_amount, money, resolve_money, sgd_minor
+from src.spending_facts import _excluded_ids, _period as period_totals, _rows as ledger_rows, _signed as signed_amount, money, resolve_money, sgd_minor
 
 LOOKBACK_WEEKS = 8
 MIN_ELIGIBLE_WEEKS = 4
@@ -83,6 +83,19 @@ def _weekday_medians(conn, as_of: date, earliest_transaction_date: date | None, 
     return result
 
 
+def _history_context(conn) -> tuple[date | None, set[int], set[int]]:
+    """(earliest transaction date, subscription-matched ids, baseline-excluded
+    ids): what the weekday-median history leaves out, and where it can start."""
+    earliest_row = conn.execute("SELECT MIN(DATE(transaction_date)) FROM transactions").fetchone()[0]
+    matched_ids = {row[0] for row in conn.execute(
+        "SELECT matched_transaction_id FROM upcoming_transactions WHERE matched_transaction_id IS NOT NULL")}
+    return (date.fromisoformat(earliest_row) if earliest_row else None), matched_ids, _excluded_ids(conn)
+
+
+def _remaining_days(as_of: date, period_end: date) -> list[date]:
+    return [as_of + timedelta(days=i) for i in range(1, (period_end - as_of).days + 1)]
+
+
 def month_forecast(conn, as_of: date | None = None, timezone: str = DEFAULT_TIMEZONE) -> dict:
     as_of = as_of or local_now(timezone).date()
     period_start, period_end = _month_bounds(as_of)
@@ -90,22 +103,12 @@ def month_forecast(conn, as_of: date | None = None, timezone: str = DEFAULT_TIME
     rows = ledger_rows(conn, period_start, period_end, timezone)
     actual_period = period_totals(rows, period_start, as_of)
 
-    earliest_row = conn.execute("SELECT MIN(DATE(transaction_date)) FROM transactions").fetchone()[0]
-    earliest_date = date.fromisoformat(earliest_row) if earliest_row else None
-
-    matched_ids = {row[0] for row in conn.execute(
-        "SELECT matched_transaction_id FROM upcoming_transactions WHERE matched_transaction_id IS NOT NULL")}
-    excluded_ids = {row[0] for row in conn.execute(
-        "SELECT id FROM transactions WHERE excluded_from_baseline = 1")}
+    earliest_date, matched_ids, excluded_ids = _history_context(conn)
 
     lookback_start, lookback_end = _lookback_window(as_of)
     medians = _weekday_medians(conn, as_of, earliest_date, matched_ids, excluded_ids, timezone)
 
-    remaining_days = []
-    day = as_of + timedelta(days=1)
-    while day <= period_end:
-        remaining_days.append(day)
-        day += timedelta(days=1)
+    remaining_days = _remaining_days(as_of, period_end)
 
     reasons = []
     remaining_variable_minor = 0
@@ -186,23 +189,15 @@ def month_forecast(conn, as_of: date | None = None, timezone: str = DEFAULT_TIME
     }
 
 
-def _category_remaining_estimate(conn, as_of: date, period_end: date, category: str, timezone: str) -> int | None:
+def _category_remaining_estimate(conn, as_of: date, period_end: date, category: str, timezone: str,
+                                 history: tuple[date | None, set[int], set[int]]) -> int | None:
     """The remaining-days variable estimate for one category alone, using the
     same weekday-median machinery as the overall forecast, scoped to that
     category's own history. None if that category doesn't have enough
     lookback history to support an estimate."""
-    earliest_row = conn.execute("SELECT MIN(DATE(transaction_date)) FROM transactions").fetchone()[0]
-    earliest_date = date.fromisoformat(earliest_row) if earliest_row else None
-    matched_ids = {row[0] for row in conn.execute(
-        "SELECT matched_transaction_id FROM upcoming_transactions WHERE matched_transaction_id IS NOT NULL")}
-    excluded_ids = {row[0] for row in conn.execute(
-        "SELECT id FROM transactions WHERE excluded_from_baseline = 1")}
+    earliest_date, matched_ids, excluded_ids = history
     medians = _weekday_medians(conn, as_of, earliest_date, matched_ids, excluded_ids, timezone, category=category)
-    remaining_days = []
-    day = as_of + timedelta(days=1)
-    while day <= period_end:
-        remaining_days.append(day)
-        day += timedelta(days=1)
+    remaining_days = _remaining_days(as_of, period_end)
     if any(medians[d.weekday()]["median"] is None for d in remaining_days):
         return None
     return sum(medians[d.weekday()]["median"]["minor_units"] for d in remaining_days)
@@ -228,6 +223,7 @@ def scenario(conn, adjustments: list[dict], as_of: date | None = None, timezone:
     as_of = as_of or local_now(timezone).date()
     period_start, period_end = _month_bounds(as_of)
     base = month_forecast(conn, as_of, timezone)
+    history = None  # _history_context, fetched once for any category reductions
 
     results = []
     total_delta_minor = 0
@@ -256,7 +252,9 @@ def scenario(conn, adjustments: list[dict], as_of: date | None = None, timezone:
             category = adjustment["category"]
             percent = adjustment.get("reduce_by_percent", 0)
             label = f"Reduce {category} by {percent:g}% for the rest of the month"
-            category_minor = _category_remaining_estimate(conn, as_of, period_end, category, timezone)
+            if history is None:
+                history = _history_context(conn)
+            category_minor = _category_remaining_estimate(conn, as_of, period_end, category, timezone, history)
             if category_minor is None:
                 note = f"Not enough history for {category} to estimate its remaining spend."
             else:
