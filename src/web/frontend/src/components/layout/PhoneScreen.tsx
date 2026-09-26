@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { ChevronRight } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { SelectableRow } from '@/components/ui/selectable-row';
 import { cn } from '@/lib/utils';
@@ -181,5 +182,14 @@ export function LensMore({ items }: { items: readonly { label: string; hint?: Re
         </SelectableRow>
       ))}
     </Card>
+  );
+}
+
+// A full-width "go deeper" row at the foot of a lens panel.
+export function LensAction({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <Button type="button" variant="ghost" className="w-full min-h-12 justify-between rounded-none border-t border-border px-4 text-teal" onClick={onClick}>
+      {label}<ChevronRight size={16} aria-hidden />
+    </Button>
   );
 }

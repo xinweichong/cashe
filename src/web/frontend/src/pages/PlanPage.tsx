@@ -22,10 +22,9 @@ import { TripDetail } from '@/components/plan/TripDetail';
 import { RecurringCard } from '@/components/plan/RecurringCard';
 import { SubscriptionsSection } from '@/components/subscriptions/SubscriptionsSection';
 import { SubscriptionDetail } from '@/components/subscriptions/SubscriptionDetail';
-import { ChevronRight } from 'lucide-react';
 import { SelectableRow } from '@/components/ui/selectable-row';
 import { HeroAmount } from '@/components/ui/HeroAmount';
-import { LensGrow, LensMore, PHONE_SCREEN_HEIGHT, PhoneScreen, type Lens } from '@/components/layout/PhoneScreen';
+import { LensGrow, LensMore, PHONE_SCREEN_HEIGHT, PhoneScreen, type Lens, LensAction } from '@/components/layout/PhoneScreen';
 import { SlideOver } from '@/components/layout/SlideOver';
 import { RecurringCharges } from '@/components/explore/RecurringCharges';
 import { useDrill } from '@/hooks/useDrill';
@@ -35,6 +34,7 @@ import { invalidateSpendingQueries } from '@/hooks/useTransactions';
 import { useSettings } from '@/hooks/useSettings';
 import { useHomeBriefing, useMonthForecast } from '@/hooks/useBriefing';
 import { useUrlParams } from '@/hooks/useUrlParams';
+import { frequencyLabel } from '@/lib/subscriptionFrequency';
 
 const amountBasisLabels: Record<'matched_charge' | 'user' | 'unknown', string> = {
   matched_charge: 'Amount based on your last confirmed charge',
@@ -65,30 +65,37 @@ function monthWindow(monthStr: string) {
 // exactly to projected_total by construction — stacking them is safe. Guard
 // on remaining_variable_estimate itself (not `status`) before stacking,
 // since projected_total can be present without it in edge/test data.
+// The stacked recorded / scheduled / estimated-remaining bar. Callers
+// check remaining_variable_estimate and a positive projected_total first.
+function ProjectionBar({ data, compact = false }: { data: MonthForecast; compact?: boolean }) {
+  const total = data.projected_total!.minor_units;
+  const remaining = data.remaining_variable_estimate!;
+  const width = (m: { minor_units: number }) => `${(m.minor_units / total) * 100}%`;
+  return (
+    <div
+      className={cn('w-full rounded-pill overflow-hidden flex', compact ? 'mt-3 h-2.5' : 'h-4')}
+      role="img"
+      aria-label={`Recorded ${formatMoney(data.recorded_actual)}, scheduled ${formatMoney(data.confirmed_commitments)}, estimated remaining ${formatMoney(remaining)}`}
+    >
+      <span className="h-full bg-teal" style={{ width: width(data.recorded_actual) }} />
+      <span className="h-full bg-honey" style={{ width: width(data.confirmed_commitments) }} />
+      <span
+        className={cn('h-full bg-tangerine', compact && 'opacity-70')}
+        style={{
+          width: width(remaining),
+          backgroundImage: compact ? undefined : 'repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(0,0,0,.18) 3px, rgba(0,0,0,.18) 6px)',
+        }}
+      />
+    </div>
+  );
+}
+
 function ProjectionComposition({ data }: { data: MonthForecast }) {
   if (!data.remaining_variable_estimate || !data.projected_total) return null;
-  const total = data.projected_total.minor_units;
-  if (total <= 0) return null;
-  const recorded = data.recorded_actual.minor_units;
-  const committed = data.confirmed_commitments.minor_units;
-  const remaining = data.remaining_variable_estimate.minor_units;
+  if (data.projected_total.minor_units <= 0) return null;
   return (
     <div className="mt-4">
-      <div
-        className="h-4 w-full rounded-pill overflow-hidden flex"
-        role="img"
-        aria-label={`Recorded ${formatMoney(data.recorded_actual)}, scheduled ${formatMoney(data.confirmed_commitments)}, estimated remaining ${formatMoney(data.remaining_variable_estimate)}`}
-      >
-        <span className="h-full bg-teal" style={{ width: `${(recorded / total) * 100}%` }} />
-        <span className="h-full bg-honey" style={{ width: `${(committed / total) * 100}%` }} />
-        <span
-          className="h-full bg-tangerine"
-          style={{
-            width: `${(remaining / total) * 100}%`,
-            backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 3px, rgba(0,0,0,.18) 3px, rgba(0,0,0,.18) 6px)',
-          }}
-        />
-      </div>
+      <ProjectionBar data={data} />
       <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-2xs font-mono uppercase tracking-[0.1em] text-muted">
         <span className="inline-flex items-center gap-1.5"><StatusDot tone="saved" />Recorded {formatMoney(data.recorded_actual)}</span>
         <span className="inline-flex items-center gap-1.5"><StatusDot tone="active" />Scheduled (est.) {formatMoney(data.confirmed_commitments)}</span>
@@ -165,14 +172,7 @@ function ProjectionGlance() {
           <p className="mt-1 text-sm text-muted">
             {target ? <>Target {formatMoney(target)} · <span className={over ? 'text-coral' : 'text-teal'}>{gap} {over ? 'over' : 'under'}</span></> : 'Projected for the month · no monthly target set'}
           </p>
-          {data.remaining_variable_estimate && projected.minor_units > 0 && (() => {
-            const total = projected.minor_units;
-            return <div className="mt-3 h-2.5 w-full rounded-pill overflow-hidden flex" role="img" aria-label={`Recorded ${formatMoney(data.recorded_actual)}, scheduled ${formatMoney(data.confirmed_commitments)}, estimated remaining ${formatMoney(data.remaining_variable_estimate!)}`}>
-              <span className="h-full bg-teal" style={{ width: `${(data.recorded_actual.minor_units / total) * 100}%` }} />
-              <span className="h-full bg-honey" style={{ width: `${(data.confirmed_commitments.minor_units / total) * 100}%` }} />
-              <span className="h-full bg-tangerine opacity-70" style={{ width: `${(data.remaining_variable_estimate!.minor_units / total) * 100}%` }} />
-            </div>;
-          })()}
+          {data.remaining_variable_estimate && projected.minor_units > 0 && <ProjectionBar data={data} compact />}
           <p className="mt-2 flex gap-x-3 text-2xs font-mono text-muted whitespace-nowrap">
             <span className="inline-flex items-center gap-1.5"><StatusDot tone="saved" />{whole(data.recorded_actual)} recorded</span>
             <span className="inline-flex items-center gap-1.5"><StatusDot tone="active" />{whole(data.confirmed_commitments)} scheduled</span>
@@ -200,9 +200,15 @@ function SavedThisMonthStat() {
   );
 }
 
-function UpcomingThisWeekStat() {
+// Today and the next six days, with their pending-charge calendar.
+function useNextWeekCalendar() {
   const days = useMemo(() => Array.from({ length: 7 }, (_, i) => { const d = new Date(); d.setDate(d.getDate() + i); return toDateStr(d); }), []);
-  const { data } = useQuery({ queryKey: ['plan-upcoming-calendar', days[0], days[6]], queryFn: () => briefingApi.upcomingCalendar(days[0], days[6]) });
+  const calendar = useQuery({ queryKey: ['plan-upcoming-calendar', days[0], days[6]], queryFn: () => briefingApi.upcomingCalendar(days[0], days[6]) });
+  return { days, data: calendar.data };
+}
+
+function UpcomingThisWeekStat() {
+  const { data } = useNextWeekCalendar();
   const count = (data?.days ?? []).reduce((sum, d) => sum + d.recorded_charge_count, 0);
   return (
     <StatCard
@@ -215,9 +221,7 @@ function UpcomingThisWeekStat() {
 }
 
 function WeekStrip({ selectedDate, onSelect }: { selectedDate: string | null; onSelect: (d: string) => void }) {
-  const days = useMemo(() => Array.from({ length: 7 }, (_, i) => { const d = new Date(); d.setDate(d.getDate() + i); return toDateStr(d); }), []);
-  const start = days[0], end = days[6];
-  const { data } = useQuery({ queryKey: ['plan-upcoming-calendar', start, end], queryFn: () => briefingApi.upcomingCalendar(start, end) });
+  const { days, data } = useNextWeekCalendar();
   const byDate = new Map((data?.days ?? []).map(d => [d.date, d]));
   return (
     <div className="flex justify-between gap-1" data-testid="week-strip">
@@ -399,7 +403,6 @@ export function PlanPage() {
     }
     return groups;
   }, [report]);
-  const frequencies: Record<string, string> = { weekly: 'Weekly', biweekly: 'Every two weeks', monthly: 'Monthly', quarterly: 'Quarterly', annual: 'Annual' };
 
   const selectDate = (date: string) => updateParams({ date: search.get('date') === date ? null : date });
   const setCalendarMonth = (month: string) => updateParams({ month });
@@ -448,11 +451,7 @@ export function PlanPage() {
     const openDrill = (kind: PlanDrill, charge?: string) => openDrillRaw(kind, charge ? { charge } : {});
     const closeDrill = () => closeDrillRaw(['charge']);
     const chargeItem = drillParam === 'charge' ? report?.items.find((item) => String(item.id) === chargeParam) : undefined;
-    const lensAction = (label: string, onClick: () => void) => (
-      <Button type="button" variant="ghost" className="w-full min-h-12 justify-between rounded-none border-t border-border px-4 text-teal" onClick={onClick}>
-        {label}<ChevronRight size={16} aria-hidden />
-      </Button>
-    );
+    const lensAction = (label: string, onClick: () => void) => <LensAction label={label} onClick={onClick} />;
     const soonPanel = <div className="flex h-full flex-col">
       <div className="flex-1 px-4 pt-3">
         {query.isError && !report ? <div role="alert"><LoadFailed onRetry={() => void query.refetch()} /></div>
@@ -506,7 +505,7 @@ export function PlanPage() {
           onOpenChange={(open) => !open && closeDrill()}
           backLabel="Plan"
           title={chargeItem?.label ?? ''}
-          description={chargeItem && `${formatShortDate(chargeItem.date)} · ${frequencies[chargeItem.frequency] || chargeItem.frequency}`}
+          description={chargeItem && `${formatShortDate(chargeItem.date)} · ${frequencyLabel(chargeItem.frequency)}`}
         >
           {chargeItem && <div className="space-y-3">
             {chargeItem.amount ? <HeroAmount value={chargeItem.amount} className="text-5xl" /> : <p className="font-display text-3xl font-bold">Amount unknown</p>}
@@ -599,7 +598,7 @@ export function PlanPage() {
                         <ol>
                           {group.items.map(item => <li key={item.id} className="py-4 border-b border-border last:border-0 space-y-1">
                             <div className="flex justify-between gap-4"><p className="font-medium">{item.label}</p><p className="tabular-nums">{item.amount ? formatMoney(item.amount) : 'Amount unknown'}</p></div>
-                            <p className="text-muted"><time dateTime={item.date}>{item.date}</time> · {frequencies[item.frequency] || item.frequency} · {item.date_basis === 'user' ? 'Date you set' : 'Scheduled estimate'}</p>
+                            <p className="text-muted"><time dateTime={item.date}>{item.date}</time> · {frequencyLabel(item.frequency)} · {item.date_basis === 'user' ? 'Date you set' : 'Scheduled estimate'}</p>
                             <p className="text-sm text-muted">{amountBasisLabels[item.amount_basis]}</p>
                             <p className="text-sm text-muted">{subscriptionConfirmationLabels[item.confirmation_source]}</p>
                             {item.schedule_status === 'possibly_cancelled' && <p className="text-warning">Schedule needs review: a previous charge may be overdue.</p>}

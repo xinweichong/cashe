@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
-import { api, type Subscription } from '@/api/client';
+import { api } from '@/api/client';
 import { PageCard } from '@/components/ui/cards';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -9,14 +9,7 @@ import { StatusDot } from '@/components/ui/StatusDot';
 import { formatCurrency } from '@/lib/utils';
 import { useState } from 'react';
 import { SubscriptionForm } from './SubscriptionForm';
-
-const FREQUENCY_LABELS: Record<Subscription['frequency'], string> = {
-  weekly: 'Weekly',
-  biweekly: 'Biweekly',
-  monthly: 'Monthly',
-  quarterly: 'Quarterly',
-  annual: 'Annual',
-};
+import { FREQUENCY_LABELS } from '@/lib/subscriptionFrequency';
 
 interface SubscriptionsSectionProps {
   selectedSubId: number | null;

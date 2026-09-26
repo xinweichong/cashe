@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { api, type Subscription } from '@/api/client';
 import { invalidateSpendingQueries } from '@/hooks/useTransactions';
 import { toDateStr } from '@/lib/utils';
+import { FREQUENCY_LABELS } from '@/lib/subscriptionFrequency';
 
 type Mode = 'create' | 'edit';
 
@@ -21,14 +22,6 @@ const FREQUENCIES: Subscription['frequency'][] = [
   'quarterly',
   'annual',
 ];
-
-const FREQUENCY_LABELS: Record<Subscription['frequency'], string> = {
-  weekly: 'Weekly',
-  biweekly: 'Biweekly',
-  monthly: 'Monthly',
-  quarterly: 'Quarterly',
-  annual: 'Annual',
-};
 
 export function SubscriptionForm({ onClose, onSave, initial }: SubscriptionFormProps) {
   const mode: Mode = initial ? 'edit' : 'create';

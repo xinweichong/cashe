@@ -2,7 +2,7 @@ import { useId, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowDown, ArrowRight, ArrowUp, ChevronRight, Plus } from 'lucide-react';
-import { evidenceLink, formatMoney } from '@/api/briefing';
+import { evidenceLink, formatMoney, formatMoneyAbs } from '@/api/briefing';
 import { api } from '@/api/client';
 import { datesInRange, formatShortDate, getCategoryColor } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -17,13 +17,14 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { TrendLine } from '@/components/charts/TrendLine';
 import { CategoryDonut } from '@/components/charts/CategoryDonut';
 import { CategoryChangeBarRow } from '@/components/charts/CategoryChangeBars';
-import { PHONE_SCREEN_HEIGHT, PhoneScreen, type Lens } from '@/components/layout/PhoneScreen';
+import { PHONE_SCREEN_HEIGHT, PhoneScreen, type Lens, LensAction } from '@/components/layout/PhoneScreen';
 import { DrillSheet } from '@/components/layout/DrillSheet';
 import { useIsPhone } from '@/hooks/useIsPhone';
 import { cn } from '@/lib/utils';
 import { useHomeBriefing } from '@/hooks/useBriefing';
 import { useUrlParams } from '@/hooks/useUrlParams';
 import { useDrill } from '@/hooks/useDrill';
+import { SignedChange } from '@/components/ui/SignedChange';
 
 const PAGE = 'p-4 md:p-6 space-y-4 md:space-y-5 max-w-[1600px] text-base';
 const BAND = 'grid gap-4 md:gap-5 lg:grid-cols-12';
@@ -184,7 +185,7 @@ export function HomePage() {
   }) : [];
   const changeBadges = <>
     {facts.change && <Badge tone={facts.change.minor_units >= 0 ? 'warm' : 'calm'} className="font-mono gap-1">
-      {facts.change.minor_units >= 0 ? <ArrowUp size={12} aria-label="up" /> : <ArrowDown size={12} aria-label="down" />}{formatMoney({ ...facts.change, minor_units: Math.abs(facts.change.minor_units) })}
+      <SignedChange change={facts.change} />
     </Badge>}
     {spending_target && <Badge tone={overTarget ? 'warm' : 'saved'} className="font-mono">
       {overTarget ? 'over target' : 'under target'}
@@ -288,13 +289,9 @@ export function HomePage() {
   if (isPhone) {
     const attentionCount = capture_issue_count + followup_issue_count + unresolved + review_count + recurring_suggestion_count;
     const sourcesNeedCare = freshness.gmail_needs_reconnection || !freshness.gmail_connected;
-    const targetAbs = spending_target && formatMoney({ ...spending_target.remaining, minor_units: Math.abs(spending_target.remaining.minor_units) });
-    const lensAction = (label: string, onClick: () => void) => (
-      <Button type="button" variant="ghost" className="w-full min-h-12 justify-between rounded-none border-t border-border px-4 text-teal" onClick={onClick}>
-        {label}<ChevronRight size={16} aria-hidden />
-      </Button>
-    );
-    const changeAbs = facts.change && formatMoney({ ...facts.change, minor_units: Math.abs(facts.change.minor_units) });
+    const targetAbs = spending_target && formatMoneyAbs(spending_target.remaining);
+    const lensAction = (label: string, onClick: () => void) => <LensAction label={label} onClick={onClick} />;
+    const changeAbs = facts.change && formatMoneyAbs(facts.change);
     const changes = facts.category_changes.slice(0, 4);
     const maxChange = Math.max(...changes.map((c) => Math.abs(c.change.minor_units)), 1);
     const lenses: Lens<HomeLens>[] = [
@@ -386,7 +383,7 @@ export function HomePage() {
               <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-muted">
                 <span>{share}% of {formatMoney(facts.current.spending)}</span>
                 {change && <Badge tone={change.minor_units >= 0 ? 'warm' : 'calm'} className="font-mono gap-1">
-                  {change.minor_units >= 0 ? <ArrowUp size={12} aria-label="up" /> : <ArrowDown size={12} aria-label="down" />}{formatMoney({ ...change, minor_units: Math.abs(change.minor_units) })} vs last month
+                  <SignedChange change={change} /> vs last month
                 </Badge>}
               </div>
               <div className="mt-4 h-2 rounded-full bg-foreground/10 overflow-hidden" aria-hidden>
@@ -434,7 +431,7 @@ export function HomePage() {
             {changeBadges}
           </div>
           <p className="mt-1.5 text-sm text-muted">{facts.current.status === 'partial' ? 'Known spending subtotal · some amounts or dates need review.' : facts.current.status === 'indicative' ? 'Recorded spending · includes indicative currency conversions.' : 'Recorded spending this month'}</p>
-          <p className="mt-1 text-sm">{facts.change ? `${formatMoney({ ...facts.change, minor_units: Math.abs(facts.change.minor_units) })} ${facts.change.minor_units >= 0 ? 'more' : 'less'} than the comparable period last month.` : 'A comparison is unavailable while some records need review.'}</p>
+          <p className="mt-1 text-sm">{facts.change ? `${formatMoneyAbs(facts.change)} ${facts.change.minor_units >= 0 ? 'more' : 'less'} than the comparable period last month.` : 'A comparison is unavailable while some records need review.'}</p>
           <p className="text-xs text-muted">Comparing {facts.comparison_current.start}–{facts.comparison_current.end} with {facts.previous.start}–{facts.previous.end}.</p>
 
           <div className="mt-5 pt-5 border-t border-border">
@@ -496,10 +493,10 @@ export function HomePage() {
           {spending_target ? (
             <StatCard
               label={overTarget ? 'Over target' : 'Target left'}
-              value={formatMoney({ ...spending_target.remaining, minor_units: Math.abs(spending_target.remaining.minor_units) })}
+              value={formatMoneyAbs(spending_target.remaining)}
               color={overTarget ? 'coral' : 'teal'}
               subtext={overTarget
-                ? `${formatMoney({ ...spending_target.remaining, minor_units: Math.abs(spending_target.remaining.minor_units) })} over your ${formatMoney(spending_target.target)} monthly target.`
+                ? `${formatMoneyAbs(spending_target.remaining)} over your ${formatMoney(spending_target.target)} monthly target.`
                 : `${formatMoney(spending_target.remaining)} remaining of your ${formatMoney(spending_target.target)} monthly target.`}
               href="/plan"
             />

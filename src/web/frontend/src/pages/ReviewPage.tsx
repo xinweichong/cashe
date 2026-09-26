@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LoadFailed } from '@/components/ui/LoadFailed';
 import { invalidateSpendingQueries } from '@/hooks/useTransactions';
+import { frequencyLabel } from '@/lib/subscriptionFrequency';
 
 const sourceLabels: Record<string, string> = { telegram_nl: 'Telegram entry', gmail: 'Gmail', wallet_request: 'Wallet request', apple_wallet: 'Apple Wallet' };
 const effectLabels: Record<string, string> = { trip: 'Trip assignment', recurring: 'Recurring analysis', notification: 'Transaction notification', suggestion: 'Recurring suggestion' };
@@ -170,7 +171,6 @@ function RecurringReviewList() {
       await invalidateSpendingQueries(client);
     },
   });
-  const frequencies: Record<string, string> = { weekly: 'Weekly', biweekly: 'Every two weeks', monthly: 'Monthly' };
   return <PageCard title="Recurring suggestions">
     <p className="text-sm text-muted mb-3">These patterns may repeat. Accept to track a schedule, then review its billing date and amount. Provider billing is unchanged. Dismissal handles this suggestion; later patterns may still appear.</p>
     {resolve.isError && <div role="alert" className="text-destructive">
@@ -183,7 +183,7 @@ function RecurringReviewList() {
     {query.isError ? <div role="alert"><LoadFailed onRetry={() => void query.refetch()} /></div> : !query.data ? <div role="status"><span className="sr-only">Loading recurring suggestions…</span><Skeleton className="h-20 w-full" /></div> : <>
       <p className="text-sm text-muted">{query.data.total} pending suggestions</p>
       {query.data.items.map(item => <div key={item.id} className="py-4 border-b border-border last:border-0 space-y-2">
-        <p>{item.merchant}</p><p className="text-sm text-muted">{frequencies[item.frequency] || item.frequency} · Inferred pattern</p>
+        <p>{item.merchant}</p><p className="text-sm text-muted">{frequencyLabel(item.frequency)} · Inferred pattern</p>
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" className="min-h-11" disabled={resolve.isPending} onClick={() => resolve.mutate({ id: item.id, action: 'accept' })}>Accept schedule</Button>
           <Button variant="ghost" className="min-h-11" disabled={resolve.isPending} onClick={() => resolve.mutate({ id: item.id, action: 'dismiss' })}>Dismiss suggestion</Button>

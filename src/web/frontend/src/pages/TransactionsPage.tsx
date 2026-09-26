@@ -405,6 +405,34 @@ export function TransactionsPage() {
     </>
   );
 
+  // Shared by the phone and desktop layouts.
+  const filterProps = {
+    search, onSearchChange: handleSearchChange,
+    category, onCategoryChange: handleCategoryChange, categories: categories ?? [],
+    startDate, setStartDate, endDate, setEndDate,
+    type, onTypeChange: setType,
+    trips: settings?.trips_enabled ? trips : [], tripId, onTripChange: setTripId,
+    needsReview, onNeedsReviewChange: setNeedsReview,
+  };
+  const bulkActionBar = (
+    <BulkActionBar
+      count={selectedIds.size}
+      categories={categories ?? []}
+      onCategorize={handleBulkCategorize}
+      onSetType={handleBulkSetType}
+      onCancel={toggleSelectionMode}
+      pending={bulkCorrect.isPending}
+    />
+  );
+  const bulkUndoStatus = (className: string) => lastBulkUndo && (
+    <p role="status" className={className}>
+      Updated {lastBulkUndo.ids.length}.{' '}
+      <Button type="button" variant="link" size="sm" className="h-auto min-h-11 p-0 align-baseline" disabled={bulkUndo.isPending} onClick={handleBulkUndo}>
+        {bulkUndo.isPending ? 'Undoing…' : 'Undo'}
+      </Button>
+    </p>
+  );
+
   let phoneView: React.ReactNode = null;
   if (isPhone) {
     // Lenses are the four most-used type views; they write the same filter
@@ -482,25 +510,9 @@ export function TransactionsPage() {
           : weekCount !== undefined ? `${weekCount} ${weekCount === 1 ? 'record' : 'records'} since Monday · every date below` : '\u00a0'}</p>
       </HeroCard>
     );
-    const dock = selectionMode ? (
-      <BulkActionBar
-        count={selectedIds.size}
-        categories={categories ?? []}
-        onCategorize={handleBulkCategorize}
-        onSetType={handleBulkSetType}
-        onCancel={toggleSelectionMode}
-        pending={bulkCorrect.isPending}
-      />
-    ) : (
+    const dock = selectionMode ? bulkActionBar : (
       <div className="flex flex-col gap-1.5">
-        {lastBulkUndo && (
-          <p role="status" className="px-1 text-sm text-muted">
-            Updated {lastBulkUndo.ids.length}.{' '}
-            <Button type="button" variant="link" size="sm" className="h-auto min-h-11 p-0 align-baseline" disabled={bulkUndo.isPending} onClick={handleBulkUndo}>
-              {bulkUndo.isPending ? 'Undoing…' : 'Undo'}
-            </Button>
-          </p>
-        )}
+        {bulkUndoStatus('px-1 text-sm text-muted')}
         <div className="flex gap-2">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted" aria-hidden />
@@ -539,25 +551,7 @@ export function TransactionsPage() {
             <Button type="button" className="min-h-12 flex-[2]" onClick={() => sheets.closeDrill()}>Show results</Button>
           </div>}
         >
-          <TransactionFilters
-            variant="sheet"
-            search={search}
-            onSearchChange={handleSearchChange}
-            category={category}
-            onCategoryChange={handleCategoryChange}
-            categories={categories ?? []}
-            startDate={startDate}
-            setStartDate={setStartDate}
-            endDate={endDate}
-            setEndDate={setEndDate}
-            type={type}
-            onTypeChange={setType}
-            trips={settings?.trips_enabled ? trips : []}
-            tripId={tripId}
-            onTripChange={setTripId}
-            needsReview={needsReview}
-            onNeedsReviewChange={setNeedsReview}
-          />
+          <TransactionFilters variant="sheet" {...filterProps} />
         </DrillSheet>
         <DrillSheet open={showForm || sheets.drill === 'add'} onOpenChange={(open) => { if (open) return; setShowForm(false); if (sheets.drill === 'add') sheets.closeDrill(); }} backLabel="Activity" title="Add a transaction">
           <TransactionForm categories={categories ?? []} onClose={() => { setShowForm(false); if (sheets.drill === 'add') sheets.closeDrill(); }} />
@@ -604,51 +598,11 @@ export function TransactionsPage() {
               </div>
             </div>
 
-            {selectionMode && (
-              <BulkActionBar
-                count={selectedIds.size}
-                categories={categories ?? []}
-                onCategorize={handleBulkCategorize}
-                onSetType={handleBulkSetType}
-                onCancel={toggleSelectionMode}
-                pending={bulkCorrect.isPending}
-              />
-            )}
+            {selectionMode && bulkActionBar}
 
-            {lastBulkUndo && (
-              <p role="status" className="text-sm text-muted">
-                Updated {lastBulkUndo.ids.length}.{' '}
-                <Button
-                  type="button"
-                  variant="link"
-                  size="sm"
-                  className="h-auto min-h-11 p-0 align-baseline"
-                  disabled={bulkUndo.isPending}
-                  onClick={handleBulkUndo}
-                >
-                  {bulkUndo.isPending ? 'Undoing…' : 'Undo'}
-                </Button>
-              </p>
-            )}
+            {bulkUndoStatus('text-sm text-muted')}
 
-            <TransactionFilters
-              search={search}
-              onSearchChange={handleSearchChange}
-              category={category}
-              onCategoryChange={handleCategoryChange}
-              categories={categories ?? []}
-              startDate={startDate}
-              setStartDate={setStartDate}
-              endDate={endDate}
-              setEndDate={setEndDate}
-              type={type}
-              onTypeChange={setType}
-              trips={settings?.trips_enabled ? trips : []}
-              tripId={tripId}
-              onTripChange={setTripId}
-              needsReview={needsReview}
-              onNeedsReviewChange={setNeedsReview}
-            />
+            <TransactionFilters {...filterProps} />
 
             {showForm && (
               <AnimatePresence>

@@ -133,6 +133,10 @@ export const briefingApi = {
 export function formatMoney(value: Money): string {
   return formatCurrency(value.minor_units / 100);
 }
+/** The amount without its sign, for copy that states the direction in words or an arrow. */
+export function formatMoneyAbs(value: Money): string {
+  return formatMoney({ ...value, minor_units: Math.abs(value.minor_units) });
+}
 export function evidenceLink(period: SpendingPeriod, category?: string, measure = 'spending', merchant?: string): string {
   const query = new URLSearchParams({ start: period.start, end: period.end, measure });
   if (category !== undefined) query.set('category', category);

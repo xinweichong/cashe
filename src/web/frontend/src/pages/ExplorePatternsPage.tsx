@@ -22,7 +22,7 @@ import { HealthScoreSummary } from '@/components/explore/HealthScoreCard';
 import { formatChange, formatRange } from '@/components/explore/format';
 import { QuestionCard, RankedBar, RecurringCharges } from '@/components/explore/RecurringCharges';
 import { datesInRange, formatShortDate, getCategoryColor } from '@/lib/utils';
-import { ArrowDown, ArrowUp, ChevronRight } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { HeroCard } from '@/components/ui/cards';
 import { HeroAmount } from '@/components/ui/HeroAmount';
@@ -33,6 +33,7 @@ import { useIsPhone } from '@/hooks/useIsPhone';
 import { useTrips } from '@/components/plan/planHooks';
 import { useCategories } from '@/hooks/useCategories';
 import { useUrlParams } from '@/hooks/useUrlParams';
+import { SignedChange } from '@/components/ui/SignedChange';
 
 const WEEKDAY_LABELS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
@@ -471,7 +472,7 @@ function ExploreGlance({ facts }: { facts: SpendingFacts | undefined }) {
       {!facts ? <Skeleton className="h-10 w-40" /> : <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
         <HeroAmount value={facts.current.spending} className="text-4xl" />
         {change && <Badge tone={change.minor_units >= 0 ? 'warm' : 'calm'} className="font-mono gap-1">
-          {change.minor_units >= 0 ? <ArrowUp size={12} aria-label="up" /> : <ArrowDown size={12} aria-label="down" />}{formatMoney({ ...change, minor_units: Math.abs(change.minor_units) })} vs last month
+          <SignedChange change={change} /> vs last month
         </Badge>}
       </div>}
       <div className="mt-3 flex divide-x divide-border border-t border-border pt-1">

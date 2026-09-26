@@ -10,19 +10,12 @@ import { api, type Subscription, type Transaction, type UpcomingTransaction } fr
 import { SubscriptionForm } from './SubscriptionForm';
 import { invalidateSpendingQueries } from '@/hooks/useTransactions';
 import { toDateStr } from '@/lib/utils';
+import { FREQUENCY_LABELS } from '@/lib/subscriptionFrequency';
 
 interface SubscriptionDetailProps {
   subId: number;
   onClose: () => void;
 }
-
-const FREQUENCY_LABELS: Record<Subscription['frequency'], string> = {
-  weekly: 'Weekly',
-  biweekly: 'Biweekly',
-  monthly: 'Monthly',
-  quarterly: 'Quarterly',
-  annual: 'Annual',
-};
 
 const FREQUENCY_MONTHLY_FACTOR: Record<Subscription['frequency'], number> = {
   weekly: 4.33,
