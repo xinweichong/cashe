@@ -110,7 +110,7 @@ export function TransactionForm({ categories, onClose }: TransactionFormProps) {
   return (
     <Card className="p-4">
       <form onSubmit={handleSubmit} className="space-y-3">
-        <SegmentedChoice name="transaction-type" aria-label="Transaction type" value={type} onValueChange={setType} options={TX_TYPES} />
+        <SegmentedChoice<TxType> name="transaction-type" aria-label="Transaction type" value={type} onValueChange={setType} options={TX_TYPES} />
 
         {/* Primary fields — amount and merchant are all it takes to capture something */}
         <div className="grid grid-cols-2 gap-3">

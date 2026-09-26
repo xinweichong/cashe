@@ -57,7 +57,7 @@ function ControlsSheet() {
         <ChoiceChip selected tone="warning">Needs review</ChoiceChip>
         {PALETTE.slice(0, 4).map((c, i) => <ChoiceChip key={c} selected={i === 0} categoryColor={c}>Category {i + 1}</ChoiceChip>)}
       </div>
-      <SegmentedChoice name="preview-type" aria-label="Transaction type" value={segment} onValueChange={setSegment} options={[{ value: 'expense', label: 'Expense' }, { value: 'income', label: 'Income' }] as const} className="max-w-sm" />
+      <SegmentedChoice<'expense' | 'income'> name="preview-type" aria-label="Transaction type" value={segment} onValueChange={setSegment} options={[{ value: 'expense', label: 'Expense' }, { value: 'income', label: 'Income' }] as const} className="max-w-sm" />
       <div className="flex items-center gap-4">
         <Switch checked={on} onCheckedChange={setOn} aria-label="Preview switch" />
         <Switch checked={false} onCheckedChange={() => {}} aria-label="Preview switch off" />
