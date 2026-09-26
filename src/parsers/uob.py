@@ -197,68 +197,35 @@ class UobParser:
             raw_data=body,
         )
 
-    def _parse_transfer(self, body: str) -> Optional[ParseResult]:
-        m = self.TRANSFER_PATTERN.search(body)
+    def _parse_outgoing(self, body: str, pattern, source: str, describe) -> Optional[ParseResult]:
+        """A transfer, NETS QR payment or PayNow send: all share one alert
+        shape (amount, counterparty, 12h time, d Mon yy), differing only in
+        pattern, source and description."""
+        m = pattern.search(body)
         if not m:
             return None
         amount = float(m.group(1).replace(",", ""))
-        recipient = m.group(2).strip()
-        time_str = m.group(3)
+        counterparty = m.group(2).strip()
         day, month_str, short_year = int(m.group(4)), m.group(5), int(m.group(6))
         iso_date = self._iso_from_dmmy(day, month_str, short_year)
-        parsed_time = self._parse_time_12h(time_str)
+        parsed_time = self._parse_time_12h(m.group(3))
         h, mi = parsed_time or (0, 0)
         return ParseResult(
-            source="uob_transfer",
+            source=source,
             source_id="",
             amount=amount,
-            merchant=recipient,
-            description=f"Transfer to {recipient}",
+            merchant=counterparty,
+            description=describe(counterparty),
             transaction_date=f"{iso_date}T{h:02d}:{mi:02d}:00",
             timestamp_precision="minute" if parsed_time else "unknown",
             raw_data=body,
         )
+
+    def _parse_transfer(self, body: str) -> Optional[ParseResult]:
+        return self._parse_outgoing(body, self.TRANSFER_PATTERN, "uob_transfer", lambda r: f"Transfer to {r}")
 
     def _parse_nets_qr(self, body: str) -> Optional[ParseResult]:
-        m = self.NETS_QR_PATTERN.search(body)
-        if not m:
-            return None
-        amount = float(m.group(1).replace(",", ""))
-        merchant = m.group(2).strip()
-        time_str = m.group(3)
-        day, month_str, short_year = int(m.group(4)), m.group(5), int(m.group(6))
-        iso_date = self._iso_from_dmmy(day, month_str, short_year)
-        parsed_time = self._parse_time_12h(time_str)
-        h, mi = parsed_time or (0, 0)
-        return ParseResult(
-            source="uob_nets",
-            source_id="",
-            amount=amount,
-            merchant=merchant,
-            description=f"NETS QR - {merchant}",
-            transaction_date=f"{iso_date}T{h:02d}:{mi:02d}:00",
-            timestamp_precision="minute" if parsed_time else "unknown",
-            raw_data=body,
-        )
+        return self._parse_outgoing(body, self.NETS_QR_PATTERN, "uob_nets", lambda m: f"NETS QR - {m}")
 
     def _parse_paynow_sent(self, body: str) -> Optional[ParseResult]:
-        m = self.PAYNOW_SENT_PATTERN.search(body)
-        if not m:
-            return None
-        amount = float(m.group(1).replace(",", ""))
-        recipient = m.group(2).strip()
-        time_str = m.group(3)
-        day, month_str, short_year = int(m.group(4)), m.group(5), int(m.group(6))
-        iso_date = self._iso_from_dmmy(day, month_str, short_year)
-        parsed_time = self._parse_time_12h(time_str)
-        h, mi = parsed_time or (0, 0)
-        return ParseResult(
-            source="uob_paynow_sent",
-            source_id="",
-            amount=amount,
-            merchant=recipient,
-            description=f"PayNow transfer to {recipient}",
-            transaction_date=f"{iso_date}T{h:02d}:{mi:02d}:00",
-            timestamp_precision="minute" if parsed_time else "unknown",
-            raw_data=body,
-        )
+        return self._parse_outgoing(body, self.PAYNOW_SENT_PATTERN, "uob_paynow_sent", lambda r: f"PayNow transfer to {r}")

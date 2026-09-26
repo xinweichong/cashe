@@ -35,6 +35,14 @@ DEFAULT_CATEGORIES = [
 ]
 
 
+def _webhook_base_url_from_env() -> str:
+    """WEBHOOK_BASE_URL, else the Railway public domain, else ''."""
+    return (
+        os.environ.get("WEBHOOK_BASE_URL")
+        or (f"https://{d}" if (d := os.environ.get("RAILWAY_PUBLIC_DOMAIN")) else "")
+    )
+
+
 def _config_from_env() -> dict[str, Any]:
     """Build a config dict purely from environment variables.
 
@@ -47,16 +55,11 @@ def _config_from_env() -> dict[str, Any]:
 
     poll_interval = int(os.environ.get("GMAIL_POLL_INTERVAL", "120"))
 
-    webhook_base_url = (
-        os.environ.get("WEBHOOK_BASE_URL")
-        or (f"https://{d}" if (d := os.environ.get("RAILWAY_PUBLIC_DOMAIN")) else "")
-    )
-
     config: dict[str, Any] = {
         "server": {
             "host": "0.0.0.0",
             "port": port,
-            "webhook_base_url": webhook_base_url,
+            "webhook_base_url": _webhook_base_url_from_env(),
         },
         "gmail": {
             "credentials_file": "credentials.json",
@@ -100,8 +103,7 @@ def load_config(config_path: str) -> dict[str, Any]:
         config.setdefault("server", {})["port"] = int(port_env)
     if tz_env := os.environ.get("TIMEZONE"):
         config["timezone"] = tz_env
-    if url := (os.environ.get("WEBHOOK_BASE_URL")
-               or (f"https://{d}" if (d := os.environ.get("RAILWAY_PUBLIC_DOMAIN")) else "")):
+    if url := _webhook_base_url_from_env():
         config.setdefault("server", {})["webhook_base_url"] = url
 
     return config
