@@ -397,7 +397,7 @@ Current registry (paths relative to `src/web/frontend/src/`):
 | Dialog, sheet, dropdown, select | Existing `components/ui/` Radix wrappers | They own surface (`card-elev`, `border-border`, `elev-md`), backdrop and §14 enter/exit motion (`.pop-motion`, `.overlay-motion`, `.sheet-motion-*` in `index.css`), and the close control is `Button` via `Close asChild`. Do not override surfaces in callers. Interrupting confirmations compose `Dialog` (no separate ConfirmDialog API). |
 | Loading / recoverable failure / transient feedback | `Skeleton`, `LoadFailed`, existing toast provider | Compose known patterns; no page-local alternative feedback system. |
 | Category-change visual | `components/charts/CategoryChangeBars.tsx` | Home and Explore reuse the same row/scale contract. |
-| Category mix (donut + ranked legend) | `components/charts/CategoryDonut.tsx` | `showLegend` adds the selectable top-5 legend with a "Remaining categories" group. `layout="row"` (approved 2026-09-25 for Home's full-width dashboard) places the legend beside the chart from `sm` up and stacks it below on phones; it changes only placement, not the chart, legend rows or selection. The default `stacked` layout stays for Explore and Overview. |
+| Category mix (donut + ranked legend) | `components/charts/CategoryDonut.tsx` | `showLegend` adds the selectable top-5 legend with a "Remaining categories" group. `layout="row"` (approved 2026-09-25 for Home's full-width dashboard) places the legend beside the chart from `sm` up and stacks it below on phones; it changes only placement, not the chart, legend rows or selection. The default `stacked` layout stays for Explore. |
 | Whole-card link | `CardLink` in `components/ui/cards.tsx`; `StatCard` `href` | Approved 2026-09-25 (Explore dashboard) for KPI tiles, the "Worth a look" summary and the Financial health summary. Chevron top-right, 1px lift plus `elev-xs` on hover (plain cards also take `card-hover` fill; glow cards keep their wash), focus ring. Wrap exactly one card; the card must contain no other links or controls, so summary rows inside it are plain. Other surfaces need approval before adopting it. |
 
 **Approved shared owners (2026-09-25).** See [the proposals](plans/2026-09-25-cashe-shared-ui-owner-proposals.md) for rationale and states.
@@ -412,6 +412,19 @@ Current registry (paths relative to `src/web/frontend/src/`):
 | Selectable row | `components/ui/selectable-row.tsx` | Full-width row that selects (`aria-pressed`) or opens something; disclosures pass `aria-expanded`. No nested controls. |
 | Budget/goal progress | `components/ui/ProgressBar.tsx` | `role="progressbar"`, Badge-tone fill, overage announced. Not for forecast composition or rankings. |
 | Category icon/colour choice | `components/categories/CategoryPickers.tsx` | Radio groups with 44px options; taken colours disabled and explained. |
+
+**Extracted shared owners (2026-09-26).** Consolidations of markup that was already repeated, approved by the user as part of the simplification pass. Each keeps the look it replaced; none adds a new fill, radius or motion.
+
+| Role | Owner | Use |
+|---|---|---|
+| Detail panel chrome | `components/ui/detail-panel.tsx` — `DetailHeader`, `DetailLoading`, `StatTiles`, `ConfirmDestructive`, `SectionLabel` | Budget, goal, trip, subscription and merchant panels. `ConfirmDestructive` is the inline in-panel delete confirmation those panels already used; interrupting confirmations still compose `Dialog`. |
+| Query first-load state | `components/ui/QueryState.tsx`; `RetryLink` in `components/ui/LoadFailed.tsx` | `QueryState` shows `LoadFailed` or a `Skeleton` until data arrives, then renders its child function; a background refetch failure never hides shown data. `RetryLink` is the inline Retry in a "Couldn't refresh…" sentence. |
+| Signed money change | `components/ui/SignedChange.tsx`; `formatMoneyAbs` in `api/briefing.ts` | Up/down arrow plus unsigned amount, where the sign is conveyed by the arrow or the sentence. |
+| Circular progress | `components/ui/ProgressRing.tsx` | Goal detail/list rings and the health score ring; caller supplies size, radius, stroke and any centred `<text>`. |
+| Trend day stepper | `components/charts/DayStepper.tsx` (`NoTrendData`) | Previous/next-day controls under `TrendLine` and `CategoryTrendLine`; each chart keeps its own stepping rule. |
+| Detail-panel mini chart | `components/charts/MiniBarChart.tsx` | Single-series SGD bars in a `ChartCard` (merchant months, subscription charges). |
+| Lens footer action | `LensAction` in `components/layout/PhoneScreen.tsx` | The full-width "go deeper" row at the foot of a phone lens panel. |
+| Drag-to-dismiss | `hooks/useDragDismiss.ts`, `components/layout/EdgeGrip.tsx` | `SlideOver` and `DrillSheet`: drag right to close, off under reduced motion; the grip is the visual cue. |
 
 Still not shared: a common category label (ActivityRowShell and Finance keep their own), and a public calendar date-cell primitive (Plan keeps one in-file recipe). Existing examples are references, not permission to clone them.
 

@@ -15,7 +15,7 @@ Single Python monolith, one process, eight subsystems:
 6. **Categorization** — keyword matching + learned merchant overrides, with match source tracking
 7. **Intelligence** — recurring transaction detection, spending insights, multi-currency exchange rates, analytics
 8. **Finance System** — budgets (monthly/weekly), savings goals with contributions, trip expense tracking, subscriptions with upcoming-transaction tracking
-9. **LLM Intelligence** — optional Gemini Flash layer for anomaly explanations, natural-language Telegram parsing, and daily AI insights; `None` when `gemini_api_key` is absent
+9. **LLM Intelligence** — optional Gemini Flash layer for natural-language Telegram parsing and daily AI insights; `None` when `gemini_api_key` is absent
 
 All data in SQLite with WAL mode. Multi-user system with per-user expense DBs and a shared admin DB. Supports income and expense tracking.
 
@@ -124,7 +124,7 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 - Exchange rates cached for 24 hours with fallback hardcoded rates when API unreachable
 - All sensitive config in `config.yaml` (gitignored) — mounted as a read-only volume in Docker
 - Categories have a `type` column (`needs`/`wants`/`neutral`) used for financial health scoring
-- Active trip auto-assigns new transactions via `storage.auto_assign_to_active_trip(tx_id)` — one active trip at a time
+- Active trip auto-assigns new transactions through the ingestion outbox's capture-time trip job — one active trip at a time
 - `IngestionPipeline` is the single path for all transaction ingestion (Gmail and Webhook) — never bypass it
 
 ## Multi-User System
@@ -141,7 +141,7 @@ The system supports multiple users. Each user has:
 
 **`UserContext`** fields: `username`, `storage`, `categorizer`, `poller`, `db_path`, `token_path`, `exchange_service`.
 
-**Admin panel** at `/admin` — separate `FastAPI` app mounted on the main app. Uses a separate admin session (not a user session). IP-based login lockout after 5 failures.
+**Admin panel** at `/admin` — separate `FastAPI` app mounted on the main app. Uses a separate admin session (not a user session). Login is rate-limited by the connecting client address (5 attempts per 15 minutes, `LoginRateLimiter` in `src/web/auth.py`, shared with the dashboard login); `X-Forwarded-For` is not trusted.
 
 **Seeding:** On first boot, if `app.db` has no users, the admin user is created from `config.yaml` (`web.admin_username` / `web.password_hash`). Existing Telegram `chat_id` from a legacy single-user DB is migrated automatically.
 
@@ -154,7 +154,7 @@ The system supports multiple users. Each user has:
 ### Storage Layer
 
 - Every expense-only query uses `(type IS NULL OR type = 'expense')` — never just `type = 'expense'`. Pre-migration rows have a NULL type and are silently dropped otherwise.
-- All mutating methods (`update_transaction`, `delete_transaction`, `update_category`, `delete_category`) pre-check existence and raise `ValueError("<entity> not found")` on miss. The API layer catches `ValueError` and returns HTTP 404. Never raise `HTTPException` from Storage.
+- All mutating methods (`update_transaction`, `delete_transaction`, `update_category`, `delete_category`) pre-check existence and raise `NotFound` on miss; state clashes raise `Conflict` (both `ValueError` subclasses in `src/storage.py`). Routes map them through `_http_error` (404/409, else the route's default status) — never by matching message text. Never raise `HTTPException` from Storage.
 - `delete_category` cascades: reassigns all affected transactions to `'Other'` and deletes matching `merchant_overrides`. Returns the reassigned count, surfaced as `{"status": "ok", "reassigned": count}` in the API.
 - `app_settings` stores all values as `TEXT`. Always cast to `float`/`int` at the call site. `set_setting` always receives `str(val)`.
 - `ingestion_state` is dual-purpose: Gmail poller state (keyed by source name, e.g. `"dbs_paylah"`) and the Telegram chat ID (stored under `source='telegram_chat_id'`, value in `last_processed_id`). Note: Telegram chat IDs have moved to `app.db users.telegram_chat_id` for new users — the `ingestion_state` approach is legacy.
@@ -179,10 +179,10 @@ The system supports multiple users. Each user has:
 - NL confirmation buttons carry a random 32-hex draft token (`nl_confirm:<token>`, `nl_edit:<token>`, `nl_cancel:<token>`). Migration 5 stores one active draft per chat in the per-user `telegram_drafts` table, before card delivery. It holds only proposed amount/currency/merchant/category/date fields, has a fixed 24-hour expiry, and survives restart. Expiry is enforced on reads/confirmation; expired payloads are lazily deleted on the next draft read/save. User isolation comes from the resolved per-user Storage, and reads/discards also require the originating chat ID. Replacing/canceling/manual Edit invalidates only the matching card. Production confirmation passes `chat_id` to `Storage.confirm_telegram_draft`, which re-reads the stored fields and atomically deletes the draft with the request receipt, evidence, transaction, and requested confirmation-time trip job. Validation/write failures retain the draft. Existing internal accepted-draft callers without `chat_id` keep their receipt replay interface. New source IDs use `telegram-nl-<token>`; generated FX is excluded from replay identity. Stale/legacy/wrong-owner/expired cards cannot save newer drafts. `context.user_data` is no longer the draft authority. Full command unification and operator-triggered NL replay remain pending.
 - Migration 6 retains `telegram_draft_messages`: a hash of chat/message identity, a fingerprint of trimmed message text, and the original draft token. The message link and draft save atomically. NL redelivery checks this before any model call: active drafts reuse their original fields/token/deadline; changed messages or consumed/canceled/replaced/expired drafts direct the user to Activity or a new entry. Recheck on save prevents concurrent proposals from replacing the accepted one. Retained links intentionally survive draft deletion and must not be treated as orphaned foreign keys. Raw text is not stored in this table. Unrecognized input and failures before draft persistence leave no draft-message link; raw input capture below retains the observation. Legacy/in-process callers without message IDs retain their prior behavior.
 - Identified NL input is committed to `source_events` (`source='telegram_nl'`, `parser_version='telegram-nl:1'`) before parsing, only for a linked user with the optional model service enabled. The original message text stays server-side. Started processing attempts are persisted before model calls and capped at five per message identity, including crashes. Redelivery can retry; the generic bank/Wallet worker explicitly excludes these observations, and capture retry endpoints reject them. Parsing/draft failures remain visible with fixed sanitized error codes; Review directs recovery through Telegram and offers no automatic retry button. Saving a draft marks its raw observation processed atomically; confirmation links it to the purchase in the same commit and groups it with manual provenance. Raw observation precision stays unknown, so it does not enable cross-source matching. Receipt alone creates no transaction or follow-ups. Unfinished Telegram input can be marked handled or returned to Review through authenticated capture resolution endpoints. Migration 7 retains a separate resolution marker without changing original evidence or processing status. Default Review and Home attention counts exclude handled input; include_handled exposes it with a handled flag. Handled redelivery and in-flight draft saves are blocked. Reopening does not queue parsing or reset attempts. Bank/Wallet and processed observations cannot be resolved this way. Raw-input replay tooling remains pending.
-- `PUT /api/settings` is all-or-nothing: validates all fields, collects errors into a dict, raises HTTP 422 with the errors dict, or writes all values atomically. Never writes a partial update.
+- `PUT /api/settings` is all-or-nothing: validates all fields against the `SETTINGS` table in `src/web/app.py` (which also drives GET), raises HTTP 422 with an errors dict, or writes every value in one transaction (`Storage.set_settings`).
 - Manual transactions via the web API use `source_id = f"manual_{uuid4().hex[:12]}"`. Identified Telegram `/add` uses the hashed message identity described above; legacy entries use `f"manual-{timestamp}-{amount}"`. Both use `source="manual"` and coexist in the DB.
 - The SPA catch-all `/{full_path:path}` is only registered at startup if `src/web/dist/` exists. If the frontend is not built, all non-API paths return 404.
-- All DB calls in the web layer go through `await _db(fn, *args)` — a single-worker `ThreadPoolExecutor` that serialises DB work off the event loop.
+- All DB calls in the web layer go through `await _db(fn, *args)` — a `ThreadPoolExecutor` that keeps SQLite off the event loop. Each `Storage` serialises its own calls, so workers only run different databases concurrently.
 - Finance features (budgets, goals, trips) are gated by `app_settings` flags: `budgets_enabled`, `goals_enabled`, `trips_enabled`. The API does not gate them — gating is UI-only.
 
 ### Ingestion Pipeline
@@ -190,7 +190,7 @@ The system supports multiple users. Each user has:
 All transaction ingestion (Gmail and Webhook) goes through `IngestionPipeline` (`src/ingestion.py`). Never bypass it.
 
 Steps in order:
-1. Same-source dedup (`source_id_exists`)
+1. Same-source dedup (`record_source_event` — one source event per source/source_id)
 2. Cross-source dedup (`find_cross_source_duplicate` — 10-minute window)
 3. Exchange rate lookup (skipped if currency is SGD)
 4. Categorization (`categorizer.reload_overrides()` then `categorizer.categorize()`)
@@ -229,7 +229,7 @@ The `IngestionPipeline` is instantiated per-user inside `UserManager._build_cont
 - `/api/v2/spending/review` lists all-history unresolved spending records using the same selection/conversion rules as evidence. Reason codes distinguish missing dates, unresolved money, and unknown classification; transfers and usable indicative FX are excluded. The read-only list resolves membership from current data, not dismissals. Invalidate `spending-review` after transaction mutations and preserve `/review?spending_offset=...` when closing details.
 - Home is the unconditional landing experience (see "Navigation Pattern"). `/api/v2/home` composes shared facts and sanitized capture freshness; `/home`, `/evidence`, and `/review` are lazy-loaded authenticated screens. Keep failed/stale/partial states explicit and invalidate Home/evidence queries after transaction mutations. Capture list APIs support `limit` and `offset`. The backend `home_briefing_enabled` setting (`app_settings` table, `src/web/app.py`) still exists but is no longer read by the frontend as of 2026-09-25 — left in place, not cleaned up.
 
-- Explore is one dashboard (`ExplorePatternsPage` + `components/explore/`): a pulse band of month facts (tiles link to evidence via the approved `CardLink`), the optional AI daily read, a three-row "Worth a look" summary (full list at `/explore/signals`), the biggest mover, a score-only health summary (full breakdown at `/explore/health`), then Over time / By category / By merchant / Recurring modes held in `?mode=`. Authenticated `/api/v2/spending/signals` (month-to-date purchases over `anomaly_multiplier`× the merchant's average before the month, needing two prior resolved purchases and honouring `excluded_from_baseline`, plus first-seen merchants) and `/api/v2/spending/monthly` (per-calendar-month spending/income, absent income stays null) are shared facts. `Storage.get_health_score` now delegates to `spending_facts.health_score` (same 50/30/20 formula; unresolved amounts are excluded and reported via `status`/`unresolved_count`; budget adherence and unusual purchases use shared rows). The legacy `/api/v2/analytics/{comparison,merchants,velocity,alerts}`, `/api/analytics/yoy` and `/api/income-vs-expense` endpoints no longer have a frontend caller; they remain for API compatibility.
+- Explore is one dashboard (`ExplorePatternsPage` + `components/explore/`): a pulse band of month facts (tiles link to evidence via the approved `CardLink`), the optional AI daily read, a three-row "Worth a look" summary (full list at `/explore/signals`), the biggest mover, a score-only health summary (full breakdown at `/explore/health`), then Over time / By category / By merchant / Recurring modes held in `?mode=`. Authenticated `/api/v2/spending/signals` (month-to-date purchases over `anomaly_multiplier`× the merchant's average before the month, needing two prior resolved purchases and honouring `excluded_from_baseline`, plus first-seen merchants) and `/api/v2/spending/monthly` (per-calendar-month spending/income, absent income stays null) are shared facts. `Storage.get_health_score` now delegates to `spending_facts.health_score` (same 50/30/20 formula; unresolved amounts are excluded and reported via `status`/`unresolved_count`; budget adherence and unusual purchases use shared rows). The legacy summary/trend/balance/insights, `/api/v2/overview/*`, `/api/v2/analytics/{comparison,merchants,velocity,alerts}`, `/api/analytics/yoy` and `/api/income-vs-expense` endpoints had no caller and were removed (2026-09-26); unknown `/api/*` paths return 404 rather than the SPA shell.
 - New reporting uses `src/spending_facts.py` through locked Storage wrappers. The additive authenticated `/api/v2/spending/month`, `/api/v2/spending/week`, and `/api/v2/spending/evidence` endpoints share classification, Decimal rounding, timezone projection, and evidence selection. See `docs/operations/spending-facts.md` for compatibility limits.
 - Report SGD integer minor units rounded per transaction; storage remains legacy floats until the audited migration. Never describe this compatibility calculation as a completed money migration.
 - Always expose partial/indicative status with known subtotals. Legacy foreign `1.0` rates are unresolved, not proof of conversion. Undated observations make comparisons unavailable. Missing income is absent, and negative recorded net flow is retained.
@@ -298,7 +298,7 @@ The `IngestionPipeline` is instantiated per-user inside `UserManager._build_cont
 | `src/exchange.py` | Exchange rate service with API fetching, 24h caching, and fallback rates |
 | `src/recurring.py` | Recurring transaction detection from spending patterns |
 | `src/subscriptions.py` | `SubscriptionMatcher`: daily job — generates upcoming charges, auto-matches transactions, flags possibly-cancelled subscriptions |
-| `src/llm_service.py` | `LLMService`: thin Gemini Flash wrapper for anomaly explanations, Telegram NL parsing, and weekly/monthly insights; `create_llm_service(config)` returns `None` when `gemini_api_key` is absent |
+| `src/llm_service.py` | `LLMService`: thin Gemini Flash wrapper for Telegram NL parsing and the daily dashboard insight; `create_llm_service(config)` returns `None` when `gemini_api_key` is absent |
 | `src/parsers/base.py` | Abstract `BankParser` — defines `can_parse()` / `parse()`, `ParseResult` dataclass |
 | `src/parsers/dbs_paylah.py` | DBS PayLah! email → Transaction (SGD prefix, To: merchant, Transaction Ref) |
 | `src/parsers/uob.py` | All UOB alert email formats → Transaction (card purchase, transit, reversal, PayNow, transfer) |
@@ -430,8 +430,8 @@ Utility classes defined in `src/web/frontend/src/index.css` under `@layer compon
 - **`.select-field`** — use on all native `<select>` elements. Includes the white SVG chevron via `background-image`. Never use `.input-field` on a `<select>`.
 - **`.grid-scroll-panel`** — use on grid-area children that may contain long content: `overflow-y: auto; min-height: 0`. The `min-height: 0` is critical and must not be removed.
 - **`.toggle-on`** — the switch fill, owned by `components/ui/switch.tsx`. Use `Switch`; never apply the class directly.
-- **`.area-header`**, **`.area-title`**, **`.area-left`**, **`.area-right`**, **`.area-top`** — `grid-area` assignments for named CSS Grid template areas. No-ops outside a grid parent (safe on mobile).
-- **`.page-grid-overview`**, **`.page-grid-finance`**, **`.page-grid-settings`** — per-page grid template definitions with responsive `@media` overrides. Mobile: single-column stack. Desktop (`md+`): multi-column viewport-filling grid.
+- **`.area-title`**, **`.area-left`**, **`.area-right`** — `grid-area` assignments for named CSS Grid template areas. No-ops outside a grid parent (safe on mobile).
+- **`.page-grid-settings`** — the remaining per-page grid template definition with responsive `@media` overrides. Mobile: single-column stack. Desktop (`md+`): multi-column viewport-filling grid.
 - **Radix `<SelectTrigger>` chevron** — always `opacity-50` (`<ChevronDown className="h-4 w-4 opacity-50" />`). Do not change to `text-foreground` or any explicit color. The 50% opacity is intentional and must be preserved across all usages.
 
 ### Navigation Pattern
@@ -440,7 +440,7 @@ Sidebar (`hidden md:flex`, `w-14` md / `w-56` lg, `sticky top-0 h-screen`, `bg-c
 
 Nav item states: active `bg-foreground/10 text-foreground font-medium`, inactive `text-muted hover:text-foreground hover:bg-foreground/5`. All nav targets have a 44px minimum hit area.
 
-**Single navigation mode (2026-09-25):** four destinations — Home `/`, Activity `/activity`, Plan `/plan` (+ `/plan/manage` for the existing subscriptions/budgets/goals tools), Explore `/explore` (nested: the dashboard index, `signals`, `health` and `merchants`; `/explore/insights` redirects to `/explore`). Settings and Review move behind the profile menu; Review also links from Home/Activity. `/overview` remains a permanent, unconditional route to the legacy `OverviewPage` for comparison — it is not part of the navigation and is not linked from anywhere in the shell.
+**Single navigation mode (2026-09-25):** four destinations — Home `/`, Activity `/activity`, Plan `/plan` (+ `/plan/manage` for the existing subscriptions/budgets/goals tools), Explore `/explore` (nested: the dashboard index, `signals`, `health` and `merchants`; `/explore/insights` redirects to `/explore`). Settings and Review move behind the profile menu; Review also links from Home/Activity. `/overview` redirects to Home; the legacy `OverviewPage` is archived at `archive/legacy-overview-2026-09-26/`.
 
 Old classic URLs (`/transactions`, `/analytics`, `/merchants`, `/finance`) redirect to their new-experience equivalent with suffix/query/fragment intact (`LegacyRedirect`), unconditionally. The `settings.home_briefing_enabled` toggle and the branching it drove (`AppShell`/`Sidebar`/`BottomTabs`/`CommandPalette`'s `newExperience` prop, the classic-vs-new ternaries in `App.tsx`, the "New experience" Settings row) were removed from `src/web/frontend/src`; the original, both-branches versions of those six files are preserved at `archive/legacy-classic-navigation-2026-09-25/` for reference or rollback. `FinancePage`, `MerchantsPage`, and `TransactionsPage` were never classic-only — each is still rendered directly by a current route (`/plan/manage`, `/explore/merchants`, `/activity`) — so only their old bare-URL rendering was removed, not the components themselves. `AnalyticsPage` was removed when Explore's Spending patterns and Insights merged into one dashboard (2026-09-25); its unique content (health score, AI daily read, alerts, income vs. spending) moved onto shared facts in `ExplorePatternsPage`.
 
@@ -462,8 +462,6 @@ On `md+` screens, dashboard pages fill the viewport with CSS Grid — no page-le
 
 | Page | CSS class | Areas | Columns (md+) | Rows (md+) |
 |---|---|---|---|---|
-| Overview | `.page-grid-overview` | `"header header" / "left right"` | `1fr 1.2fr` | `auto 1fr` |
-| Finance | `.page-grid-finance` | `"top top" / "left right"` | `1fr 1fr` | `auto 1fr` |
 | Settings | `.page-grid-settings` | `"title title" / "left right"` | `1fr 1fr` | `auto 1fr` |
 
 **Panel assignments:**
@@ -530,7 +528,7 @@ Pagination control (only rendered when `totalPages > 1`):
 
 - **Filter / quick-select chips:** use `ChoiceChip` (`components/ui/choice-chip.tsx`). "All time" is never highlighted as selected.
 - **Single-choice form values:** use `SegmentedChoice`. Same-panel view switches use `Tabs`; route selectors use `routeTabClassName`. Do not hand-build segmented button rows.
-- **Source labels:** Use `SOURCE_DISPLAY_LABELS` from `@/components/icons/sources` for human-readable source display names (e.g. `'DBS PayLah!'`, used in `TransactionDetail.tsx`). `SOURCE_LABELS` contains single-character glyphs for the `SourceGlyph` component and must not be used for readable text. Never hardcode source strings in UI text.
+- **Source labels:** Use `SOURCE_DISPLAY_LABELS` from `@/lib/sourceLabels` for human-readable source display names (e.g. `'DBS PayLah!'`, used in `TransactionDetail.tsx`). `SOURCE_LABELS` there holds single-character glyphs and must not be used for readable text. Never hardcode source strings in UI text.
 - **Error feedback:** Always `text-sm text-destructive`, inline below the relevant field or immediately below the submit button.
 - **Loading state:** Replace button label text (e.g. "Saving…"). Never leave the button without visual feedback during async operations.
 
@@ -606,7 +604,7 @@ Test files: `test_storage.py`, `test_categorizer.py`, `test_parsers.py`, `test_t
 - Use `config.example.yaml` as the template — it has placeholder values only
 - On Oracle Cloud, `config.yaml` and `credentials.json` are mounted as read-only volumes in docker-compose
 - Web sessions expire after 30 days of inactivity (sliding window, enforced in `AdminStorage.verify_session`)
-- Admin panel has IP-based login lockout: 5 failed attempts → 15-minute lockout
+- Admin and dashboard logins are rate-limited per connecting client address: 5 attempts per 15-minute window
 - New users created via admin panel have `force_password_change=1` — they are redirected to `SetPasswordPage` on first login
 - Telegram linking uses time-limited tokens (`telegram_link_tokens` table) rather than direct chat ID entry
 
