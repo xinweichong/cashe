@@ -1,33 +1,20 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { motion } from 'framer-motion';
 import { Pencil, Trash2, X, Check } from 'lucide-react';
 import { api, type GoalProgress } from '@/api/client';
 import { Button } from '@/components/ui/button';
-import { springs } from '@/lib/motionPresets';
 import { getGoalTone, formatCurrencyWhole } from '@/lib/utils';
 import { useGoals } from './planHooks';
 import { ConfirmDestructive, DetailHeader, DetailLoading, SectionLabel } from '@/components/ui/detail-panel';
+import { ProgressRing } from '@/components/ui/ProgressRing';
 
-function ProgressRing({ percent, color }: { percent: number; color: string }) {
-  const r = 40;
-  const circ = 2 * Math.PI * r;
-  const filled = (Math.min(percent, 100) / 100) * circ;
-  const strokeDashoffset = circ - filled;
+function GoalRing({ percent, color }: { percent: number; color: string }) {
   return (
-    <svg width="96" height="96" className="shrink-0">
-      <circle cx="48" cy="48" r={r} fill="none" stroke="var(--color-border)" strokeWidth="7" />
-      <motion.circle
-        cx="48" cy="48" r={r} fill="none" stroke={color} strokeWidth="7" strokeDasharray={circ} strokeLinecap="round"
-        transform="rotate(-90 48 48)"
-        initial={{ strokeDashoffset: circ }}
-        animate={{ strokeDashoffset }}
-        transition={springs.gentle}
-      />
+    <ProgressRing percent={percent} color={color} size={96} radius={40} strokeWidth={7} animated>
       <text x="48" y="53" textAnchor="middle" fontSize="16" fontWeight="600" fill="var(--color-foreground)">
         {percent.toFixed(0)}%
       </text>
-    </svg>
+    </ProgressRing>
   );
 }
 
@@ -136,7 +123,7 @@ export function GoalDetail({ goalId, onClose }: { goalId: number; onClose: () =>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         <div className="flex items-start gap-4">
-          <ProgressRing percent={g.percent} color={goalColor} />
+          <GoalRing percent={g.percent} color={goalColor} />
           <div className="flex-1 min-w-0">
             {onTrackLabel && <span className={`text-xs font-medium ${onTrackColor}`}>{onTrackLabel}</span>}
             <p className="text-sm text-foreground mt-1">{formatCurrencyWhole(g.saved_amount)} saved of {formatCurrencyWhole(g.target_amount)}</p>

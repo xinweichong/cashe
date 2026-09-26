@@ -1,9 +1,11 @@
 import { useEffect, type ReactNode } from 'react';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
-import { motion, useReducedMotion, type PanInfo } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { ChevronLeft } from 'lucide-react';
 import { SheetOverlay, SheetPortal } from '@/components/ui/sheet';
 import { tapFeedback } from '@/lib/haptics';
+import { useDragDismiss } from '@/hooks/useDragDismiss';
+import { EdgeGrip } from './EdgeGrip';
 
 // Approved shared owner (phone redesign, 2026-09-25): the phone's drill-in
 // card. It slides in from the right over the tab, and dragging it right
@@ -21,32 +23,21 @@ interface DrillSheetProps {
   children: ReactNode;
 }
 
-const DISMISS_DISTANCE = 96;
-const DISMISS_VELOCITY = 500;
-
 export function DrillSheet({ open, onOpenChange, title, backLabel, description, footer, children }: DrillSheetProps) {
-  const reduceMotion = useReducedMotion();
   useEffect(() => {
     if (open) tapFeedback();
   }, [open]);
-  const onDragEnd = (_: unknown, info: PanInfo) => {
-    if (info.offset.x > DISMISS_DISTANCE || info.velocity.x > DISMISS_VELOCITY) onOpenChange(false);
-  };
+  const dragDismiss = useDragDismiss(() => onOpenChange(false));
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
       <SheetPortal>
         <SheetOverlay />
         <DialogPrimitive.Content asChild>
           <motion.div
-            drag={reduceMotion ? false : 'x'}
-            dragDirectionLock
-            dragConstraints={{ left: 0, right: 0 }}
-            dragElastic={{ left: 0, right: 0.9 }}
-            onDragEnd={onDragEnd}
+            {...dragDismiss}
             className="sheet-motion-right fixed inset-y-0 right-0 z-50 flex w-full flex-col border-l border-border bg-card-elev text-foreground shadow-elev-md focus:outline-none"
           >
-            {/* Edge grip: the cue that the card drags right to go back. */}
-            <span aria-hidden className="pointer-events-none absolute left-1.5 top-1/2 h-10 w-1 -translate-y-1/2 rounded-full bg-muted/50" />
+            <EdgeGrip />
             <div className="shrink-0 pt-[env(safe-area-inset-top)] border-b border-border">
               <div className="flex items-center gap-1 px-2 h-12">
                 <DialogPrimitive.Close className="inline-flex min-h-11 min-w-11 items-center gap-1 rounded-sm pl-1 pr-3 text-sm text-teal active:scale-[0.97] transition-transform focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">

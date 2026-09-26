@@ -10,21 +10,14 @@ import { SelectableRow } from '@/components/ui/selectable-row';
 import { getGoalTone, formatCurrencyWhole } from '@/lib/utils';
 import { staggerContainerVariants, staggerItemVariants } from '@/lib/motionPresets';
 import { useGoals } from './planHooks';
+import { ProgressRing } from '@/components/ui/ProgressRing';
 
 function GoalSummaryRow({ g, onSelect }: { g: GoalProgress; onSelect: () => void }) {
   const { color } = getGoalTone(g.percent);
   const isComplete = g.status === 'completed' || g.percent >= 100;
   return (
     <SelectableRow onClick={onSelect} className="rounded-none border-b border-border last:border-b-0 py-3">
-      <svg width="36" height="36" className="shrink-0">
-        <circle cx="18" cy="18" r="15" fill="none" stroke="var(--color-border)" strokeWidth="4" />
-        <circle
-          cx="18" cy="18" r="15" fill="none" stroke={color} strokeWidth="4" strokeLinecap="round"
-          strokeDasharray={2 * Math.PI * 15}
-          strokeDashoffset={2 * Math.PI * 15 * (1 - Math.min(g.percent, 100) / 100)}
-          transform="rotate(-90 18 18)"
-        />
-      </svg>
+      <ProgressRing percent={g.percent} color={color} size={36} radius={15} strokeWidth={4} />
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <span className="text-sm font-semibold text-foreground truncate">{g.name}</span>

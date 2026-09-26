@@ -10,10 +10,9 @@ import { getGoalTone } from '@/lib/utils';
 import { springs } from '@/lib/motionPresets';
 import { useChartTheme } from '@/lib/chartTheme';
 import { formatRange } from './format';
+import { ProgressRing } from '@/components/ui/ProgressRing';
 
 const PILLAR_ORDER = ['savings_rate', 'needs_ratio', 'wants_ratio', 'budget_adherence', 'anomaly_frequency'] as const;
-const RADIUS = 40;
-const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 
 function pillarValue(key: (typeof PILLAR_ORDER)[number], value: number, benchmark?: number | null): string {
   if (key === 'anomaly_frequency') return `${value} ${value === 1 ? 'purchase' : 'purchases'}`;
@@ -25,17 +24,12 @@ function ScoreRing({ score }: { score: number | null }) {
   const { COLOR_TRACK, COLOR_FOREGROUND } = useChartTheme();
   const ringColor = score == null ? COLOR_TRACK : getGoalTone(score).color;
   return (
-    <svg width="96" height="96" className="shrink-0" role="img" aria-label={`Health score ${score} out of 100`}>
-      <circle cx="48" cy="48" r={RADIUS} fill="none" stroke={COLOR_TRACK} strokeWidth="6" />
-      <motion.circle
-        cx="48" cy="48" r={RADIUS} fill="none" stroke={ringColor} strokeWidth="6"
-        strokeDasharray={CIRCUMFERENCE} strokeLinecap="round" transform="rotate(-90 48 48)"
-        initial={{ strokeDashoffset: CIRCUMFERENCE }}
-        animate={{ strokeDashoffset: CIRCUMFERENCE - ((score ?? 0) / 100) * CIRCUMFERENCE }}
-        transition={springs.gentle}
-      />
+    <ProgressRing
+      percent={score ?? 0} color={ringColor} track={COLOR_TRACK} size={96} radius={40} strokeWidth={6} animated
+      role="img" aria-label={`Health score ${score} out of 100`}
+    >
       <text x="48" y="54" textAnchor="middle" fontSize="22" fontWeight="700" fill={COLOR_FOREGROUND}>{score}</text>
-    </svg>
+    </ProgressRing>
   );
 }
 

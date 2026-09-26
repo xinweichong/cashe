@@ -1,9 +1,11 @@
 import { useEffect, type ReactNode } from 'react';
-import { AnimatePresence, motion, useReducedMotion, type PanInfo } from 'framer-motion';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { useIsPhone } from '@/hooks/useIsPhone';
 import { fadeVariants, pushInRightVariants, slideInRightVariants } from '@/lib/motionPresets';
 import { tapFeedback } from '@/lib/haptics';
 import { cn } from '@/lib/utils';
+import { useDragDismiss } from '@/hooks/useDragDismiss';
+import { EdgeGrip } from './EdgeGrip';
 
 // Approved shared owner (phone redesign, 2026-09-26): the route-held detail
 // panel (a transaction, budget, goal, subscription or trip). A side panel
@@ -11,9 +13,6 @@ import { cn } from '@/lib/utils';
 // right to close, so every drill-in on the phone slides back the same way.
 // One element for both layouts, so an in-progress edit survives crossing
 // the breakpoint.
-
-const DISMISS_DISTANCE = 96;
-const DISMISS_VELOCITY = 500;
 
 export function SlideOver({ show, onClose, className, children }: {
   show: boolean;
@@ -27,9 +26,7 @@ export function SlideOver({ show, onClose, className, children }: {
   useEffect(() => {
     if (show && isPhone) tapFeedback();
   }, [show, isPhone]);
-  const onDragEnd = (_: unknown, info: PanInfo) => {
-    if (info.offset.x > DISMISS_DISTANCE || info.velocity.x > DISMISS_VELOCITY) onClose();
-  };
+  const dragDismiss = useDragDismiss(onClose, isPhone);
   return (
     <AnimatePresence>
       {show && (
@@ -39,13 +36,9 @@ export function SlideOver({ show, onClose, className, children }: {
           initial="initial"
           animate="animate"
           exit="exit"
-          drag={isPhone && !reduceMotion ? 'x' : false}
-          dragDirectionLock
-          dragConstraints={{ left: 0, right: 0 }}
-          dragElastic={{ left: 0, right: 0.9 }}
-          onDragEnd={onDragEnd}
+          {...dragDismiss}
         >
-          {isPhone && <span aria-hidden className="pointer-events-none absolute left-1.5 top-1/2 z-10 h-10 w-1 -translate-y-1/2 rounded-full bg-muted/50" />}
+          {isPhone && <EdgeGrip />}
           {children}
         </motion.div>
       )}
