@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { type Transaction, type DailyTotalV2 } from '@/api/client';
 import { TransactionRow } from './TransactionRow';
@@ -87,6 +87,29 @@ function groupByDay(transactions: Transaction[]): Row[] {
   return rows;
 }
 
+// Memoised so changing the selection re-renders only the rows whose
+// `selected` flips, not every loaded row.
+const ListRow = memo(function ListRow({ tx, index, selected, selectable, compact, onActivate }: {
+  tx: Transaction; index: number; selected: boolean; selectable: boolean; compact: boolean;
+  onActivate: (tx: Transaction) => void;
+}) {
+  return (
+    <motion.div
+      data-tx-row-id={tx.id}
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, transition: { duration: 0.12 } }}
+      transition={{
+        duration: 0.2,
+        ease: EASE_OUT_EXPO,
+        delay: index < STAGGER_LIMIT ? index * 0.025 : 0,
+      }}
+    >
+      <TransactionRow tx={tx} onClick={() => onActivate(tx)} selected={selected} selectable={selectable} compact={compact} />
+    </motion.div>
+  );
+});
+
 export function TransactionList({
   transactions,
   onLoadMore,
@@ -102,6 +125,17 @@ export function TransactionList({
   compactRows = false,
 }: TransactionListProps) {
   const observerRef = useRef<HTMLDivElement>(null);
+  const rows = useMemo(() => groupByDay(transactions), [transactions]);
+  // A stable click handler that always sees the latest props, so memoised
+  // rows don't re-render just because the parent passed new callbacks.
+  const latest = useRef({ selectionMode, onToggleSelect, onTransactionClick });
+  useLayoutEffect(() => {
+    latest.current = { selectionMode, onToggleSelect, onTransactionClick };
+  });
+  const activate = useCallback((tx: Transaction) => {
+    const { selectionMode, onToggleSelect, onTransactionClick } = latest.current;
+    if (selectionMode) onToggleSelect?.(tx.id); else onTransactionClick(tx);
+  }, []);
 
   useEffect(() => {
     if (!hasMore || isLoading) return;
@@ -134,8 +168,6 @@ export function TransactionList({
     );
   }
 
-  const rows = groupByDay(transactions);
-
   return (
     <div>
       <AnimatePresence>
@@ -143,26 +175,15 @@ export function TransactionList({
           row.kind === 'header' ? (
             <DayHeader key={`day-${row.day}`} dayKey={row.day} total={dailyTotals?.get(row.day)} sticky={stickyDayHeaders} />
           ) : (
-            <motion.div
+            <ListRow
               key={row.tx.id}
-              data-tx-row-id={row.tx.id}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, transition: { duration: 0.12 } }}
-              transition={{
-                duration: 0.2,
-                ease: EASE_OUT_EXPO,
-                delay: row.index < STAGGER_LIMIT ? row.index * 0.025 : 0,
-              }}
-            >
-              <TransactionRow
-                tx={row.tx}
-                onClick={() => (selectionMode ? onToggleSelect?.(row.tx.id) : onTransactionClick(row.tx))}
-                selected={selectionMode ? !!selectedIds?.has(row.tx.id) : row.tx.id === selectedTransactionId}
-                selectable={selectionMode}
-                compact={compactRows}
-              />
-            </motion.div>
+              tx={row.tx}
+              index={row.index}
+              selected={selectionMode ? !!selectedIds?.has(row.tx.id) : row.tx.id === selectedTransactionId}
+              selectable={selectionMode}
+              compact={compactRows}
+              onActivate={activate}
+            />
           )
         )}
       </AnimatePresence>

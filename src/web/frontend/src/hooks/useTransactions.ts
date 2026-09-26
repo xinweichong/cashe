@@ -27,10 +27,11 @@ function patchRow<T extends Row>(row: T, patch: Record<string, unknown>): T {
   return { ...row, ...own };
 }
 
-export function useTransactions(params?: Record<string, string | number>) {
+export function useTransactions(params?: Record<string, string | number>, { enabled = true }: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: ['transactions', params],
     queryFn: () => api.getTransactions(params),
+    enabled,
   });
 }
 

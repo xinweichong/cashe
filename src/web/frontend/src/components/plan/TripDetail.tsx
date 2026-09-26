@@ -47,7 +47,7 @@ export function TripDetail({ tripId, onClose }: { tripId: number; onClose: () =>
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['trip-transactions', tripId] });
       qc.invalidateQueries({ queryKey: ['trip-summary', tripId] });
-      qc.invalidateQueries({ queryKey: ['trip-membership', tripId] });
+      qc.invalidateQueries({ queryKey: ['transaction-trips'] });
     },
   });
 

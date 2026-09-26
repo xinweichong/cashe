@@ -2521,6 +2521,13 @@ class Storage:
         return [dict(r) for r in rows]
 
     @_locked
+    def get_trip_ids_for_transaction(self, tx_id: int) -> list[int]:
+        """Every trip transaction tx_id is enlisted in."""
+        return [r[0] for r in self._conn.execute(
+            "SELECT trip_id FROM trip_transactions WHERE transaction_id = ? ORDER BY trip_id", (tx_id,),
+        )]
+
+    @_locked
     def is_in_trip(self, trip_id: int, tx_id: int) -> bool:
         """Return True if transaction tx_id is enlisted in trip trip_id."""
         row = self._conn.execute(

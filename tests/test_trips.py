@@ -485,7 +485,7 @@ class TestTripAPI:
         assert (await ac.get(f"/api/trips/{trip_id}/transactions")).json() == []
 
     @pytest.mark.asyncio
-    async def test_check_trip_membership(self, api):
+    async def test_transaction_trips_lists_enlisted_trips(self, api):
         ac, storage = api
         db = storage._conn
         db.execute(
@@ -497,13 +497,13 @@ class TestTripAPI:
         create = await ac.post("/api/trips", json={"name": "X", "start_date": "2026-04-01"})
         trip_id = create.json()["id"]
 
-        resp = await ac.get(f"/api/trips/{trip_id}/transactions/{tx_id}/membership")
+        resp = await ac.get(f"/api/transactions/{tx_id}/trips")
         assert resp.status_code == 200
-        assert resp.json()["in_trip"] is False
+        assert resp.json() == {"trip_ids": []}
 
         await ac.post(f"/api/trips/{trip_id}/transactions", json={"transaction_id": tx_id})
-        resp = await ac.get(f"/api/trips/{trip_id}/transactions/{tx_id}/membership")
-        assert resp.json()["in_trip"] is True
+        resp = await ac.get(f"/api/transactions/{tx_id}/trips")
+        assert resp.json() == {"trip_ids": [trip_id]}
 
     @pytest.mark.asyncio
     async def test_settings_include_trips_enabled(self, api):

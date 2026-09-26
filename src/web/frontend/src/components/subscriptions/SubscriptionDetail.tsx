@@ -57,7 +57,7 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
   const { data: merchantTxs = [] } = useQuery({
     queryKey: ['merchant-transactions-for-link', sub?.merchant],
     queryFn: () => api.getTransactions({ merchant: sub!.merchant, limit: 100 }),
-    enabled: sub != null,
+    enabled: sub != null && showLinkPicker,
     staleTime: 60_000,
   });
 
@@ -71,7 +71,8 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
     queryKey: ['transactions', 'match-picker', ninetyDaysAgo, today],
     queryFn: () =>
       api.getTransactions({ start_date: ninetyDaysAgo, end_date: today, limit: 50 }) as Promise<Transaction[]>,
-    enabled: sub != null,
+    // Only the match picker on a pending charge uses these.
+    enabled: sub != null && sub.status !== 'paused' && upcoming.some((u: UpcomingTransaction) => u.status === 'pending'),
   });
 
   const cancelMutation = useMutation({

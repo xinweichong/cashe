@@ -23,6 +23,7 @@ import { X, Pencil, Trash2, Check, ExternalLink } from 'lucide-react';
 import { SOURCE_DISPLAY_LABELS } from '@/lib/sourceLabels';
 import { useSettings } from '@/hooks/useSettings';
 import { useTrips } from '@/components/plan/planHooks';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 
 export function TransactionDetail({
   transaction: tx,
@@ -426,7 +427,9 @@ function RefundEvidenceSection({ tx }: { tx: Transaction }) {
     queryFn: () => api.getTransactionV2(tx.id),
   });
 
-  const { data: candidates = [] } = useTransactions({ merchant_search: query, limit: 8 });
+  // Only searched while the picker is open, and not on every keystroke.
+  const debouncedQuery = useDebouncedValue(query);
+  const { data: candidates = [] } = useTransactions({ merchant_search: debouncedQuery, limit: 8 }, { enabled: linking });
   const purchaseCandidates = candidates.filter(
     (c) => c.id !== tx.id && (c.type === 'expense' || !c.type)
   );
@@ -571,17 +574,11 @@ function DetailRow({
   );
 }
 
-function TripMembershipItem({ trip, txId }: { trip: Trip; txId: number }) {
+function TripMembershipItem({ trip, txId, inTrip }: { trip: Trip; txId: number; inTrip: boolean }) {
   const qc = useQueryClient();
 
-  const { data: membership } = useQuery({
-    queryKey: ['trip-membership', trip.id, txId],
-    queryFn: () => api.checkTripMembership(trip.id, txId),
-    staleTime: 30_000,
-  });
-
   const invalidate = () => {
-    qc.invalidateQueries({ queryKey: ['trip-membership', trip.id, txId] });
+    qc.invalidateQueries({ queryKey: ['transaction-trips', txId] });
     qc.invalidateQueries({ queryKey: ['trip-transactions', trip.id] });
     qc.invalidateQueries({ queryKey: ['trip-summary', trip.id] });
   };
@@ -595,8 +592,6 @@ function TripMembershipItem({ trip, txId }: { trip: Trip; txId: number }) {
     mutationFn: () => api.delistTransaction(trip.id, txId),
     onSuccess: invalidate,
   });
-
-  const inTrip = membership?.in_trip ?? false;
 
   return (
     <div className="flex items-center justify-between gap-2">
@@ -622,16 +617,25 @@ function TripMembershipItem({ trip, txId }: { trip: Trip; txId: number }) {
 function TripMembershipRow({ txId }: { txId: number }) {
   const { data: settings } = useSettings();
 
-  const { data: trips = [] } = useTrips({ enabled: settings?.trips_enabled === true });
+  const tripsEnabled = settings?.trips_enabled === true;
+  const { data: trips = [] } = useTrips({ enabled: tripsEnabled });
+  // One request for every trip's membership rather than one per trip.
+  const { data: membership } = useQuery({
+    queryKey: ['transaction-trips', txId],
+    queryFn: () => api.getTransactionTripIds(txId),
+    enabled: tripsEnabled && trips.length > 0,
+    staleTime: 30_000,
+  });
+  const tripIds = new Set(membership?.trip_ids ?? []);
 
-  if (!settings?.trips_enabled || trips.length === 0) return null;
+  if (!tripsEnabled || trips.length === 0) return null;
 
   return (
     <div className="flex justify-between gap-4">
       <span className="text-xs text-muted shrink-0">Trips</span>
       <div className="flex flex-col gap-1 items-end flex-1 min-w-0">
         {trips.map((trip) => (
-          <TripMembershipItem key={trip.id} trip={trip} txId={txId} />
+          <TripMembershipItem key={trip.id} trip={trip} txId={txId} inTrip={tripIds.has(trip.id)} />
         ))}
       </div>
     </div>

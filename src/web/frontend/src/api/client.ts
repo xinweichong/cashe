@@ -671,8 +671,8 @@ export const api = {
       method: 'DELETE',
     }),
 
-  checkTripMembership: (tripId: number, txId: number) =>
-    request<{ in_trip: boolean }>(`/api/trips/${tripId}/transactions/${txId}/membership`),
+  getTransactionTripIds: (txId: number) =>
+    request<{ trip_ids: number[] }>(`/api/transactions/${txId}/trips`),
 
   // Subscriptions
   getSubscriptions: () =>

@@ -1441,9 +1441,9 @@ def create_dashboard_app(
         await _db(storage.delist_transaction, trip_id, tx_id)
         return {"status": "ok"}
 
-    @app.get("/api/trips/{trip_id}/transactions/{tx_id}/membership")
-    async def check_trip_membership(trip_id: int, tx_id: int, storage=Depends(_get_storage)):
-        return {"in_trip": await _db(storage.is_in_trip, trip_id, tx_id)}
+    @app.get("/api/transactions/{tx_id}/trips")
+    async def transaction_trips(tx_id: int, storage=Depends(_get_storage)):
+        return {"trip_ids": await _db(storage.get_trip_ids_for_transaction, tx_id)}
 
     # ── Subscriptions ──────────────────────────────────────────────────────────
 
