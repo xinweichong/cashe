@@ -6,7 +6,7 @@ import { Card } from '@/components/ui/card';
 import { SelectableRow } from '@/components/ui/selectable-row';
 import { cn } from '@/lib/utils';
 import { tapFeedback } from '@/lib/haptics';
-import { springs } from '@/lib/motionPresets';
+import { quickFade, springs } from '@/lib/motionPresets';
 
 // Approved shared owner (phone redesign, 2026-09-25): one phone tab as one
 // screen. The glance sits on top, one lens panel fills the middle, and the
@@ -115,8 +115,8 @@ export function PhoneScreen<T extends string>({ glance, lenses, lens, onLensChan
       <div className={cn('relative flex-1 min-h-0', LARGER_PANEL)}>
         {/* No initial={false} here: it would reach into panels whose own
             staggered lists mount after data loads and leave them at their
-            hidden initial state. The panel's first fade-in is the cost. */}
-        {/* Panels are already absolutely stacked, so a plain crossfade needs
+            hidden initial state. The panel's first fade-in is the cost.
+            Panels are already absolutely stacked, so a plain crossfade needs
             no popLayout measurement pass. */}
         <AnimatePresence>
           {lenses.filter((l) => l.value === lens).map((l) => (
@@ -125,7 +125,7 @@ export function PhoneScreen<T extends string>({ glance, lenses, lens, onLensChan
                 initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, transition: { duration: 0.08 } }}
-                transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+                transition={quickFade}
                 className="absolute inset-0 will-change-[opacity,transform]"
               >
                 <LensScroller bare={l.bare}>{l.panel}</LensScroller>

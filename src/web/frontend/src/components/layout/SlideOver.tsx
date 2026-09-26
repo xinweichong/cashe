@@ -1,7 +1,7 @@
 import { useEffect, type ReactNode } from 'react';
-import { AnimatePresence, motion, useReducedMotion, type PanInfo, type Variants } from 'framer-motion';
+import { AnimatePresence, motion, useReducedMotion, type PanInfo } from 'framer-motion';
 import { useIsPhone } from '@/hooks/useIsPhone';
-import { slideInRightVariants } from '@/lib/motionPresets';
+import { fadeVariants, pushInRightVariants, slideInRightVariants } from '@/lib/motionPresets';
 import { tapFeedback } from '@/lib/haptics';
 import { cn } from '@/lib/utils';
 
@@ -11,20 +11,6 @@ import { cn } from '@/lib/utils';
 // right to close, so every drill-in on the phone slides back the same way.
 // One element for both layouts, so an in-progress edit survives crossing
 // the breakpoint.
-
-// On a phone the panel travels the full width like a native push, on a
-// fixed ease-out curve (a spring's settle read as lag); reduced motion keeps
-// only the fade.
-const PHONE_SLIDE: Variants = {
-  initial: { x: '100%' },
-  animate: { x: 0, transition: { duration: 0.3, ease: [0.16, 1, 0.3, 1] } },
-  exit: { x: '100%', transition: { duration: 0.2, ease: [0.4, 0, 1, 1] } },
-};
-const FADE: Variants = {
-  initial: { opacity: 0 },
-  animate: { opacity: 1, transition: { duration: 0.15 } },
-  exit: { opacity: 0, transition: { duration: 0.1 } },
-};
 
 const DISMISS_DISTANCE = 96;
 const DISMISS_VELOCITY = 500;
@@ -49,7 +35,7 @@ export function SlideOver({ show, onClose, className, children }: {
       {show && (
         <motion.div
           className={cn('fixed inset-y-0 right-0 z-50 w-full overflow-hidden border-l border-border bg-card shadow-elev-md will-change-transform', className)}
-          variants={reduceMotion ? FADE : isPhone ? PHONE_SLIDE : slideInRightVariants}
+          variants={reduceMotion ? fadeVariants : isPhone ? pushInRightVariants : slideInRightVariants}
           initial="initial"
           animate="animate"
           exit="exit"

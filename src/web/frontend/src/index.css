@@ -278,7 +278,6 @@ body {
     inset: 0;
     background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--color-foreground) 6%, transparent), transparent);
     animation: skeleton-shimmer 1.5s ease-in-out infinite;
-    will-change: transform;
   }
 
   /* ── Hero glow pulse (one per screen max) ──────────────────────────── */

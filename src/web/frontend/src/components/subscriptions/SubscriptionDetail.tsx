@@ -5,7 +5,7 @@ import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recha
 import { Ban, Pencil, Trash2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ChartCard } from '@/components/ui/cards';
-import { useChartTheme } from '@/lib/chartTheme';
+import { CHART_MOTION, useChartTheme } from '@/lib/chartTheme';
 import { api, type Subscription, type Transaction, type UpcomingTransaction } from '@/api/client';
 import { SubscriptionForm } from './SubscriptionForm';
 
@@ -328,7 +328,7 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
                       <XAxis dataKey="date" {...CHART_AXIS_PROPS} />
                       <YAxis hide />
                       <Tooltip contentStyle={CHART_TOOLTIP_STYLE} cursor={CHART_CURSOR_BAR} />
-                      <Bar dataKey="amount" fill={COLOR_TEAL} radius={[4, 4, 0, 0]} />
+                      <Bar {...CHART_MOTION} dataKey="amount" fill={COLOR_TEAL} radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
                 </ChartCard>

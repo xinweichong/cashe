@@ -7,6 +7,7 @@ import { Command } from 'cmdk';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { api } from '@/api/client';
 import { toDateStr } from '@/lib/utils';
+import { springs } from '@/lib/motionPresets';
 import { Store, Settings, Plus } from 'lucide-react';
 
 const ITEM_CLASS =
@@ -57,7 +58,7 @@ export function CommandPalette() {
           initial={{ opacity: 0, scale: 0.97, y: -8 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.97, y: -8 }}
-          transition={{ type: 'tween', ease: [0.16, 1, 0.3, 1], duration: 0.2 }}
+          transition={{ ...springs.expo, duration: 0.2 }}
         >
           <Command
             label="Command palette"

@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { ChoiceChip } from '@/components/ui/choice-chip';
 import { Button } from '@/components/ui/button';
 import { ChartCard } from '@/components/ui/cards';
-import { useChartTheme } from '@/lib/chartTheme';
+import { CHART_MOTION, useChartTheme } from '@/lib/chartTheme';
 import { X } from 'lucide-react';
 import { formatCurrency, isCreditType } from '@/lib/utils';
 import { ALL_TAGS, formatSGD } from '@/lib/merchants';
@@ -182,7 +182,7 @@ export function MerchantProfile({
                 contentStyle={CHART_TOOLTIP_STYLE}
                 cursor={CHART_CURSOR_BAR}
               />
-              <Bar dataKey="Total" fill={COLOR_TEAL} radius={[3, 3, 0, 0]} />
+              <Bar {...CHART_MOTION} dataKey="Total" fill={COLOR_TEAL} radius={[3, 3, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>
