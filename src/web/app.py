@@ -12,7 +12,6 @@ from functools import partial
 from typing import Literal, Optional
 from zoneinfo import ZoneInfo
 
-import bcrypt
 from fastapi import FastAPI, Request, Response, HTTPException, Depends, Query
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -20,18 +19,20 @@ import csv
 import io
 from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 
-from src.storage import RevisionConflict, SubscriptionMatchConflict, TransactionRequestConflict
+from src.storage import Conflict, NotFound, RevisionConflict
 from src import transaction_commands
 from src.money import to_minor_units, from_minor_units
 from src.spending_facts import resolve_money
 from src.config import DEFAULT_TIMEZONE, local_now
-from src.web.auth import verify_password, create_session, verify_session, destroy_session
+from src.web.auth import LoginRateLimiter, create_session, destroy_session, hash_password, verify_password, verify_session
 from src.web.contracts import BudgetProgress, BulkTransactionRequest, BulkTransactionResultItem, BulkUndoRequest, CaptureFollowup, CaptureIssue, CaptureResolution, CategoryBreakdown, CategoryTrendPoint, DailyTotal, GoalProgress, HealthScore, HomeBriefing, MerchantRanking, MerchantSummary, QueuedResponse, SpendingEvidence, SpendingFacts, SpendingReview, TransactionCorrection, TransactionCreate, TransactionDeletion, TransactionProvenance, TransactionUndo, TransactionV2, TripSummary, UpcomingPlan, UpcomingCalendar, PlanMutationResponse, RecurringReview, RecurringResolution, RefundMatchReview, RefundMatchResolution, DuplicateReview, DuplicateDismissal, DuplicateMergeRequest, DuplicateMergeResult, DuplicateMergeUndoResult, SubscriptionReview, WeekdayPattern, MonthForecast, ScenarioRequest, ScenarioResponse, SpendingSignals, MonthlyFlow
 
 logger = logging.getLogger(__name__)
 
 
-# DB thread pool: allows concurrent read queries while serialising writes via SQLite WAL mode.
+# Keeps blocking SQLite calls off the event loop. Each Storage serialises its
+# own calls (one lock per instance), so the workers run different users' and
+# the admin database's calls concurrently, never one database's.
 _DB_EXECUTOR = ThreadPoolExecutor(max_workers=4)
 
 
@@ -39,6 +40,50 @@ async def _db(fn, *args, **kwargs):
     """Run a synchronous storage/DB call in the dedicated DB thread pool."""
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(_DB_EXECUTOR, partial(fn, *args, **kwargs))
+
+
+def _http_error(exc: ValueError, default: int) -> HTTPException:
+    """Storage's NotFound and Conflict carry their own status; any other
+    ValueError is a bad request with the route's `default` status."""
+    status = 404 if isinstance(exc, NotFound) else 409 if isinstance(exc, Conflict) else default
+    return HTTPException(status_code=status, detail=str(exc))
+
+
+def _parse_bool_setting(value) -> str:
+    if not isinstance(value, bool):
+        raise ValueError("must be a boolean")
+    return "true" if value else "false"
+
+
+def _parse_ranged_setting(cast, low, high, kind):
+    def parse(value) -> str:
+        try:
+            value = cast(value)
+        except (TypeError, ValueError):
+            raise ValueError(f"must be {kind}") from None
+        if not low <= value <= high:
+            raise ValueError(f"must be between {low} and {high}")
+        return str(value)
+    return parse
+
+
+def _is_true(value: str) -> bool:
+    return value == "true"
+
+
+# key → (stored default, read the stored string, validate a PUT value into
+# the string to store). Drives both GET and PUT /api/settings.
+SETTINGS = {
+    "anomaly_multiplier": ("2.0", float, _parse_ranged_setting(float, 1.0, 10.0, "a number")),
+    "velocity_alert_threshold": ("110", int, _parse_ranged_setting(int, 50, 300, "an integer")),
+    **{key: ("false", _is_true, _parse_bool_setting) for key in (
+        "budgets_enabled", "goals_enabled", "trips_enabled", "subscriptions_enabled",
+        "recurring_enabled", "home_briefing_enabled",
+    )},
+    "category_colors_snapped_v2": ("false", str, str),
+}
+# Accepted by PUT but never returned.
+WRITE_ONLY_SETTINGS = {"category_colors_pre_v2": str}
 
 
 VALID_SUBSCRIPTION_FREQUENCIES = {"weekly", "biweekly", "monthly", "quarterly", "annual"}
@@ -56,7 +101,7 @@ def create_dashboard_app(
     app.add_middleware(GZipMiddleware, minimum_size=500)
 
     oauth_states: dict[str, tuple[str, str, float]] = {}
-    login_attempts: dict[str, list[float]] = {}
+    login_limiter = LoginRateLimiter()
 
     @app.get("/oauth/callback")
     async def oauth_callback(request: Request):
@@ -73,10 +118,9 @@ def create_dashboard_app(
         if not ctx:
             return Response(content="<h2>Unknown user.</h2>", media_type="text/html", status_code=404)
         try:
-            loop = asyncio.get_running_loop()
-            await loop.run_in_executor(_DB_EXECUTOR, partial(ctx.poller.complete_reauth, code, state))
+            await _db(ctx.poller.complete_reauth, code, state)
             user_manager.start_poller(username)
-            await loop.run_in_executor(_DB_EXECUTOR, partial(admin_storage.update_user, username, gmail_connected=1))
+            await _db(admin_storage.update_user, username, gmail_connected=1)
             return Response(
                 content="<h2>Gmail connected. You can close this tab.</h2>",
                 media_type="text/html",
@@ -92,29 +136,21 @@ def create_dashboard_app(
         password = body.get("password", "")
         if not isinstance(username, str) or not isinstance(password, str):
             raise HTTPException(status_code=422, detail="Username and password must be strings")
-        now = time.monotonic()
-        # Reserve an attempt before awaiting bcrypt, including concurrent requests.
-        for key in list(login_attempts):
-            login_attempts[key] = [stamp for stamp in login_attempts[key] if stamp > now - 900]
-            if not login_attempts[key]:
-                del login_attempts[key]
         keys = ["user:" + username.casefold(), "ip:" + (request.client.host if request.client else "unknown")]
-        if any(len(login_attempts.get(key, [])) >= 5 for key in keys):
+        stamp = login_limiter.reserve(keys, time.monotonic())
+        if stamp is None:
             raise HTTPException(status_code=429, detail="Too many attempts. Try again in 15 minutes.")
-        for key in keys:
-            login_attempts.setdefault(key, []).append(now)
         loop = asyncio.get_running_loop()
-        user = await loop.run_in_executor(_DB_EXECUTOR, admin_storage.get_user, username)
+        user = await _db(admin_storage.get_user, username)
         if not user:
             raise HTTPException(status_code=401, detail="Invalid username or password")
         ok = await loop.run_in_executor(None, verify_password, password, user["password_hash"])
         if not ok:
             raise HTTPException(status_code=401, detail="Invalid username or password")
-        login_attempts.pop(keys[0], None)
-        if keys[1] in login_attempts:
-            login_attempts[keys[1]] = [stamp for stamp in login_attempts[keys[1]] if stamp != now]
+        login_limiter.clear(keys[0])
+        login_limiter.release(keys[1], stamp)
         user_agent = request.headers.get("User-Agent", "")
-        token = await loop.run_in_executor(_DB_EXECUTOR, create_session, username, user_agent)
+        token = await _db(create_session, username, user_agent)
         secure_cookies = os.environ.get("SECURE_COOKIES", "true") == "true"
         response = JSONResponse({"status": "ok"})
         response.set_cookie(
@@ -132,11 +168,10 @@ def create_dashboard_app(
 
     async def require_auth(request: Request) -> str:
         session = request.cookies.get("session")
-        loop = asyncio.get_running_loop()
-        username = await loop.run_in_executor(_DB_EXECUTOR, verify_session, session) if session else None
+        username = await _db(verify_session, session) if session else None
         if not username:
             raise HTTPException(status_code=401, detail="Not authenticated")
-        user = await loop.run_in_executor(_DB_EXECUTOR, admin_storage.get_user, username)
+        user = await _db(admin_storage.get_user, username)
         if user and user["force_password_change"] and request.url.path not in _FORCE_PW_ALLOWED:
             raise HTTPException(status_code=403, detail="Password change required")
         return username
@@ -159,7 +194,7 @@ def create_dashboard_app(
     async def logout(request: Request, response: Response):
         session = request.cookies.get("session")
         if session:
-            destroy_session(session)
+            await _db(destroy_session, session)
         response.delete_cookie("session", httponly=True, samesite="lax")
         return {"status": "ok"}
 
@@ -199,14 +234,14 @@ def create_dashboard_app(
         try:
             return await _db(storage.set_capture_issue_handled, event_id, handled)
         except ValueError as exc:
-            raise HTTPException(status_code=404 if str(exc).endswith("not found") else 409, detail=str(exc))
+            raise _http_error(exc, 409)
 
     @app.post("/api/v2/capture/issues/{event_id}/retry", response_model=QueuedResponse)
     async def retry_capture_issue(event_id: int, storage=Depends(_get_storage)):
         try:
             await _db(storage.retry_source_event, event_id)
         except ValueError as exc:
-            raise HTTPException(status_code=404 if str(exc).endswith("not found") else 409, detail=str(exc))
+            raise _http_error(exc, 409)
         return QueuedResponse()
 
     @app.get("/api/v2/capture/followups", response_model=list[CaptureFollowup])
@@ -218,7 +253,7 @@ def create_dashboard_app(
         try:
             await _db(storage.retry_ingestion_effect, effect_id)
         except ValueError as exc:
-            raise HTTPException(status_code=404 if str(exc).endswith("not found") else 409, detail=str(exc))
+            raise _http_error(exc, 409)
         return QueuedResponse()
 
     @app.get("/api/v2/spending/month", response_model=SpendingFacts)
@@ -233,8 +268,7 @@ def create_dashboard_app(
         try:
             await _db(storage.update_planned_charge, upcoming_id, body)
         except ValueError as exc:
-            code = 404 if str(exc).endswith("not found") else 409 if str(exc) == "Charge is no longer pending" else 422
-            raise HTTPException(status_code=code, detail=str(exc)) from None
+            raise _http_error(exc, 422) from None
         return {"status": "ok"}
 
     @app.post("/api/v2/plan/upcoming/{upcoming_id}/dismiss", response_model=PlanMutationResponse)
@@ -242,7 +276,7 @@ def create_dashboard_app(
         try:
             await _db(storage.dismiss_planned_charge, upcoming_id)
         except ValueError as exc:
-            raise HTTPException(status_code=404 if str(exc).endswith("not found") else 409, detail=str(exc)) from None
+            raise _http_error(exc, 409) from None
         return {"status": "ok"}
 
     @app.get("/api/v2/plan/upcoming", response_model=UpcomingPlan)
@@ -303,10 +337,8 @@ def create_dashboard_app(
     ):
         try:
             sub_id = await _db(storage.resolve_recurring_review, suggestion_id, action)
-        except SubscriptionMatchConflict as exc:
-            raise HTTPException(status_code=409, detail=str(exc)) from None
         except ValueError as exc:
-            raise HTTPException(status_code=404, detail=str(exc)) from None
+            raise _http_error(exc, 404) from None
         return {"status": "ok", "subscription_id": sub_id}
 
     @app.get("/api/v2/refund-matches/review", response_model=RefundMatchReview)
@@ -413,8 +445,7 @@ def create_dashboard_app(
 
     @app.get("/api/users/me")
     async def get_current_user(username: str = Depends(require_auth)):
-        loop = asyncio.get_running_loop()
-        user = await loop.run_in_executor(_DB_EXECUTOR, admin_storage.get_user, username)
+        user = await _db(admin_storage.get_user, username)
         if user is None:
             raise HTTPException(status_code=401, detail="User not found")
         return {
@@ -435,35 +466,32 @@ def create_dashboard_app(
         if not new_password or len(new_password) < 8:
             raise HTTPException(status_code=422, detail="new_password must be at least 8 characters")
         loop = asyncio.get_running_loop()
-        user = await loop.run_in_executor(_DB_EXECUTOR, admin_storage.get_user, username)
+        user = await _db(admin_storage.get_user, username)
         ok = await loop.run_in_executor(None, verify_password, current_password, user["password_hash"])
         if not ok:
             raise HTTPException(status_code=401, detail="Current password is incorrect")
-        new_hash = await loop.run_in_executor(None, lambda: bcrypt.hashpw(new_password.encode(), bcrypt.gensalt()).decode())
-        await loop.run_in_executor(_DB_EXECUTOR, lambda: admin_storage.update_user(username, password_hash=new_hash, force_password_change=0))
+        new_hash = await loop.run_in_executor(None, hash_password, new_password)
+        await _db(admin_storage.update_user, username, password_hash=new_hash, force_password_change=0)
         return {"status": "ok"}
 
     # ── Session management ────────────────────────────────────────────────────
 
     @app.get("/api/sessions")
     async def list_sessions(request: Request, username: str = Depends(require_auth)):
-        loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(_DB_EXECUTOR, admin_storage.list_sessions, username)
+        return await _db(admin_storage.list_sessions, username)
 
     @app.delete("/api/sessions")
     async def logout_all_other_sessions(request: Request, username: str = Depends(require_auth)):
         current_token = request.cookies.get("session")
-        loop = asyncio.get_running_loop()
-        await loop.run_in_executor(_DB_EXECUTOR, partial(admin_storage.destroy_all_sessions, username, except_token=current_token))
+        await _db(admin_storage.destroy_all_sessions, username, except_token=current_token)
         return {"status": "ok"}
 
     @app.delete("/api/sessions/{token}")
     async def logout_session(token: str, username: str = Depends(require_auth)):
-        loop = asyncio.get_running_loop()
-        sessions = await loop.run_in_executor(_DB_EXECUTOR, admin_storage.list_sessions, username)
+        sessions = await _db(admin_storage.list_sessions, username)
         if not any(s["token"] == token for s in sessions):
             raise HTTPException(status_code=404, detail="Session not found")
-        await loop.run_in_executor(_DB_EXECUTOR, admin_storage.destroy_session, token)
+        await _db(admin_storage.destroy_session, token)
         return {"status": "ok"}
 
     # ── Onboarding ────────────────────────────────────────────────────────────
@@ -471,12 +499,12 @@ def create_dashboard_app(
     @app.put("/api/onboarding/preferences")
     async def set_onboarding_preferences(request: Request, username: str = Depends(require_auth)):
         body = await request.json()
-        loop = asyncio.get_running_loop()
-        await loop.run_in_executor(_DB_EXECUTOR, lambda: admin_storage.update_user(
+        await _db(
+            admin_storage.update_user,
             username,
             wants_gmail=1 if body.get("wants_gmail", True) else 0,
             wants_apple_wallet=1 if body.get("wants_apple_wallet", True) else 0,
-        ))
+        )
         return {"status": "ok"}
 
     @app.get("/api/onboarding/gmail/connect-url")
@@ -495,8 +523,7 @@ def create_dashboard_app(
 
     @app.post("/api/onboarding/telegram/link-token")
     async def create_telegram_link_token(username: str = Depends(require_auth)):
-        loop = asyncio.get_running_loop()
-        token = await loop.run_in_executor(_DB_EXECUTOR, admin_storage.create_telegram_link_token, username)
+        token = await _db(admin_storage.create_telegram_link_token, username)
         return {"token": token}
 
     @app.get("/api/onboarding/webhook-url")
@@ -506,8 +533,7 @@ def create_dashboard_app(
 
     @app.put("/api/onboarding/complete")
     async def mark_onboarding_complete(username: str = Depends(require_auth)):
-        loop = asyncio.get_running_loop()
-        await loop.run_in_executor(_DB_EXECUTOR, partial(admin_storage.update_user, username, onboarding_complete=1))
+        await _db(admin_storage.update_user, username, onboarding_complete=1)
         return {"status": "ok"}
 
     @app.get("/api/connections/apple-wallet")
@@ -532,8 +558,7 @@ def create_dashboard_app(
 
     @app.delete("/api/connections/telegram")
     async def disconnect_telegram(username: str = Depends(require_auth)):
-        loop = asyncio.get_running_loop()
-        await loop.run_in_executor(_DB_EXECUTOR, partial(admin_storage.update_user, username, telegram_chat_id=None))
+        await _db(admin_storage.update_user, username, telegram_chat_id=None)
         return {"status": "ok"}
 
     @app.delete("/api/connections/gmail")
@@ -560,8 +585,7 @@ def create_dashboard_app(
                 pass
         if ctx and ctx.poller:
             ctx.poller.stop()
-        loop = asyncio.get_running_loop()
-        await loop.run_in_executor(_DB_EXECUTOR, partial(admin_storage.update_user, username, gmail_connected=0))
+        await _db(admin_storage.update_user, username, gmail_connected=0)
         return {"status": "ok"}
 
     @app.get("/api/transactions")
@@ -573,9 +597,8 @@ def create_dashboard_app(
         merchant: Optional[str] = None,
         limit: int = 50,
         offset: int = 0,
-        username: str = Depends(require_auth),
+        storage=Depends(_get_storage),
     ):
-        storage = user_manager.get(username).storage
         return await _db(storage.query_transactions,
             start_date=start_date,
             end_date=end_date,
@@ -592,9 +615,8 @@ def create_dashboard_app(
         category: Optional[str] = None,
         merchant_search: Optional[str] = None,
         merchant: Optional[str] = None,
-        username: str = Depends(require_auth),
+        storage=Depends(_get_storage),
     ):
-        storage = user_manager.get(username).storage
         rows = await _db(storage.query_transactions,
             start_date=start_date,
             end_date=end_date,
@@ -650,9 +672,8 @@ def create_dashboard_app(
         needs_review: Optional[bool] = None,
         limit: int = Query(20, ge=1, le=100),
         offset: int = Query(0, ge=0),
-        username: str = Depends(require_auth),
+        storage=Depends(_get_storage),
     ):
-        storage = user_manager.get(username).storage
         rows = await _db(
             storage.get_transactions_v2,
             start_date=start_date, end_date=end_date, category=category, source=source,
@@ -662,37 +683,34 @@ def create_dashboard_app(
         return await _db(transaction_commands.to_v2_many, rows, storage)
 
     @app.get("/api/v2/transactions/daily-totals", response_model=list[DailyTotal])
-    async def transactions_daily_totals(start: date, end: date, username: str = Depends(require_auth)):
+    async def transactions_daily_totals(start: date, end: date, storage=Depends(_get_storage)):
         if end < start:
             raise HTTPException(status_code=422, detail="End must not precede start")
-        storage = user_manager.get(username).storage
         return await _db(storage.get_daily_totals, start, end, timezone)
 
     @app.get("/api/v2/spending/breakdown", response_model=CategoryBreakdown)
-    async def spending_breakdown(start: date, end: date, username: str = Depends(require_auth)):
+    async def spending_breakdown(start: date, end: date, storage=Depends(_get_storage)):
         """Category totals for [start, end] on the same shared-facts rules as
         /api/v2/home's hero (spending_facts.py), not the legacy SQL
         aggregates behind /api/v2/overview/* — see the increment-3 finding in
         docs/plans/2026-09-16-cashe-design-language-restoration.md."""
         if end < start:
             raise HTTPException(status_code=422, detail="End must not precede start")
-        storage = user_manager.get(username).storage
         return await _db(storage.get_category_breakdown, start, end, timezone)
 
     @app.get("/api/v2/spending/merchants", response_model=list[MerchantRanking])
     async def spending_merchants(start: date, end: date, category: Optional[str] = None,
-                                  limit: int = Query(10, ge=1, le=50), username: str = Depends(require_auth)):
+                                  limit: int = Query(10, ge=1, le=50), storage=Depends(_get_storage)):
         """Same shared-facts rules as /api/v2/spending/breakdown — a merchant
         ranking scoped to a selected category always agrees with that
         category's breakdown total for the identical period."""
         if end < start:
             raise HTTPException(status_code=422, detail="End must not precede start")
-        storage = user_manager.get(username).storage
         return await _db(storage.get_merchant_ranking_facts, start, end, timezone, category, limit)
 
     @app.get("/api/v2/spending/trend-by-category", response_model=list[CategoryTrendPoint])
     async def spending_trend_by_category(start: date, end: date, categories: Optional[str] = None,
-                                          username: str = Depends(require_auth)):
+                                          storage=Depends(_get_storage)):
         """Same shared-facts rules as /api/v2/spending/breakdown and
         /transactions/daily-totals — not storage.get_trend_by_category's
         legacy SQL, which has no timezone conversion on transaction_date.
@@ -701,28 +719,24 @@ def create_dashboard_app(
         if end < start:
             raise HTTPException(status_code=422, detail="End must not precede start")
         category_list = [c for c in categories.split(",") if c] if categories else None
-        storage = user_manager.get(username).storage
         return await _db(storage.get_category_daily_trend, start, end, timezone, category_list)
 
     @app.get("/api/v2/transactions/{tx_id}", response_model=TransactionV2)
-    async def get_transaction_v2(tx_id: int, username: str = Depends(require_auth)):
-        storage = user_manager.get(username).storage
+    async def get_transaction_v2(tx_id: int, storage=Depends(_get_storage)):
         tx = await _db(storage.get_transaction, tx_id)
         if not tx:
             raise HTTPException(status_code=404, detail="Transaction not found")
         return transaction_commands.to_v2(tx, storage)
 
     @app.get("/api/v2/transactions/{tx_id}/provenance", response_model=TransactionProvenance)
-    async def get_transaction_provenance(tx_id: int, username: str = Depends(require_auth)):
-        storage = user_manager.get(username).storage
+    async def get_transaction_provenance(tx_id: int, storage=Depends(_get_storage)):
         try:
             return await _db(storage.get_transaction_provenance, tx_id)
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc))
 
     @app.post("/api/v2/transactions", response_model=TransactionV2, status_code=201)
-    async def create_transaction_v2(payload: TransactionCreate, request: Request, username: str = Depends(require_auth)):
-        storage = user_manager.get(username).storage
+    async def create_transaction_v2(payload: TransactionCreate, request: Request, storage=Depends(_get_storage)):
         body = payload.model_dump(exclude_none=True)
         try:
             return await _db(
@@ -730,20 +744,17 @@ def create_dashboard_app(
                 source_id=f"manual_{uuid.uuid4().hex[:12]}",
                 request_key=request.headers.get("Idempotency-Key"), timezone=timezone,
             )
-        except TransactionRequestConflict as e:
-            raise HTTPException(status_code=409, detail=str(e))
         except ValueError as e:
-            raise HTTPException(status_code=409 if str(e).startswith("duplicate source_id:") else 400, detail=str(e))
+            raise _http_error(e, 400)
 
     @app.post("/api/v2/transactions/bulk", response_model=list[BulkTransactionResultItem])
-    async def bulk_correct_transactions(payload: BulkTransactionRequest, username: str = Depends(require_auth)):
+    async def bulk_correct_transactions(payload: BulkTransactionRequest, storage=Depends(_get_storage)):
         if not payload.transaction_ids:
             raise HTTPException(status_code=422, detail="No transactions selected")
         if len(payload.transaction_ids) > 200:
             raise HTTPException(status_code=422, detail="At most 200 transactions per batch")
         if payload.category is None and payload.type is None:
             raise HTTPException(status_code=422, detail="Nothing to change")
-        storage = user_manager.get(username).storage
         return await _db(
             storage.bulk_correct, payload.transaction_ids,
             category=payload.category, type=payload.type,
@@ -752,25 +763,22 @@ def create_dashboard_app(
         )
 
     @app.post("/api/v2/transactions/bulk/undo", response_model=list[BulkTransactionResultItem])
-    async def bulk_undo_transactions(payload: BulkUndoRequest, username: str = Depends(require_auth)):
+    async def bulk_undo_transactions(payload: BulkUndoRequest, storage=Depends(_get_storage)):
         if not payload.transaction_ids:
             raise HTTPException(status_code=422, detail="No transactions selected")
         if len(payload.transaction_ids) > 200:
             raise HTTPException(status_code=422, detail="At most 200 transactions per batch")
-        storage = user_manager.get(username).storage
         return await _db(storage.bulk_undo, payload.transaction_ids, expected_revisions=payload.expected_revisions)
 
     @app.delete("/api/v2/transactions/{tx_id}", response_model=TransactionDeletion)
-    async def delete_transaction_v2(tx_id: int, username: str = Depends(require_auth)):
-        storage = user_manager.get(username).storage
+    async def delete_transaction_v2(tx_id: int, storage=Depends(_get_storage)):
         try:
             return await _db(transaction_commands.delete, storage, tx_id)
         except ValueError:
             raise HTTPException(status_code=404, detail="Transaction not found")
 
     @app.put("/api/v2/transactions/{tx_id}", response_model=TransactionV2)
-    async def update_transaction_v2(tx_id: int, correction: TransactionCorrection, username: str = Depends(require_auth)):
-        storage = user_manager.get(username).storage
+    async def update_transaction_v2(tx_id: int, correction: TransactionCorrection, storage=Depends(_get_storage)):
         tx = await _db(storage.get_transaction, tx_id)
         if not tx:
             raise HTTPException(status_code=404, detail="Transaction not found")
@@ -798,8 +806,7 @@ def create_dashboard_app(
             raise HTTPException(status_code=422, detail=str(exc))
 
     @app.post("/api/v2/transactions/{tx_id}/undo", response_model=TransactionV2)
-    async def undo_transaction_v2(tx_id: int, payload: TransactionUndo | None = None, username: str = Depends(require_auth)):
-        storage = user_manager.get(username).storage
+    async def undo_transaction_v2(tx_id: int, payload: TransactionUndo | None = None, storage=Depends(_get_storage)):
         expected_revision = payload.expected_revision if payload else None
         try:
             return await _db(transaction_commands.undo, storage, tx_id, expected_revision=expected_revision)
@@ -808,22 +815,17 @@ def create_dashboard_app(
                 "message": str(exc), "current": transaction_commands.to_v2(exc.current, storage),
             })
         except ValueError as exc:
-            status_code = 404 if str(exc).endswith("not found") else 400
-            raise HTTPException(status_code=status_code, detail=str(exc))
+            raise _http_error(exc, 400)
 
     @app.post("/api/v2/transactions/{tx_id}/restore", response_model=TransactionV2)
-    async def restore_transaction_v2(tx_id: int, username: str = Depends(require_auth)):
-        storage = user_manager.get(username).storage
+    async def restore_transaction_v2(tx_id: int, storage=Depends(_get_storage)):
         try:
             return await _db(transaction_commands.restore, storage, tx_id)
         except ValueError as exc:
-            msg = str(exc)
-            status_code = 404 if "no deletion record" in msg else 409
-            raise HTTPException(status_code=status_code, detail=msg)
+            raise _http_error(exc, 409)
 
     @app.post("/api/transactions")
-    async def create_transaction(request: Request, username: str = Depends(require_auth)):
-        storage = user_manager.get(username).storage
+    async def create_transaction(request: Request, storage=Depends(_get_storage)):
         body = await request.json()
         if not isinstance(body, dict):
             raise HTTPException(status_code=400, detail="Transaction must be an object")
@@ -840,14 +842,11 @@ def create_dashboard_app(
                 source_id=f"manual_{uuid.uuid4().hex[:12]}",
                 request_key=request.headers.get("Idempotency-Key"), timezone=timezone,
             )
-        except TransactionRequestConflict as e:
-            raise HTTPException(status_code=409, detail=str(e))
         except ValueError as e:
-            raise HTTPException(status_code=409 if str(e).startswith("duplicate source_id:") else 400, detail=str(e))
+            raise _http_error(e, 400)
 
     @app.put("/api/transactions/{tx_id}")
-    async def update_transaction(tx_id: int, request: Request, username: str = Depends(require_auth)):
-        storage = user_manager.get(username).storage
+    async def update_transaction(tx_id: int, request: Request, storage=Depends(_get_storage)):
         tx = await _db(storage.get_transaction, tx_id)
         if not tx:
             raise HTTPException(status_code=404, detail="Transaction not found")
@@ -902,8 +901,7 @@ def create_dashboard_app(
         try:
             await _db(storage.add_category, name, keywords, icon, color, cat_type=cat_type)
         except ValueError as e:
-            status_code = 422 if "cat_type" in str(e) else 409
-            raise HTTPException(status_code=status_code, detail=str(e))
+            raise _http_error(e, 422)
         return {"status": "ok", "name": name}
 
     @app.put("/api/categories/{name}")
@@ -919,10 +917,7 @@ def create_dashboard_app(
                 cat_type=cat_type,
             )
         except ValueError as e:
-            if "cat_type" in str(e):
-                raise HTTPException(status_code=422, detail=str(e))
-            status_code = 409 if "already used" in str(e) else 404
-            raise HTTPException(status_code=status_code, detail=str(e))
+            raise _http_error(e, 422)
         return {"status": "ok", "name": name}
 
     @app.delete("/api/categories/{name}")
@@ -1086,114 +1081,31 @@ def create_dashboard_app(
         return {"content": content, "generated_at": generated_at, "is_stale": is_stale}
 
 
+    async def _read_settings(storage) -> dict:
+        stored = await _db(storage.get_settings, SETTINGS)
+        return {key: read(stored.get(key, default)) for key, (default, read, _) in SETTINGS.items()}
+
     @app.get("/api/settings")
     async def get_settings(storage=Depends(_get_storage)):
-        return {
-            "anomaly_multiplier": float(await _db(storage.get_setting, "anomaly_multiplier", "2.0")),
-            "velocity_alert_threshold": int(await _db(storage.get_setting, "velocity_alert_threshold", "110")),
-            "budgets_enabled": await _db(storage.get_setting, "budgets_enabled", "false") == "true",
-            "goals_enabled": await _db(storage.get_setting, "goals_enabled", "false") == "true",
-            "trips_enabled": await _db(storage.get_setting, "trips_enabled", "false") == "true",
-            "subscriptions_enabled": await _db(storage.get_setting, "subscriptions_enabled", "false") == "true",
-            "recurring_enabled": await _db(storage.get_setting, "recurring_enabled", "false") == "true",
-            "home_briefing_enabled": await _db(storage.get_setting, "home_briefing_enabled", "false") == "true",
-            "category_colors_snapped_v2": await _db(storage.get_setting, "category_colors_snapped_v2", "false"),
-        }
+        return await _read_settings(storage)
 
     @app.put("/api/settings")
     async def update_settings(request: Request, storage=Depends(_get_storage)):
         body = await request.json()
         errors = {}
         validated = {}
-
-        if "home_briefing_enabled" in body:
-            if not isinstance(body["home_briefing_enabled"], bool):
-                errors["home_briefing_enabled"] = "must be a boolean"
-            else:
-                validated["home_briefing_enabled"] = str(body["home_briefing_enabled"]).lower()
-
-        if "anomaly_multiplier" in body:
-            val = body["anomaly_multiplier"]
+        for key, value in body.items():
+            parse = SETTINGS[key][2] if key in SETTINGS else WRITE_ONLY_SETTINGS.get(key)
+            if parse is None:
+                continue
             try:
-                val = float(val)
-            except (TypeError, ValueError):
-                errors["anomaly_multiplier"] = "must be a number"
-            else:
-                if not (1.0 <= val <= 10.0):
-                    errors["anomaly_multiplier"] = "must be between 1.0 and 10.0"
-                else:
-                    validated["anomaly_multiplier"] = str(val)
-
-        if "velocity_alert_threshold" in body:
-            val = body["velocity_alert_threshold"]
-            try:
-                val = int(val)
-            except (TypeError, ValueError):
-                errors["velocity_alert_threshold"] = "must be an integer"
-            else:
-                if not (50 <= val <= 300):
-                    errors["velocity_alert_threshold"] = "must be between 50 and 300"
-                else:
-                    validated["velocity_alert_threshold"] = str(val)
-
-        if "budgets_enabled" in body:
-            val = body["budgets_enabled"]
-            if not isinstance(val, bool):
-                errors["budgets_enabled"] = "must be a boolean"
-            else:
-                validated["budgets_enabled"] = "true" if val else "false"
-
-        if "goals_enabled" in body:
-            val = body["goals_enabled"]
-            if not isinstance(val, bool):
-                errors["goals_enabled"] = "must be a boolean"
-            else:
-                validated["goals_enabled"] = "true" if val else "false"
-
-        if "trips_enabled" in body:
-            val = body["trips_enabled"]
-            if not isinstance(val, bool):
-                errors["trips_enabled"] = "must be a boolean"
-            else:
-                validated["trips_enabled"] = "true" if val else "false"
-
-        if "subscriptions_enabled" in body:
-            val = body["subscriptions_enabled"]
-            if not isinstance(val, bool):
-                errors["subscriptions_enabled"] = "must be a boolean"
-            else:
-                validated["subscriptions_enabled"] = "true" if val else "false"
-
-        if "recurring_enabled" in body:
-            val = body["recurring_enabled"]
-            if not isinstance(val, bool):
-                errors["recurring_enabled"] = "must be a boolean"
-            else:
-                validated["recurring_enabled"] = "true" if val else "false"
-
-        if "category_colors_snapped_v2" in body:
-            validated["category_colors_snapped_v2"] = str(body["category_colors_snapped_v2"])
-
-        if "category_colors_pre_v2" in body:
-            validated["category_colors_pre_v2"] = str(body["category_colors_pre_v2"])
-
+                validated[key] = parse(value)
+            except ValueError as exc:
+                errors[key] = str(exc)
         if errors:
             raise HTTPException(status_code=422, detail=errors)
-
-        # Write all-or-nothing after validation
-        for key, value in validated.items():
-            await _db(storage.set_setting, key, value)
-
-        return {
-            "anomaly_multiplier": float(await _db(storage.get_setting, "anomaly_multiplier", "2.0")),
-            "velocity_alert_threshold": int(await _db(storage.get_setting, "velocity_alert_threshold", "110")),
-            "budgets_enabled": await _db(storage.get_setting, "budgets_enabled", "false") == "true",
-            "goals_enabled": await _db(storage.get_setting, "goals_enabled", "false") == "true",
-            "trips_enabled": await _db(storage.get_setting, "trips_enabled", "false") == "true",
-            "subscriptions_enabled": await _db(storage.get_setting, "subscriptions_enabled", "false") == "true",
-            "recurring_enabled": await _db(storage.get_setting, "recurring_enabled", "false") == "true",
-            "category_colors_snapped_v2": await _db(storage.get_setting, "category_colors_snapped_v2", "false"),
-        }
+        await _db(storage.set_settings, validated)
+        return await _read_settings(storage)
 
     # ── Budgets ──────────────────────────────────────────────────────────
 
@@ -1219,8 +1131,7 @@ def create_dashboard_app(
         return dict(row)
 
     @app.get("/api/v2/budgets/progress", response_model=list[BudgetProgress])
-    async def budget_progress_v2(username: str = Depends(require_auth)):
-        storage = user_manager.get(username).storage
+    async def budget_progress_v2(storage=Depends(_get_storage)):
         rows = await _db(storage.get_budget_progress)
         return [
             {
@@ -1480,8 +1391,7 @@ def create_dashboard_app(
         return summary
 
     @app.get("/api/v2/trips/{trip_id}/summary", response_model=TripSummary)
-    async def trip_summary_v2(trip_id: int, username: str = Depends(require_auth)):
-        storage = user_manager.get(username).storage
+    async def trip_summary_v2(trip_id: int, storage=Depends(_get_storage)):
         summary = await _db(storage.get_trip_summary, trip_id)
         if summary is None:
             raise HTTPException(status_code=404, detail="Trip not found")
@@ -1591,7 +1501,7 @@ def create_dashboard_app(
         try:
             await _db(storage.update_subscription, sub_id, **body)
         except ValueError as e:
-            raise HTTPException(status_code=404 if "not found" in str(e) else 422, detail=str(e))
+            raise _http_error(e, 422)
         return await _db(storage.get_subscription, sub_id)
 
     @app.delete("/api/subscriptions/{sub_id}")
@@ -1624,10 +1534,8 @@ def create_dashboard_app(
         transaction_id = body.get("transaction_id")
         try:
             await _db(storage.match_upcoming_transaction, upcoming_id, transaction_id)
-        except SubscriptionMatchConflict as e:
-            raise HTTPException(status_code=409, detail=str(e))
         except ValueError as e:
-            raise HTTPException(status_code=404 if "not found" in str(e).lower() else 422, detail=str(e))
+            raise _http_error(e, 422)
         return {"status": "ok"}
 
     @app.post("/api/subscriptions/{sub_id}/upcoming/{upcoming_id}/dismiss")
@@ -1636,11 +1544,9 @@ def create_dashboard_app(
         if not upcoming or upcoming["subscription_id"] != sub_id:
             raise HTTPException(status_code=404, detail="Upcoming transaction not found")
         try:
-            await _db(storage.dismiss_upcoming_transaction, upcoming_id)
-        except SubscriptionMatchConflict as e:
-            raise HTTPException(status_code=409, detail=str(e))
+            await _db(storage.dismiss_planned_charge, upcoming_id)
         except ValueError as e:
-            raise HTTPException(status_code=404, detail=str(e))
+            raise _http_error(e, 404)
         return {"status": "ok"}
 
     @app.post("/api/subscriptions/{sub_id}/link-transaction", status_code=201)
@@ -1648,10 +1554,8 @@ def create_dashboard_app(
         tx_id = body.get("transaction_id")
         try:
             await _db(storage.link_transaction_to_subscription, sub_id, tx_id)
-        except SubscriptionMatchConflict as e:
-            raise HTTPException(status_code=409, detail=str(e))
         except ValueError as e:
-            raise HTTPException(status_code=404 if "not found" in str(e).lower() else 422, detail=str(e))
+            raise _http_error(e, 422)
         return {"status": "ok"}
 
     # Serve React SPA

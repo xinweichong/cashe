@@ -29,7 +29,7 @@ def test_match_replay_and_conflicts_preserve_original(charges):
     with pytest.raises(SubscriptionMatchConflict):
         storage.link_transaction_to_subscription(subs[1], tx)
     with pytest.raises(SubscriptionMatchConflict):
-        storage.dismiss_upcoming_transaction(predictions[0])
+        storage.dismiss_planned_charge(predictions[0])
     assert storage.get_transaction(tx) == original
     assert storage.get_upcoming_transaction(predictions[0])['matched_transaction_id'] == tx
     assert storage.get_upcoming_transaction(predictions[1])['status'] == 'pending'

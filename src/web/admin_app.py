@@ -1,12 +1,13 @@
-import bcrypt
 import logging
 import os
 import secrets
 import string
-from datetime import datetime, timedelta, timezone
+import time
 
 from fastapi import FastAPI, Request, HTTPException, Depends
 from fastapi.responses import JSONResponse, FileResponse
+
+from src.web.auth import LoginRateLimiter, hash_password, verify_password
 
 logger = logging.getLogger(__name__)
 
@@ -18,34 +19,12 @@ def create_admin_app(
 ) -> FastAPI:
     app = FastAPI(title="Cashe Admin")
 
-    # In-memory rate limiting: {ip: (attempt_count, lockout_until_datetime | None)}
-    _login_attempts: dict[str, tuple[int, datetime | None]] = {}
-    _MAX_ATTEMPTS = 5
-    _LOCKOUT_MINUTES = 15
+    # Same limiter as the dashboard login, keyed by the connecting client (not
+    # a client-supplied X-Forwarded-For header, which would let anyone reset
+    # their own lockout).
+    login_limiter = LoginRateLimiter()
 
     # ── Auth helpers ──────────────────────────────────────────────────────────
-
-    def _get_client_ip(request: Request) -> str:
-        forwarded = request.headers.get("X-Forwarded-For")
-        return forwarded.split(",")[0].strip() if forwarded else (
-            request.client.host if request.client else "unknown"
-        )
-
-    def _is_locked_out(ip: str) -> bool:
-        attempts, lockout_until = _login_attempts.get(ip, (0, None))
-        if lockout_until and datetime.now(timezone.utc) < lockout_until:
-            return True
-        if lockout_until and datetime.now(timezone.utc) >= lockout_until:
-            _login_attempts.pop(ip, None)
-        return False
-
-    def _record_failure(ip: str) -> None:
-        attempts, _ = _login_attempts.get(ip, (0, None))
-        attempts += 1
-        if attempts >= _MAX_ATTEMPTS:
-            _login_attempts[ip] = (attempts, datetime.now(timezone.utc) + timedelta(minutes=_LOCKOUT_MINUTES))
-        else:
-            _login_attempts[ip] = (attempts, None)
 
     def require_admin_session(request: Request) -> None:
         token = request.headers.get("X-Admin-Token")
@@ -54,25 +33,21 @@ def create_admin_app(
 
     # ── Login / logout ────────────────────────────────────────────────────────
 
+    # Plain `def` handlers: FastAPI runs them in its threadpool, so bcrypt and
+    # SQLite never block the event loop.
     @app.post("/api/login")
-    async def admin_login(request: Request):
-        ip = _get_client_ip(request)
-        if _is_locked_out(ip):
-            raise HTTPException(
-                status_code=429,
-                detail=f"Too many attempts. Try again in {_LOCKOUT_MINUTES} minutes.",
-            )
-        body = await request.json()
-        password = body.get("password", "")
-        if not bcrypt.checkpw(password.encode(), admin_password_hash.encode()):
-            _record_failure(ip)
+    def admin_login(request: Request, body: dict):
+        key = "ip:" + (request.client.host if request.client else "unknown")
+        if login_limiter.reserve([key], time.monotonic()) is None:
+            raise HTTPException(status_code=429, detail="Too many attempts. Try again in 15 minutes.")
+        if not verify_password(body.get("password", ""), admin_password_hash):
             raise HTTPException(status_code=401, detail="Incorrect password")
-        _login_attempts.pop(ip, None)
+        login_limiter.clear(key)
         token = admin_storage.create_admin_session()
         return JSONResponse({"status": "ok", "token": token})
 
     @app.post("/api/logout")
-    async def admin_logout(request: Request):
+    def admin_logout(request: Request):
         token = request.headers.get("X-Admin-Token")
         if token:
             admin_storage.destroy_admin_session(token)
@@ -81,7 +56,7 @@ def create_admin_app(
     # ── User management ───────────────────────────────────────────────────────
 
     @app.get("/api/users", dependencies=[Depends(require_admin_session)])
-    async def list_users():
+    def list_users():
         users = admin_storage.list_users()
         return [
             {
@@ -99,13 +74,12 @@ def create_admin_app(
         return "".join(secrets.choice(alphabet) for _ in range(length))
 
     @app.post("/api/users", dependencies=[Depends(require_admin_session)])
-    async def create_user(request: Request):
-        body = await request.json()
+    def create_user(body: dict):
         username = body.get("username", "").strip().lower()
         if not username:
             raise HTTPException(status_code=400, detail="username is required")
         password = _generate_password()
-        password_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+        password_hash = hash_password(password)
         try:
             user_manager.create_user(username, password_hash)
         except ValueError as e:
@@ -118,7 +92,7 @@ def create_admin_app(
         }
 
     @app.delete("/api/users/{username}", dependencies=[Depends(require_admin_session)])
-    async def delete_user(username: str):
+    def delete_user(username: str):
         user = admin_storage.get_user(username)
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
@@ -127,15 +101,14 @@ def create_admin_app(
         return {"status": "ok"}
 
     @app.post("/api/users/{username}/reset-password", dependencies=[Depends(require_admin_session)])
-    async def reset_password(username: str, request: Request):
-        body = await request.json()
+    def reset_password(username: str, body: dict):
         new_password = body.get("new_password", "")
         if len(new_password) < 8:
             raise HTTPException(status_code=422, detail="password must be at least 8 characters")
         user = admin_storage.get_user(username)
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
-        new_hash = bcrypt.hashpw(new_password.encode(), bcrypt.gensalt()).decode()
+        new_hash = hash_password(new_password)
         admin_storage.update_user(username, password_hash=new_hash, force_password_change=1)
         admin_storage.destroy_all_sessions(username)
         return {"status": "ok"}
@@ -143,7 +116,7 @@ def create_admin_app(
     # ── Operational health (private; distinct from the public /health liveness check) ──
 
     @app.get("/api/health", dependencies=[Depends(require_admin_session)])
-    async def job_health():
+    def job_health():
         capture = {}
         for user in admin_storage.list_users():
             ctx = user_manager.get(user["username"])

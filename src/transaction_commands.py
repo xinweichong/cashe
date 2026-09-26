@@ -13,6 +13,7 @@ TransactionRequestConflict) — callers translate those into their own
 presentation layer.
 """
 from src.config import DEFAULT_TIMEZONE
+from src.storage import NotFound
 
 
 def _refund_evidence(tx: dict, *, warning: str | None = None) -> dict:
@@ -147,7 +148,7 @@ def correct(storage, tx_id: int, fields: dict, *, remember_category: bool = Fals
 def delete(storage, tx_id: int) -> dict:
     tx = storage.get_transaction(tx_id)
     if tx is None:
-        raise ValueError(f"transaction {tx_id} not found")
+        raise NotFound(f"transaction {tx_id} not found")
     deleted_at = storage.delete_transaction(tx_id)
     result = to_v2(tx, storage)
     result["deleted_at"] = deleted_at
@@ -157,7 +158,7 @@ def delete(storage, tx_id: int) -> dict:
 def undo(storage, tx_id: int, *, expected_revision=None) -> dict:
     tx = storage.get_transaction(tx_id)
     if tx is None:
-        raise ValueError(f"transaction {tx_id} not found")
+        raise NotFound(f"transaction {tx_id} not found")
     storage.undo_last_mutation(tx_id, expected_revision=expected_revision)
     return to_v2(storage.get_transaction(tx_id), storage)
 

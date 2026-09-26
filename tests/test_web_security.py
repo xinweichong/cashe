@@ -598,7 +598,7 @@ async def test_home_upcoming_excludes_matched_cancelled_and_outside_window(authe
     storage.create_upcoming_transaction(sub, '2026-09-08', None)
     storage.create_upcoming_transaction(sub, '2026-09-20', 999)
     old = storage.create_upcoming_transaction(sub, '2026-09-09', 999)
-    storage.dismiss_upcoming_transaction(old)
+    storage.dismiss_planned_charge(old)
     data = (await authed_client.get('/api/v2/home')).json()
     assert len(data['upcoming']) == 2
     assert data['upcoming_total']['minor_units'] == 1000

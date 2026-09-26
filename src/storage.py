@@ -62,11 +62,19 @@ def _get_budget_period(period: str) -> tuple[str, str]:
     raise ValueError(f"Unknown period '{period}'. Must be 'monthly' or 'weekly'.")
 
 
-class TransactionRequestConflict(ValueError):
+class NotFound(ValueError):
+    """The requested record doesn't exist (HTTP 404)."""
+
+
+class Conflict(ValueError):
+    """The request clashes with the record's current state (HTTP 409)."""
+
+
+class TransactionRequestConflict(Conflict):
     """A creation key was already accepted for a different or deleted purchase."""
 
 
-class SubscriptionMatchConflict(ValueError):
+class SubscriptionMatchConflict(Conflict):
     """A prediction or transaction already has an incompatible disposition."""
 
 
@@ -376,7 +384,7 @@ class Storage:
         """Summarize retained evidence without exposing observation identifiers/payloads."""
         tx = self._conn.execute("SELECT source FROM transactions WHERE id = ?", (tx_id,)).fetchone()
         if tx is None:
-            raise ValueError("Transaction not found")
+            raise NotFound("Transaction not found")
 
         def channel(source):
             if source in {"apple_wallet", "wallet_request"}:
@@ -511,7 +519,7 @@ class Storage:
     def set_capture_issue_handled(self, event_id: int, handled: bool) -> dict:
         row = self._conn.execute("SELECT source, status FROM source_events WHERE id = ?", (event_id,)).fetchone()
         if row is None:
-            raise ValueError("Source event not found")
+            raise NotFound("Source event not found")
         if row["source"] != "telegram_nl" or row["status"] == "processed":
             raise ValueError("Only unfinished Telegram input can be marked handled or returned to Review")
         with self._conn:
@@ -525,11 +533,11 @@ class Storage:
     def retry_source_event(self, event_id: int) -> None:
         row = self._conn.execute("SELECT status, source FROM source_events WHERE id = ?", (event_id,)).fetchone()
         if row is None:
-            raise ValueError("Source event not found")
+            raise NotFound("Source event not found")
         if row["source"] == "telegram_nl":
             raise ValueError("Use Telegram /add or send a new entry to recover this input")
         if row["status"] == "processed":
-            raise ValueError("Source event already processed")
+            raise Conflict("Source event already processed")
         self._conn.execute(
             """UPDATE source_events SET status = 'pending', attempts = 0, error_code = NULL,
                updated_at = CURRENT_TIMESTAMP WHERE id = ?""", (event_id,),
@@ -609,7 +617,7 @@ class Storage:
         except sqlite3.IntegrityError:
             if (self.get_transaction_by_source_id(source_id) is not None
                     or (manual_evidence is not None and self.get_source_event(source, source_id) is not None)):
-                raise ValueError(f"duplicate source_id: {source_id}") from None
+                raise Conflict(f"duplicate source_id: {source_id}") from None
             raise
 
     @_locked
@@ -631,9 +639,9 @@ class Storage:
     def retry_ingestion_effect(self, effect_id: int) -> None:
         row = self._conn.execute("SELECT status FROM ingestion_outbox WHERE id = ?", (effect_id,)).fetchone()
         if row is None:
-            raise ValueError("Follow-up not found")
+            raise NotFound("Follow-up not found")
         if row["status"] == 'done':
-            raise ValueError("Follow-up already completed")
+            raise Conflict("Follow-up already completed")
         self._conn.execute(
             """UPDATE ingestion_outbox SET status = 'pending', attempts = 0, error_code = NULL,
                updated_at = CURRENT_TIMESTAMP WHERE id = ?""", (effect_id,),
@@ -715,7 +723,7 @@ class Storage:
         from src.spending_facts import refund_match_candidate
         refund = self.get_transaction(refund_transaction_id)
         if refund is None:
-            raise ValueError(f"transaction {refund_transaction_id} not found")
+            raise NotFound(f"transaction {refund_transaction_id} not found")
         candidate = refund_match_candidate(self._conn, refund)
         if candidate is None:
             raise ValueError("No refund match proposal for this transaction")
@@ -956,7 +964,7 @@ class Storage:
             return
         tx = self.get_transaction(tx_id)
         if tx is None:
-            raise ValueError(f"transaction {tx_id} not found")
+            raise NotFound(f"transaction {tx_id} not found")
         if expected_revision is not None and expected_revision != tx["revision"]:
             raise RevisionConflict(tx)
         fields = normalize_transaction_fields(fields)
@@ -969,7 +977,7 @@ class Storage:
                 raise ValueError("Only a refund transaction can link to a purchase")
             target = self.get_transaction(target_id)
             if target is None:
-                raise ValueError(f"transaction {target_id} not found")
+                raise NotFound(f"transaction {target_id} not found")
             if target["type"] not in (None, "expense"):
                 raise ValueError("A refund can only link to an expense transaction")
         elif (
@@ -1045,7 +1053,7 @@ class Storage:
         """
         tx = self.get_transaction(tx_id)
         if tx is None:
-            raise ValueError(f"transaction {tx_id} not found")
+            raise NotFound(f"transaction {tx_id} not found")
         if expected_revision is not None and expected_revision != tx["revision"]:
             raise RevisionConflict(tx)
         mutation = self._conn.execute(
@@ -1140,7 +1148,7 @@ class Storage:
     def delete_transaction(self, tx_id: int) -> str:
         tx = self.get_transaction(tx_id)
         if tx is None:
-            raise ValueError(f"transaction {tx_id} not found")
+            raise NotFound(f"transaction {tx_id} not found")
         # Revert any upcoming_transactions row this actual charge was matched
         # to back to a pending forecast, rather than leaving it (or a FK
         # constraint) pointing at a row that's about to be deleted.
@@ -1184,12 +1192,12 @@ class Storage:
         column. Returns the restored row's new (bumped) revision.
         """
         if self.get_transaction(tx_id) is not None:
-            raise ValueError(f"transaction {tx_id} already exists")
+            raise Conflict(f"transaction {tx_id} already exists")
         snapshot = self._conn.execute(
             "SELECT * FROM deleted_transactions WHERE id = ?", (tx_id,)
         ).fetchone()
         if snapshot is None:
-            raise ValueError(f"transaction {tx_id} has no deletion record")
+            raise NotFound(f"transaction {tx_id} has no deletion record")
         if snapshot["original_minor_units"] is None:
             raise ValueError(
                 f"transaction {tx_id} deletion predates full snapshot retention and cannot be restored"
@@ -1370,9 +1378,9 @@ class Storage:
     def undo_transaction_merge(self, merge_id: int) -> None:
         row = self._conn.execute("SELECT * FROM transaction_merges WHERE id = ?", (merge_id,)).fetchone()
         if row is None:
-            raise ValueError(f"merge {merge_id} not found")
+            raise NotFound(f"merge {merge_id} not found")
         if row["undone_at"] is not None:
-            raise ValueError(f"merge {merge_id} was already undone")
+            raise Conflict(f"merge {merge_id} was already undone")
         survivor_id = row["survivor_transaction_id"]
         loser_id = row["loser_transaction_id"]
 
@@ -1596,11 +1604,11 @@ class Storage:
     def add_category(self, name: str, keywords: str, icon: str = "📌", color: Optional[str] = None, cat_type: str = "neutral") -> None:
         existing = self._conn.execute("SELECT 1 FROM categories WHERE name = ?", (name,)).fetchone()
         if existing:
-            raise ValueError(f"category '{name}' already exists")
+            raise Conflict(f"category '{name}' already exists")
         if color:
             clash = self._conn.execute("SELECT name FROM categories WHERE color = ? AND name != ?", (color, name)).fetchone()
             if clash:
-                raise ValueError(f"color '{color}' is already used by category '{clash['name']}'")
+                raise Conflict(f"color '{color}' is already used by category '{clash['name']}'")
         if cat_type not in _VALID_TYPES:
             raise ValueError(f"cat_type must be one of {set(_VALID_TYPES)}, got '{cat_type}'")
         self._conn.execute("INSERT INTO categories (name, keywords, icon, color, type) VALUES (?, ?, ?, ?, ?)", (name, keywords, icon, color, cat_type))
@@ -1610,11 +1618,11 @@ class Storage:
     def update_category(self, name: str, keywords: Optional[str] = None, icon: Optional[str] = None, color: Optional[str] = None, cat_type: Optional[str] = None) -> None:
         existing = self._conn.execute("SELECT 1 FROM categories WHERE name = ?", (name,)).fetchone()
         if not existing:
-            raise ValueError(f"category '{name}' not found")
+            raise NotFound(f"category '{name}' not found")
         if color:
             clash = self._conn.execute("SELECT name FROM categories WHERE color = ? AND name != ?", (color, name)).fetchone()
             if clash:
-                raise ValueError(f"color '{color}' is already used by category '{clash['name']}'")
+                raise Conflict(f"color '{color}' is already used by category '{clash['name']}'")
         updates = []
         params: list = []
         if keywords is not None:
@@ -1641,7 +1649,7 @@ class Storage:
     def delete_category(self, name: str) -> int:
         existing = self._conn.execute("SELECT 1 FROM categories WHERE name = ?", (name,)).fetchone()
         if not existing:
-            raise ValueError(f"category '{name}' not found")
+            raise NotFound(f"category '{name}' not found")
         count = self._conn.execute("UPDATE transactions SET category = 'Other' WHERE category = ?", (name,)).rowcount
         self._conn.execute("DELETE FROM merchant_overrides WHERE category = ?", (name,))
         self._conn.execute("DELETE FROM categories WHERE name = ?", (name,))
@@ -1713,15 +1721,29 @@ class Storage:
         return row["value"]
 
     @_locked
+    def get_settings(self, keys) -> dict[str, str]:
+        """The stored value of each of `keys` that has one."""
+        keys = list(keys)
+        rows = self._conn.execute(
+            f"SELECT key, value FROM app_settings WHERE key IN ({','.join('?' * len(keys))})", keys
+        ).fetchall()
+        return {r["key"]: r["value"] for r in rows}
+
+    @_locked
     def set_setting(self, key: str, value: str) -> None:
-        self._conn.execute(
-            """INSERT INTO app_settings (key, value, updated_at)
-               VALUES (?, ?, CURRENT_TIMESTAMP)
-               ON CONFLICT(key) DO UPDATE SET value = excluded.value,
-               updated_at = excluded.updated_at""",
-            (key, value),
-        )
-        self._conn.commit()
+        self.set_settings({key: value})
+
+    @_locked
+    def set_settings(self, values: dict[str, str]) -> None:
+        """Write every key in one transaction."""
+        with self._conn:
+            self._conn.executemany(
+                """INSERT INTO app_settings (key, value, updated_at)
+                   VALUES (?, ?, CURRENT_TIMESTAMP)
+                   ON CONFLICT(key) DO UPDATE SET value = excluded.value,
+                   updated_at = excluded.updated_at""",
+                list(values.items()),
+            )
 
     @_locked
     def get_merchant_list(
@@ -2012,7 +2034,7 @@ class Storage:
                 "SELECT 1 FROM budgets WHERE category IS NULL AND period = ?", (period,)
             ).fetchone()
             if existing:
-                raise ValueError(f"Budget for 'Overall' ({period}) already exists")
+                raise Conflict(f"Budget for 'Overall' ({period}) already exists")
         try:
             cursor = self._conn.execute(
                 """INSERT INTO budgets (category, period, amount)
@@ -2023,7 +2045,7 @@ class Storage:
             return cursor.lastrowid
         except sqlite3.IntegrityError:
             label = category if category else "Overall"
-            raise ValueError(f"Budget for '{label}' ({period}) already exists")
+            raise Conflict(f"Budget for '{label}' ({period}) already exists")
 
     @_locked
     def get_budgets(self) -> list[dict]:
@@ -2034,7 +2056,7 @@ class Storage:
     def update_budget(self, budget_id: int, amount: float) -> None:
         row = self._conn.execute("SELECT 1 FROM budgets WHERE id = ?", (budget_id,)).fetchone()
         if not row:
-            raise ValueError(f"Budget {budget_id} not found")
+            raise NotFound(f"Budget {budget_id} not found")
         self._conn.execute(
             "UPDATE budgets SET amount = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
             (amount, budget_id),
@@ -2045,7 +2067,7 @@ class Storage:
     def delete_budget(self, budget_id: int) -> None:
         row = self._conn.execute("SELECT 1 FROM budgets WHERE id = ?", (budget_id,)).fetchone()
         if not row:
-            raise ValueError(f"Budget {budget_id} not found")
+            raise NotFound(f"Budget {budget_id} not found")
         self._conn.execute("DELETE FROM budgets WHERE id = ?", (budget_id,))
         self._conn.commit()
 
@@ -2133,7 +2155,7 @@ class Storage:
             return
         row = self._conn.execute("SELECT 1 FROM goals WHERE id = ?", (goal_id,)).fetchone()
         if not row:
-            raise ValueError(f"Goal {goal_id} not found")
+            raise NotFound(f"Goal {goal_id} not found")
         set_clauses = ", ".join(f"{k} = ?" for k in updates)
         values = list(updates.values()) + [goal_id]
         self._conn.execute(
@@ -2146,7 +2168,7 @@ class Storage:
     def delete_goal(self, goal_id: int) -> None:
         row = self._conn.execute("SELECT 1 FROM goals WHERE id = ?", (goal_id,)).fetchone()
         if not row:
-            raise ValueError(f"Goal {goal_id} not found")
+            raise NotFound(f"Goal {goal_id} not found")
         # ON DELETE CASCADE removes contributions automatically
         self._conn.execute("DELETE FROM goals WHERE id = ?", (goal_id,))
         self._conn.commit()
@@ -2165,7 +2187,7 @@ class Storage:
             contributed_date = local_now().strftime("%Y-%m-%d")
         row = self._conn.execute("SELECT 1 FROM goals WHERE id = ?", (goal_id,)).fetchone()
         if not row:
-            raise ValueError(f"Goal {goal_id} not found")
+            raise NotFound(f"Goal {goal_id} not found")
         cursor = self._conn.execute(
             """INSERT INTO goal_contributions (goal_id, amount, month, contributed_date, source, note)
                VALUES (?, ?, ?, ?, ?, ?)""",
@@ -2206,7 +2228,7 @@ class Storage:
             "SELECT * FROM goal_contributions WHERE id = ?", (contribution_id,)
         ).fetchone()
         if not row:
-            raise ValueError("Contribution not found")
+            raise NotFound("Contribution not found")
         # If amount is changing, adjust the goal's saved_amount by the delta
         if "amount" in updates:
             delta = updates["amount"] - row["amount"]
@@ -2245,7 +2267,7 @@ class Storage:
             "SELECT * FROM goal_contributions WHERE id = ?", (contribution_id,)
         ).fetchone()
         if not row:
-            raise ValueError("Contribution not found")
+            raise NotFound("Contribution not found")
         self._conn.execute("DELETE FROM goal_contributions WHERE id = ?", (contribution_id,))
         self._conn.execute(
             "UPDATE goals SET saved_amount = MAX(0, saved_amount - ?), updated_at = CURRENT_TIMESTAMP WHERE id = ?",
@@ -2403,7 +2425,7 @@ class Storage:
             return
         row = self._conn.execute("SELECT 1 FROM trips WHERE id = ?", (trip_id,)).fetchone()
         if not row:
-            raise ValueError(f"Trip {trip_id} not found")
+            raise NotFound(f"Trip {trip_id} not found")
         set_clauses = ", ".join(f"{k} = ?" for k in updates)
         values = list(updates.values()) + [trip_id]
         self._conn.execute(
@@ -2416,7 +2438,7 @@ class Storage:
     def delete_trip(self, trip_id: int) -> None:
         row = self._conn.execute("SELECT 1 FROM trips WHERE id = ?", (trip_id,)).fetchone()
         if not row:
-            raise ValueError(f"Trip {trip_id} not found")
+            raise NotFound(f"Trip {trip_id} not found")
         self._conn.execute("DELETE FROM trip_transactions WHERE trip_id = ?", (trip_id,))
         self._conn.execute("DELETE FROM trips WHERE id = ?", (trip_id,))
         self._conn.commit()
@@ -2425,7 +2447,7 @@ class Storage:
     def activate_trip(self, trip_id: int) -> None:
         row = self._conn.execute("SELECT 1 FROM trips WHERE id = ?", (trip_id,)).fetchone()
         if not row:
-            raise ValueError(f"Trip {trip_id} not found")
+            raise NotFound(f"Trip {trip_id} not found")
         self._conn.execute(
             "UPDATE trips SET status = 'inactive', updated_at = CURRENT_TIMESTAMP WHERE id != ?",
             (trip_id,),
@@ -2440,7 +2462,7 @@ class Storage:
     def deactivate_trip(self, trip_id: int) -> None:
         row = self._conn.execute("SELECT 1 FROM trips WHERE id = ?", (trip_id,)).fetchone()
         if not row:
-            raise ValueError(f"Trip {trip_id} not found")
+            raise NotFound(f"Trip {trip_id} not found")
         self._conn.execute(
             "UPDATE trips SET status = 'inactive', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
             (trip_id,),
@@ -2670,7 +2692,7 @@ class Storage:
         """Upgrade old pending outbox payloads once, before optional delivery."""
         job = self._conn.execute("SELECT payload FROM ingestion_outbox WHERE id = ? AND kind = 'suggestion'", (effect_id,)).fetchone()
         if job is None:
-            raise ValueError("Suggestion follow-up not found")
+            raise NotFound("Suggestion follow-up not found")
         payload = json.loads(job["payload"])
         with self._conn:
             if "suggestion_id" not in payload:
@@ -2679,7 +2701,7 @@ class Storage:
                 self._conn.execute("UPDATE ingestion_outbox SET payload = ? WHERE id = ?", (json.dumps(payload), effect_id))
             row = self._conn.execute("SELECT * FROM recurring_suggestions WHERE id = ?", (payload["suggestion_id"],)).fetchone()
             if row is None:
-                raise ValueError("Recorded suggestion not found")
+                raise NotFound("Recorded suggestion not found")
         return dict(row)
 
     @_locked
@@ -2688,7 +2710,7 @@ class Storage:
             raise ValueError("Suggestion needs a Telegram chat identity")
         row = self._conn.execute("SELECT * FROM recurring_suggestions WHERE id = ?", (suggestion_id,)).fetchone()
         if row is None:
-            raise ValueError("Suggestion not found")
+            raise NotFound("Suggestion not found")
         if row["status"] != "pending":
             return None
         if row["chat_id"] not in (None, chat_id):
@@ -2713,7 +2735,7 @@ class Storage:
         """Authenticated web callers already resolve the owning user's Storage."""
         row = self._conn.execute("SELECT chat_id FROM recurring_suggestions WHERE id = ?", (suggestion_id,)).fetchone()
         if row is None:
-            raise ValueError("Suggestion not found")
+            raise NotFound("Suggestion not found")
         return self.resolve_recurring_suggestion(suggestion_id, row["chat_id"], action)
 
     @_locked
@@ -2724,7 +2746,7 @@ class Storage:
             "SELECT * FROM recurring_suggestions WHERE id = ? AND chat_id IS ?", (suggestion_id, chat_id),
         ).fetchone()
         if row is None:
-            raise ValueError("Suggestion not found; review subscriptions in the app")
+            raise NotFound("Suggestion not found; review subscriptions in the app")
         target = "accepted" if action == "accept" else "dismissed"
         if row["status"] != "pending":
             if row["status"] != target:
@@ -2743,7 +2765,7 @@ class Storage:
     @_locked
     def confirm_subscription(self, sub_id: int) -> None:
         if not self.get_subscription(sub_id):
-            raise ValueError("Subscription not found")
+            raise NotFound("Subscription not found")
         with self._conn:
             self._conn.execute(
                 "INSERT OR IGNORE INTO subscription_confirmations(subscription_id, source) VALUES (?, 'user')",
@@ -2831,7 +2853,7 @@ class Storage:
     @_locked
     def update_subscription(self, sub_id: int, **fields) -> None:
         if not self.get_subscription(sub_id):
-            raise ValueError("subscription not found")
+            raise NotFound("subscription not found")
         allowed = {"merchant", "label", "frequency", "billing_day", "status", "notes"}
         updates = {k: v for k, v in fields.items() if k in allowed}
         if not updates:
@@ -2848,7 +2870,7 @@ class Storage:
     @_locked
     def delete_subscription(self, sub_id: int) -> None:
         if not self.get_subscription(sub_id):
-            raise ValueError("subscription not found")
+            raise NotFound("subscription not found")
         self._conn.execute("DELETE FROM upcoming_transactions WHERE subscription_id = ?", (sub_id,))
         self._conn.execute("DELETE FROM subscription_confirmations WHERE subscription_id = ?", (sub_id,))
         self._conn.execute("DELETE FROM subscriptions WHERE id = ?", (sub_id,))
@@ -3058,7 +3080,7 @@ class Storage:
             raise ValueError("transaction_id must be a positive integer")
         tx = self.get_transaction(transaction_id)
         if tx is None:
-            raise ValueError("Transaction not found")
+            raise NotFound("Transaction not found")
         if tx["type"] not in (None, "expense"):
             raise ValueError("Only expense transactions can match a charge")
         return tx
@@ -3075,7 +3097,7 @@ class Storage:
         self._subscription_expense(transaction_id)
         upcoming = self.get_upcoming_transaction(upcoming_id)
         if upcoming is None:
-            raise ValueError("Charge not found")
+            raise NotFound("Charge not found")
         if upcoming["status"] == "matched" and upcoming["matched_transaction_id"] == transaction_id:
             return
         self._pending_planned_charge(upcoming_id)
@@ -3090,7 +3112,7 @@ class Storage:
     def link_transaction_to_subscription(self, sub_id: int, tx_id: int) -> None:
         """Link an actual expense once; replaying the same subscription link is harmless."""
         if not self.get_subscription(sub_id):
-            raise ValueError("Subscription not found")
+            raise NotFound("Subscription not found")
         tx = self._subscription_expense(tx_id)
         existing = self._conn.execute(
             "SELECT 1 FROM upcoming_transactions WHERE subscription_id = ? AND matched_transaction_id = ? AND status = 'matched'",
@@ -3121,7 +3143,7 @@ class Storage:
                JOIN subscriptions s ON s.id = u.subscription_id WHERE u.id = ?""", (upcoming_id,),
         ).fetchone()
         if row is None:
-            raise ValueError("Charge not found")
+            raise NotFound("Charge not found")
         if (row["status"] != "pending" or row["matched_transaction_id"] is not None
                 or row["schedule_status"] not in ("active", "possibly_cancelled")):
             raise SubscriptionMatchConflict("Charge is no longer pending")
@@ -3163,10 +3185,6 @@ class Storage:
         self._pending_planned_charge(upcoming_id)
         with self._conn:
             self._conn.execute("UPDATE upcoming_transactions SET status = 'dismissed' WHERE id = ?", (upcoming_id,))
-
-    @_locked
-    def dismiss_upcoming_transaction(self, upcoming_id: int) -> None:
-        self.dismiss_planned_charge(upcoming_id)
 
     @_locked
     def get_upcoming_transaction(self, upcoming_id: int) -> dict | None:
@@ -3322,7 +3340,7 @@ class AdminStorage:
             )
             self._conn.commit()
         except sqlite3.IntegrityError:
-            raise ValueError(f"user '{username}' already exists")
+            raise Conflict(f"user '{username}' already exists")
 
     @_locked
     def get_user(self, username: str) -> dict | None:
