@@ -21,6 +21,8 @@ import {
 } from '@/components/ui/select';
 import { X, Pencil, Trash2, Check, ExternalLink } from 'lucide-react';
 import { SOURCE_DISPLAY_LABELS } from '@/lib/sourceLabels';
+import { useSettings } from '@/hooks/useSettings';
+import { useTrips } from '@/components/plan/planHooks';
 
 export function TransactionDetail({
   transaction: tx,
@@ -618,18 +620,9 @@ function TripMembershipItem({ trip, txId }: { trip: Trip; txId: number }) {
 }
 
 function TripMembershipRow({ txId }: { txId: number }) {
-  const { data: settings } = useQuery({
-    queryKey: ['settings'],
-    queryFn: () => api.getSettings(),
-    staleTime: 30_000,
-  });
+  const { data: settings } = useSettings();
 
-  const { data: trips = [] } = useQuery({
-    queryKey: ['trips'],
-    queryFn: () => api.getTrips(),
-    enabled: settings?.trips_enabled === true,
-    staleTime: 30_000,
-  });
+  const { data: trips = [] } = useTrips({ enabled: settings?.trips_enabled === true });
 
   if (!settings?.trips_enabled || trips.length === 0) return null;
 

@@ -2,7 +2,7 @@ import { useId, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowDown, ArrowRight, ArrowUp, ChevronRight, Plus } from 'lucide-react';
-import { briefingApi, evidenceLink, formatMoney } from '@/api/briefing';
+import { evidenceLink, formatMoney } from '@/api/briefing';
 import { api } from '@/api/client';
 import { datesInRange, formatShortDate, getCategoryColor } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -21,6 +21,7 @@ import { PHONE_SCREEN_HEIGHT, PhoneScreen, type Lens } from '@/components/layout
 import { DrillSheet } from '@/components/layout/DrillSheet';
 import { useIsPhone } from '@/hooks/useIsPhone';
 import { cn } from '@/lib/utils';
+import { useHomeBriefing } from '@/hooks/useBriefing';
 
 const PAGE = 'p-4 md:p-6 space-y-4 md:space-y-5 max-w-[1600px] text-base';
 const BAND = 'grid gap-4 md:gap-5 lg:grid-cols-12';
@@ -93,7 +94,7 @@ export function HomePage() {
     next.delete('category');
     setSearch(next, { replace: true });
   };
-  const query = useQuery({ queryKey: ['home-briefing'], queryFn: briefingApi.home });
+  const query = useHomeBriefing();
   const currentStart = query.data?.facts.current.start;
   const currentEnd = query.data?.facts.current.end;
   // Both charts read start/end scoped to facts.current — the exact period the

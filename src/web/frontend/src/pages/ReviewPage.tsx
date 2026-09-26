@@ -19,8 +19,8 @@ export function ReviewPage() {
     const [capture, followups] = await Promise.all([briefingApi.captureIssues(page * 50, includeHandled), briefingApi.followups(page * 50)]);
     return { capture, followups };
   } });
-  const retry = useMutation({ mutationFn: ({ id, type }: { id: number; type: 'capture' | 'followup' }) => type === 'capture' ? briefingApi.retryCapture(id) : briefingApi.retryFollowup(id), onSuccess: async () => { await Promise.all([client.invalidateQueries({ queryKey: ['capture-review'] }), client.invalidateQueries({ queryKey: ['home-briefing'] })]); } });
-  const resolve = useMutation({ mutationFn: ({ id, handled }: { id: number; handled: boolean }) => briefingApi.resolveCapture(id, handled), onSuccess: async () => { await Promise.all([client.invalidateQueries({ queryKey: ['capture-review'] }), client.invalidateQueries({ queryKey: ['home-briefing'] })]); } });
+  const retry = useMutation({ mutationFn: ({ id, type }: { id: number; type: 'capture' | 'followup' }) => type === 'capture' ? briefingApi.retryCapture(id) : briefingApi.retryFollowup(id), onSuccess: () => invalidateSpendingQueries(client) });
+  const resolve = useMutation({ mutationFn: ({ id, handled }: { id: number; handled: boolean }) => briefingApi.resolveCapture(id, handled), onSuccess: () => invalidateSpendingQueries(client) });
   return <div className="max-w-4xl mx-auto p-4 md:p-8 space-y-6">
     <header className="space-y-1"><Link to="/home" className="text-teal min-h-11 inline-flex items-center">Back to briefing</Link><h1 className="font-display text-2xl font-semibold">Review</h1><p className="text-muted">Spending records, recurring suggestions, and capture follow-ups that need attention.</p></header>
     <SpendingReviewList />
@@ -95,11 +95,11 @@ function DuplicateReviewList() {
     // A merge changes which transaction records exist, so every spending
     // total downstream of them (Home, Explore, Plan, evidence) needs to
     // refetch too — not just this review list.
-    onSuccess: async () => { await client.invalidateQueries({ queryKey: ['duplicate-review'] }); invalidateSpendingQueries(client); },
+    onSuccess: () => invalidateSpendingQueries(client),
   });
   const undo = useMutation({
     mutationFn: (mergeId: number) => briefingApi.undoDuplicateMerge(mergeId),
-    onSuccess: async () => { await client.invalidateQueries({ queryKey: ['duplicate-review'] }); invalidateSpendingQueries(client); },
+    onSuccess: () => invalidateSpendingQueries(client),
   });
   return <PageCard title="Possible duplicates">
     <p className="text-sm text-muted mb-3">Two records from different sources that look like the same purchase. Keep whichever one you want as the record — its evidence, trip, and any billing match carry over. Keep separate if they're actually different.</p>
@@ -137,7 +137,7 @@ function RefundMatchReviewList() {
     // change refund-netting in every spending total; dismissing only clears
     // this review item. Invalidate broadly in both cases rather than
     // special-casing — a stale total is worse than one extra refetch.
-    onSuccess: async () => { await client.invalidateQueries({ queryKey: ['refund-match-review'] }); invalidateSpendingQueries(client); },
+    onSuccess: () => invalidateSpendingQueries(client),
   });
   return <PageCard title="Refund matches">
     <p className="text-sm text-muted mb-3">A likely purchase for an unlinked refund, based on matching merchant, currency, and amount within 180 days. Confirm to link it as evidence, or dismiss if it's wrong.</p>
@@ -167,9 +167,7 @@ function RecurringReviewList() {
       // Accepting creates a tracked schedule (a new confirmed commitment for
       // Plan's forecast); both actions clear this suggestion from Explore's
       // Recurring mode too.
-      await Promise.all(['recurring-review', 'subscriptions', 'subscription-upcoming', 'explore-subscription-review'].map(key =>
-        client.invalidateQueries({ queryKey: [key] })));
-      invalidateSpendingQueries(client);
+      await invalidateSpendingQueries(client);
     },
   });
   const frequencies: Record<string, string> = { weekly: 'Weekly', biweekly: 'Every two weeks', monthly: 'Monthly' };

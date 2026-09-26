@@ -16,6 +16,8 @@ import { useCreateTransaction } from '@/hooks/useTransactions';
 import { useToast } from '@/hooks/useToastContext';
 import { api, type Category } from '@/api/client';
 import { ChevronDown, ChevronUp } from 'lucide-react';
+import { useSettings } from '@/hooks/useSettings';
+import { useTrips } from '@/components/plan/planHooks';
 
 const TX_TYPES = [
   { value: 'expense', label: 'Expense' },
@@ -52,11 +54,9 @@ export function TransactionForm({ categories, onClose }: TransactionFormProps) {
     return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
   });
 
-  const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: () => api.getSettings(), staleTime: 30_000 });
+  const { data: settings } = useSettings();
   const tripsEnabled = settings?.trips_enabled === true;
-  const { data: trips = [] } = useQuery({
-    queryKey: ['trips'], queryFn: () => api.getTrips(), enabled: tripsEnabled, staleTime: 30_000,
-  });
+  const { data: trips = [] } = useTrips({ enabled: tripsEnabled });
   const { data: activeTrip } = useQuery({
     queryKey: ['active-trip'], queryFn: () => api.getActiveTrip().catch(() => null),
     enabled: tripsEnabled, staleTime: 30_000,

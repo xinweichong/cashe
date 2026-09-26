@@ -14,7 +14,7 @@ import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 import { useBulkCorrectTransactions, useBulkUndoTransactions } from '@/hooks/useTransactions';
 import { useToast } from '@/hooks/useToastContext';
 import { api, type Transaction, type TransactionV2, type DailyTotalV2, type BulkTransactionResultItemV2 } from '@/api/client';
-import { briefingApi, formatMoney } from '@/api/briefing';
+import { formatMoney } from '@/api/briefing';
 import { fadeUpVariants } from '@/lib/motionPresets';
 import { localDayKey } from '@/lib/utils';
 import { CheckSquare, Plus, Search, SlidersHorizontal, X } from 'lucide-react';
@@ -29,6 +29,9 @@ import { useDrill } from '@/hooks/useDrill';
 import { SlideOver } from '@/components/layout/SlideOver';
 import { LoadFailed } from '@/components/ui/LoadFailed';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useSettings } from '@/hooks/useSettings';
+import { useTrips } from '@/components/plan/planHooks';
+import { useHomeBriefing } from '@/hooks/useBriefing';
 
 const PAGE_SIZE = 20;
 
@@ -95,14 +98,9 @@ export function TransactionsPage() {
     enabled: isPhone,
   });
   const { data: categories } = useCategories();
-  const briefing = useQuery({ queryKey: ['home-briefing'], queryFn: briefingApi.home });
-  const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: () => api.getSettings(), staleTime: 30_000 });
-  const { data: trips = [] } = useQuery({
-    queryKey: ['trips'],
-    queryFn: () => api.getTrips(),
-    enabled: settings?.trips_enabled === true,
-    staleTime: 30_000,
-  });
+  const briefing = useHomeBriefing();
+  const { data: settings } = useSettings();
+  const { data: trips = [] } = useTrips({ enabled: settings?.trips_enabled === true });
 
   const returnTo = searchParams.get('returnTo');
   const listRef = useRef<HTMLDivElement>(null);

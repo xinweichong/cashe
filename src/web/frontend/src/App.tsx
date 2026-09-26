@@ -15,6 +15,7 @@ import { api } from '@/api/client';
 import { setCategoryColors, nearestSpectrum } from '@/lib/utils';
 import { ToastProvider } from '@/components/ui/toast';
 import { SPECTRUM_PALETTE } from '@/lib/chartTheme';
+import { useSettings } from '@/hooks/useSettings';
 
 // A lazy route that can start downloading before it renders. If its chunk
 // has already arrived when a route mounts, it renders directly instead of
@@ -156,7 +157,7 @@ function CategoryColorLoader() {
 function AppContent() {
   const { isAuthenticated, loading } = useAuth();
   const { data: currentUser, isLoading: userLoading } = useCurrentUser();
-  const { isLoading: settingsLoading } = useQuery({ queryKey: ['settings'], queryFn: api.getSettings, enabled: isAuthenticated });
+  const { isLoading: settingsLoading } = useSettings({ enabled: isAuthenticated });
 
   if (loading || (isAuthenticated && (userLoading || settingsLoading))) {
     return <SplashScreen />;

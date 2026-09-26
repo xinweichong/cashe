@@ -29,23 +29,24 @@ beforeEach(() => {
   });
 });
 afterEach(cleanup);
+const DEPENDENT_KEYS = ['subscriptions', 'subscription-upcoming', 'plan-upcoming', 'home-briefing'];
+
 function show() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  const invalidate = vi.spyOn(client, 'invalidateQueries');
+  // Stand-ins for other views a schedule change must refresh.
+  for (const key of DEPENDENT_KEYS) client.setQueryData([key, 'other-view'], { placeholder: true });
   render(<QueryClientProvider client={client}><SubscriptionDetail subId={1} onClose={() => {}} /></QueryClientProvider>);
-  return invalidate;
+  return (key: string) => client.getQueryState([key, 'other-view'])?.isInvalidated;
 }
 
 test('pause and resume explain provider limits and refresh predictions', async () => {
-  const invalidate = show();
+  const isInvalidated = show();
   fireEvent.click(await screen.findByRole('button', { name: 'Pause in Cashe' }));
   expect(await screen.findByRole('button', { name: 'Resume in Cashe' })).toBeTruthy();
   expect(screen.getByText(/does not pause billing with your provider/)).toBeTruthy();
   expect(screen.queryByRole('button', { name: 'Match' })).toBeNull();
   expect(api.updateSubscription).toHaveBeenCalledWith(1, { status: 'paused' });
-  for (const key of ['subscriptions', 'subscription-upcoming', 'plan-upcoming', 'home-briefing']) {
-    expect(invalidate).toHaveBeenCalledWith({ queryKey: [key] });
-  }
+  for (const key of DEPENDENT_KEYS) expect(isInvalidated(key)).toBe(true);
   fireEvent.click(screen.getByRole('button', { name: 'Resume in Cashe' }));
   expect(await screen.findByRole('button', { name: 'Pause in Cashe' })).toBeTruthy();
   await waitFor(() => expect(screen.getByRole('button', { name: 'Match' })).toBeTruthy());
@@ -67,13 +68,13 @@ test('explicit confirmation preserves paused status and labels estimates', async
   vi.mocked(api.confirmSubscription).mockImplementation(async () => {
     sub = { ...sub, confirmation_source: 'user' }; return { status: 'ok' };
   });
-  const invalidate = show();
+  const isInvalidated = show();
   fireEvent.click(await screen.findByRole('button', { name: 'Confirm this schedule' }));
   expect(await screen.findByText(/Schedule confirmed by you/)).toBeTruthy();
   expect(screen.getByText(/Future dates and amounts remain estimates/)).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Resume in Cashe' })).toBeTruthy();
   expect(api.confirmSubscription).toHaveBeenCalledWith(1);
-  expect(invalidate).toHaveBeenCalledWith({ queryKey: ['plan-upcoming'] });
+  expect(isInvalidated('plan-upcoming')).toBe(true);
   expect(screen.queryByRole('button', { name: 'Confirm this schedule' })).toBeNull();
 });
 

@@ -1,25 +1,30 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api, type Transaction, type TransactionCreateV2, type TransactionCorrectionV2 } from '@/api/client';
+import { api, type TransactionCreateV2, type TransactionCorrectionV2 } from '@/api/client';
 import { useToast } from '@/hooks/useToastContext';
 
-type TxCache =
-  | Transaction[]
-  | { pages: Transaction[][]; pageParams: unknown[] }
-  | undefined;
+type Row = { id: number };
+type RowCache = Row[] | { pages: Row[][]; pageParams: unknown[] } | undefined;
 
-function mapTxCache(
-  data: TxCache,
-  fn: (tx: Transaction) => Transaction | null
-): TxCache {
+// Every cache that holds transaction rows: the legacy list and Activity's
+// infinite v2 pages. Each is either a plain array or infinite-query pages.
+const ROW_LIST_KEYS = [['transactions'], ['transactions-v2']] as const;
+
+function mapRows(data: RowCache, fn: (row: Row) => Row | null): RowCache {
   if (!data) return data;
-  const mapRows = (rows: Transaction[]) =>
-    rows.flatMap((tx) => {
-      const r = fn(tx);
-      return r === null ? [] : [r];
-    });
-  if (Array.isArray(data)) return mapRows(data);
-  if ('pages' in data) return { ...data, pages: data.pages.map(mapRows) };
+  const mapPage = (rows: Row[]) => rows.flatMap((row) => {
+    const next = fn(row);
+    return next === null ? [] : [next];
+  });
+  if (Array.isArray(data)) return mapPage(data);
+  if ('pages' in data) return { ...data, pages: data.pages.map(mapPage) };
   return data;
+}
+
+// Copies only fields the row already has, so one patch fits both the legacy
+// and the v2 row shape (e.g. merchant/category, never v2's money objects).
+function patchRow<T extends Row>(row: T, patch: Record<string, unknown>): T {
+  const own = Object.fromEntries(Object.entries(patch).filter(([k]) => k in row));
+  return { ...row, ...own };
 }
 
 export function useTransactions(params?: Record<string, string | number>) {
@@ -29,29 +34,28 @@ export function useTransactions(params?: Record<string, string | number>) {
   });
 }
 
-// Every cache key downstream of "a transaction's money/date/category
-// changed" — Home, Explore and Plan each read their own shared-facts
-// queries under their own key prefixes (not just 'home-briefing'), so a
-// transaction mutation that only invalidated a few of these left the other
-// destinations showing pre-edit numbers on a fast cached return. See the
-// "Query invalidation needs journey review" finding in
-// docs/plans/2026-09-16-cashe-design-restoration-baseline-audit.md.
-// react-query's invalidateQueries does prefix matching, so each entry here
-// covers every parameterised variant of that query (e.g. ['home-daily-
-// totals', start, end] is invalidated by the bare ['home-daily-totals']).
-const SPENDING_AFFECTED_KEYS = [
-  'transactions', 'transactions-v2', 'transaction', 'transaction-v2',
-  'transactions-daily-totals', 'summary', 'balance',
-  'home-briefing', 'home-category-breakdown', 'home-daily-totals', 'home-merchants',
-  'explore-month-facts', 'explore-category-trend', 'explore-weekday-pattern',
-  'explore-merchants-by-category', 'explore-subscription-review',
-  'explore-trip-summary', 'explore-trip-month-facts',
-  'month-forecast', 'plan-upcoming', 'plan-upcoming-calendar', 'plan-upcoming-day',
-  'spending-evidence', 'spending-review',
-] as const;
+// Queries a transaction change can't move. Everything else is invalidated
+// after one — Home, Explore and Plan each read their own shared-facts
+// queries, and an allowlist of those kept falling behind as screens added
+// queries (see "Query invalidation needs journey review" in
+// docs/plans/2026-09-16-cashe-design-restoration-baseline-audit.md).
+// Only mounted queries refetch; the rest are marked stale.
+const UNAFFECTED_BY_SPENDING = new Set([
+  'settings', 'currentUser', 'status', 'sessions', 'categories', 'apple-wallet-cards', 'analytics-insight',
+]);
 
 export function invalidateSpendingQueries(qc: ReturnType<typeof useQueryClient>) {
-  for (const key of SPENDING_AFFECTED_KEYS) qc.invalidateQueries({ queryKey: [key] });
+  return qc.invalidateQueries({ predicate: (q) => !UNAFFECTED_BY_SPENDING.has(String(q.queryKey[0])) });
+}
+
+async function snapshotRowCaches(qc: ReturnType<typeof useQueryClient>, extraKeys: readonly (readonly unknown[])[] = []) {
+  const keys = [...ROW_LIST_KEYS, ...extraKeys];
+  await Promise.all(keys.map((queryKey) => qc.cancelQueries({ queryKey })));
+  return keys.flatMap((queryKey) => qc.getQueriesData<unknown>({ queryKey }));
+}
+
+function restore(qc: ReturnType<typeof useQueryClient>, snapshots: [readonly unknown[], unknown][]) {
+  for (const [key, snapshot] of snapshots) qc.setQueryData(key, snapshot);
 }
 
 export function useCreateTransaction() {
@@ -69,27 +73,23 @@ export function useUpdateTransaction() {
     mutationFn: ({ id, data }: { id: number; data: Partial<TransactionCorrectionV2> }) =>
       api.updateTransaction(id, data),
     onMutate: async ({ id, data }) => {
-      await qc.cancelQueries({ queryKey: ['transactions'] });
-      await qc.cancelQueries({ queryKey: ['transaction', id] });
-      const listSnapshots = qc.getQueriesData<TxCache>({ queryKey: ['transactions'] });
-      const single = qc.getQueryData<Transaction>(['transaction', id]);
+      const snapshots = await snapshotRowCaches(qc, [['transaction-v2', id]]);
       // Only merge fields the caller actually set (never null/undefined) —
       // the correction contract allows amount/currency/etc. to be null, but
-      // the cached Transaction shape requires them; an optimistic patch
-      // should never blank out a required display field.
+      // the cached rows require them; an optimistic patch should never blank
+      // out a required display field.
       const patch = Object.fromEntries(
         Object.entries(data).filter(([, v]) => v !== null && v !== undefined)
       );
-      qc.setQueriesData<TxCache>({ queryKey: ['transactions'] }, (old) =>
-        mapTxCache(old, (tx) => (tx.id === id ? { ...tx, ...patch } : tx))
-      );
-      if (single) qc.setQueryData(['transaction', id], { ...single, ...patch });
-      return { listSnapshots, single, id };
+      for (const queryKey of ROW_LIST_KEYS) {
+        qc.setQueriesData<RowCache>({ queryKey }, (old) =>
+          mapRows(old, (row) => (row.id === id ? patchRow(row, patch) : row)));
+      }
+      qc.setQueryData<Row>(['transaction-v2', id], (old) => (old ? patchRow(old, patch) : old));
+      return { snapshots };
     },
     onError: (_err, _vars, ctx) => {
-      if (!ctx) return;
-      for (const [key, snapshot] of ctx.listSnapshots) qc.setQueryData(key, snapshot);
-      if (ctx.single) qc.setQueryData(['transaction', ctx.id], ctx.single);
+      if (ctx) restore(qc, ctx.snapshots);
     },
     onSettled: () => invalidateSpendingQueries(qc),
   });
@@ -120,16 +120,15 @@ export function useDeleteTransaction() {
   return useMutation({
     mutationFn: (id: number) => api.deleteTransaction(id),
     onMutate: async (id) => {
-      await qc.cancelQueries({ queryKey: ['transactions'] });
-      const listSnapshots = qc.getQueriesData<TxCache>({ queryKey: ['transactions'] });
-      qc.setQueriesData<TxCache>({ queryKey: ['transactions'] }, (old) =>
-        mapTxCache(old, (tx) => (tx.id === id ? null : tx))
-      );
-      return { listSnapshots };
+      const snapshots = await snapshotRowCaches(qc);
+      for (const queryKey of ROW_LIST_KEYS) {
+        qc.setQueriesData<RowCache>({ queryKey }, (old) => mapRows(old, (row) => (row.id === id ? null : row)));
+      }
+      return { snapshots };
     },
     onError: (_err, _id, ctx) => {
       if (!ctx) return;
-      for (const [key, snapshot] of ctx.listSnapshots) qc.setQueryData(key, snapshot);
+      restore(qc, ctx.snapshots);
       toast("Couldn't delete — restored.");
     },
     onSettled: () => invalidateSpendingQueries(qc),

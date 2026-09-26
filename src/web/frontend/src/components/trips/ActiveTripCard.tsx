@@ -6,16 +6,13 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { useSettings } from '@/hooks/useSettings';
 
 export function ActiveTripCard({ showEndButton = false }: { showEndButton?: boolean }) {
   const qc = useQueryClient();
   const [confirmEnd, setConfirmEnd] = useState(false);
 
-  const { data: settings } = useQuery({
-    queryKey: ['settings'],
-    queryFn: () => api.getSettings(),
-    staleTime: 30_000,
-  });
+  const { data: settings } = useSettings();
 
   const { data: activeTrip } = useQuery({
     queryKey: ['trips-active'],

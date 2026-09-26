@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { api, type Subscription } from '@/api/client';
+import { invalidateSpendingQueries } from '@/hooks/useTransactions';
 
 type Mode = 'create' | 'edit';
 
@@ -81,9 +82,7 @@ export function SubscriptionForm({ onClose, onSave, initial }: SubscriptionFormP
       });
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['subscriptions'] });
-      qc.invalidateQueries({ queryKey: ['plan-upcoming'] });
-      qc.invalidateQueries({ queryKey: ['home-briefing'] });
+      invalidateSpendingQueries(qc);
       onSave();
     },
     onError: (e: unknown) => {

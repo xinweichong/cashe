@@ -1,8 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 import { api, type GoalProgress, type GoalProgressV2 } from '@/api/client';
+import { useSettings } from '@/hooks/useSettings';
 
 export function useBudget(id: number | null) {
-  const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: () => api.getSettings(), staleTime: 10_000 });
+  const { data: settings } = useSettings();
   const { data: progress = [] } = useQuery({
     queryKey: ['budget-progress-v2'],
     queryFn: () => api.getBudgetProgressV2(),
@@ -50,6 +51,6 @@ export function useGoals() {
   });
 }
 
-export function useTrips() {
-  return useQuery({ queryKey: ['trips'], queryFn: () => api.getTrips(), staleTime: 30_000 });
+export function useTrips({ enabled = true }: { enabled?: boolean } = {}) {
+  return useQuery({ queryKey: ['trips'], queryFn: () => api.getTrips(), staleTime: 30_000, enabled });
 }

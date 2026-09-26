@@ -34,6 +34,7 @@ import {
   CheckCircle2, Wifi, WifiOff, AlertTriangle,
 } from 'lucide-react';
 import { TelegramStep, GmailStep, AppleWalletStep } from '@/components/onboarding/steps';
+import { useSettings } from '@/hooks/useSettings';
 
 
 const CAT_TYPES = [
@@ -181,10 +182,7 @@ export function SettingsPage() {
   const [velocityThreshold, setVelocityThreshold] = useState<string>('');
   const [settingsError, setSettingsError] = useState('');
 
-  const { data: settings, refetch: refetchSettings } = useQuery({
-    queryKey: ['settings'],
-    queryFn: () => api.getSettings(),
-  });
+  const { data: settings, refetch: refetchSettings } = useSettings();
 
   // Syncs the editable draft from server data, which arrives asynchronously
   // after mount (and again on refetch) — there's no prop/render-time value to

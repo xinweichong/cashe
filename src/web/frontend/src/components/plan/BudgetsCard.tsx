@@ -8,6 +8,8 @@ import { SelectableRow } from '@/components/ui/selectable-row';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import { getBudgetTone, formatCurrency } from '@/lib/utils';
 import { staggerContainerVariants, staggerItemVariants } from '@/lib/motionPresets';
+import { useSettings } from '@/hooks/useSettings';
+import { useCategories } from '@/hooks/useCategories';
 
 function BudgetSummaryRow({ b, onSelect }: { b: BudgetProgressV2; onSelect: () => void }) {
   const budgetAmount = b.budget_amount.minor_units / 100;
@@ -31,7 +33,7 @@ function BudgetSummaryRow({ b, onSelect }: { b: BudgetProgressV2; onSelect: () =
 
 function AddBudgetForm({ onAdd }: { onAdd: () => void }) {
   const qc = useQueryClient();
-  const { data: categories = [] } = useQuery({ queryKey: ['categories'], queryFn: () => api.getCategories(), staleTime: 60_000 });
+  const { data: categories = [] } = useCategories();
   const [category, setCategory] = useState<string>('__overall__');
   const [amount, setAmount] = useState('');
   const [period, setPeriod] = useState('monthly');
@@ -76,7 +78,7 @@ function AddBudgetForm({ onAdd }: { onAdd: () => void }) {
 
 export function BudgetsCard({ onSelect }: { onSelect: (id: number) => void }) {
   const [showAddForm, setShowAddForm] = useState(false);
-  const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: () => api.getSettings(), staleTime: 10_000 });
+  const { data: settings } = useSettings();
   const { data: progress = [], isLoading } = useQuery({
     queryKey: ['budget-progress-v2'],
     queryFn: () => api.getBudgetProgressV2(),

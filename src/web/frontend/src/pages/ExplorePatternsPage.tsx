@@ -30,6 +30,8 @@ import { LensGrow, LensMore, PhoneScreen, type Lens } from '@/components/layout/
 import { DrillSheet } from '@/components/layout/DrillSheet';
 import { useDrill } from '@/hooks/useDrill';
 import { useIsPhone } from '@/hooks/useIsPhone';
+import { useTrips } from '@/components/plan/planHooks';
+import { useCategories } from '@/hooks/useCategories';
 
 const WEEKDAY_LABELS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
@@ -159,7 +161,7 @@ function WhereItWent({ facts }: { facts: SpendingFacts | undefined }) {
 
 function SpendingOverTime({ compactChips = false }: { compactChips?: boolean }) {
   const [allChips, setAllChips] = useState(false);
-  const { data: categories } = useQuery({ queryKey: ['categories'], queryFn: () => api.getCategories() });
+  const { data: categories } = useCategories();
   const { data: monthFacts } = useQuery({ queryKey: ['explore-month-facts'], queryFn: () => briefingApi.month() });
   const [selected, setSelected] = useState<string[]>([]);
   const initialized = useRef(false);
@@ -334,7 +336,7 @@ function WhatDoesANormalWeekLookLike() {
 
 function MerchantRanking({ facts }: { facts: SpendingFacts | undefined }) {
   const [category, setCategory] = useState('');
-  const { data: categories } = useQuery({ queryKey: ['categories'], queryFn: () => api.getCategories() });
+  const { data: categories } = useCategories();
   const period = facts?.current;
   const { data, isError, refetch } = useQuery({
     // Shared-facts merchant_ranking (spending_facts.py), not the legacy
@@ -511,7 +513,7 @@ export function ExplorePatternsPage() {
     setSearch(params, { replace: true });
   }
   const { data: facts } = useMonthFacts();
-  const { data: trips } = useQuery({ queryKey: ['trips'], queryFn: () => api.getTrips() });
+  const { data: trips } = useTrips();
   const isPhone = useIsPhone();
   const { drill, openDrill, closeDrill } = useDrill(EXPLORE_DRILLS);
   const dailyRead = useQuery({ queryKey: ['analytics-insight', 'daily'], queryFn: () => api.getAnalyticsInsight(), staleTime: 60 * 60 * 1000, enabled: isPhone });

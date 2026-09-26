@@ -8,6 +8,7 @@ import { ChartCard } from '@/components/ui/cards';
 import { CHART_MOTION, useChartTheme } from '@/lib/chartTheme';
 import { api, type Subscription, type Transaction, type UpcomingTransaction } from '@/api/client';
 import { SubscriptionForm } from './SubscriptionForm';
+import { invalidateSpendingQueries } from '@/hooks/useTransactions';
 
 interface SubscriptionDetailProps {
   subId: number;
@@ -82,9 +83,7 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
   const cancelMutation = useMutation({
     mutationFn: () => api.updateSubscription(subId, { status: 'cancelled' }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['subscriptions'] });
-      qc.invalidateQueries({ queryKey: ['plan-upcoming'] });
-      qc.invalidateQueries({ queryKey: ['home-briefing'] });
+      invalidateSpendingQueries(qc);
       setConfirmCancel(false);
     },
   });
@@ -92,26 +91,21 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
   const confirmationMutation = useMutation({
     mutationFn: () => api.confirmSubscription(subId),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['subscriptions'] });
-      qc.invalidateQueries({ queryKey: ['plan-upcoming'] });
+      invalidateSpendingQueries(qc);
     },
   });
 
   const pauseMutation = useMutation({
     mutationFn: (status: 'paused' | 'active') => api.updateSubscription(subId, { status }),
     onSuccess: () => {
-      for (const key of ['subscriptions', 'subscription-upcoming', 'plan-upcoming', 'home-briefing']) {
-        qc.invalidateQueries({ queryKey: [key] });
-      }
+      invalidateSpendingQueries(qc);
     },
   });
 
   const deleteMutation = useMutation({
     mutationFn: () => api.deleteSubscription(subId),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['subscriptions'] });
-      qc.invalidateQueries({ queryKey: ['plan-upcoming'] });
-      qc.invalidateQueries({ queryKey: ['home-briefing'] });
+      invalidateSpendingQueries(qc);
       onClose();
     },
   });
@@ -119,9 +113,7 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
   const dismissMutation = useMutation({
     mutationFn: (upcomingId: number) => api.dismissUpcoming(subId, upcomingId),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['subscription-upcoming', subId] });
-      qc.invalidateQueries({ queryKey: ['plan-upcoming'] });
-      qc.invalidateQueries({ queryKey: ['home-briefing'] });
+      invalidateSpendingQueries(qc);
     },
   });
 
@@ -129,11 +121,7 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
     mutationFn: ({ upcomingId, txId }: { upcomingId: number; txId: number }) =>
       api.matchUpcoming(subId, upcomingId, txId).then(() => txId),
     onSuccess: (txId) => {
-      qc.invalidateQueries({ queryKey: ['subscription-upcoming', subId] });
-      qc.invalidateQueries({ queryKey: ['subscription-history', subId] });
-      qc.invalidateQueries({ queryKey: ['subscriptions'] });
-      qc.invalidateQueries({ queryKey: ['plan-upcoming'] });
-      qc.invalidateQueries({ queryKey: ['home-briefing'] });
+      invalidateSpendingQueries(qc);
       const matchedTx = recentTxs.find((t) => t.id === txId);
       if (matchedTx && sub && matchedTx.merchant && matchedTx.merchant !== sub.merchant) {
         setAdoptPrompt({ txMerchant: matchedTx.merchant });
@@ -144,9 +132,7 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
   const adoptMutation = useMutation({
     mutationFn: (merchant: string) => api.updateSubscription(subId, { merchant }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['subscriptions'] });
-      qc.invalidateQueries({ queryKey: ['plan-upcoming'] });
-      qc.invalidateQueries({ queryKey: ['home-briefing'] });
+      invalidateSpendingQueries(qc);
       setAdoptPrompt(null);
     },
   });
@@ -154,10 +140,7 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
   const linkMutation = useMutation({
     mutationFn: (txId: number) => api.linkTransaction(subId, txId),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['subscription-history', subId] });
-      qc.invalidateQueries({ queryKey: ['subscriptions'] });
-      qc.invalidateQueries({ queryKey: ['plan-upcoming'] });
-      qc.invalidateQueries({ queryKey: ['home-briefing'] });
+      invalidateSpendingQueries(qc);
       setLinkSelectedId('');
     },
   });
@@ -470,9 +453,7 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
           onClose={() => setShowEdit(false)}
           onSave={() => {
             setShowEdit(false);
-            qc.invalidateQueries({ queryKey: ['subscriptions'] });
-            qc.invalidateQueries({ queryKey: ['plan-upcoming'] });
-            qc.invalidateQueries({ queryKey: ['home-briefing'] });
+            invalidateSpendingQueries(qc);
           }}
         />
       )}

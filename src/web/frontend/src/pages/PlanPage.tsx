@@ -31,6 +31,9 @@ import { RecurringCharges } from '@/components/explore/RecurringCharges';
 import { useDrill } from '@/hooks/useDrill';
 import { DrillSheet } from '@/components/layout/DrillSheet';
 import { useIsPhone } from '@/hooks/useIsPhone';
+import { invalidateSpendingQueries } from '@/hooks/useTransactions';
+import { useSettings } from '@/hooks/useSettings';
+import { useHomeBriefing, useMonthForecast } from '@/hooks/useBriefing';
 
 const amountBasisLabels: Record<'matched_charge' | 'user' | 'unknown', string> = {
   matched_charge: 'Amount based on your last confirmed charge',
@@ -113,7 +116,7 @@ function ProjectionComparisonFallback({ data }: { data: MonthForecast }) {
 }
 
 function ProjectionHero() {
-  const { data, isError, refetch } = useQuery({ queryKey: ['month-forecast'], queryFn: () => briefingApi.monthForecast() });
+  const { data, isError, refetch } = useMonthForecast();
   return (
     <HeroCard title="This month's projection" className="col-span-2">
       {isError && !data ? <div role="alert"><LoadFailed onRetry={() => void refetch()} /></div> : !data ? <div role="status"><span className="sr-only">Loading…</span><Skeleton className="h-20 w-full" /></div> :
@@ -142,8 +145,8 @@ function ProjectionHero() {
 // where it lands on the spectrum (teal under, coral over), so the plan's
 // projection never looks like money already spent.
 function ProjectionGlance() {
-  const { data, isError, refetch } = useQuery({ queryKey: ['month-forecast'], queryFn: () => briefingApi.monthForecast() });
-  const { data: briefing } = useQuery({ queryKey: ['home-briefing'], queryFn: briefingApi.home });
+  const { data, isError, refetch } = useMonthForecast();
+  const { data: briefing } = useHomeBriefing();
   const target = briefing?.spending_target?.target;
   const month = new Date().toLocaleDateString('en-SG', { month: 'short' });
   const projected = data?.projected_total ?? null;
@@ -433,7 +436,7 @@ export function PlanPage() {
   const cutAfter = !!report && offset + report.items.length < report.total && selectedIndex === grouped.length - 1;
   const selectedInAgenda = selectedIndex >= 0 && !cutBefore && !cutAfter;
 
-  const { data: settings } = useQuery({ queryKey: ['settings'], queryFn: () => api.getSettings(), staleTime: 10_000 });
+  const { data: settings } = useSettings();
 
   const calendarPane = isDesktop ? (
     <MonthCalendar month={calendarMonth} onMonth={setCalendarMonth} selectedDate={selectedDate} onSelect={selectDate} />
@@ -702,8 +705,7 @@ function ChargeActions({ item, onDismissed }: { item: UpcomingPlan['items'][numb
     onSuccess: async (_data, action) => {
       if (action === 'dismiss') onDismissed();
       setMode(null);
-      await Promise.all(['plan-upcoming', 'home-briefing', 'subscriptions', 'subscription-upcoming', 'plan-upcoming-calendar', 'plan-upcoming-day'].map(key =>
-        client.invalidateQueries({ queryKey: [key] })));
+      await invalidateSpendingQueries(client);
     },
   });
   const openEdit = () => {
