@@ -56,14 +56,3 @@ test('Analytics (Explore Insights) period switch is a labelled tab set', async (
   expect(await daily.evaluate((el) => getComputedStyle(el).color)).not.toBe(await tealOf(page));
   await page.screenshot({ path: 'e2e/screenshots/tabs-analytics-insights.png' });
 });
-
-test('classic Overview trend view switch is a labelled tab set', async ({ page }) => {
-  await mockShell(page, false);
-  await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto('/overview');
-  const list = page.getByRole('tablist', { name: 'Trend view' });
-  await expect(list).toBeVisible();
-  await list.getByRole('tab', { name: 'By category' }).click();
-  await expect(list.getByRole('tab', { name: 'By category' })).toHaveAttribute('aria-selected', 'true');
-  await page.screenshot({ path: 'e2e/screenshots/tabs-overview-classic.png' });
-});

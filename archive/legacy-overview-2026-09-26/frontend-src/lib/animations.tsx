@@ -1,5 +1,27 @@
 // src/web/frontend/src/lib/animations.tsx
+import { useEffect } from 'react'
+import { animate, useMotionValue, useTransform, motion } from 'framer-motion'
+import { formatCurrency } from './utils'
 import { Badge } from '@/components/ui/badge'
+
+// ─── Animated currency number ─────────────────────────────────────────────────
+// Counts from 0 to `value` on mount and whenever `value` changes.
+interface AnimatedCurrencyProps {
+  value: number
+  currency?: string
+}
+
+export function AnimatedCurrency({ value, currency = 'SGD' }: AnimatedCurrencyProps) {
+  const motionValue = useMotionValue(0)
+  const formatted = useTransform(motionValue, (v) => formatCurrency(v, currency))
+
+  useEffect(() => {
+    const controls = animate(motionValue, value, { duration: 0.7, ease: 'easeOut' })
+    return controls.stop
+  }, [value, motionValue])
+
+  return <motion.span>{formatted}</motion.span>
+}
 
 // ─── Delta badge ─────────────────────────────────────────────────────────────
 // value = signed percentage vs prior period (positive = more spend = worse for expenses)

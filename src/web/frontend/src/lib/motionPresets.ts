@@ -1,5 +1,3 @@
-import { useEffect } from 'react'
-import { animate, useMotionValue } from 'framer-motion'
 import type { Variants } from 'framer-motion'
 
 // Mirrors --ease-out-expo in index.css.
@@ -55,13 +53,6 @@ export const fadeVariants: Variants = {
   exit:    { opacity: 0, transition: { duration: 0.1 } },
 }
 
-// ─── Slide up from bottom (BottomTabs drawer) ────────────────────────────────
-export const slideUpVariants: Variants = {
-  initial: { y: '100%' },
-  animate: { y: 0, transition: springs.snappy },
-  exit:    { y: '100%', transition: { duration: 0.2, ease: 'easeIn' as const } },
-}
-
 // ─── Stagger container ────────────────────────────────────────────────────────
 export const staggerContainerVariants: Variants = {
   initial: {},
@@ -73,14 +64,4 @@ export const staggerItemVariants: Variants = {
   initial: { opacity: 0, y: 10 },
   animate: { opacity: 1, y: 0, transition: springs.gentle },
   exit:    { opacity: 0, transition: { duration: 0.1 } },
-}
-
-// ─── Count-up hook ────────────────────────────────────────────────────────────
-export function useCountUp(target: number, duration = 0.7) {
-  const motionValue = useMotionValue(0)
-  useEffect(() => {
-    const controls = animate(motionValue, target, { duration, ease: 'easeOut' })
-    return controls.stop
-  }, [target, motionValue, duration])
-  return motionValue
 }

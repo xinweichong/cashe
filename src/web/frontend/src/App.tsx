@@ -40,7 +40,6 @@ const PlanPage = lazyRoute(() => import('@/pages/PlanPage').then(m => m.PlanPage
 const HomePage = lazyRoute(() => import('@/pages/HomePage').then(m => m.HomePage));
 const EvidencePage = lazyRoute(() => import('@/pages/EvidencePage').then(m => m.EvidencePage));
 const ReviewPage = lazyRoute(() => import('@/pages/ReviewPage').then(m => m.ReviewPage));
-const OverviewPage = lazyRoute(() => import('@/pages/OverviewPage').then(m => m.OverviewPage));
 const TransactionsPage = lazyRoute(() => import('@/pages/TransactionsPage').then(m => m.TransactionsPage));
 const ExplorePatternsPage = lazyRoute(() => import('@/pages/ExplorePatternsPage').then(m => m.ExplorePatternsPage));
 const ExploreSignalsPage = lazyRoute(() => import('@/pages/ExploreDetailPages').then(m => m.ExploreSignalsPage));
@@ -77,7 +76,6 @@ const ROUTE_PRELOADS: [RegExp, Array<{ preload: () => Promise<void> }>][] = [
   [/^\/evidence(\/|$)/, [EvidencePage]],
   [/^\/review(\/|$)/, [ReviewPage]],
   [/^\/settings(\/|$)/, [SettingsPage]],
-  [/^\/overview(\/|$)/, [OverviewPage]],
   [/^\/analytics(\/|$)/, [ExplorePatternsPage]],
   [/^\/merchants(\/|$)/, [MerchantsPage]],
   [/^\/finance(\/|$)/, [PlanPage]],
@@ -186,7 +184,7 @@ function AppContent() {
         {/* Dashboard routes */}
         <Route element={<AppShell />}>
           <Route index element={<HomePage />} />
-          <Route path="overview" element={<OverviewPage />} />
+          <Route path="overview" element={<LegacyRedirect from="/overview" to="/" />} />
           <Route path="activity" element={<TransactionsPage />} />
           <Route path="activity/:transactionId" element={<TransactionsPage />} />
           <Route path="plan" element={<PlanPage />} />

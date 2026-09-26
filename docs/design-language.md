@@ -748,7 +748,8 @@ Source of truth for presets: [`src/lib/animations.tsx`](../src/web/frontend/src/
 | `pageVariants` | gentle in, 0.12s ease-in out | Route transitions (AppShell) |
 | `fadeUpVariants` | gentle in, 0.12s ease-in out | Form expands, card entrances |
 | `slideInRightVariants` | snappy in, 0.15s ease-in out | Right-side detail panels |
-| `slideUpVariants` | snappy in, 0.2s ease-in out | Bottom drawers (mobile) |
+| `pushInRightVariants` | 0.3s expo in, 0.2s ease-in out | SlideOver on a phone (full-width push) |
+| `fadeVariants` | 0.15s in, 0.1s out | Reduced-motion stand-in for slides |
 | `staggerContainer/ItemVariants` | 0.04s children | Lists — cap staggering at 10 items (`STAGGER_LIMIT`) |
 | `AnimatedCurrency` | 0.7s ease-out count-up | Hero numerics only — one count-up per page |
 

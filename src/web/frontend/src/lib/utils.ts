@@ -157,14 +157,6 @@ export function toDateStr(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-/** Map spending pace % to a spectrum colour. */
-export function getPaceColor(percent: number): string {
-  if (percent < 80)  return COLOR_MINT;
-  if (percent <= 100) return COLOR_TEAL;
-  if (percent <= 115) return COLOR_TANGERINE;
-  return COLOR_CORAL;
-}
-
 /** Map budget utilisation % to a spectrum colour. */
 export function getBudgetTone(percent: number): { color: string; toneName: 'calm' | 'active' | 'notable' | 'warn' } {
   if (percent < 50)  return { color: COLOR_MINT,      toneName: 'calm' };

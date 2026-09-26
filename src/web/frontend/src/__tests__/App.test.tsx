@@ -6,7 +6,6 @@ vi.mock('@/pages/PlanPage', () => ({ PlanPage: () => <div>plan-page</div> }));
 vi.mock('@/pages/HomePage', () => ({ HomePage: () => <div>home-page</div> }));
 vi.mock('@/pages/EvidencePage', () => ({ EvidencePage: () => <div>evidence-page</div> }));
 vi.mock('@/pages/ReviewPage', () => ({ ReviewPage: () => <div>review-page</div> }));
-vi.mock('@/pages/OverviewPage', () => ({ OverviewPage: () => <div>overview-page</div> }));
 vi.mock('@/pages/TransactionsPage', () => ({ TransactionsPage: () => <div>transactions-page</div> }));
 vi.mock('@/pages/ExplorePatternsPage', () => ({ ExplorePatternsPage: () => <div>explore-patterns-page</div> }));
 vi.mock('@/pages/SettingsPage', () => ({ SettingsPage: () => <div>settings-page</div> }));
