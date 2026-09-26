@@ -27,7 +27,7 @@ class TestBuildContextLineBudget:
             }
         ]
         bot.storage.get_budget_progress = MagicMock(return_value=mock_progress)
-        result = bot._build_context_line("Food", "KFC", 10.0)
+        result = bot._build_context_line(bot.storage, "Food", "KFC", 10.0)
         assert result == "Budget 80% used — 20 left this month."
 
     def test_budget_over_100_pct_returns_over_budget_message(self, bot):
@@ -41,7 +41,7 @@ class TestBuildContextLineBudget:
             }
         ]
         bot.storage.get_budget_progress = MagicMock(return_value=mock_progress)
-        result = bot._build_context_line("Food", "KFC", 10.0)
+        result = bot._build_context_line(bot.storage, "Food", "KFC", 10.0)
         assert result == "Over budget by 5."
 
     def test_budget_below_75_pct_skips_budget_check(self, bot, in_memory_db):
@@ -57,7 +57,7 @@ class TestBuildContextLineBudget:
         ]
         bot.storage.get_budget_progress = MagicMock(return_value=mock_progress)
         # No merchant visits, no anomaly data → empty string
-        result = bot._build_context_line("Food", "UniqueMerchantXYZ", 5.0)
+        result = bot._build_context_line(bot.storage, "Food", "UniqueMerchantXYZ", 5.0)
         assert result == ""
 
 
@@ -82,27 +82,27 @@ class TestBuildContextLineRepeatMerchant:
         # 2 prior DB rows + this transaction = 3 total → triggers at exactly ≥ 3
         bot.storage.get_budget_progress = MagicMock(return_value=[])
         self._insert_merchant_txns(in_memory_db, "Starbucks", 2)
-        result = bot._build_context_line("Food", "Starbucks", 8.0)
+        result = bot._build_context_line(bot.storage, "Food", "Starbucks", 8.0)
         assert result == "Starbucks — 3× this week."
 
     def test_merchant_4x_this_week_returns_correct_count(self, bot, in_memory_db):
         # 3 prior DB rows + this transaction = 4 total
         bot.storage.get_budget_progress = MagicMock(return_value=[])
         self._insert_merchant_txns(in_memory_db, "GrabFood", 3)
-        result = bot._build_context_line("Food", "GrabFood", 8.0)
+        result = bot._build_context_line(bot.storage, "Food", "GrabFood", 8.0)
         assert result == "GrabFood — 4× this week."
 
     def test_merchant_1x_in_db_with_current_is_2x_no_repeat(self, bot, in_memory_db):
         bot.storage.get_budget_progress = MagicMock(return_value=[])
         self._insert_merchant_txns(in_memory_db, "PastaMania", 1)
         # 1 in DB + this transaction = 2 total → should NOT trigger (need ≥ 3)
-        result = bot._build_context_line("Food", "PastaMania", 8.0)
+        result = bot._build_context_line(bot.storage, "Food", "PastaMania", 8.0)
         assert result == ""
 
     def test_merchant_3x_older_than_7_days_no_repeat_message(self, bot, in_memory_db):
         bot.storage.get_budget_progress = MagicMock(return_value=[])
         self._insert_merchant_txns(in_memory_db, "OldMerchant", 3, days_ago=10)
-        result = bot._build_context_line("Food", "OldMerchant", 8.0)
+        result = bot._build_context_line(bot.storage, "Food", "OldMerchant", 8.0)
         assert result == ""
 
 
@@ -127,21 +127,21 @@ class TestBuildContextLineAnomaly:
         bot.storage.get_budget_progress = MagicMock(return_value=[])
         # Median of [10, 10, 10] = 10; amount = 25.0 → 2.5× → triggers
         self._insert_category_txns(in_memory_db, "Dining", [10.0, 10.0, 10.0])
-        result = bot._build_context_line("Dining", "UniqueRestaurantXYZ", 25.0)
+        result = bot._build_context_line(bot.storage, "Dining", "UniqueRestaurantXYZ", 25.0)
         assert result == "Unusual — 2.5× the usual Dining spend."
 
     def test_anomaly_1_5x_median_no_message(self, bot, in_memory_db):
         bot.storage.get_budget_progress = MagicMock(return_value=[])
         # Median of [10, 10, 10] = 10; amount = 15.0 → 1.5× → no trigger
         self._insert_category_txns(in_memory_db, "Transport", [10.0, 10.0, 10.0])
-        result = bot._build_context_line("Transport", "UniqueGrab", 15.0)
+        result = bot._build_context_line(bot.storage, "Transport", "UniqueGrab", 15.0)
         assert result == ""
 
     def test_anomaly_fewer_than_3_prior_txns_no_message(self, bot, in_memory_db):
         bot.storage.get_budget_progress = MagicMock(return_value=[])
         # Only 2 prior transactions → minimum 3 required → no trigger
         self._insert_category_txns(in_memory_db, "Coffee", [5.0, 5.0])
-        result = bot._build_context_line("Coffee", "UniqueBarXYZ", 50.0)
+        result = bot._build_context_line(bot.storage, "Coffee", "UniqueBarXYZ", 50.0)
         assert result == ""
 
 
@@ -153,7 +153,7 @@ class TestBuildContextLineNoneApply:
     def test_returns_empty_when_nothing_applies(self, bot):
         bot.storage.get_budget_progress = MagicMock(return_value=[])
         # No transactions in DB at all
-        result = bot._build_context_line("Food", "NewMerchantEver", 10.0)
+        result = bot._build_context_line(bot.storage, "Food", "NewMerchantEver", 10.0)
         assert result == ""
 
 
@@ -186,6 +186,6 @@ class TestBuildContextLinePriority:
             )
         in_memory_db.commit()
 
-        result = bot._build_context_line("Food", "BudgetMerchant", 10.0)
+        result = bot._build_context_line(bot.storage, "Food", "BudgetMerchant", 10.0)
         # Should return budget message, not repeat message
         assert result == "Budget 80% used — 20 left this month."

@@ -184,7 +184,6 @@ class UserManager:
             ),
             poll_interval=poll_interval,
         )
-        # Attach exchange_service and categorizer to context for webhook direct path
         ctx = UserContext(
             username=username,
             storage=storage,
@@ -193,8 +192,6 @@ class UserManager:
             db_path=db_path,
             token_path=token_path,
         )
-        # Back-reference so webhook can reach exchange_service
-        ctx.exchange_service = self._exchange_service  # type: ignore[attr-defined]
         return ctx
 
     def _make_on_transaction(self, username: str, storage, categorizer):

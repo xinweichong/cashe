@@ -679,6 +679,13 @@ class Storage:
         return dict(row) if row else None
 
     @_locked
+    def count_transactions_from(self, source: str, cap: int) -> int:
+        """How many transactions came from `source`, counting no further than `cap`."""
+        return self._conn.execute(
+            "SELECT COUNT(*) FROM (SELECT 1 FROM transactions WHERE source = ? LIMIT ?)", (source, cap)
+        ).fetchone()[0]
+
+    @_locked
     def get_transactions_by_ids(self, ids) -> dict[int, dict]:
         ids = list(set(ids))
         if not ids:

@@ -32,29 +32,17 @@ def create_webhook_app(user_manager, bot=None) -> FastAPI:
             digest = hashlib.sha256(token.encode()).hexdigest()
         if not await run_in_threadpool(storage.authorize_wallet, digest):
             raise HTTPException(status_code=401, detail="Wallet credential required")
-        # Resolve per-user pipeline from the poller if available
-        pipeline = getattr(ctx.poller, "pipeline", None) if ctx.poller else None
-        # Resolve categorizer and exchange service from context attributes
-        categorizer = getattr(ctx, "categorizer", None)
-        exchange_service = getattr(ctx, "exchange_service", None)
-
-        if pipeline is None:
-            from src.ingestion import IngestionPipeline
-            callback = getattr(ctx, "on_transaction", None)
-            def notify(tx):
-                if callback:
-                    return callback(tx["id"], tx["amount"], tx["merchant"],
-                                    tx["category"], tx["_match_source"], tx["source"])
-            pipeline = IngestionPipeline(storage, categorizer, exchange_service, on_transaction=notify)
+        # The user's one ingestion pipeline (shared with Gmail), so Wallet
+        # captures get the same categorizer, FX rates and notifications.
         body = await request.body()
         try:
-            tx_dict, tx_id = await run_in_threadpool(pipeline.ingest_wallet_request, body)
+            tx_dict, tx_id = await run_in_threadpool(ctx.poller.pipeline.ingest_wallet_request, body)
         except WalletPayloadError as exc:
             raise HTTPException(status_code=exc.status_code, detail=str(exc)) from None
         if tx_dict is None:
             return {"status": "duplicate", "transaction_id": tx_id}
 
-        _maybe_notify_first_apple_wallet(storage, bot, username)
+        await run_in_threadpool(_maybe_notify_first_apple_wallet, storage, bot, username)
         return {"status": "ok", "transaction_id": tx_dict["id"]}
 
     return app
@@ -65,10 +53,7 @@ def _maybe_notify_first_apple_wallet(storage, bot, username: str) -> None:
     if bot is None:
         return
     try:
-        count = storage._conn.execute(
-            "SELECT COUNT(*) FROM transactions WHERE source = 'apple_wallet'"
-        ).fetchone()[0]
-        if count == 1:
+        if storage.count_transactions_from("apple_wallet", cap=2) == 1:
             bot.notify_text(
                 "Apple Wallet is working — your first transaction just came through.",
                 username,

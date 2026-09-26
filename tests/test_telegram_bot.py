@@ -461,7 +461,7 @@ class TestRecatCallback:
         update.callback_query = query
         context = MagicMock()
 
-        await bot_service._recat_callback(update, context)
+        await bot_service._category_callback(update, context)
 
         query.edit_message_text.assert_called_once()
         text = query.edit_message_text.call_args[0][0]
@@ -1114,7 +1114,7 @@ class TestBuildContextLineAnomalyMedian:
             category="Dining", transaction_date="2026-04-16", tx_type="expense",
             currency="THB", exchange_rate=1.0,
         )
-        result = bot_service._build_context_line("Dining", "New Spot", 25.0)
+        result = bot_service._build_context_line(bot_service.storage, "Dining", "New Spot", 25.0)
         assert "Unusual" in result
         assert "2.5" in result  # 25 / median(10) = 2.5x
 

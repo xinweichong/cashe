@@ -9,12 +9,18 @@ TEST_USER = "alice"
 
 
 class FakeContext:
+    """Like UserManager's context: the webhook ingests through the poller's pipeline."""
     def __init__(self, storage, categorizer=None, exchange_service=None, on_transaction=None):
+        from types import SimpleNamespace
+        from src.ingestion import IngestionPipeline
+
+        def notify(tx):
+            if on_transaction:
+                return on_transaction(tx["id"], tx["amount"], tx["merchant"],
+                                      tx["category"], tx["_match_source"], tx["source"])
+
         self.storage = storage
-        self.poller = None
-        self.categorizer = categorizer
-        self.exchange_service = exchange_service
-        self.on_transaction = on_transaction
+        self.poller = SimpleNamespace(pipeline=IngestionPipeline(storage, categorizer, exchange_service, on_transaction=notify))
 
 
 class FakeUserManager:

@@ -5,6 +5,7 @@ import logging
 import re
 import secrets
 from datetime import datetime, timedelta
+from decimal import Decimal
 from types import SimpleNamespace
 from typing import Optional
 
@@ -14,7 +15,7 @@ from telegram.ext import Application, CallbackQueryHandler, CommandHandler, Conv
 from src.categorizer import Categorizer
 from src.config import DEFAULT_TIMEZONE, local_now
 from src.exchange import ExchangeRateService
-from src.storage import Storage, TransactionRequestConflict
+from src.storage import Conflict, Storage, TransactionRequestConflict
 from src.spending_facts import resolve_money
 from src import transaction_commands
 
@@ -65,18 +66,52 @@ def _fmt_sgd_equivalent(tx: dict) -> str:
     return f"{minor / 100:.2f}"
 
 
+def _two_column_keyboard(buttons: list, extra_rows: list = ()) -> InlineKeyboardMarkup:
+    rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
+    return InlineKeyboardMarkup(rows + list(extra_rows))
+
+
 def get_category_keyboard(tx_id: int, categories: list[str]) -> InlineKeyboardMarkup:
     """Create a 2-column grid of category buttons for recategorization."""
-    buttons = []
-    row = []
-    for cat in categories:
-        row.append(InlineKeyboardButton(cat, callback_data=f"recat:{tx_id}:{cat}"))
-        if len(row) == 2:
-            buttons.append(row)
-            row = []
-    if row:
-        buttons.append(row)
-    return InlineKeyboardMarkup(buttons)
+    return _two_column_keyboard([InlineKeyboardButton(cat, callback_data=f"recat:{tx_id}:{cat}") for cat in categories])
+
+
+def _split_trailing_date(tokens: list[str], keep: int = 0) -> tuple[str | None, list[str]]:
+    """Take a trailing "YYYY-MM-DD HH:MM" or bare "YYYY-MM-DD" (midnight) off
+    `tokens`, leaving at least `keep` tokens. Returns (ISO datetime or None,
+    the remaining tokens)."""
+    if len(tokens) >= 2 + keep:
+        try:
+            datetime.strptime(f"{tokens[-2]} {tokens[-1]}", "%Y-%m-%d %H:%M")
+            return f"{tokens[-2]}T{tokens[-1]}:00", tokens[:-2]
+        except ValueError:
+            pass
+    if len(tokens) >= 1 + keep:
+        try:
+            datetime.strptime(tokens[-1], "%Y-%m-%d")
+            return f"{tokens[-1]}T00:00:00", tokens[:-1]
+        except ValueError:
+            pass
+    return None, tokens
+
+
+def _sgd_text(money: dict) -> str:
+    return f"S${Decimal(money['minor_units']) / 100:,.2f}"
+
+
+def _period_status_lines(current: dict, facts: dict) -> list[str]:
+    """The caveats under a spending period: unresolved, undated, indicative
+    and partial records."""
+    lines = []
+    if current["unresolved_count"]:
+        lines.append(f"{current['unresolved_count']} records in this period have unresolved money or classification.")
+    if facts["undated_count"]:
+        lines.append(f"{facts['undated_count']} undated records cannot be assigned to a period.")
+    if current["indicative_count"]:
+        lines.append("Currency conversions are indicative estimates.")
+    if current["status"] == "partial":
+        lines.append("Known subtotals are incomplete. Open Review to resolve missing information.")
+    return lines
 
 
 class _ReplyProxy:
@@ -207,27 +242,9 @@ class TelegramBotService:
         if amount <= 0:
             return None
 
-        remaining = parts[1:]
-        date = None
         category = None
-
-        # Check last two tokens for "YYYY-MM-DD HH:MM" datetime
-        if len(remaining) >= 3:
-            try:
-                datetime.strptime(f"{remaining[-2]} {remaining[-1]}", "%Y-%m-%d %H:%M")
-                date = f"{remaining[-2]}T{remaining[-1]}:00"
-                remaining = remaining[:-2]
-            except ValueError:
-                pass
-
-        # Fall back: check last token for bare "YYYY-MM-DD" — store as midnight
-        if date is None and len(remaining) >= 2:
-            try:
-                datetime.strptime(remaining[-1], "%Y-%m-%d")
-                date = f"{remaining[-1]}T00:00:00"
-                remaining = remaining[:-1]
-            except ValueError:
-                pass
+        # A trailing date never takes the merchant's last word.
+        date, remaining = _split_trailing_date(parts[1:], keep=1)
 
         # Only extract category if a date was found — otherwise everything is the merchant
         if date is not None and len(remaining) >= 2:
@@ -417,20 +434,12 @@ class TelegramBotService:
                 await query.edit_message_text("Account not linked.")
                 context.user_data.clear()
                 return ConversationHandler.END
-            cats = edit_ctx.storage.get_categories()
-            buttons = []
-            row = []
-            for i, cat in enumerate(cats):
-                icon = cat.get("icon", "") or ""
-                label = f"{icon} {cat['name']}".strip()
-                row.append(InlineKeyboardButton(label, callback_data=f"ec_{cat['name']}"))
-                if len(row) == 2:
-                    buttons.append(row)
-                    row = []
-            if row:
-                buttons.append(row)
-            buttons.append([InlineKeyboardButton("Cancel", callback_data="ef_cancel")])
-            await query.edit_message_text("Select new category:", reply_markup=InlineKeyboardMarkup(buttons))
+            keyboard = _two_column_keyboard(
+                [InlineKeyboardButton(f"{cat.get('icon', '') or ''} {cat['name']}".strip(), callback_data=f"ec_{cat['name']}")
+                 for cat in edit_ctx.storage.get_categories()],
+                extra_rows=[[InlineKeyboardButton("Cancel", callback_data="ef_cancel")]],
+            )
+            await query.edit_message_text("Select new category:", reply_markup=keyboard)
             return EDIT_SELECT_FIELD
 
         prompts = {
@@ -585,8 +594,7 @@ class TelegramBotService:
         self.app.add_handler(CommandHandler("menu", self._menu))
 
         self.app.add_handler(CallbackQueryHandler(self._cmd_callback, pattern="^cmd_"))
-        self.app.add_handler(CallbackQueryHandler(self._category_callback, pattern="^cat:"))
-        self.app.add_handler(CallbackQueryHandler(self._recat_callback, pattern="^recat:"))
+        self.app.add_handler(CallbackQueryHandler(self._category_callback, pattern="^(cat|recat):"))
         self.app.add_handler(CallbackQueryHandler(self._handle_sub_suggest_callback, pattern="^sub_suggest_"))
 
         edit_conv = ConversationHandler(
@@ -693,11 +701,8 @@ class TelegramBotService:
 
     def _format_spending_period(self, storage, period: str, *, as_of=None, include_evidence=True) -> str:
         from datetime import date
-        from decimal import Decimal
 
-        def amount(value):
-            return f"S${Decimal(value['minor_units']) / 100:,.2f}"
-
+        amount = _sgd_text
         as_of = as_of or self._local_now().date()
         with storage.reconciliation_lock():
             get_facts = {"day": storage.get_day_spending_facts,
@@ -724,14 +729,7 @@ class TelegramBotService:
             lines.append("No income recorded.")
         if current["recorded_net_flow"] is not None:
             lines.append(f"Recorded net flow: `{amount(current['recorded_net_flow'])}`")
-        if current["unresolved_count"]:
-            lines.append(f"{current['unresolved_count']} records in this period have unresolved money or classification.")
-        if facts["undated_count"]:
-            lines.append(f"{facts['undated_count']} undated records cannot be assigned to a period.")
-        if current["indicative_count"]:
-            lines.append("Currency conversions are indicative estimates.")
-        if current["status"] == "partial":
-            lines.append("Known subtotals are incomplete. Open Review to resolve missing information.")
+        lines.extend(_period_status_lines(current, facts))
         if facts["change"] is None:
             lines.append("Comparison unavailable — records still need review.")
         else:
@@ -799,7 +797,7 @@ class TelegramBotService:
             await reply("This message was already saved or its transaction was deleted. Check Activity to make corrections.")
             return None
         except ValueError as exc:
-            message = "Already logged." if str(exc).startswith("duplicate source_id:") else "Couldn’t save. Check the amount, currency, exchange rate, and date."
+            message = "Already logged." if isinstance(exc, Conflict) else "Couldn’t save. Check the amount, currency, exchange rate, and date."
             await reply(message)
             return None
         if fields.get("assign_to_active_trip"):
@@ -848,38 +846,40 @@ class TelegramBotService:
                 await update.message.reply_text("Amount missing. /add $12.50 Coffee Starbucks")
             return
 
+        conversion_line = None
+        if currency != "SGD":
+            conversion_line = ("SGD conversion unresolved." if exchange_rate is None or exchange_rate == 1
+                               else f"~ SGD ${parsed['amount'] * exchange_rate:.2f} (indicative)")
+        await self._record_expense(ctx, update, context, parsed, command="add", source="manual",
+                                   conversion_line=conversion_line, currency=currency, exchange_rate=exchange_rate)
+
+    async def _record_expense(self, ctx, update, context, parsed: dict, *, command: str, source: str,
+                              conversion_line: str | None = None, **money) -> None:
+        """Save a parsed /add or /cash expense and confirm it."""
         now = self._local_now()
-        tx_date = parsed["date"] or now.strftime("%Y-%m-%dT%H:%M:%S")
         category = parsed["category"]
         if not category and ctx.categorizer:
             category, _ = ctx.categorizer.categorize(parsed["merchant"])
-
         tx_id = await self._save_manual_entry(ctx, update.message.reply_text,
-            message=update.message, command="add", args=context.args,
+            message=update.message, command=command, args=context.args,
             assign_to_active_trip=True,
-            source="manual",
-            source_id=f"manual-{now.strftime('%Y%m%d%H%M%S')}-{parsed['amount']}",
+            source=source,
+            source_id=f"{source}-{now.strftime('%Y%m%d%H%M%S')}-{parsed['amount']}",
             amount=parsed["amount"],
             merchant=parsed["merchant"],
             category=category,
-            currency=currency,
-            exchange_rate=exchange_rate,
-            transaction_date=tx_date,
+            transaction_date=parsed["date"] or now.strftime("%Y-%m-%dT%H:%M:%S"),
+            **money,
         )
         if tx_id is None:
             return
-
-        context_line = self._build_context_line(category, parsed["merchant"], parsed["amount"])
-        msg = f"cash, caught. [${parsed['amount']:.2f} · {parsed['merchant']}]"
-        if currency != "SGD":
-            if exchange_rate is None or exchange_rate == 1:
-                msg += "\nSGD conversion unresolved."
-            else:
-                sgd_equivalent = parsed["amount"] * exchange_rate
-                msg += f"\n~ SGD ${sgd_equivalent:.2f} (indicative)"
+        lines = [f"cash, caught. [${parsed['amount']:.2f} · {parsed['merchant']}]"]
+        if conversion_line:
+            lines.append(conversion_line)
+        context_line = self._build_context_line(ctx.storage, category, parsed["merchant"], parsed["amount"])
         if context_line:
-            msg += f"\n{context_line}"
-        await update.message.reply_text(msg)
+            lines.append(context_line)
+        await update.message.reply_text("\n".join(lines))
 
     async def _cash(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         ctx = await self._require_ctx(update)
@@ -907,29 +907,7 @@ class TelegramBotService:
             await update.message.reply_text("Missing merchant. Usage: /cash <amount> <merchant> [category] [date]")
             return
 
-        now = self._local_now()
-        tx_date = parsed["date"] or now.strftime("%Y-%m-%dT%H:%M:%S")
-        category = parsed["category"]
-        if not category and ctx.categorizer:
-            category, _ = ctx.categorizer.categorize(parsed["merchant"])
-
-        tx_id = await self._save_manual_entry(ctx, update.message.reply_text,
-            message=update.message, command="cash", args=context.args,
-            assign_to_active_trip=True,
-            source="cash",
-            source_id=f"cash-{now.strftime('%Y%m%d%H%M%S')}-{parsed['amount']}",
-            amount=parsed["amount"],
-            merchant=parsed["merchant"],
-            category=category,
-            transaction_date=tx_date,
-        )
-        if tx_id is None:
-            return
-        context_line = self._build_context_line(category, parsed["merchant"], parsed["amount"])
-        msg = f"cash, caught. [${parsed['amount']:.2f} · {parsed['merchant']}]"
-        if context_line:
-            msg += f"\n{context_line}"
-        await update.message.reply_text(msg)
+        await self._record_expense(ctx, update, context, parsed, command="cash", source="cash")
 
     async def _recategorize(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         ctx = await self._require_ctx(update)
@@ -1005,26 +983,7 @@ class TelegramBotService:
             await update.message.reply_text("Amount must be positive.")
             return
 
-        remaining = list(context.args[1:])
-        tx_date = None
-
-        # Check last two tokens for "YYYY-MM-DD HH:MM"
-        if len(remaining) >= 2:
-            try:
-                datetime.strptime(f"{remaining[-2]} {remaining[-1]}", "%Y-%m-%d %H:%M")
-                tx_date = f"{remaining[-2]}T{remaining[-1]}:00"
-                remaining = remaining[:-2]
-            except ValueError:
-                pass
-
-        # Fall back: bare "YYYY-MM-DD" → midnight
-        if tx_date is None and remaining:
-            try:
-                datetime.strptime(remaining[-1], "%Y-%m-%d")
-                tx_date = f"{remaining[-1]}T00:00:00"
-                remaining = remaining[:-1]
-            except ValueError:
-                pass
+        tx_date, remaining = _split_trailing_date(list(context.args[1:]))
 
         description = " ".join(remaining) if remaining else "Income"
         now = self._local_now()
@@ -1052,14 +1011,9 @@ class TelegramBotService:
         if ctx is None:
             return
         today = self._local_now()
-        from decimal import Decimal
-
         facts = ctx.storage.get_month_spending_facts(today.date(), self.timezone)
         current = facts["current"]
-
-        def amount(value):
-            return f"S${Decimal(value['minor_units']) / 100:,.2f}"
-
+        amount = _sgd_text
         partial = current["status"] == "partial"
         lines = [
             f"*Recorded flow for {today.strftime('%B %Y')}*",
@@ -1076,14 +1030,7 @@ class TelegramBotService:
                 lines.append(f"Recorded net flow: `{amount(current['recorded_net_flow'])}`")
             else:
                 lines.append("Recorded net flow unavailable — records still need review.")
-        if current["unresolved_count"]:
-            lines.append(f"{current['unresolved_count']} records in this period have unresolved money or classification.")
-        if facts["undated_count"]:
-            lines.append(f"{facts['undated_count']} undated records cannot be assigned to a period.")
-        if partial:
-            lines.append("Known subtotals are incomplete. Open Review to resolve missing information.")
-        if current["indicative_count"]:
-            lines.append("Currency conversions are indicative estimates.")
+        lines.extend(_period_status_lines(current, facts))
         days_remaining = calendar.monthrange(today.year, today.month)[1] - today.day
         lines.extend([
             f"_{days_remaining} days remaining this month_",
@@ -1678,20 +1625,10 @@ class TelegramBotService:
                         text += f"\n\n✈️ {active_trip['name']} · Trip total: S${summary['total_sgd']:.2f} (Day {day_num})"
             await self.app.bot.send_message(chat_id=_chat_id, text=text, parse_mode="Markdown")
         else:
-            categories = _storage.get_categories()
-            buttons = []
-            row = []
-            for cat in categories:
-                row.append(InlineKeyboardButton(
-                    f"{cat['icon']} {cat['name']}",
-                    callback_data=f"cat:{tx_id}:{cat['name']}",
-                ))
-                if len(row) == 2:
-                    buttons.append(row)
-                    row = []
-            if row:
-                buttons.append(row)
-            keyboard = InlineKeyboardMarkup(buttons)
+            keyboard = _two_column_keyboard([
+                InlineKeyboardButton(f"{cat['icon']} {cat['name']}", callback_data=f"cat:{tx_id}:{cat['name']}")
+                for cat in _storage.get_categories()
+            ])
             text = f"💸 *${amount:.2f}* at *{self._escape_md(merchant)}*\n{self._escape_md(source_label)} · Pick a category:"
             await self.app.bot.send_message(
                 chat_id=_chat_id,
@@ -1713,11 +1650,11 @@ class TelegramBotService:
             except Exception as _e:
                 logger.warning("Budget alert check failed: %s", _e)
 
-    def _build_context_line(self, category: str, merchant: str, amount: float) -> str:
+    def _build_context_line(self, storage, category: str, merchant: str, amount: float) -> str:
         """Returns a one-line contextual note for the post-add confirmation, or ''."""
         # 1. Budget threshold ≥ 75%
         try:
-            progress = self.storage.get_budget_progress()
+            progress = storage.get_budget_progress()
             for b in progress:
                 if b["category"] == category:
                     pct = b["percent"]
@@ -1734,7 +1671,7 @@ class TelegramBotService:
         try:
             week_start = (self._local_now() - timedelta(days=7)).strftime("%Y-%m-%d")
             today = self._local_now().strftime("%Y-%m-%d")
-            rows = self.storage.query_transactions(
+            rows = storage.query_transactions(
                 start_date=week_start,
                 end_date=today,
                 merchant_search=merchant,
@@ -1752,7 +1689,7 @@ class TelegramBotService:
         try:
             thirty_days_ago = (self._local_now() - timedelta(days=30)).strftime("%Y-%m-%d")
             today = self._local_now().strftime("%Y-%m-%d")
-            prior = self.storage.query_transactions(
+            prior = storage.query_transactions(
                 start_date=thirty_days_ago,
                 end_date=today,
                 category=category,
@@ -1867,19 +1804,10 @@ class TelegramBotService:
         )
 
     async def _category_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """A category button from a new-transaction ("cat:") or /recategorize ("recat:") prompt."""
         query = update.callback_query
         await query.answer()
-        if not query.data.startswith("cat:"):
-            return
-        _, tx_id_str, category = query.data.split(":", 2)
-        cb_ctx = await self._require_ctx(update)
-        storage = cb_ctx.storage if cb_ctx else None
-        await self._apply_category_update(int(tx_id_str), category, query, storage=storage)
-
-    async def _recat_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        query = update.callback_query
-        await query.answer()
-        if not query.data.startswith("recat:"):
+        if not query.data.startswith(("cat:", "recat:")):
             return
         _, tx_id_str, category = query.data.split(":", 2)
         cb_ctx = await self._require_ctx(update)
