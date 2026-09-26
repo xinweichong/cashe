@@ -1,3 +1,4 @@
+import { MAIN_DESTINATIONS } from '@/lib/navigation';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -6,24 +7,15 @@ import { Command } from 'cmdk';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { api } from '@/api/client';
 import { toDateStr } from '@/lib/utils';
-import {
-  LayoutDashboard, List, BarChart3, Store, Wallet, Settings, Plus,
-} from 'lucide-react';
-
-const PAGES = [
-  { to: '/',             icon: LayoutDashboard, label: 'Overview'     },
-  { to: '/transactions', icon: List,            label: 'Transactions' },
-  { to: '/analytics',    icon: BarChart3,       label: 'Analytics'    },
-  { to: '/finance',      icon: Wallet,          label: 'Finance'      },
-  { to: '/merchants',    icon: Store,           label: 'Merchants'    },
-  { to: '/settings',     icon: Settings,        label: 'Settings'     },
-];
+import { springs } from '@/lib/motionPresets';
+import { Store, Settings, Plus } from 'lucide-react';
 
 const ITEM_CLASS =
   'flex items-center gap-2 px-3 py-2 text-sm rounded-md cursor-pointer ' +
   'text-foreground data-[selected=true]:bg-foreground/10';
 
 export function CommandPalette() {
+  const pages = [...MAIN_DESTINATIONS, { to: '/settings', icon: Settings, label: 'Settings' }];
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
 
@@ -66,7 +58,7 @@ export function CommandPalette() {
           initial={{ opacity: 0, scale: 0.97, y: -8 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.97, y: -8 }}
-          transition={{ type: 'tween', ease: [0.16, 1, 0.3, 1], duration: 0.2 }}
+          transition={{ ...springs.expo, duration: 0.2 }}
         >
           <Command
             label="Command palette"
@@ -81,7 +73,7 @@ export function CommandPalette() {
                 Nothing matches.
               </Command.Empty>
               <Command.Group heading="Pages">
-                {PAGES.map(({ to, icon: Icon, label }) => (
+                {pages.map(({ to, icon: Icon, label }) => (
                   <Command.Item
                     key={to}
                     className={ITEM_CLASS}
@@ -95,7 +87,7 @@ export function CommandPalette() {
               <Command.Group heading="Actions">
                 <Command.Item
                   className={ITEM_CLASS}
-                  onSelect={() => run(() => navigate('/transactions?add=1'))}
+                  onSelect={() => run(() => navigate('/activity?add=1'))}
                 >
                   <Plus className="w-4 h-4 text-muted" />
                   Add transaction
@@ -108,7 +100,7 @@ export function CommandPalette() {
                       key={m}
                       className={ITEM_CLASS}
                       onSelect={() =>
-                        run(() => navigate(`/merchants/${encodeURIComponent(m)}`))
+                        run(() => navigate(`/explore/merchants/${encodeURIComponent(m)}`))
                       }
                     >
                       <Store className="w-4 h-4 text-muted" />

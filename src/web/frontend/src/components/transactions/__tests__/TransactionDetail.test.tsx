@@ -1,0 +1,228 @@
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import '@testing-library/jest-dom/vitest';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { TransactionDetail } from '../TransactionDetail';
+import type { Transaction } from '@/api/client';
+
+const { mutate, provenance, transactionV2, transactionCandidates } = vi.hoisted(() => ({
+  mutate: vi.fn(), provenance: vi.fn(), transactionV2: vi.fn(), transactionCandidates: vi.fn((): unknown[] => []),
+}));
+vi.mock('@/hooks/useTransactions', () => ({
+  useUpdateTransaction: () => ({ mutate, isPending: false }),
+  useDeleteTransaction: () => ({ mutate: vi.fn(), isPending: false }),
+  useTransactions: () => ({ data: transactionCandidates() }),
+}));
+vi.mock('@/hooks/useCategories', () => ({ useCategories: () => ({ data: [{ name: 'Food' }, { name: 'Transport' }] }) }));
+vi.mock('@/hooks/useIconMap', () => ({ useIconMap: () => ({}) }));
+vi.mock('@/api/client', () => ({ api: { getTransactionProvenance: provenance, getTransactionV2: transactionV2, getAppleWalletCards: async () => [], getSettings: async () => ({ trips_enabled: false }) } }));
+beforeEach(() => {
+  provenance.mockReset().mockResolvedValue({ transaction_id: 1, sources: [{ channel: 'manual', evidence_recorded: false }] });
+  transactionV2.mockReset().mockResolvedValue({ refund_of: null, refunded_by: [] });
+});
+afterEach(() => { cleanup(); mutate.mockReset(); transactionCandidates.mockReset().mockReturnValue([]); });
+
+it('defaults to one transaction and submits an explicit future-rule choice', () => {
+  const transaction = { id: 1, merchant: 'Cafe', category: 'Food', amount: 12, currency: 'SGD', type: 'expense', source: 'manual', transaction_date: '2026-09-06T12:00:00' } as Transaction;
+  render(<QueryClientProvider client={new QueryClient()}><MemoryRouter><TransactionDetail transaction={transaction} onClose={() => {}} /></MemoryRouter></QueryClientProvider>);
+  fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+  expect((screen.getByRole('radio', { name: 'This transaction only' }) as HTMLInputElement).checked).toBe(true);
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+  expect(mutate.mock.calls[0][0].data.remember_category).toBe(false);
+  fireEvent.click(screen.getByRole('radio', { name: 'Remember for future matching transactions' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+  expect(mutate.mock.calls[1][0].data.remember_category).toBe(true);
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+  expect((screen.getByRole('radio', { name: 'This transaction only' }) as HTMLInputElement).checked).toBe(true);
+});
+
+const transaction = { id: 1, merchant: 'Cafe', category: 'Food', amount: 12, currency: 'SGD', type: 'expense', source: 'manual', source_id: 'private-id', transaction_date: '2026-09-06T12:00:00' } as Transaction;
+
+it('submits explicit date and classification corrections and resets them on cancel', () => {
+  render(detail({ ...transaction, transaction_date: '', type: 'unknown' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+  fireEvent.change(screen.getByLabelText('Transaction date'), { target: { value: '2026-09-05' } });
+  fireEvent.change(screen.getByLabelText('Transaction type'), { target: { value: 'income' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+  expect(mutate.mock.calls[0][0].data).toMatchObject({ transaction_date: '2026-09-05', type: 'income', remember_category: false });
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+  expect(screen.getByLabelText('Transaction date')).toHaveValue('');
+  expect(screen.getByLabelText('Transaction type')).toHaveValue('unknown');
+});
+
+it('can mark a transaction as a refund or a transfer', () => {
+  render(detail());
+  fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+  fireEvent.change(screen.getByLabelText('Transaction type'), { target: { value: 'refund' } });
+  expect(screen.getByText(/Refund reduces spending in this record.s own period/)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+  expect(mutate.mock.calls[0][0].data).toMatchObject({ type: 'refund' });
+
+  fireEvent.change(screen.getByLabelText('Transaction type'), { target: { value: 'transfer' } });
+  expect(screen.getByText(/Transfer excludes this from spending and income entirely/)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+  expect(mutate.mock.calls[1][0].data).toMatchObject({ type: 'transfer' });
+});
+
+it('shows the linked purchase for a refund, with its warning, and can unlink', async () => {
+  transactionV2.mockResolvedValue({
+    refund_of: {
+      transaction_id: 5, merchant: 'Shop', transaction_date: '2026-09-01T00:00:00',
+      amount: 100, currency: 'SGD', warning: 'Linked refunds exceed the purchase amount',
+    },
+    refunded_by: [],
+  });
+  render(detail({ ...transaction, type: 'refund' }));
+  expect(await screen.findByText(/Shop/)).toBeInTheDocument();
+  expect(screen.getByText('Linked refunds exceed the purchase amount')).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole('button', { name: 'Unlink' }));
+  expect(mutate.mock.calls[0][0]).toMatchObject({ id: transaction.id, data: { refund_of_transaction_id: null } });
+});
+
+it('lets an unlinked refund search and link to a purchase', async () => {
+  transactionV2.mockResolvedValue({ refund_of: null, refunded_by: [] });
+  transactionCandidates.mockReturnValue([
+    { id: 9, merchant: 'Corner Shop', amount: 45, currency: 'SGD', type: 'expense', transaction_date: '2026-09-02T00:00:00' },
+  ]);
+  render(detail({ ...transaction, type: 'refund' }));
+  expect(await screen.findByText('+ Link to purchase')).toBeInTheDocument();
+
+  fireEvent.click(screen.getByText('+ Link to purchase'));
+  fireEvent.change(screen.getByPlaceholderText('Search purchases by merchant…'), { target: { value: 'Shop' } });
+  const candidate = await screen.findByText(/Corner Shop/);
+  fireEvent.click(candidate);
+  expect(mutate.mock.calls[0][0]).toMatchObject({ id: transaction.id, data: { refund_of_transaction_id: 9 } });
+});
+
+it('shows linked refunds on a purchase', async () => {
+  transactionV2.mockResolvedValue({
+    refund_of: null,
+    refunded_by: [{ transaction_id: 6, merchant: 'Cafe', transaction_date: '2026-09-10T00:00:00', amount: 4, currency: 'SGD', warning: null }],
+  });
+  render(detail());
+  expect(await screen.findByText('Refunded by')).toBeInTheDocument();
+});
+
+it('category-only edits do not rewrite timestamps or legacy classifications', () => {
+  render(detail({ ...transaction, transaction_date: '2026-09-06T12:30:45+08:00', type: null } as unknown as Transaction));
+  fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+  expect(screen.getByLabelText('Transaction date')).toHaveValue('2026-09-06T12:30:45+08:00');
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+  expect(mutate.mock.calls[0][0].data).not.toHaveProperty('transaction_date');
+  expect(mutate.mock.calls[0][0].data).not.toHaveProperty('type');
+});
+
+it('keeps a failed correction editable and prevents clearing an existing date', () => {
+  render(detail());
+  fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+  fireEvent.change(screen.getByLabelText('Transaction date'), { target: { value: '' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+  expect(mutate).not.toHaveBeenCalled();
+  expect(screen.getByText('Choose a transaction date.')).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText('Transaction date'), { target: { value: 'bad-date' } });
+  mutate.mockImplementation((_vars, callbacks) => callbacks.onError());
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+  expect(screen.getByLabelText('Transaction date')).toHaveValue('bad-date');
+  expect(screen.getByText(/Check the date and transaction fields/)).toBeInTheDocument();
+});
+
+function detail(tx = transaction, client = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
+  return <QueryClientProvider client={client}><MemoryRouter><TransactionDetail transaction={tx} onClose={() => {}} /></MemoryRouter></QueryClientProvider>;
+}
+
+it('preserves unresolved conversions on unrelated edits and clears rates explicitly', () => {
+  render(detail({ ...transaction, currency: 'USD', exchange_rate: null }));
+  expect(screen.getByText('SGD conversion unresolved')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+  expect(screen.getByLabelText('Exchange rate (1 USD = ? SGD)')).toHaveValue(null);
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+  expect(mutate.mock.calls[0][0].data).not.toHaveProperty('exchange_rate');
+});
+
+it('clearing a known rate sends null without inventing a conversion', () => {
+  render(detail({ ...transaction, currency: 'USD', exchange_rate: 1.3 }));
+  fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+  fireEvent.change(screen.getByLabelText('Exchange rate (1 USD = ? SGD)'), { target: { value: '' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+  expect(mutate.mock.calls[0][0].data.exchange_rate).toBeNull();
+});
+
+it('currency changes clear stale rates and amount corrections submit the original value', () => {
+  render(detail({ ...transaction, currency: 'USD', exchange_rate: 1.3 }));
+  fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+  fireEvent.change(screen.getByLabelText('Currency'), { target: { value: 'eur' } });
+  fireEvent.change(screen.getByLabelText('Original amount'), { target: { value: '20.25' } });
+  expect(screen.getByLabelText('Exchange rate (1 EUR = ? SGD)')).toHaveValue(null);
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+  expect(mutate.mock.calls[0][0].data).toMatchObject({ currency: 'EUR', amount: 20.25, exchange_rate: null });
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+  expect(screen.getByLabelText('Currency')).toHaveValue('USD');
+  expect(screen.getByLabelText('Exchange rate (1 USD = ? SGD)')).toHaveValue(1.3);
+});
+
+it('rejects invalid amounts locally and allows unknown currencies to be repaired', () => {
+  render(detail({ ...transaction, currency: '' }));
+  expect(screen.getByText(/Currency unknown/)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+  fireEvent.change(screen.getByLabelText('Original amount'), { target: { value: '-1' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+  expect(mutate).not.toHaveBeenCalled();
+  expect(screen.getByText('Enter a non-negative amount.')).toBeInTheDocument();
+});
+
+it('shows linked Wallet and Gmail evidence without internal source IDs', async () => {
+  provenance.mockResolvedValue({ transaction_id: 1, sources: [{ channel: 'apple_wallet', evidence_recorded: true }, { channel: 'gmail', evidence_recorded: true }] });
+  render(detail());
+  const section = within(screen.getByRole('region', { name: 'Capture sources' }));
+  expect(await section.findByText('Apple Wallet')).toBeInTheDocument();
+  expect(section.getByText('Gmail')).toBeInTheDocument();
+  expect(section.getByText(/linked to one transaction and counted once/)).toBeInTheDocument();
+  expect(screen.queryByText('private-id')).not.toBeInTheDocument();
+});
+
+it('distinguishes a recorded source from retained evidence', async () => {
+  render(detail());
+  expect(await screen.findByText('Recorded source only; no capture evidence retained')).toBeInTheDocument();
+  expect(screen.queryByText(/counted once/)).not.toBeInTheDocument();
+});
+
+it('shows loading and supports retry after unavailable provenance', async () => {
+  provenance.mockRejectedValueOnce(new Error('offline'));
+  render(detail());
+  expect(screen.getByText('Loading capture sources…')).toBeInTheDocument();
+  fireEvent.click(await screen.findByRole('button', { name: 'Retry sources' }));
+  expect(await screen.findByText('Recorded source only; no capture evidence retained')).toBeInTheDocument();
+});
+
+it('does not show the previous transaction’s evidence when selection changes', async () => {
+  provenance.mockResolvedValueOnce({ transaction_id: 1, sources: [{ channel: 'gmail', evidence_recorded: true }] });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const { rerender } = render(detail(transaction, client));
+  expect(await screen.findByText('Gmail')).toBeInTheDocument();
+  rerender(detail({ ...transaction, id: 2 }, client));
+  expect(await screen.findByText('Recorded source only; no capture evidence retained')).toBeInTheDocument();
+  expect(screen.queryByText('Gmail')).not.toBeInTheDocument();
+  expect(provenance).toHaveBeenLastCalledWith(2);
+});
+
+it('recategorizes in one tap from the view-mode picker, without entering Edit', () => {
+  render(detail());
+  // Not in edit mode — the quick picker is available directly.
+  expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole('button', { name: 'Transport' }));
+
+  expect(mutate).toHaveBeenCalledOnce();
+  expect(mutate.mock.calls[0][0]).toEqual({ id: 1, data: { category: 'Transport' } });
+});
+
+it('tapping the already-active category in the quick picker is a no-op', () => {
+  render(detail());
+  fireEvent.click(screen.getByRole('button', { name: 'Food' }));
+  expect(mutate).not.toHaveBeenCalled();
+});

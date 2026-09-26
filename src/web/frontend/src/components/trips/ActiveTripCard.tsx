@@ -1,17 +1,18 @@
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { api } from '@/api/client';
 import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { useSettings } from '@/hooks/useSettings';
 
 export function ActiveTripCard({ showEndButton = false }: { showEndButton?: boolean }) {
   const qc = useQueryClient();
+  const [confirmEnd, setConfirmEnd] = useState(false);
 
-  const { data: settings } = useQuery({
-    queryKey: ['settings'],
-    queryFn: () => api.getSettings(),
-    staleTime: 30_000,
-  });
+  const { data: settings } = useSettings();
 
   const { data: activeTrip } = useQuery({
     queryKey: ['trips-active'],
@@ -44,15 +45,13 @@ export function ActiveTripCard({ showEndButton = false }: { showEndButton?: bool
   const daysElapsed = Math.max(1, Math.floor((today.getTime() - start.getTime()) / 86400000) + 1);
 
   return (
-    <Card className="border-accent/40 bg-accent/5">
+    <Card>
       <CardContent className="p-4">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
             <div className="flex items-center gap-2">
               <span className="text-base font-semibold text-foreground">✈️ {activeTrip.name}</span>
-              <span className="text-xs px-1.5 py-0.5 rounded bg-accent/20 text-accent font-medium">
-                Active
-              </span>
+              <Badge tone="active">Active</Badge>
             </div>
             {activeTrip.destination && (
               <p className="text-xs text-muted mt-0.5">{activeTrip.destination}</p>
@@ -73,10 +72,8 @@ export function ActiveTripCard({ showEndButton = false }: { showEndButton?: bool
               <Button
                 variant="outline"
                 size="sm"
-                className="mt-2 text-xs h-7"
-                onClick={() => {
-                  if (confirm('End this trip?')) deactivateMutation.mutate();
-                }}
+                className="mt-2"
+                onClick={() => setConfirmEnd(true)}
                 disabled={deactivateMutation.isPending}
               >
                 {deactivateMutation.isPending ? 'Ending…' : 'End Trip'}
@@ -103,6 +100,18 @@ export function ActiveTripCard({ showEndButton = false }: { showEndButton?: bool
           </div>
         )}
       </CardContent>
+      <Dialog open={confirmEnd} onOpenChange={setConfirmEnd}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>End {activeTrip.name}?</DialogTitle>
+            <DialogDescription>New transactions will stop joining this trip automatically. Its existing transactions stay on it.</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setConfirmEnd(false)}>Keep trip active</Button>
+            <Button type="button" onClick={() => { deactivateMutation.mutate(); setConfirmEnd(false); }}>End trip</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }

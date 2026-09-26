@@ -1,24 +1,34 @@
+import { useReducedMotion } from 'framer-motion';
+import { useTheme } from '@/hooks/useTheme';
 import type { CSSProperties } from 'react';
 
 export const CHART_TOOLTIP_STYLE: CSSProperties = {
   background: '#161624',
+  color: '#EEEAF5',
   border: '1px solid #2A2A3F',
   borderRadius: '8px',
   fontSize: '13px',
 };
 
 export const CHART_AXIS_PROPS = {
-  tick: { fontSize: 11, fill: '#7A7488' },
+  tick: { fontSize: 11, fill: '#A8A1B5' },
   tickLine: false,
   axisLine: false,
 };
+
+// Recharts' default numeric-axis domain is [dataMin, dataMax] with zero
+// headroom, so a line/bar chart's highest point sits exactly on the plot
+// area's top edge with no breathing room — the stroke can render a pixel or
+// two past the boundary, and visually the mark reads as if it's hitting the
+// card's ceiling. Every numeric YAxis should spread this in as its `domain`.
+export const CHART_Y_DOMAIN: [number, (max: number) => number] = [0, (max: number) => Math.ceil(max * 1.15) || 1];
 
 export const CHART_CURSOR_BAR = { fill: '#1C1C22' };
 export const CHART_CURSOR_LINE = { stroke: '#2A2A3F', strokeWidth: 1 };
 
 export const CHART_LEGEND_STYLE: CSSProperties = {
   fontSize: '12px',
-  color: '#7A7488',
+  color: '#A8A1B5',
 };
 
 // Spectrum data colors
@@ -49,4 +59,33 @@ export function formatDateTick(v: string): string {
 /** Tooltip label: short date (e.g. "15 Apr") */
 export function formatDateLabel(v: unknown): string {
   return new Date(String(v)).toLocaleDateString('en-SG', { day: 'numeric', month: 'short' });
+}
+
+const DARK_CHART_THEME = {
+  CHART_TOOLTIP_STYLE, CHART_AXIS_PROPS, CHART_CURSOR_BAR, CHART_CURSOR_LINE,
+  CHART_LEGEND_STYLE, COLOR_MUTED_BAR, COLOR_TRACK, COLOR_FOREGROUND, COLOR_TEAL,
+};
+const LIGHT_CHART_THEME = {
+  CHART_TOOLTIP_STYLE: { ...CHART_TOOLTIP_STYLE, background: '#FFFFFF', color: '#201C2C', border: '1px solid #D9D5E1' },
+  CHART_AXIS_PROPS: { ...CHART_AXIS_PROPS, tick: { ...CHART_AXIS_PROPS.tick, fill: '#625C70' } },
+  CHART_CURSOR_BAR: { fill: '#EDEAF2' },
+  CHART_CURSOR_LINE: { ...CHART_CURSOR_LINE, stroke: '#D9D5E1' },
+  CHART_LEGEND_STYLE: { ...CHART_LEGEND_STYLE, color: '#625C70' },
+  COLOR_MUTED_BAR: '#82798F', COLOR_TRACK: '#D9D5E1', COLOR_FOREGROUND: '#201C2C', COLOR_TEAL: '#007A63',
+};
+
+/** Recharts receives explicit hex values and rerenders without remounting page state. */
+export function useChartTheme() {
+  return useTheme().resolved === 'light' ? LIGHT_CHART_THEME : DARK_CHART_THEME;
+}
+
+// Recharts animates series on the JS thread. Keep the draw-in short and let
+// it begin after the page or panel fade (~150ms) so the two never compete
+// for frames on a phone.
+export const CHART_MOTION = { animationBegin: 160, animationDuration: 520, animationEasing: 'ease-out' as const };
+
+/** CHART_MOTION for a series, switched off under reduced motion. */
+export function useChartMotion() {
+  const reduceMotion = useReducedMotion();
+  return { ...CHART_MOTION, isAnimationActive: !reduceMotion };
 }

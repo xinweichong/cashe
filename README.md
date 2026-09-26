@@ -79,7 +79,7 @@ Most people don't track their spending — not because they don't care, but beca
 | **Spending Velocity** | Daily pace indicator and projected month-end total based on current trajectory |
 | **Merchant Intelligence** | Per-merchant profiles with spend trends, tags (subscription, online, foreign, essential, recurring), notes, and full transaction history |
 | **Anomaly Detection** | Unusual spending flagged in yellow with explanatory labels; new merchants highlighted separately |
-| **LLM Intelligence** | Optional Gemini Flash integration — AI anomaly explanations on Analytics, natural-language Telegram transaction entry, and AI-generated weekly/monthly spending insights; disabled when `gemini_api_key` is blank |
+| **LLM Intelligence** | Optional Gemini Flash integration — AI anomaly explanations on Analytics, natural-language Telegram transaction entry, and AI-generated daily spending insights; disabled when `gemini_api_key` is blank |
 | **Recurring Detection** | Automatically identifies subscriptions and regular payments — monthly, weekly, biweekly |
 | **Period Comparison** | Current vs previous period charts, category-level breakdown, and change percentages |
 
@@ -91,7 +91,7 @@ Most people don't track their spending — not because they don't care, but beca
 | **Financial Goals** | Savings goals with target amounts and dates, manual contributions, progress rings, and Telegram completion notifications |
 | **Subscriptions** | Tracked recurring charges with upcoming-transaction predictions; daily matcher auto-links incoming transactions; match/dismiss flow; possibly-cancelled detection |
 | **Trips** | Group any set of transactions into a trip; all new transactions auto-assigned to the active trip across every ingestion path |
-| **Income Tracking** | Record income alongside expenses; see earned / spent / net via `/balance` |
+| **Income Tracking** | Record income alongside expenses; see recorded income, spending, and recorded net flow via `/balance` |
 
 ### Interface
 
@@ -102,7 +102,8 @@ Most people don't track their spending — not because they don't care, but beca
 | **Auto-Categorisation** | Keyword matching with learned merchant overrides that persist and hot-reload without a restart |
 | **Category Management** | Full CRUD with keyword editor, icon and colour picker, needs/wants/neutral type classification |
 | **CSV Export** | Download filtered transactions from the Transactions page |
-| **Scheduled Reports** | Daily morning digest, weekly and monthly summary reports via Telegram |
+| **Upcoming Plan** | Recorded upcoming subscription charges in 14/30/90-day windows, with estimated/unknown amounts and direct schedule controls |
+| **Scheduled Reports** | Morning digest and weekly/monthly Telegram reports share spending facts, comparison periods, and unresolved-currency status |
 | **Oracle Cloud Deployment** | Runs free on Oracle Always Free ARM VM + Cloudflare Tunnel — no open ports, automatic TLS, custom domain |
 | **Privacy-First** | All data stays in your own SQLite database. No third-party data sharing. No telemetry |
 
@@ -301,11 +302,11 @@ All config values can be set via environment variables (for Railway or Docker). 
 
 | Command | Description |
 |---------|-------------|
-| `/today` | Today's spending summary |
-| `/yesterday` | Yesterday's spending summary |
-| `/week` | This week's summary |
-| `/month` | This month's breakdown |
-| `/balance` | Income vs expenses, net position |
+| `/today` | Today's shared spending facts and evidence |
+| `/yesterday` | Yesterday's shared spending facts and evidence |
+| `/week` | Monday-to-date spending, comparable prior weekdays, and evidence |
+| `/month` | Month-to-date spending, comparable prior-month dates, and evidence |
+| `/balance` | Month-to-date recorded income, spending, and recorded net flow |
 | `/insights` | Top merchants, average daily spend |
 | `/subscriptions` | Detected recurring transactions |
 | `/trip` | Active trip summary with spend breakdown |
@@ -334,7 +335,7 @@ All config values can be set via environment variables (for Railway or Docker). 
 
 | Command | Description |
 |---------|-------------|
-| `/recategorize <id> <category>` | Change a transaction's category and learn the merchant mapping |
+| `/recategorize <id> [category] [--remember]` | Change this transaction only; add `--remember` to save its category for future matching purchases |
 
 ### Utilities
 
@@ -488,7 +489,8 @@ All tests use in-memory SQLite — no database files created on disk. 623 tests 
 ```
 cashe/
 ├── src/
-│   ├── main.py              # Entry point — starts all services, runs DB migrations
+│   ├── main.py              # Entry point — starts all services
+│   ├── db.py                # Opens a user DB / app.db: baseline tables, then src/migrations.py
 │   ├── config.py            # Config loader + env-var fallback
 │   ├── storage.py           # SQLite CRUD, queries, insights, income, overrides, budgets, goals, trips, merchants, health score
 │   ├── categorizer.py       # Keyword matching + merchant overrides

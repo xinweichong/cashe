@@ -1,0 +1,145 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-09-25T03:49:00Z",
+  "title": "Design System: cashe",
+  "extensions": {
+    "colorMeta": {
+      "teal": { "role": "primary", "displayName": "Teal", "canonical": "#00D4AA" },
+      "mint": { "role": "spectrum", "displayName": "Mint", "canonical": "#34D399" },
+      "honey": { "role": "spectrum", "displayName": "Honey", "canonical": "#FBBF24" },
+      "tangerine": { "role": "spectrum", "displayName": "Tangerine", "canonical": "#FB923C" },
+      "coral": { "role": "spectrum", "displayName": "Coral", "canonical": "#FF6B6B" },
+      "background": { "role": "neutral", "displayName": "Deep Ink", "canonical": "#0B0B14" },
+      "card": { "role": "neutral", "displayName": "Card Surface", "canonical": "#161624" },
+      "card-elev": { "role": "neutral", "displayName": "Elevated Card", "canonical": "#1B1B2C" },
+      "border": { "role": "neutral", "displayName": "Hairline Border", "canonical": "#2A2A3F" },
+      "foreground": { "role": "neutral", "displayName": "Primary Text", "canonical": "#EEEAF5" },
+      "muted": { "role": "neutral", "displayName": "Muted Text", "canonical": "#A8A1B5" },
+      "destructive": { "role": "destructive", "displayName": "Destructive Red", "canonical": "#FF453A" }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display / Hero Numerics", "purpose": "Wordmark, hero numerics with spending-gradient text-clip. One per page." },
+      "headline": { "displayName": "Page Headline", "purpose": "Top-level page H1." },
+      "title": { "displayName": "Card Title", "purpose": "PageCard/ChartCard title spans, section sub-headings." },
+      "body": { "displayName": "Body", "purpose": "Paragraphs, form fields, button labels." },
+      "label": { "displayName": "Mono Eyebrow", "purpose": "Uppercase data labels, KPI captions, kickers." }
+    },
+    "shadows": [
+      { "name": "elev-none", "value": "0 0 0 1px var(--color-border)", "purpose": "Default card — flat, border only." },
+      { "name": "elev-xs", "value": "0 0 0 1px var(--color-border), 0 2px 6px rgba(0,0,0,.3)", "purpose": "Hover on interactive cards." },
+      { "name": "elev-md", "value": "0 0 0 1px var(--color-border), 0 8px 24px rgba(0,0,0,.5)", "purpose": "Dialogs, dropdowns, popovers, toasts." },
+      { "name": "elev-glow-teal", "value": "0 0 0 1px rgba(0,212,170,.18), 0 0 36px -8px rgba(0,212,170,.28)", "purpose": "On-track health cards, completed goal cards." },
+      { "name": "elev-glow-warm", "value": "0 0 0 1px rgba(251,146,60,.14), 0 0 48px -10px rgba(251,146,60,.34)", "purpose": "Overview hero card, splash container." }
+    ],
+    "motion": [
+      { "name": "spring-gentle", "value": "stiffness 200 / damping 25", "purpose": "Default — page entrances, list items, card reveals." },
+      { "name": "spring-snappy", "value": "stiffness 350 / damping 30", "purpose": "Spatial chrome — detail panels, drawers, sheets." },
+      { "name": "spring-bouncy", "value": "stiffness 400 / damping 20", "purpose": "Celebration only (goal completed); at most one per page." },
+      { "name": "ease-out-expo", "value": "cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "Overlay/pop/sheet entrances." },
+      { "name": "ease-fast-exit", "value": "150ms ease-in", "purpose": "All exits — always faster than the matching entrance." }
+    ],
+    "breakpoints": [
+      { "name": "md", "value": "768px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Full-spectrum gradient CTA. Reserved for the single main command on a screen.",
+      "html": "<button class=\"ds-btn ds-btn-primary\">Add Transaction</button>",
+      "css": ".ds-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 40px; padding: 0 16px; border-radius: 6px; font-family: Inter, sans-serif; font-size: 14px; font-weight: 500; border: none; cursor: pointer; transition: all 0.2s; } .ds-btn:active { transform: scale(0.97); } .ds-btn-primary { background: linear-gradient(135deg, #00D4AA 0%, #34D399 25%, #FBBF24 50%, #FB923C 75%, #FF6B6B 100%); background-size: 200% 100%; background-position: 0 0; color: #0B0B14; font-weight: 700; box-shadow: 0 0 32px -10px rgba(251, 146, 60, 0.45); transition: background-position 0.35s ease; } .ds-btn-primary:hover { background-position: 100% 0; } .ds-btn-primary:focus-visible { outline: none; box-shadow: 0 0 0 2px #00D4AA, 0 0 0 4px #0B0B14; }"
+    },
+    {
+      "name": "Outline Button",
+      "kind": "button",
+      "refersTo": "button-outline",
+      "description": "Secondary/cancel action.",
+      "html": "<button class=\"ds-btn ds-btn-outline\">Cancel</button>",
+      "css": ".ds-btn-outline { background: #0B0B14; color: #EEEAF5; border: 1px solid #2A2A3F; } .ds-btn-outline:hover { background: rgba(238,234,245,0.05); }"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Low-emphasis action, dropdown trigger. Never hovers to teal.",
+      "html": "<button class=\"ds-btn ds-btn-ghost\">View all</button>",
+      "css": ".ds-btn-ghost { background: transparent; color: #A8A1B5; } .ds-btn-ghost:hover { background: rgba(238,234,245,0.05); color: #EEEAF5; }"
+    },
+    {
+      "name": "Text Input",
+      "kind": "input",
+      "refersTo": "input-field",
+      "description": "Shared text-field contract. 16px on phones avoids iOS Safari zoom-on-focus.",
+      "html": "<input class=\"ds-input\" type=\"text\" placeholder=\"Merchant name\" />",
+      "css": ".ds-input { padding: 6px 12px; font-size: 16px; background: #0B0B14; border: 1px solid #2A2A3F; border-radius: 6px; color: #EEEAF5; } .ds-input::placeholder { color: #A8A1B5; } .ds-input:focus-visible { outline: none; box-shadow: 0 0 0 2px #00D4AA, 0 0 0 4px #0B0B14; } @media (min-width: 768px) { .ds-input { font-size: 14px; } }"
+    },
+    {
+      "name": "Badge — Spectrum Tone",
+      "kind": "chip",
+      "refersTo": "badge-tone",
+      "description": "Non-interactive status label using a spectrum tone tint. Tone precedence over structural variant.",
+      "html": "<span class=\"ds-badge ds-badge-saved\">On track</span>",
+      "css": ".ds-badge { display: inline-flex; align-items: center; padding: 2px 10px; border-radius: 9999px; font-size: 12px; font-weight: 500; border: 1px solid transparent; } .ds-badge-saved { background: rgba(0,212,170,0.13); color: #00D4AA; border-color: rgba(0,212,170,0.25); } .ds-badge-warm { background: rgba(255,107,107,0.13); color: #FF6B6B; border-color: rgba(255,107,107,0.25); }"
+    },
+    {
+      "name": "PageCard",
+      "kind": "card",
+      "refersTo": "card-page",
+      "description": "General content/table/list surface. Flat by default — border only, no shadow.",
+      "html": "<div class=\"ds-card\"><div class=\"ds-card-header\"><span class=\"ds-card-title\">Recent Activity</span></div><div class=\"ds-card-body\">…</div></div>",
+      "css": ".ds-card { background: #161624; border: 1px solid #2A2A3F; border-radius: 8px; } .ds-card-header { display: flex; align-items: center; justify-content: space-between; padding: 16px; gap: 8px; } .ds-card-title { font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 700; font-size: 16px; color: #EEEAF5; } .ds-card-body { padding: 0 16px 16px; }"
+    },
+    {
+      "name": "HeroCard",
+      "kind": "card",
+      "refersTo": "card-hero",
+      "description": "The single hero numeric surface per page — warm glow, gradient hairline. At most one per screen.",
+      "html": "<div class=\"ds-hero-card\"><span class=\"ds-hero-eyebrow\">This Month</span><div class=\"ds-hero-value\">$2,481.09</div></div>",
+      "css": ".ds-hero-card { border-radius: 24px; padding: 32px; background: #161624; box-shadow: 0 0 0 1px rgba(251,146,60,.14), 0 0 48px -10px rgba(251,146,60,.34); } .ds-hero-eyebrow { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 600; letter-spacing: 0.22em; text-transform: uppercase; color: #A8A1B5; } .ds-hero-value { font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 800; font-size: 61px; line-height: 0.92; letter-spacing: -0.045em; background: linear-gradient(135deg, #FBBF24 0%, #FB923C 50%, #FF6B6B 100%); -webkit-background-clip: text; background-clip: text; color: transparent; margin-top: 12px; }"
+    },
+    {
+      "name": "Status Dot",
+      "kind": "custom",
+      "refersTo": "status-dot",
+      "description": "Quieter status pattern than a full badge — for repeated/stacked status rows.",
+      "html": "<span class=\"ds-status\"><span class=\"ds-dot ds-dot-teal\"></span>On track</span>",
+      "css": ".ds-status { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; color: #EEEAF5; } .ds-dot { width: 6px; height: 6px; border-radius: 9999px; } .ds-dot-teal { background: #00D4AA; } .ds-dot-coral { background: #FF6B6B; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Spectrum Instrument",
+    "overview": "cashe reads as a precise, dark-mode financial instrument, not a cheerful budgeting app. The whole system runs on one governing idea: a five-stop cool-to-warm spectrum (teal → mint → honey → tangerine → coral) that encodes financial temperature everywhere a value needs meaning — teal-side means \"good news, on track, saved\"; coral-side means \"this is where the money is going, over pace, alert.\" It is deliberately never a stoplight binary. Position along the spectrum, not a fixed palette of red/yellow/green, is the semantic unit.\n\nThe base surface is near-black ink (#0B0B14) with a very faint cool tilt, kept almost entirely flat — most cards carry no shadow at all, just a 1px border. Brand warmth is rationed: gradient fills and glow elevation appear in three to five places per screen at most, so when they do appear (hero numerics, the primary CTA, an \"on track\" health card) they read as genuinely special rather than decorative wallpaper. Three type families do three distinct jobs — Plus Jakarta Sans carries personality wherever something is being named (headings, card titles, the wordmark), Inter carries plain-legibility body and interactive chrome, and JetBrains Mono flags \"this is data\" (eyebrow labels, stat labels, timestamps, IDs). The voice is matter-of-fact and lightly warm — \"Captured.\" not \"Successfully added!\" — because this is a private financial instrument for a small, trusted circle of people, not a consumer app performing enthusiasm at a stranger.",
+    "keyCharacteristics": [
+      "A five-color semantic spectrum (never a red/green binary) drives every status, badge, chart, and category color in the system.",
+      "Near-black flat surfaces at rest; glow elevation and gradient fills are rationed to a handful of moments per screen so they stay meaningful.",
+      "Three typefaces, three jobs: Plus Jakarta (naming/personality), Inter (body/clarity), JetBrains Mono (data/precision).",
+      "Matter-of-fact, unexclamatory voice — periods, not exclamation marks; \"Captured.\" not \"Success!\""
+    ],
+    "rules": [
+      { "name": "The Spectrum-Not-Stoplight Rule", "body": "Status is never red/yellow/green. It is a position on the five-stop teal→coral spectrum, because spending health is a gradient, not a pass/fail.", "section": "colors" },
+      { "name": "The Rationed Glow Rule", "body": "At most one warm glow and one teal glow visible on screen at a time. If a page would produce two warm-glow cards, demote one to flat (elev-none) and let a single hero carry the warmth.", "section": "elevation" },
+      { "name": "The Named-Thing Rule", "body": "Plus Jakarta is reserved for anything that names a page, card, or section. Inter never carries a heading; Plus Jakarta never carries a paragraph.", "section": "typography" },
+      { "name": "The Role-Bound Radius Rule", "body": "A radius value signals what kind of surface it is (control vs. card vs. hero vs. pill) — never mix radii within a role for visual variety.", "section": "shapes" },
+      { "name": "The One Visual Owner Rule", "body": "One visual role and interaction contract has exactly one shared component owner. A new page composes existing owners; a parallel implementation of an existing role requires explicit approval first.", "section": "components" },
+      { "name": "The Persistent Action Rule", "body": "Edit/delete icon buttons are always visible — never hidden behind opacity-0 group-hover:opacity-100. Discoverability beats minimalism here.", "section": "components" }
+    ],
+    "dos": [
+      "Do encode status as a position on the teal→coral spectrum, never a red/yellow/green stoplight.",
+      "Do keep cards flat (elev-none, border only) by default; reserve real shadow and glow for dialogs/toasts and the 3-5 rationed brand-glow moments per screen.",
+      "Do route every monetary value through the shared currency formatter (never toFixed + string-concatenated \"$\"); expenses stay unsigned, income takes a + prefix in text-success.",
+      "Do write copy in the established voice — matter-of-fact, past-tense confirmations (\"Captured.\", \"Saved.\"), periods not exclamation marks.",
+      "Do gate every page-level or repeating animation on useReducedMotion.",
+      "Do reuse the shared component owner for a visual role rather than composing new classes on a one-off element."
+    ],
+    "donts": [
+      "Don't invent a new button, pill, field, or card variant by restyling an existing component's classes.",
+      "Don't use text-accent for destructive intent, or hover a destructive icon back to muted.",
+      "Don't show more than one warm-glow and one teal-glow surface on screen at once.",
+      "Don't use exclamation marks, greetings, or \"Successfully X'd\" phrasing anywhere in product copy.",
+      "Don't stack toasts — a new toast always replaces the current one.",
+      "Don't introduce text color dimmer than muted, and never drop muted body copy below 12px."
+    ]
+  }
+}

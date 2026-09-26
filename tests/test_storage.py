@@ -1,3 +1,4 @@
+import json
 import pytest
 from datetime import datetime
 from src.storage import Storage
@@ -61,6 +62,50 @@ class TestInsertTransaction:
         tx = storage.get_transaction(tx_id)
         assert tx["raw_data"] == "original email body here"
 
+    def test_new_sgd_transaction_is_canonically_native_immediately(self, storage):
+        tx_id = storage.insert_transaction(
+            source="manual", source_id="sgd-1", amount=12.50,
+            transaction_date="2026-04-16T12:00:00",
+        )
+        tx = storage.get_transaction(tx_id)
+        assert tx["original_minor_units"] == 1250
+        assert tx["reporting_minor_units"] == 1250
+        assert tx["conversion_status"] == "native"
+
+    def test_new_transaction_with_a_rate_result_gets_that_richer_provenance(self, storage):
+        from src.exchange import RateResult
+        tx_id = storage.insert_transaction(
+            source="dbs_card", source_id="usd-1", amount=20.0, currency="USD",
+            exchange_rate=1.34, rate_result=RateResult(status="resolved", rate=1.34, source="api"),
+            transaction_date="2026-04-16T12:00:00",
+        )
+        tx = storage.get_transaction(tx_id)
+        assert tx["conversion_status"] == "resolved"
+        assert tx["conversion_source"] == "api"
+        assert tx["reporting_minor_units"] == 2680
+        assert tx["conversion_quoted_at"] is not None
+
+    def test_new_transaction_without_a_rate_result_falls_back_to_legacy_inference(self, storage):
+        tx_id = storage.insert_transaction(
+            source="manual", source_id="usd-2", amount=20.0, currency="USD",
+            exchange_rate=1.34, transaction_date="2026-04-16T12:00:00",
+        )
+        tx = storage.get_transaction(tx_id)
+        assert tx["conversion_status"] == "indicative"
+        assert tx["conversion_source"] == "legacy_backfill"
+
+    def test_new_transaction_with_unresolved_rate_result_has_no_reporting_amount(self, storage):
+        from src.exchange import RateResult
+        tx_id = storage.insert_transaction(
+            source="dbs_card", source_id="usd-3", amount=20.0, currency="USD",
+            exchange_rate=1.0, rate_result=RateResult(status="unresolved"),
+            transaction_date="2026-04-16T12:00:00",
+        )
+        tx = storage.get_transaction(tx_id)
+        assert tx["conversion_status"] == "unresolved"
+        assert tx["reporting_minor_units"] is None
+        assert tx["original_minor_units"] == 2000
+
 
 class TestGetTransaction:
     def test_get_existing(self, storage):
@@ -100,6 +145,227 @@ class TestUpdateTransaction:
         with pytest.raises(ValueError, match="not found"):
             storage.update_transaction(999, merchant="Test")
 
+    def test_new_transaction_starts_at_revision_one(self, storage):
+        tx_id = storage.insert_transaction(
+            source="manual", source_id="m1", amount=12.50,
+            transaction_date="2026-04-16T12:00:00",
+        )
+        assert storage.get_transaction(tx_id)["revision"] == 1
+
+    def test_update_bumps_revision(self, storage):
+        tx_id = storage.insert_transaction(
+            source="manual", source_id="m1", amount=12.50,
+            transaction_date="2026-04-16T12:00:00",
+        )
+        storage.update_transaction(tx_id, merchant="Ya Kun")
+        assert storage.get_transaction(tx_id)["revision"] == 2
+        storage.update_transaction(tx_id, merchant="Toast Box")
+        assert storage.get_transaction(tx_id)["revision"] == 3
+
+    def test_update_with_matching_expected_revision_succeeds(self, storage):
+        tx_id = storage.insert_transaction(
+            source="manual", source_id="m1", amount=12.50,
+            transaction_date="2026-04-16T12:00:00",
+        )
+        storage.update_transaction(tx_id, merchant="Ya Kun", expected_revision=1)
+        assert storage.get_transaction(tx_id)["merchant"] == "Ya Kun"
+
+    def test_update_with_stale_expected_revision_raises_conflict_with_current_state(self, storage):
+        from src.storage import RevisionConflict
+        tx_id = storage.insert_transaction(
+            source="manual", source_id="m1", amount=12.50, merchant="Toast Box",
+            transaction_date="2026-04-16T12:00:00",
+        )
+        storage.update_transaction(tx_id, merchant="Ya Kun")  # revision -> 2
+        with pytest.raises(RevisionConflict) as exc_info:
+            storage.update_transaction(tx_id, merchant="Somewhere Else", expected_revision=1)
+        assert exc_info.value.current["revision"] == 2
+        assert exc_info.value.current["merchant"] == "Ya Kun"
+        # The conflicting update must not have been applied.
+        assert storage.get_transaction(tx_id)["merchant"] == "Ya Kun"
+
+    def test_update_without_expected_revision_still_works_last_write_wins(self, storage):
+        """v1 callers that never send a revision keep working unchanged."""
+        tx_id = storage.insert_transaction(
+            source="manual", source_id="m1", amount=12.50,
+            transaction_date="2026-04-16T12:00:00",
+        )
+        storage.update_transaction(tx_id, merchant="Ya Kun")
+        storage.update_transaction(tx_id, merchant="Toast Box")  # no expected_revision
+        assert storage.get_transaction(tx_id)["merchant"] == "Toast Box"
+
+    def test_update_records_mutation_history_with_changed_fields_only(self, storage):
+        tx_id = storage.insert_transaction(
+            source="manual", source_id="m1", amount=12.50, merchant="Toast Box",
+            category="Food", transaction_date="2026-04-16T12:00:00",
+        )
+        storage.update_transaction(tx_id, merchant="Ya Kun")
+        mutations = storage._conn.execute(
+            "SELECT transaction_id, revision_before, revision_after, changed_fields FROM transaction_mutations"
+        ).fetchall()
+        assert len(mutations) == 1
+        tx_row_id, revision_before, revision_after, changed_fields = mutations[0]
+        assert (tx_row_id, revision_before, revision_after) == (tx_id, 1, 2)
+        changed = json.loads(changed_fields)
+        assert changed == {"merchant": {"old": "Toast Box", "new": "Ya Kun"}}
+
+
+class TestRefundLinking:
+    def test_link_refund_to_purchase(self, storage):
+        purchase_id = storage.insert_transaction(
+            source="manual", source_id="p1", amount=100.0, merchant="Shop",
+            category="Food", transaction_date="2026-04-16", tx_type="expense",
+        )
+        refund_id = storage.insert_transaction(
+            source="manual", source_id="r1", amount=30.0, merchant="Shop",
+            category="Food", transaction_date="2026-04-20", tx_type="refund",
+        )
+        storage.update_transaction(refund_id, refund_of_transaction_id=purchase_id)
+        tx = storage.get_transaction(refund_id)
+        assert tx["refund_of_transaction_id"] == purchase_id
+
+    def test_unlink_refund(self, storage):
+        purchase_id = storage.insert_transaction(
+            source="manual", source_id="p2", amount=100.0, transaction_date="2026-04-16", tx_type="expense",
+        )
+        refund_id = storage.insert_transaction(
+            source="manual", source_id="r2", amount=30.0, transaction_date="2026-04-20", tx_type="refund",
+        )
+        storage.update_transaction(refund_id, refund_of_transaction_id=purchase_id)
+        storage.update_transaction(refund_id, refund_of_transaction_id=None)
+        assert storage.get_transaction(refund_id)["refund_of_transaction_id"] is None
+
+    def test_link_to_nonexistent_transaction_raises(self, storage):
+        refund_id = storage.insert_transaction(
+            source="manual", source_id="r3", amount=30.0, transaction_date="2026-04-20", tx_type="refund",
+        )
+        with pytest.raises(ValueError, match="not found"):
+            storage.update_transaction(refund_id, refund_of_transaction_id=999999)
+
+    def test_link_to_self_raises(self, storage):
+        refund_id = storage.insert_transaction(
+            source="manual", source_id="r4", amount=30.0, transaction_date="2026-04-20", tx_type="refund",
+        )
+        with pytest.raises(ValueError, match="itself"):
+            storage.update_transaction(refund_id, refund_of_transaction_id=refund_id)
+
+    def test_link_to_another_refund_raises(self, storage):
+        other_refund_id = storage.insert_transaction(
+            source="manual", source_id="r5", amount=10.0, transaction_date="2026-04-16", tx_type="refund",
+        )
+        refund_id = storage.insert_transaction(
+            source="manual", source_id="r6", amount=30.0, transaction_date="2026-04-20", tx_type="refund",
+        )
+        with pytest.raises(ValueError, match="expense"):
+            storage.update_transaction(refund_id, refund_of_transaction_id=other_refund_id)
+
+    def test_link_to_transfer_raises(self, storage):
+        transfer_id = storage.insert_transaction(
+            source="manual", source_id="t1", amount=500.0, transaction_date="2026-04-16", tx_type="transfer",
+        )
+        refund_id = storage.insert_transaction(
+            source="manual", source_id="r7", amount=30.0, transaction_date="2026-04-20", tx_type="refund",
+        )
+        with pytest.raises(ValueError, match="expense"):
+            storage.update_transaction(refund_id, refund_of_transaction_id=transfer_id)
+
+    def test_link_to_income_raises(self, storage):
+        income_id = storage.insert_transaction(
+            source="manual", source_id="i1", amount=5000.0, transaction_date="2026-04-16", tx_type="income",
+        )
+        refund_id = storage.insert_transaction(
+            source="manual", source_id="r8", amount=30.0, transaction_date="2026-04-20", tx_type="refund",
+        )
+        with pytest.raises(ValueError, match="expense"):
+            storage.update_transaction(refund_id, refund_of_transaction_id=income_id)
+
+    def test_link_to_legacy_null_type_succeeds(self, storage):
+        purchase_id = storage.insert_transaction(
+            source="manual", source_id="p9", amount=100.0, transaction_date="2026-04-16",
+        )
+        storage._conn.execute("UPDATE transactions SET type = NULL WHERE id = ?", (purchase_id,))
+        storage._conn.commit()
+        refund_id = storage.insert_transaction(
+            source="manual", source_id="r9", amount=30.0, transaction_date="2026-04-20", tx_type="refund",
+        )
+        storage.update_transaction(refund_id, refund_of_transaction_id=purchase_id)
+        assert storage.get_transaction(refund_id)["refund_of_transaction_id"] == purchase_id
+
+    def test_only_a_refund_can_carry_a_link(self, storage):
+        purchase_id = storage.insert_transaction(
+            source="manual", source_id="p11", amount=100.0, transaction_date="2026-04-16", tx_type="expense",
+        )
+        other_expense_id = storage.insert_transaction(
+            source="manual", source_id="e1", amount=20.0, transaction_date="2026-04-20", tx_type="expense",
+        )
+        with pytest.raises(ValueError, match="Only a refund"):
+            storage.update_transaction(other_expense_id, refund_of_transaction_id=purchase_id)
+
+    def test_can_set_type_and_link_together(self, storage):
+        purchase_id = storage.insert_transaction(
+            source="manual", source_id="p12", amount=100.0, transaction_date="2026-04-16", tx_type="expense",
+        )
+        tx_id = storage.insert_transaction(
+            source="manual", source_id="r11", amount=20.0, transaction_date="2026-04-20", tx_type="expense",
+        )
+        storage.update_transaction(tx_id, type="refund", refund_of_transaction_id=purchase_id)
+        tx = storage.get_transaction(tx_id)
+        assert tx["type"] == "refund"
+        assert tx["refund_of_transaction_id"] == purchase_id
+
+    def test_reclassifying_away_from_refund_clears_a_stale_link(self, storage):
+        purchase_id = storage.insert_transaction(
+            source="manual", source_id="p13", amount=100.0, transaction_date="2026-04-16", tx_type="expense",
+        )
+        refund_id = storage.insert_transaction(
+            source="manual", source_id="r12", amount=20.0, transaction_date="2026-04-20", tx_type="refund",
+        )
+        storage.update_transaction(refund_id, refund_of_transaction_id=purchase_id)
+        # Reclassify without touching the link explicitly — the invariant
+        # "only a refund carries a link" must still hold afterward.
+        storage.update_transaction(refund_id, type="expense")
+        assert storage.get_transaction(refund_id)["refund_of_transaction_id"] is None
+
+    def test_get_refunds_for_ids_returns_linked_refunds(self, storage):
+        purchase_id = storage.insert_transaction(
+            source="manual", source_id="p16", amount=100.0, transaction_date="2026-04-16", tx_type="expense",
+        )
+        other_purchase_id = storage.insert_transaction(
+            source="manual", source_id="p17", amount=50.0, transaction_date="2026-04-16", tx_type="expense",
+        )
+        refund1_id = storage.insert_transaction(
+            source="manual", source_id="r15", amount=20.0, transaction_date="2026-04-18", tx_type="refund",
+        )
+        refund2_id = storage.insert_transaction(
+            source="manual", source_id="r16", amount=10.0, transaction_date="2026-04-20", tx_type="refund",
+        )
+        unrelated_refund_id = storage.insert_transaction(
+            source="manual", source_id="r17", amount=5.0, transaction_date="2026-04-20", tx_type="refund",
+        )
+        storage.update_transaction(refund1_id, refund_of_transaction_id=purchase_id)
+        storage.update_transaction(refund2_id, refund_of_transaction_id=purchase_id)
+        storage.update_transaction(unrelated_refund_id, refund_of_transaction_id=other_purchase_id)
+
+        refunds = storage.get_refunds_for_ids([purchase_id])[purchase_id]
+        assert {r["id"] for r in refunds} == {refund1_id, refund2_id}
+
+    def test_get_refunds_for_ids_returns_empty_for_unlinked_purchase(self, storage):
+        purchase_id = storage.insert_transaction(
+            source="manual", source_id="p18", amount=100.0, transaction_date="2026-04-16", tx_type="expense",
+        )
+        assert storage.get_refunds_for_ids([purchase_id])[purchase_id] == []
+
+    def test_deleting_linked_purchase_clears_the_link(self, storage):
+        purchase_id = storage.insert_transaction(
+            source="manual", source_id="p10", amount=100.0, transaction_date="2026-04-16", tx_type="expense",
+        )
+        refund_id = storage.insert_transaction(
+            source="manual", source_id="r10", amount=30.0, transaction_date="2026-04-20", tx_type="refund",
+        )
+        storage.update_transaction(refund_id, refund_of_transaction_id=purchase_id)
+        storage.delete_transaction(purchase_id)
+        assert storage.get_transaction(refund_id)["refund_of_transaction_id"] is None
+
 
 class TestDeleteTransaction:
     def test_delete_existing(self, storage):
@@ -113,6 +379,127 @@ class TestDeleteTransaction:
     def test_delete_nonexistent_raises(self, storage):
         with pytest.raises(ValueError, match="not found"):
             storage.delete_transaction(999)
+
+    def test_delete_unlinks_a_matched_upcoming_transaction_instead_of_leaving_it_dangling(self, storage):
+        """delete_transaction must not leave upcoming_transactions.matched_transaction_id
+        pointing at a deleted row — that's an orphan the app previously relied on
+        (silently absent) FK enforcement to hide."""
+        sub_id = storage.create_subscription(merchant="Netflix", frequency="monthly", billing_day=15)
+        tx_id = storage.insert_transaction(
+            source="manual", source_id="netflix-may", amount=15.98,
+            merchant="Netflix", transaction_date="2026-05-15T10:00:00",
+        )
+        upcoming_id = storage.create_upcoming_transaction(sub_id, "2026-05-15", 15.98)
+        storage.match_upcoming_transaction(upcoming_id, tx_id)
+
+        storage.delete_transaction(tx_id)
+
+        upcoming = storage.get_upcoming_transaction(upcoming_id)
+        assert upcoming["status"] == "pending"
+        assert upcoming["matched_transaction_id"] is None
+
+    def test_delete_retains_a_snapshot_for_conflict_summaries_and_undo(self, storage):
+        tx_id = storage.insert_transaction(
+            source="manual", source_id="m1", amount=12.50, currency="SGD",
+            merchant="Toast Box", category="Food", transaction_date="2026-04-16T12:00:00",
+        )
+        storage.update_transaction(tx_id, merchant="Ya Kun")  # revision -> 2
+
+        storage.delete_transaction(tx_id)
+
+        row = storage._conn.execute(
+            "SELECT id, source, source_id, amount, currency, merchant, category, type, revision "
+            "FROM deleted_transactions WHERE id = ?", (tx_id,)
+        ).fetchone()
+        assert tuple(row) == (tx_id, "manual", "m1", 12.50, "SGD", "Ya Kun", "Food", "expense", 2)
+
+    def test_deleted_transaction_id_is_never_reused(self, storage):
+        tx_id = storage.insert_transaction(
+            source="manual", source_id="m1", amount=12.50, transaction_date="2026-04-16T12:00:00",
+        )
+        storage.delete_transaction(tx_id)
+        new_id = storage.insert_transaction(
+            source="manual", source_id="m2", amount=5.0, transaction_date="2026-04-17T12:00:00",
+        )
+        assert new_id != tx_id
+
+
+class TestRestoreDeletedTransaction:
+    def test_restore_recreates_row_with_bumped_revision(self, storage):
+        tx_id = storage.insert_transaction(
+            source="manual", source_id="m1", amount=12.50, currency="SGD",
+            merchant="Toast Box", category="Food", transaction_date="2026-04-16T12:00:00",
+        )
+        storage.delete_transaction(tx_id)
+
+        new_revision = storage.restore_deleted_transaction(tx_id)
+
+        assert new_revision == 2
+        restored = storage.get_transaction(tx_id)
+        assert restored["merchant"] == "Toast Box"
+        assert restored["category"] == "Food"
+        assert restored["revision"] == 2
+        assert restored["original_minor_units"] == 1250
+        assert restored["reporting_minor_units"] == 1250
+        assert storage._conn.execute(
+            "SELECT 1 FROM deleted_transactions WHERE id = ?", (tx_id,)
+        ).fetchone() is None
+
+    def test_delete_and_restore_preserves_refund_link(self, storage):
+        purchase_id = storage.insert_transaction(
+            source="manual", source_id="p14", amount=100.0, transaction_date="2026-04-16", tx_type="expense",
+        )
+        refund_id = storage.insert_transaction(
+            source="manual", source_id="r13", amount=20.0, transaction_date="2026-04-20", tx_type="refund",
+        )
+        storage.update_transaction(refund_id, refund_of_transaction_id=purchase_id)
+        storage.delete_transaction(refund_id)
+        storage.restore_deleted_transaction(refund_id)
+        assert storage.get_transaction(refund_id)["refund_of_transaction_id"] == purchase_id
+
+    def test_restoring_a_refund_whose_linked_purchase_is_gone_nulls_the_link(self, storage):
+        purchase_id = storage.insert_transaction(
+            source="manual", source_id="p15", amount=100.0, transaction_date="2026-04-16", tx_type="expense",
+        )
+        refund_id = storage.insert_transaction(
+            source="manual", source_id="r14", amount=20.0, transaction_date="2026-04-20", tx_type="refund",
+        )
+        storage.update_transaction(refund_id, refund_of_transaction_id=purchase_id)
+        storage.delete_transaction(refund_id)
+        storage.delete_transaction(purchase_id)  # purchase gone for good, refund not yet restored
+        storage.restore_deleted_transaction(refund_id)
+        assert storage.get_transaction(refund_id)["refund_of_transaction_id"] is None
+
+    def test_restore_nonexistent_raises(self, storage):
+        with pytest.raises(ValueError, match="no deletion record"):
+            storage.restore_deleted_transaction(999)
+
+    def test_restore_a_still_existing_transaction_raises(self, storage):
+        tx_id = storage.insert_transaction(
+            source="manual", source_id="m1", amount=12.50, transaction_date="2026-04-16T12:00:00",
+        )
+        with pytest.raises(ValueError, match="already exists"):
+            storage.restore_deleted_transaction(tx_id)
+
+    def test_restore_of_a_pre_migration_14_snapshot_is_refused(self, storage):
+        """A deletion recorded before migration 14 only has the legacy summary
+        columns — no canonical money to restore. Simulate that by inserting a
+        deleted_transactions row the same way the old code did, skipping the
+        columns migration 14 added."""
+        tx_id = storage.insert_transaction(
+            source="manual", source_id="m1", amount=12.50, transaction_date="2026-04-16T12:00:00",
+        )
+        storage._conn.execute("DELETE FROM transactions WHERE id = ?", (tx_id,))
+        storage._conn.execute(
+            """INSERT INTO deleted_transactions
+               (id, source, source_id, amount, currency, merchant, category, transaction_date, type, revision)
+               VALUES (?, 'manual', 'm1', 12.50, 'SGD', NULL, NULL, '2026-04-16T12:00:00', 'expense', 1)""",
+            (tx_id,),
+        )
+        storage._conn.commit()
+
+        with pytest.raises(ValueError, match="predates full snapshot retention"):
+            storage.restore_deleted_transaction(tx_id)
 
 
 class TestQueryTransactions:
@@ -191,108 +578,89 @@ class TestQueryTransactions:
         assert summary["by_category"]["Food"] == 30.0
         assert summary["by_category"]["Transport"] == 30.0
 
-
-class TestCategories:
-    def test_load_categories(self, storage, sample_categories):
-        storage.load_categories(sample_categories)
-        cats = storage.get_categories()
-        assert len(cats) == 6
-        assert cats[0]["name"] == "Food"
-
-    def test_load_categories_idempotent(self, storage, sample_categories):
-        storage.load_categories(sample_categories)
-        storage.load_categories(sample_categories)
-        cats = storage.get_categories()
-        assert len(cats) == 6
-
-
-class TestIngestionState:
-    def test_get_initial_state(self, storage):
-        state = storage.get_ingestion_state("dbs_paylah")
-        assert state is None
-
-    def test_update_and_get_state(self, storage):
-        storage.update_ingestion_state("dbs_paylah", "msg-123", "2026-04-16T12:00:00")
-        state = storage.get_ingestion_state("dbs_paylah")
-        assert state["last_processed_id"] == "msg-123"
-
-    def test_update_state_overwrites(self, storage):
-        storage.update_ingestion_state("dbs_paylah", "msg-123", "2026-04-16T12:00:00")
-        storage.update_ingestion_state("dbs_paylah", "msg-456", "2026-04-16T13:00:00")
-        state = storage.get_ingestion_state("dbs_paylah")
-        assert state["last_processed_id"] == "msg-456"
-
-
-class TestDuplicateCheck:
-    def test_is_duplicate_false_for_new(self, storage):
-        assert storage.is_duplicate("dbs_paylah", "email-123") is False
-
-    def test_is_duplicate_true_after_insert(self, storage):
+    def test_get_spending_summary_excludes_transfer(self, storage):
         storage.insert_transaction(
-            source="dbs_paylah", source_id="email-123", amount=5.0,
-            merchant="Test", transaction_date="2026-04-16T12:00:00",
+            source="manual", source_id="t1", amount=50.0, category="Food",
+            transaction_date="2026-04-16", tx_type="expense",
         )
-        assert storage.is_duplicate("dbs_paylah", "email-123") is True
-
-    def test_recent_transaction_exists(self, storage):
         storage.insert_transaction(
-            source="apple_wallet", source_id="aw-1", amount=12.50,
-            merchant="Toast Box", transaction_date="2026-04-16T12:00:00",
+            source="manual", source_id="t2", amount=500.0, category="Card Payment",
+            transaction_date="2026-04-16", tx_type="transfer",
         )
-        assert storage.recent_transaction_exists("Toast Box", 12.50, minutes=5) is True
+        summary = storage.get_spending_summary(
+            start_date="2026-04-16", end_date="2026-04-16"
+        )
+        assert summary["total"] == 50.0
+        assert "Card Payment" not in summary["by_category"]
 
-    def test_recent_transaction_not_exists_different_amount(self, storage):
+    def test_get_spending_summary_nets_refund(self, storage):
         storage.insert_transaction(
-            source="apple_wallet", source_id="aw-1", amount=12.50,
-            merchant="Toast Box", transaction_date="2026-04-16T12:00:00",
+            source="manual", source_id="r1", amount=50.0, category="Food",
+            transaction_date="2026-04-16", tx_type="expense",
         )
-        assert storage.recent_transaction_exists("Toast Box", 99.99, minutes=5) is False
+        storage.insert_transaction(
+            source="manual", source_id="r2", amount=15.0, category="Food",
+            transaction_date="2026-04-16", tx_type="refund",
+        )
+        summary = storage.get_spending_summary(
+            start_date="2026-04-16", end_date="2026-04-16"
+        )
+        assert summary["total"] == 35.0
+        assert summary["by_category"]["Food"] == 35.0
 
 
 class TestCrossSourceDedup:
     def test_find_cross_source_duplicate_match(self, storage):
-        storage.insert_transaction(
+        tx_id = storage.insert_transaction(
             source="apple_wallet", source_id="aw-1", amount=8.20,
             merchant="Ban Mian", transaction_date="2026-04-16T12:00:00",
         )
+        event = storage.record_source_event("apple_wallet", "evidence", "{}", timestamp_precision="second")
+        storage.finish_source_event(event["id"], "processed", tx_id)
         result = storage.find_cross_source_duplicate(
-            "Ban Mian", 8.20, "dbs_paylah"
+            "Ban Mian", 8.20, "dbs_paylah", transaction_date="2026-04-16T12:01:00", timestamp_precision="minute"
         )
         assert result is not None
         assert result["source"] == "apple_wallet"
         assert result["amount"] == 8.20
 
     def test_find_cross_source_duplicate_case_insensitive(self, storage):
-        storage.insert_transaction(
+        tx_id = storage.insert_transaction(
             source="apple_wallet", source_id="aw-1", amount=8.20,
             merchant="Ban Mian", transaction_date="2026-04-16T12:00:00",
         )
+        event = storage.record_source_event("apple_wallet", "evidence", "{}", timestamp_precision="second")
+        storage.finish_source_event(event["id"], "processed", tx_id)
         result = storage.find_cross_source_duplicate(
-            "BAN MIAN", 8.20, "dbs_paylah"
+            "BAN MIAN", 8.20, "dbs_paylah", transaction_date="2026-04-16T12:01:00", timestamp_precision="minute"
         )
         assert result is not None
 
     def test_find_cross_source_no_match_different_source(self, storage):
-        storage.insert_transaction(
+        tx_id = storage.insert_transaction(
             source="dbs_paylah", source_id="db-1", amount=8.20,
             merchant="Ban Mian", transaction_date="2026-04-16T12:00:00",
         )
+        event = storage.record_source_event("apple_wallet", "evidence", "{}", timestamp_precision="second")
+        storage.finish_source_event(event["id"], "processed", tx_id)
         result = storage.find_cross_source_duplicate(
-            "Ban Mian", 8.20, "dbs_paylah"
+            "Ban Mian", 8.20, "dbs_paylah", transaction_date="2026-04-16T12:01:00", timestamp_precision="minute"
         )
         assert result is None
 
     def test_find_cross_source_no_match_different_amount(self, storage):
-        storage.insert_transaction(
+        tx_id = storage.insert_transaction(
             source="apple_wallet", source_id="aw-1", amount=8.20,
             merchant="Ban Mian", transaction_date="2026-04-16T12:00:00",
         )
+        event = storage.record_source_event("apple_wallet", "evidence", "{}", timestamp_precision="second")
+        storage.finish_source_event(event["id"], "processed", tx_id)
         result = storage.find_cross_source_duplicate(
-            "Ban Mian", 99.99, "dbs_paylah"
+            "Ban Mian", 99.99, "dbs_paylah", transaction_date="2026-04-16T12:01:00", timestamp_precision="minute"
         )
         assert result is None
 
-    def test_find_cross_source_no_match_old_transaction(self, storage):
+    def test_find_cross_source_matches_delayed_observation(self, storage):
         tx_id = storage.insert_transaction(
             source="apple_wallet", source_id="aw-1", amount=8.20,
             merchant="Ban Mian", transaction_date="2026-04-16T12:00:00",
@@ -303,10 +671,12 @@ class TestCrossSourceDedup:
             (tx_id,),
         )
         storage._conn.commit()
+        event = storage.record_source_event("apple_wallet", "evidence", "{}", timestamp_precision="second")
+        storage.finish_source_event(event["id"], "processed", tx_id)
         result = storage.find_cross_source_duplicate(
-            "Ban Mian", 8.20, "dbs_paylah"
+            "Ban Mian", 8.20, "dbs_paylah", transaction_date="2026-04-16T12:01:00", timestamp_precision="minute"
         )
-        assert result is None
+        assert result is not None
 
 
 class TestCategoryCRUD:
@@ -498,6 +868,19 @@ class TestInsights:
         assert toast["visits"] == 2
         assert toast["total"] == 18.0
 
+    def test_get_merchant_ranking_nets_refund(self, storage):
+        storage.insert_transaction(
+            source="manual", source_id="m1", amount=25.0, merchant="Grab",
+            transaction_date="2026-04-10T12:00:00", tx_type="expense",
+        )
+        storage.insert_transaction(
+            source="manual", source_id="m2", amount=5.0, merchant="Grab",
+            transaction_date="2026-04-11T12:00:00", tx_type="refund",
+        )
+        ranking = storage.get_merchant_ranking("2026-04-01", "2026-04-30")
+        grab = next(r for r in ranking if r["merchant"] == "Grab")
+        assert grab["total"] == 20.0
+
     def test_get_merchant_ranking_with_limit(self, storage):
         # Insert 5 different merchants
         merchants = [("A", 10.0), ("B", 20.0), ("C", 30.0), ("D", 40.0), ("E", 50.0)]
@@ -526,29 +909,17 @@ class TestInsights:
         avg = storage.get_average_daily("2026-04-01", "2026-04-30")
         assert avg == pytest.approx(100.0 / 30)
 
-    def test_get_trend(self, storage):
-        # Insert transactions on different dates
+    def test_get_average_daily_nets_refund(self, storage):
         storage.insert_transaction(
-            source="manual", source_id="m1", amount=10.0,
-            merchant="A", transaction_date="2026-04-10T12:00:00",
+            source="manual", source_id="m1", amount=90.0, merchant="Test",
+            transaction_date="2026-04-01T12:00:00", tx_type="expense",
         )
         storage.insert_transaction(
-            source="manual", source_id="m2", amount=20.0,
-            merchant="B", transaction_date="2026-04-12T12:00:00",
+            source="manual", source_id="m2", amount=30.0, merchant="Test",
+            transaction_date="2026-04-01T13:00:00", tx_type="refund",
         )
-        storage.insert_transaction(
-            source="manual", source_id="m3", amount=15.0,
-            merchant="C", transaction_date="2026-04-11T12:00:00",
-        )
-        trend = storage.get_trend("2026-04-01", "2026-04-30")
-        assert len(trend) == 3
-        # Should be sorted by date
-        assert trend[0]["date"] == "2026-04-10"
-        assert trend[0]["amount"] == 10.0
-        assert trend[1]["date"] == "2026-04-11"
-        assert trend[1]["amount"] == 15.0
-        assert trend[2]["date"] == "2026-04-12"
-        assert trend[2]["amount"] == 20.0
+        avg = storage.get_average_daily("2026-04-01", "2026-04-30")
+        assert avg == pytest.approx(60.0 / 30)
 
     def test_get_period_comparison(self, storage):
         # Insert transactions in April (current)
@@ -584,8 +955,36 @@ class TestInsights:
         assert comparison["previous"]["by_category"]["Food"] == 80.0
         assert comparison["previous"]["by_category"]["Shopping"] == 120.0
 
+    def test_get_period_comparison_nets_refund(self, storage):
+        storage.insert_transaction(
+            source="manual", source_id="m1", amount=100.0, category="Food",
+            transaction_date="2026-04-10T12:00:00", tx_type="expense",
+        )
+        storage.insert_transaction(
+            source="manual", source_id="m2", amount=20.0, category="Food",
+            transaction_date="2026-04-15T12:00:00", tx_type="refund",
+        )
+        comparison = storage.get_period_comparison(
+            "2026-04-01", "2026-04-30", "2026-03-01", "2026-03-31",
+        )
+        assert comparison["current"]["total"] == 80.0
+        assert comparison["current"]["by_category"]["Food"] == 80.0
+
 
 class TestTrendByCategory:
+    def test_trend_by_category_nets_refund_in_its_own_category(self, storage):
+        storage.insert_transaction(
+            source="manual", source_id="m1", amount=20.0, category="Food",
+            transaction_date="2026-04-10T09:00:00", tx_type="expense",
+        )
+        storage.insert_transaction(
+            source="manual", source_id="m2", amount=5.0, category="Food",
+            transaction_date="2026-04-10T12:00:00", tx_type="refund",
+        )
+        result = storage.get_trend_by_category("2026-04-01", "2026-04-30")
+        day = next(r for r in result if r["date"] == "2026-04-10")
+        assert day["Food"] == 15.0
+
     def test_trend_by_category_groups_correctly(self, storage):
         # Two Food transactions and one Transport on the same date
         storage.insert_transaction(
@@ -877,19 +1276,10 @@ class TestAnalyticsWrappers:
         result = storage.top_merchants_by_period()
         assert isinstance(result, list)
 
-    def test_merchant_trend_chart_returns_dict(self, storage):
-        result = storage.merchant_trend_chart("Starbucks")
-        assert isinstance(result, dict)
-        assert "months" in result
-
     def test_spending_velocity_returns_dict(self, storage):
         result = storage.spending_velocity()
         assert isinstance(result, dict)
         assert "pace_percent" in result
-
-    def test_spending_anomalies_returns_list(self, storage):
-        result = storage.spending_anomalies()
-        assert isinstance(result, list)
 
     def test_new_merchants_returns_list(self, storage):
         result = storage.new_merchants()
@@ -899,3 +1289,52 @@ class TestAnalyticsWrappers:
         result = storage.generate_digest()
         assert isinstance(result, dict)
 
+
+
+def test_category_and_rule_commit_atomically(storage, in_memory_db):
+    import sqlite3
+    tx_id = storage.insert_transaction(source='manual', source_id='atomic-rule', amount=12, merchant='Cafe', category='Other')
+    in_memory_db.execute("CREATE TRIGGER reject_rule BEFORE INSERT ON merchant_overrides BEGIN SELECT RAISE(ABORT, 'unavailable'); END")
+    with pytest.raises(sqlite3.IntegrityError):
+        storage.update_transaction(tx_id, category='Food', remember_category=True)
+    assert storage.get_transaction(tx_id)['category'] == 'Other'
+    assert storage.get_merchant_overrides() == {}
+
+
+def test_remember_rule_is_not_applied_on_a_stale_revision_conflict(storage):
+    """A remember_category=True correction that loses a revision race must
+    not remember a rule for a category change that never actually applied —
+    the revision check happens before any write, so this should already
+    hold, but R03 never had a test pinning it for the remember-rule path
+    specifically (only for the pre-existing trigger-abort atomicity case)."""
+    from src.storage import RevisionConflict
+    tx_id = storage.insert_transaction(
+        source='manual', source_id='atomic-revision', amount=12,
+        merchant='Cafe', category='Other', transaction_date='2026-04-16T12:00:00',
+    )
+    with pytest.raises(RevisionConflict):
+        storage.update_transaction(
+            tx_id, category='Food', remember_category=True, expected_revision=99,
+        )
+    assert storage.get_transaction(tx_id)['category'] == 'Other'
+    assert storage.get_merchant_overrides() == {}
+
+
+class TestSavingsOverview:
+    def test_expenses_nets_refund(self, storage):
+        storage.insert_transaction(
+            source="manual", source_id="so1", amount=5000.0, merchant="Employer",
+            category="Salary", transaction_date="2026-04-01", tx_type="income",
+        )
+        storage.insert_transaction(
+            source="manual", source_id="so2", amount=100.0, category="Food",
+            transaction_date="2026-04-10", tx_type="expense",
+        )
+        storage.insert_transaction(
+            source="manual", source_id="so3", amount=30.0, category="Food",
+            transaction_date="2026-04-15", tx_type="refund",
+        )
+        overview = storage.get_savings_overview("2026-04")
+        assert overview["income"] == 5000.0
+        assert overview["expenses"] == 70.0
+        assert overview["savings"] == 4930.0

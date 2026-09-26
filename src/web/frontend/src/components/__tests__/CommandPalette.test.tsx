@@ -39,9 +39,9 @@ test('opens with Cmd+K and navigates on select', async () => {
   expect(screen.queryByPlaceholderText('Jump to…')).toBeNull();
   fireEvent.keyDown(window, { key: 'k', metaKey: true });
   expect(await screen.findByPlaceholderText('Jump to…')).toBeTruthy();
-  fireEvent.click(screen.getByText('Transactions'));
+  fireEvent.click(screen.getByText('Activity'));
   await waitFor(() =>
-    expect(screen.getByTestId('loc').textContent).toBe('/transactions')
+    expect(screen.getByTestId('loc').textContent).toBe('/activity')
   );
 });
 
@@ -50,6 +50,6 @@ test('lists merchants and navigates to the profile', async () => {
   fireEvent.keyDown(window, { key: 'k', metaKey: true });
   fireEvent.click(await screen.findByText('Toast Box'));
   await waitFor(() =>
-    expect(screen.getByTestId('loc').textContent).toBe('/merchants/Toast%20Box')
+    expect(screen.getByTestId('loc').textContent).toBe('/explore/merchants/Toast%20Box')
   );
 });

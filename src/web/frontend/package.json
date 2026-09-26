@@ -9,7 +9,12 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:visual": "playwright test",
+    "generate:v2-types": "(cd ../../.. && python3 -m scripts.export_v2_openapi_schema src/web/frontend/openapi/v2-schema.json) && openapi-typescript openapi/v2-schema.json -o src/api/v2-schema.gen.ts",
+    "check-types:v2": "npm run generate:v2-types && git diff --exit-code -- openapi/v2-schema.json src/api/v2-schema.gen.ts",
+    "test:perf": "playwright test -c playwright.perf.config.ts",
+    "test:journey": "playwright test -c playwright.journey.config.ts"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",
@@ -32,6 +37,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
+    "@playwright/test": "^1.63.0",
     "@tailwindcss/vite": "^4.2.4",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
@@ -45,6 +51,7 @@
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17.5.0",
     "jsdom": "^29.1.1",
+    "openapi-typescript": "^7.13.0",
     "postcss": "^8.5.10",
     "tailwindcss": "^4.2.4",
     "typescript": "~6.0.2",

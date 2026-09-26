@@ -49,6 +49,14 @@ def _make_admin_db():
             username TEXT NOT NULL REFERENCES users(username) ON DELETE CASCADE,
             expires_at DATETIME NOT NULL
         );
+        CREATE TABLE job_runs (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            job_name      TEXT NOT NULL,
+            status        TEXT NOT NULL DEFAULT 'running' CHECK(status IN ('running', 'succeeded', 'failed')),
+            started_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            finished_at   DATETIME,
+            error_code    TEXT
+        );
     """)
     conn.row_factory = sqlite3.Row
     return conn
@@ -61,6 +69,7 @@ class FakeUserManager:
         self._storage = admin_storage
         self.created = []
         self.deleted = []
+        self.contexts = {}
 
     def create_user(self, username, password_hash):
         self._storage.create_user(username, password_hash)
@@ -68,6 +77,9 @@ class FakeUserManager:
 
     def delete_user(self, username):
         self.deleted.append(username)
+
+    def get(self, username):
+        return self.contexts.get(username)
 
 
 @pytest.fixture
@@ -121,6 +133,52 @@ async def test_admin_list_users_requires_auth(app):
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         resp = await client.get("/api/users")
     assert resp.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_admin_health_requires_auth(app):
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        resp = await client.get("/api/health")
+    assert resp.status_code == 401
+
+
+# ── Job health ─────────────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_admin_health_reports_job_runs(app, admin_db):
+    storage = AdminStorage(admin_db)
+    run_id = storage.record_job_start("backup")
+    storage.record_job_failure(run_id, "UploadError")
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        login = await client.post("/api/login", json={"password": ADMIN_PASSWORD})
+        token = login.json()["token"]
+        resp = await client.get("/api/health", headers={"X-Admin-Token": token})
+    assert resp.status_code == 200
+    jobs = resp.json()["jobs"]
+    assert len(jobs) == 1
+    assert jobs[0]["job_name"] == "backup"
+    assert jobs[0]["status"] == "failed"
+    assert jobs[0]["error_code"] == "UploadError"
+    assert jobs[0]["consecutive_failures"] == 1
+
+
+@pytest.mark.asyncio
+async def test_admin_health_reports_per_user_capture_freshness(app, admin_db, user_manager):
+    from types import SimpleNamespace
+    from src.db import init_db
+    from src.storage import Storage
+    user_manager._storage.create_user("alice", bcrypt.hashpw(b"x", bcrypt.gensalt()).decode())
+    alice_storage = Storage(init_db(":memory:"))
+    alice_storage.record_source_event("apple_wallet", "evidence-1", "{}", timestamp_precision="second")
+    user_manager.contexts["alice"] = SimpleNamespace(storage=alice_storage)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        login = await client.post("/api/login", json={"password": ADMIN_PASSWORD})
+        token = login.json()["token"]
+        resp = await client.get("/api/health", headers={"X-Admin-Token": token})
+    capture = resp.json()["capture"]
+    assert "alice" in capture
+    assert capture["alice"]["oldest_queued_at"] is not None
+    assert capture["alice"]["exhausted_retry_count"] == 0
 
 
 # ── User CRUD ─────────────────────────────────────────────────────────────────

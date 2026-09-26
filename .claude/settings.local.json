@@ -35,7 +35,8 @@
       "Bash(npx tsc:*)",
       "mcp__plugin_claude-mem_mcp-search__smart_unfold",
       "Bash(grep -E \"\\\\.\\(py|js|html|css|sql|json\\)$\")",
-      "Bash(grep -E \"\\\\.\\(js|jsx|ts|tsx\\)$\")"
+      "Bash(grep -E \"\\\\.\\(js|jsx|ts|tsx\\)$\")",
+      "Bash(npm -v)"
     ]
   },
   "enabledPlugins": {

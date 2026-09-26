@@ -1,3 +1,4 @@
+import { WalletCredential } from './WalletCredential';
 import { useState, useEffect, useRef } from 'react';
 import { CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -225,7 +226,7 @@ export function TelegramStep({ onComplete, onSkip }: StepProps) {
       ) : token ? (
         <div className="space-y-3">
           <ol className="text-sm text-foreground space-y-1 list-decimal list-inside">
-            <li>Open the cashe bot: <span className="text-accent font-mono">@cashe_app_bot</span></li>
+            <li>Open the cashe bot: <span className="text-teal font-mono">@cashe_app_bot</span></li>
             <li>Send this code:</li>
           </ol>
           <div className="flex items-center gap-2">
@@ -313,6 +314,8 @@ export function AppleWalletStep({ onComplete, onSkip }: StepProps) {
         </div>
 
         <div className="border-t border-border" />
+
+        <WalletCredential />
 
         {/* Step 2 */}
         <div className="space-y-2">

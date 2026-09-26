@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
+import { PageCard } from '@/components/ui/cards';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { CheckCircle2, X } from 'lucide-react';
@@ -90,8 +91,8 @@ function AdminLogin({ onSuccess }: { onSuccess: (token: string) => void }) {
     try {
       const { token } = await adminLogin(password);
       onSuccess(token);
-    } catch (err: any) {
-      setError(err.message ?? 'Incorrect password');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Incorrect password');
       setPassword('');
     } finally {
       setLoading(false);
@@ -111,7 +112,6 @@ function AdminLogin({ onSuccess }: { onSuccess: (token: string) => void }) {
               placeholder="Admin password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="bg-background border-border"
               autoFocus
             />
             {error && <p className="text-sm text-destructive">{error}</p>}
@@ -160,15 +160,21 @@ function AdminDashboard({ token, onLogout }: { token: string; onLogout: () => vo
 
   const loadUsers = async () => {
     try {
-      setLoadError('');
       const list = await adminApi.listUsers();
       setUsers(list);
-    } catch (err: any) {
-      setLoadError(err.message ?? 'Couldn\'t load this — try refreshing.');
+      setLoadError('');
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : 'Couldn\'t load this — try refreshing.');
     }
   };
 
-  useEffect(() => { loadUsers(); }, []);
+  // Fetch on mount only; loadUsers is intentionally excluded from deps (it's
+  // redefined every render and is also invoked directly after create/delete).
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadUsers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleCreate = async () => {
     setCreateError('');
@@ -179,8 +185,8 @@ function AdminDashboard({ token, onLogout }: { token: string; onLogout: () => vo
       setCreateResult(result);
       setNewUsername('');
       loadUsers();
-    } catch (err: any) {
-      setCreateError(err.message ?? 'Couldn\'t create user — try again.');
+    } catch (err) {
+      setCreateError(err instanceof Error ? err.message : 'Couldn\'t create user — try again.');
     } finally {
       setCreateLoading(false);
     }
@@ -194,8 +200,8 @@ function AdminDashboard({ token, onLogout }: { token: string; onLogout: () => vo
       await adminApi.resetPassword(resetTarget, resetPassword);
       setResetTarget(null);
       setResetPassword('');
-    } catch (err: any) {
-      setResetError(err.message ?? 'Couldn\'t reset password — try again.');
+    } catch (err) {
+      setResetError(err instanceof Error ? err.message : 'Couldn\'t reset password — try again.');
     } finally {
       setResetLoading(false);
     }
@@ -239,14 +245,13 @@ function AdminDashboard({ token, onLogout }: { token: string; onLogout: () => vo
 
       <div className="max-w-3xl mx-auto space-y-6">
         {/* Create user */}
-        <Card className="p-6 space-y-4">
-          <h2 className="text-sm font-semibold text-foreground">Create Account</h2>
+        <PageCard title="Create Account" contentClassName="space-y-4">
           <div className="flex flex-col sm:flex-row gap-2">
             <Input
               placeholder="Username"
               value={newUsername}
               onChange={(e) => setNewUsername(e.target.value.toLowerCase())}
-              className="bg-background border-border flex-1"
+              className="flex-1"
             />
             <Button onClick={handleCreate} disabled={createLoading || !newUsername}>
               {createLoading ? 'Creating…' : 'Create Account'}
@@ -276,7 +281,7 @@ function AdminDashboard({ token, onLogout }: { token: string; onLogout: () => vo
               </Button>
             </div>
           )}
-        </Card>
+        </PageCard>
 
         {/* Users table */}
         <Card className="overflow-hidden">
@@ -347,7 +352,7 @@ function AdminDashboard({ token, onLogout }: { token: string; onLogout: () => vo
 
       {/* Reset Password Modal */}
       <Dialog open={!!resetTarget} onOpenChange={(open) => { if (!open) { setResetTarget(null); setResetPassword(''); setResetError(''); } }}>
-        <DialogContent className="bg-card border-border">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>Reset password for {resetTarget}</DialogTitle>
           </DialogHeader>
@@ -358,7 +363,7 @@ function AdminDashboard({ token, onLogout }: { token: string; onLogout: () => vo
                 placeholder="New password"
                 value={resetPassword}
                 onChange={(e) => setResetPassword(e.target.value)}
-                className="bg-background border-border flex-1"
+                className="flex-1"
                 autoFocus
               />
               <Button variant="outline" onClick={() => setResetPassword(generatePassword())}>
@@ -381,7 +386,7 @@ function AdminDashboard({ token, onLogout }: { token: string; onLogout: () => vo
 
       {/* Delete Confirm Modal */}
       <Dialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
-        <DialogContent className="bg-card border-border">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>Delete {deleteTarget}?</DialogTitle>
           </DialogHeader>
@@ -392,7 +397,7 @@ function AdminDashboard({ token, onLogout }: { token: string; onLogout: () => vo
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancel</Button>
               <Button
-                className="text-destructive-foreground bg-destructive hover:bg-destructive/90"
+                variant="destructive"
                 onClick={handleDelete}
                 disabled={deleteLoading}
               >

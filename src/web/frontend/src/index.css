@@ -15,8 +15,9 @@
   --color-card-hover:        #1C1C22;
   --color-border:            #2A2A3F;
   --color-foreground:        #EEEAF5;
-  --color-muted:             #7A7488;
+  --color-muted:             #A8A1B5;
   --color-destructive:       #FF453A;
+  --color-on-brand:          #0B0B14;
   --color-destructive-foreground: #FFFFFF;
   --color-popover:            #1B1B2C;
   --color-popover-foreground: #EEEAF5;
@@ -27,6 +28,15 @@
   --color-success:            var(--color-teal);
   --color-warning:            var(--color-honey);
   --color-info:               var(--color-mint);
+
+  /* Compatibility aliases — resolve shadcn/ui token references through
+     established theme colours rather than leaving them undefined. */
+  --color-primary:              var(--color-teal);
+  --color-primary-foreground:   var(--color-on-brand);
+  --color-secondary:            var(--color-card-elev);
+  --color-secondary-foreground: var(--color-foreground);
+  --color-muted-foreground:     var(--color-muted);
+  --color-card-foreground:      var(--color-foreground);
 
   /* Fonts */
   --font-display: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
@@ -45,39 +55,54 @@
   /* Type — §3.2 */
   --text-2xs: 0.6875rem;
   --text-2xs--line-height: 1rem;
+  --text-lg:  1.25rem;
+  --text-lg--line-height: 1.4;
+  --text-xl:  1.5625rem;
+  --text-xl--line-height: 1.3;
+  --text-2xl: 1.9375rem;
+  --text-2xl--line-height: 1.25;
+  --text-3xl: 2.4375rem;
+  --text-3xl--line-height: 1.2;
+  --text-4xl: 3.0625rem;
+  --text-4xl--line-height: 1.15;
+  --text-5xl: 3.8125rem;
+  --text-5xl--line-height: 1.1;
+  --text-6xl: 4.8125rem;
+  --text-6xl--line-height: 1.05;
 
   /* Elevation — §6 */
   --shadow-elev-xs:   0 0 0 1px var(--color-border), 0 2px 6px rgba(0,0,0,.3);
   --shadow-elev-md:   0 0 0 1px var(--color-border), 0 8px 24px rgba(0,0,0,.5);
 
   /* Motion */
-  --ease-spring:   cubic-bezier(0.34, 1.56, 0.64, 1);
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
-  --ease-bounce:   cubic-bezier(0.34, 1.8,  0.64, 1);
 
   --dur-fast:      150ms;
   --dur-base:      250ms;
-  --dur-slow:      400ms;
-  --dur-cinematic: 600ms;
 
   /* Elevation & glow */
   --shadow-glow-teal:  0 0 0 1px rgba(0,212,170,.18), 0 0 36px -8px rgba(0,212,170,.4),
                        inset 0 1px 0 rgba(0,212,170,.08);
-  --shadow-glow-warm:  0 0 0 1px rgba(251,146,60,.14), 0 0 48px -10px rgba(251,146,60,.45),
-                       inset 0 1px 0 rgba(251,146,60,.06);
-  --shadow-glow-coral: 0 0 0 1px rgba(255,107,107,.14), 0 0 40px -10px rgba(255,107,107,.38);
   --shadow-elev-card:  0 8px 32px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.04);
 }
 
-@keyframes glow-pulse-opacity {
-  0%, 100% { opacity: 0.45; }
-  50%       { opacity: 1;    }
+/* Compositor-only: the highlight is a translated layer, not an animated
+   background-position, so placeholders never repaint while they shimmer. */
+@keyframes skeleton-shimmer {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(100%); }
 }
 
-@keyframes skeleton-shimmer {
-  0%   { background-position: -200% 0; }
-  100% { background-position:  200% 0; }
-}
+/* Radix overlay motion (§14.2): entrances ease out, exits are quicker fades.
+   Only `transform` animates; centering uses Tailwind's separate `translate`. */
+@keyframes overlay-in  { from { opacity: 0; } }
+@keyframes overlay-out { to   { opacity: 0; } }
+@keyframes pop-in   { from { opacity: 0; transform: translateY(8px) scale(0.97); } }
+@keyframes pop-out  { to   { opacity: 0; transform: scale(0.97); } }
+@keyframes sheet-in-right  { from { transform: translateX(100%); } }
+@keyframes sheet-in-left   { from { transform: translateX(-100%); } }
+@keyframes sheet-in-top    { from { transform: translateY(-100%); } }
+@keyframes sheet-in-bottom { from { transform: translateY(100%); } }
 
 @layer base {
   /* §9.2 — all lucide icons render at 1.5 stroke, overridden once, never per-instance */
@@ -95,15 +120,28 @@ body {
 }
 
 @layer components {
-  .input-field {
-    @apply px-3 py-1.5 text-sm bg-background border border-border rounded-md text-foreground;
+  /* CardLink (components/ui/cards.tsx): whole-card navigation. The wrapped
+     card lifts on hover; plain cards also take the hover fill, glow cards
+     keep their own wash. */
+  .card-link > :first-child {
+    transition: transform 150ms ease-out, box-shadow 150ms ease-out, background-color 150ms ease-out;
   }
-  .btn-action {
-    @apply px-4 py-1.5 text-sm bg-foreground text-background rounded-md hover:opacity-90;
+  .card-link:hover > :first-child {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-elev-xs);
+  }
+  .card-link:hover > .bg-card:not([class*="hero-glow"]) {
+    background-color: var(--color-card-hover);
+  }
+
+  /* Shared text-field contract (§7.2/§15); components/ui/input.tsx wraps it.
+     16px on phones avoids iOS Safari's zoom-on-focus for smaller text. */
+  .input-field {
+    @apply px-3 py-1.5 text-base md:text-sm bg-background border border-border rounded-sm text-foreground placeholder:text-muted ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 aria-[invalid=true]:border-destructive/40;
   }
   /* Native <select> with a themed chevron arrow — use instead of unstyled <select> */
   .select-field {
-    @apply px-3 py-1.5 text-sm bg-background border border-border rounded-md text-foreground appearance-none pr-8;
+    @apply px-3 py-1.5 text-base md:text-sm bg-background border border-border rounded-sm text-foreground appearance-none pr-8 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 aria-[invalid=true]:border-destructive/40;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='none' stroke='%23E8E8ED' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: right 0.5rem center;
@@ -125,6 +163,28 @@ body {
     background: linear-gradient(90deg, #00D4AA, #FB923C);
   }
 
+  /* Horizontally scrollable strip (tab/chip rows) that keeps touch/trackpad
+     scroll working but hides the native scrollbar track — the platform
+     convention for a swipeable nav strip, not a data table. */
+  .scroll-strip {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .scroll-strip::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Owned by the dialog, sheet, dropdown-menu and select wrappers — not for page use. */
+  .overlay-motion[data-state="open"]   { animation: overlay-in var(--dur-base) var(--ease-out-expo); }
+  .overlay-motion[data-state="closed"] { animation: overlay-out var(--dur-fast) ease-in; }
+  .pop-motion[data-state="open"]    { animation: pop-in var(--dur-base) var(--ease-out-expo); }
+  .pop-motion[data-state="closed"]  { animation: pop-out var(--dur-fast) ease-in; }
+  .sheet-motion-right[data-state="open"]  { animation: sheet-in-right var(--dur-base) var(--ease-out-expo); }
+  .sheet-motion-left[data-state="open"]   { animation: sheet-in-left var(--dur-base) var(--ease-out-expo); }
+  .sheet-motion-top[data-state="open"]    { animation: sheet-in-top var(--dur-base) var(--ease-out-expo); }
+  .sheet-motion-bottom[data-state="open"] { animation: sheet-in-bottom var(--dur-base) var(--ease-out-expo); }
+  [class*="sheet-motion-"][data-state="closed"] { animation: overlay-out var(--dur-fast) ease-in; }
+
   /* ── Grid layout utilities ─────────────────────────────────────────────── */
 
   /* Applied to any grid cell whose content may overflow — scrolls independently */
@@ -137,60 +197,11 @@ body {
   }
 
   /* Grid area name assignments (apply on children of a named-areas grid) */
-  .area-header  { grid-area: header;  }
   .area-title   { grid-area: title;   }
   .area-left    { grid-area: left;    }
   .area-right   { grid-area: right;   }
-  .area-top     { grid-area: top;     }
-  .area-insight { grid-area: insight; }
 
   /* Per-page grid templates -------------------------------------------------- */
-
-  /* Overview: period selector header | left=stats+charts | right=transactions */
-  .page-grid-overview {
-    /* mobile: single column, rows sized to content */
-    grid-template-areas: "header" "left" "right";
-    grid-template-columns: 1fr;
-    grid-template-rows: auto auto auto;
-  }
-  @media (min-width: 768px) {
-    .page-grid-overview {
-      grid-template-areas: "header header" "left right";
-      grid-template-columns: 1fr 1.2fr;
-      grid-template-rows: auto 1fr;
-    }
-  }
-
-  /* Analytics: header | insight (full-width) | left=health+alerts | right=charts */
-  .page-grid-analytics {
-    grid-template-areas: "header" "insight" "left" "right";
-    grid-template-columns: 1fr;
-    grid-template-rows: auto auto auto auto;
-  }
-  @media (min-width: 768px) {
-    .page-grid-analytics {
-      grid-template-areas:
-        "header  header"
-        "insight insight"
-        "left    right";
-      grid-template-columns: 1fr 1fr;
-      grid-template-rows: auto auto 1fr;
-    }
-  }
-
-  /* Finance: savings strip | left=budgets | right=goals */
-  .page-grid-finance {
-    grid-template-areas: "top" "left" "right";
-    grid-template-columns: 1fr;
-    grid-template-rows: auto auto auto;
-  }
-  @media (min-width: 768px) {
-    .page-grid-finance {
-      grid-template-areas: "top top" "left right";
-      grid-template-columns: 1fr 1fr;
-      grid-template-rows: auto 1fr;
-    }
-  }
 
   /* Settings: title | left=categories+overrides | right=toggles+thresholds */
   .page-grid-settings {
@@ -220,15 +231,17 @@ body {
   /* ── Skeleton shimmer ──────────────────────────────────────────────── */
 
   .skeleton-pulse {
-    background: linear-gradient(
-      90deg,
-      rgba(255,255,255,.04) 25%,
-      rgba(255,255,255,.08) 50%,
-      rgba(255,255,255,.04) 75%
-    );
-    background-size: 200% 100%;
-    animation: skeleton-shimmer 1.5s ease-in-out infinite;
+    position: relative;
+    overflow: hidden;
+    background: color-mix(in srgb, var(--color-foreground) 5%, transparent);
     border-radius: var(--radius-sm);
+  }
+  .skeleton-pulse::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--color-foreground) 6%, transparent), transparent);
+    animation: skeleton-shimmer 1.5s ease-in-out infinite;
   }
 
   /* ── Hero glow pulse (one per screen max) ──────────────────────────── */
@@ -237,45 +250,46 @@ body {
   .hero-glow-teal,
   .hero-glow-coral {
     position: relative;
-    overflow: hidden;
+    /* No overflow:hidden here — the box-shadow must bloom evenly past
+       every edge, corners included. Clipping the shadow to the box would
+       cut the round corners flat, since a descendant's box-shadow is
+       clipped by an ancestor's overflow:hidden even though the ancestor's
+       own shadow is not. Only .hero-hairline needs clipping — it gets its
+       own scoped wrapper instead. */
   }
 
-  .hero-glow-warm::after,
-  .hero-glow-teal::after,
-  .hero-glow-coral::after {
-    content: '';
+  /* Scoped clip for the hairline only — keeps the glow box-shadows below
+     unclipped so they bloom uniformly at every
+     corner instead of being cut flat where the hairline's clip box met the
+     rounded edge. */
+  .hero-glow-clip {
     position: absolute;
     inset: 0;
     border-radius: inherit;
-    will-change: opacity;
-    animation: glow-pulse-opacity 3s ease-in-out infinite;
+    overflow: hidden;
     pointer-events: none;
   }
 
   .hero-glow-warm {
-    background: radial-gradient(120% 100% at 100% 0%, rgba(251,146,60,.08) 0%, rgba(11,11,20,0) 50%), #161624;
-    box-shadow: 0 0 0 1px rgba(251,146,60,.14), 0 0 48px -10px rgba(251,146,60,.45),
+    background: radial-gradient(120% 100% at 100% 0%, rgba(251,146,60,.08) 0%, rgba(11,11,20,0) 50%), var(--color-card);
+    /* Static, not pulsing ("Keep glow static", docs/design-language.md):
+       a stronger outer halo listed first, over the base glow. */
+    box-shadow: 0 0 0 1px rgba(251,146,60,.21), 0 0 48px -4px rgba(251,146,60,.35),
+                0 0 0 1px rgba(251,146,60,.14), 0 0 48px -10px rgba(251,146,60,.45),
                 inset 0 1px 0 rgba(251,146,60,.06);
-  }
-  .hero-glow-warm::after {
-    box-shadow: 0 0 0 1px rgba(251,146,60,.30), 0 0 48px -4px rgba(251,146,60,.50);
   }
 
   .hero-glow-teal {
-    background: radial-gradient(120% 100% at 100% 0%, rgba(0,212,170,.08) 0%, rgba(11,11,20,0) 50%), #161624;
-    box-shadow: 0 0 0 1px rgba(0,212,170,.18), 0 0 36px -8px rgba(0,212,170,.40),
+    background: radial-gradient(120% 100% at 100% 0%, rgba(0,212,170,.08) 0%, rgba(11,11,20,0) 50%), var(--color-card);
+    box-shadow: 0 0 0 1px rgba(0,212,170,.21), 0 0 48px -4px rgba(0,212,170,.35),
+                0 0 0 1px rgba(0,212,170,.18), 0 0 36px -8px rgba(0,212,170,.40),
                 inset 0 1px 0 rgba(0,212,170,.08);
-  }
-  .hero-glow-teal::after {
-    box-shadow: 0 0 0 1px rgba(0,212,170,.30), 0 0 48px -4px rgba(0,212,170,.50);
   }
 
   .hero-glow-coral {
-    background: radial-gradient(120% 100% at 100% 0%, rgba(255,107,107,.08) 0%, rgba(11,11,20,0) 50%), #161624;
-    box-shadow: 0 0 0 1px rgba(255,107,107,.14), 0 0 40px -10px rgba(255,107,107,.38);
-  }
-  .hero-glow-coral::after {
-    box-shadow: 0 0 0 1px rgba(255,107,107,.30), 0 0 40px -4px rgba(255,107,107,.45);
+    background: radial-gradient(120% 100% at 100% 0%, rgba(255,107,107,.08) 0%, rgba(11,11,20,0) 50%), var(--color-card);
+    box-shadow: 0 0 0 1px rgba(255,107,107,.21), 0 0 40px -4px rgba(255,107,107,.32),
+                0 0 0 1px rgba(255,107,107,.14), 0 0 40px -10px rgba(255,107,107,.38);
   }
 
   /* Hairline top-edge gradient — child of .hero-glow-* */
@@ -297,9 +311,80 @@ body {
   /* ── Reduced motion ────────────────────────────────────────────────── */
 
   @media (prefers-reduced-motion: reduce) {
+    /* animation-iteration-count: 1 matters as much as the duration here —
+       without it, an `infinite` animation (glow pulse, skeleton shimmer)
+       just loops faster under this override instead of stopping, which
+       reads as rapid flicker rather than the "immediate final state" the
+       motion contract requires (docs/plans/2026-09-16-cashe-design-
+       language-restoration.md's Reduced motion row). */
     *, *::before, *::after {
       animation-duration: var(--dur-fast) !important;
+      animation-iteration-count: 1 !important;
       transition-duration: var(--dur-fast) !important;
+      scroll-behavior: auto !important;
     }
   }
+
+  /* Quiet diagonal shell wash, theme-aware (replaces the fixed-opacity B2_WASH
+     inline style for the new experience). Dark keeps B2_WASH's original
+     intensities; light uses lower coefficients tuned for a white canvas so the
+     brand colours read as a hint rather than a tint. */
+  .shell-wash {
+    background: linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--color-teal) 8%, transparent) 0%,
+      transparent 30%,
+      transparent 68%,
+      color-mix(in srgb, var(--color-tangerine) 7%, transparent) 86%,
+      color-mix(in srgb, var(--color-coral) 6%, transparent) 100%
+    ), var(--color-background);
+  }
+  :root[data-theme="light"] .shell-wash {
+    background: linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--color-teal) 5%, transparent) 0%,
+      transparent 30%,
+      transparent 68%,
+      color-mix(in srgb, var(--color-tangerine) 4%, transparent) 86%,
+      color-mix(in srgb, var(--color-coral) 3%, transparent) 100%
+    ), var(--color-background);
+  }
 }
+
+/* Home and Explore scroll naturally; Activity keeps its list/detail panels. */
+.explore-page .grid-scroll-panel { overflow: visible; }
+
+:root { color-scheme: dark; }
+:root[data-theme="light"] {
+  color-scheme: light;
+  --color-background: #F6F5F8;
+  --color-card: #FFFFFF;
+  --color-card-elev: #FFFFFF;
+  --color-card-hover: #EDEAF2;
+  --color-border: #D9D5E1;
+  --color-foreground: #201C2C;
+  --color-muted: #625C70;
+  --color-teal: #007A63;
+  --color-ring: #007A63;
+  --color-mint: #006D51;
+  --color-honey: #865500;
+  --color-tangerine: #A34409;
+  --color-coral: #B82D43;
+  --color-destructive: #BE241B;
+  --color-warning: #865500;
+  --color-info: #006D51;
+  --color-success: #007A63;
+  --color-popover: #FFFFFF;
+  --color-popover-foreground: #201C2C;
+  --color-input: #D9D5E1;
+  --color-accent: #EDEAF2;
+  --color-accent-foreground: #201C2C;
+  --shadow-elev-card: 0 4px 18px rgba(32,28,44,.08);
+  --shadow-elev-xs: 0 0 0 1px var(--color-border), 0 2px 6px rgba(32,28,44,.06);
+  --shadow-elev-md: 0 0 0 1px var(--color-border), 0 8px 24px rgba(32,28,44,.12);
+}
+:root[data-theme="light"] .select-field {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23201C2C' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}
+:focus-visible { outline: 2px solid var(--color-ring); outline-offset: 3px; }
+

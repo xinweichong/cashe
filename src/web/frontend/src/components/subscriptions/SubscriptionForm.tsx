@@ -1,7 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { Button } from '@/components/ui/button';
 import { api, type Subscription } from '@/api/client';
+import { invalidateSpendingQueries } from '@/hooks/useTransactions';
+import { toDateStr } from '@/lib/utils';
+import { FREQUENCY_LABELS } from '@/lib/subscriptionFrequency';
 
 type Mode = 'create' | 'edit';
 
@@ -19,14 +23,6 @@ const FREQUENCIES: Subscription['frequency'][] = [
   'annual',
 ];
 
-const FREQUENCY_LABELS: Record<Subscription['frequency'], string> = {
-  weekly: 'Weekly',
-  biweekly: 'Biweekly',
-  monthly: 'Monthly',
-  quarterly: 'Quarterly',
-  annual: 'Annual',
-};
-
 export function SubscriptionForm({ onClose, onSave, initial }: SubscriptionFormProps) {
   const mode: Mode = initial ? 'edit' : 'create';
   const qc = useQueryClient();
@@ -41,7 +37,7 @@ export function SubscriptionForm({ onClose, onSave, initial }: SubscriptionFormP
   const [error, setError] = useState<string | null>(null);
 
   // Today's start_date for the merchants query so the dropdown isn't empty.
-  const today = new Date().toISOString().slice(0, 10);
+  const today = toDateStr(new Date());
   const startOfYear = `${new Date().getFullYear()}-01-01`;
   const { data: merchants = [] } = useQuery({
     queryKey: ['merchants', startOfYear, today],
@@ -80,7 +76,7 @@ export function SubscriptionForm({ onClose, onSave, initial }: SubscriptionFormP
       });
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['subscriptions'] });
+      invalidateSpendingQueries(qc);
       onSave();
     },
     onError: (e: unknown) => {
@@ -88,9 +84,13 @@ export function SubscriptionForm({ onClose, onSave, initial }: SubscriptionFormP
     },
   });
 
-  useEffect(() => {
+  // Clear the submit error as soon as the user edits any field.
+  const fieldsKey = `${merchant}|${frequency}|${billingDay}|${label}|${notes}`;
+  const [errorClearedForKey, setErrorClearedForKey] = useState(fieldsKey);
+  if (fieldsKey !== errorClearedForKey) {
+    setErrorClearedForKey(fieldsKey);
     setError(null);
-  }, [merchant, frequency, billingDay, label, notes]);
+  }
 
   return (
     <Sheet open onOpenChange={(open) => { if (!open) onClose(); }}>
@@ -166,19 +166,16 @@ export function SubscriptionForm({ onClose, onSave, initial }: SubscriptionFormP
         <div className="shrink-0 px-4 py-3 border-t border-border space-y-2">
           {error && <p className="text-sm text-destructive">{error}</p>}
           <div className="flex justify-end gap-2">
-            <button
-              onClick={onClose}
-              className="px-3 py-1.5 text-sm text-muted hover:text-foreground"
-            >
+            <Button type="button" variant="ghost" onClick={onClose}>
               Cancel
-            </button>
-            <button
+            </Button>
+            <Button
+              type="button"
               onClick={() => mutation.mutate()}
               disabled={!merchant || !!billingDayError || mutation.isPending}
-              className="btn-action disabled:opacity-40"
             >
               {mutation.isPending ? 'Saving…' : mode === 'create' ? 'Create' : 'Save'}
-            </button>
+            </Button>
           </div>
         </div>
       </SheetContent>

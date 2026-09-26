@@ -1,5 +1,8 @@
 import base64
 import html
+import json
+from datetime import timedelta
+from email.utils import parseaddr
 import logging
 import os
 import re
@@ -11,6 +14,7 @@ from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 
 from src.parsers.base import BankParser, ParseResult
 from src.storage import Storage
@@ -46,12 +50,16 @@ class GmailPoller:
         self.on_transaction = on_transaction
         self.on_auth_error = on_auth_error
         self.pipeline = pipeline
+        if pipeline is not None and on_transaction is not None:
+            pipeline.on_transaction = on_transaction
         self._poll_interval = poll_interval
         self.service = None
         self._pending_flow = None
         self._pending_state = None
         self._stop_event: Optional[threading.Event] = None
         self._thread: Optional[threading.Thread] = None
+        self._lifecycle_lock = threading.Lock()
+        self._poll_lock = threading.Lock()
         # Error state — read by /api/status
         self.last_auth_error: Optional[str] = None
         self.last_poll_at: Optional[str] = None
@@ -88,7 +96,7 @@ class GmailPoller:
         if not self.sender_filters:
             return ""
         senders = " OR ".join(f"from:{s}" for s in self.sender_filters)
-        return f"({senders}) is:unread"
+        return f"({senders}) newer_than:90d"
 
     def _find_parser(self, sender: str, subject: str) -> Optional[BankParser]:
         for parser in self.parsers:
@@ -97,10 +105,10 @@ class GmailPoller:
         return None
 
     def _process_message(self, msg: dict) -> Optional[ParseResult]:
-        headers = {h["name"]: h["value"] for h in msg["payload"]["headers"]}
-        sender = headers.get("From", "")
-        subject = headers.get("Subject", "")
-        message_id = headers.get("Message-ID", msg["id"])
+        headers = {h["name"].lower(): h["value"] for h in msg["payload"]["headers"]}
+        sender = headers.get("from", "")
+        subject = headers.get("subject", "")
+        message_id = headers.get("message-id", msg["id"])
 
         parser = self._find_parser(sender, subject)
         if not parser:
@@ -115,12 +123,6 @@ class GmailPoller:
         result = parser.parse(body)
         if result:
             result.source_id = message_id
-        elif "dbs.com" in sender.lower():
-            logger.warning(
-                "DBS parser returned None for message %s. Body:\n%s",
-                message_id,
-                body[:500],
-            )
         return result
 
     def _extract_body(self, msg: dict) -> str:
@@ -164,70 +166,122 @@ class GmailPoller:
         text = re.sub(r"\n\s*\n+", "\n", text)
         return text.strip()
 
-    def poll_once(self) -> list[ParseResult]:
-        if not self.service:
-            raise RuntimeError("Not authenticated. Call authenticate() first.")
-
-        query = self._build_query()
-        if not query:
-            logger.warning("No sender filters configured — skipping poll")
-            return []
-        results = self.service.users().messages().list(userId="me", q=query).execute()
-        messages = results.get("messages", [])
-
-        transactions = []
-        for msg_summary in messages:
+    def _capture_message(self, message_id: str, *, historical: bool = False) -> None:
+        if self.storage.get_source_event("gmail", message_id):
+            return
+        try:
             msg = self.service.users().messages().get(
-                userId="me", id=msg_summary["id"], format="full"
+                userId="me", id=message_id, format="full"
             ).execute()
-            result = self._process_message(msg)
-            if result:
-                if self.storage.is_duplicate(result.source, result.source_id):
-                    logger.debug("Skipping duplicate: %s", result.source_id)
-                else:
-                    dup = self.storage.find_cross_source_duplicate(
-                        result.merchant, result.amount, result.source
-                    )
-                    if dup:
-                        logger.info(
-                            "Cross-source duplicate: %s matches existing %s (id=%s)",
-                            result.source, dup["source"], dup["id"],
-                        )
-                    else:
-                        transactions.append(result)
-                try:
-                    self.service.users().messages().modify(
-                        userId="me",
-                        id=msg["id"],
-                        body={"removeLabelIds": ["UNREAD"]},
-                    ).execute()
-                except Exception as e:
-                    logger.warning("Could not mark message as read: %s", e)
+        except HttpError as exc:
+            if exc.resp.status != 404:
+                raise
+            event = self.storage.record_source_event("gmail", message_id, "{}")
+            self.storage.finish_source_event(event["id"], "unrecognized", error_code="message_deleted")
+            return
+        headers = {h["name"].lower(): h["value"] for h in msg["payload"].get("headers", [])}
+        sender = parseaddr(headers.get("from", ""))[1].lower()
+        # History covers the whole mailbox; never retain unrelated personal mail.
+        if not any(sender == value.lower() or sender.endswith("@" + value.lower())
+                   for value in self.sender_filters):
+            return
+        msg["_cashe_historical"] = historical
+        self.storage.record_source_event("gmail", message_id, json.dumps(msg))
 
-        logger.info(f"Processed {len(transactions)} new transactions")
+    def _synchronize(self) -> None:
+        checkpoint = self.storage.get_setting("gmail_history_id")
+        state = json.loads(self.storage.get_setting("gmail_sync_progress", "{}"))
+        if not checkpoint and not state:
+            state = {
+                "history_id": self.service.users().getProfile(userId="me").execute()["historyId"],
+                "query": self._build_query().replace(
+                    "newer_than:90d", f"after:{int((local_now() - timedelta(days=90)).timestamp())}"
+                ),
+            }
+            self.storage.set_setting("gmail_sync_progress", json.dumps(state))
+        # Bound each cycle; the next poll resumes after the last durable page.
+        for _ in range(10):
+            try:
+                if checkpoint:
+                    page = self.service.users().history().list(
+                        userId="me", startHistoryId=checkpoint, historyTypes=["messageAdded"],
+                        **({"pageToken": state["page_token"]} if state.get("page_token") else {}),
+                    ).execute()
+                    ids = {item["message"]["id"] for entry in page.get("history", [])
+                           for item in entry.get("messagesAdded", [])}
+                else:
+                    page = self.service.users().messages().list(
+                        userId="me", q=state["query"], maxResults=100,
+                        **({"pageToken": state["page_token"]} if state.get("page_token") else {}),
+                    ).execute()
+                    ids = [item["id"] for item in page.get("messages", [])]
+            except HttpError as exc:
+                if (checkpoint and exc.resp.status == 404) or (
+                    state.get("page_token") and exc.resp.status == 400
+                ):
+                    self.storage.set_setting("gmail_sync_progress", "{}")
+                    self.storage.set_setting("gmail_history_id", "")
+                    return
+                raise
+            for message_id in ids:
+                self._capture_message(message_id, historical=not bool(checkpoint))
+            if page.get("nextPageToken"):
+                state["page_token"] = page["nextPageToken"]
+                self.storage.set_setting("gmail_sync_progress", json.dumps(state))
+            else:
+                self.storage.set_setting("gmail_sync_progress", "{}")
+                self.storage.set_setting("gmail_history_id", str(
+                    page["historyId"] if checkpoint else state["history_id"]
+                ))
+                self.storage.set_setting("gmail_last_sync_at", _now_iso())
+                return
+
+    def poll_once(self) -> list[dict]:
+        """Persist source observations before advancing sync; retry stored failures.
+
+        Inbox labels are user-owned. Reading a message never controls capture.
+        """
+        with self._poll_lock:
+            if not self.service:
+                raise RuntimeError("Not authenticated. Call authenticate() first.")
+            if not self._build_query():
+                return []
+            # Retry already captured mail even when a later Gmail request fails.
+            transactions = self._process_pending_events()
+            self._synchronize()
+            transactions.extend(self._process_pending_events())
+            self.last_poll_at = _now_iso()
+            return transactions
+
+    def _process_pending_events(self) -> list[dict]:
+        transactions = []
+        if self.pipeline is None:
+            return transactions
+        for event in self.storage.pending_source_events("gmail", limit=100):
+            try:
+                message = json.loads(event["payload"])
+                historical = message.get("_cashe_historical", False)
+                result = self._process_message(message)
+                if result is None:
+                    self.storage.finish_source_event(event["id"], "unrecognized", error_code="no_parser_match")
+                    continue
+                tx = self.pipeline.ingest(result, historical=historical)
+                evidence = self.storage.get_source_event(result.source, result.source_id)
+                self.storage.finish_source_event(event["id"], "processed", evidence["transaction_id"])
+            except Exception as exc:
+                self.storage.finish_source_event(event["id"], "failed", error_code=type(exc).__name__)
+                logger.warning("Gmail event processing failed: %s", type(exc).__name__)
+                continue
+            if tx is not None:
+                transactions.append(tx)
         return transactions
 
     def force_poll(self) -> int:
-        """Run a single poll cycle. Returns the number of new transactions ingested."""
-        results = self.poll_once()
-        count = 0
-        for result in results:
-            try:
-                if self.pipeline is None:
-                    logger.warning("No pipeline configured; transaction not stored: %s", result.source_id)
-                    continue
-                tx_dict = self.pipeline.ingest(result)
-                if tx_dict is not None:
-                    count += 1
-                    if self.on_transaction:
-                        self.on_transaction(tx_dict)
-            except Exception as e:
-                logger.error(f"Failed to store transaction: {e}")
-        return count
+        """Run a serialized capture/ingestion cycle, returning new transaction count."""
+        return len(self.poll_once())
 
     def get_auth_url(self, redirect_uri: str, state: str) -> str:
-        """Generate Google OAuth URL. `state` is the username — passed through to
-        the /oauth/callback so we know which user completed OAuth.
+        """Generate Google OAuth URL with an opaque, session-bound state token.
         Stores self._pending_flow so complete_reauth() can exchange the code.
         """
         flow = Flow.from_client_secrets_file(
@@ -248,14 +302,14 @@ class GmailPoller:
         """Start the poll_loop in a background daemon thread.
         Called by UserManager.start_poller() after Gmail OAuth completes.
         """
-        self._stop_event = threading.Event()
-        t = threading.Thread(
-            target=self.poll_loop,
-            args=(self._poll_interval,),
-            daemon=True,
-        )
-        t.start()
-        self._thread = t
+        with self._lifecycle_lock:
+            if self._thread and self._thread.is_alive():
+                return
+            self._stop_event = threading.Event()
+            self._thread = threading.Thread(
+                target=self.poll_loop, args=(self._poll_interval,), daemon=True,
+            )
+            self._thread.start()
 
     def stop(self) -> None:
         """Signal the poll_loop to exit.
@@ -290,18 +344,7 @@ class GmailPoller:
         stop = getattr(self, "_stop_event", None)
         while not (stop and stop.is_set()):
             try:
-                results = self.poll_once()
-                self.last_poll_at = _now_iso()
-                for result in results:
-                    try:
-                        if self.pipeline is None:
-                            logger.warning("No pipeline configured; transaction not stored: %s", result.source_id)
-                            continue
-                        tx_dict = self.pipeline.ingest(result)
-                        if tx_dict is not None and self.on_transaction:
-                            self.on_transaction(tx_dict)
-                    except Exception as e:
-                        logger.error(f"Failed to store transaction: {e}")
+                self.force_poll()
             except Exception as e:
                 logger.error(f"Poll error: {e}")
                 self.last_auth_error = str(e)

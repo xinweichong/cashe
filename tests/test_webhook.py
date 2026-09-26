@@ -9,12 +9,18 @@ TEST_USER = "alice"
 
 
 class FakeContext:
+    """Like UserManager's context: the webhook ingests through the poller's pipeline."""
     def __init__(self, storage, categorizer=None, exchange_service=None, on_transaction=None):
+        from types import SimpleNamespace
+        from src.ingestion import IngestionPipeline
+
+        def notify(tx):
+            if on_transaction:
+                return on_transaction(tx["id"], tx["amount"], tx["merchant"],
+                                      tx["category"], tx["_match_source"], tx["source"])
+
         self.storage = storage
-        self.poller = None
-        self.categorizer = categorizer
-        self.exchange_service = exchange_service
-        self.on_transaction = on_transaction
+        self.poller = SimpleNamespace(pipeline=IngestionPipeline(storage, categorizer, exchange_service, on_transaction=notify))
 
 
 class FakeUserManager:
@@ -72,8 +78,9 @@ class TestAppleWalletWebhook:
     @pytest.mark.asyncio
     async def test_foreign_currency_payload(self, in_memory_db):
         storage = Storage(connection=in_memory_db)
+        from src.exchange import RateResult
         mock_exchange = MagicMock()
-        mock_exchange.get_rate.return_value = 0.35
+        mock_exchange.get_rate.return_value = RateResult(status="resolved", rate=0.35, source="api")
         ctx = FakeContext(storage, exchange_service=mock_exchange)
         app = create_webhook_app(FakeUserManager(ctx))
         transport = ASGITransport(app=app)
@@ -207,13 +214,15 @@ class TestWebhookDedup:
     @pytest.mark.asyncio
     async def test_cross_source_duplicate_detected(self, in_memory_db):
         storage = Storage(connection=in_memory_db)
-        storage.insert_transaction(
+        tx_id = storage.insert_transaction(
             source="dbs_paylah",
             source_id="email-123",
             amount=8.20,
             merchant="BAN MIAN",
             transaction_date="2026-04-16T12:00:00",
         )
+        event = storage.record_source_event("dbs_paylah", "email-123", "{}", timestamp_precision="minute")
+        storage.finish_source_event(event["id"], "processed", tx_id)
         ctx = FakeContext(storage)
         app = create_webhook_app(FakeUserManager(ctx))
         transport = ASGITransport(app=app)
@@ -227,3 +236,81 @@ class TestWebhookDedup:
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "duplicate"
+
+
+@pytest.mark.asyncio
+async def test_wallet_upgrade_rotation_and_revocation(client, in_memory_db):
+    import hashlib
+    storage = Storage(in_memory_db)
+    payload = {"amount": "12.50", "merchant": "Test", "date": "2026-09-05T12:00:00"}
+    storage.set_setting("wallet_credential_hash", hashlib.sha256(b"credential-one").hexdigest())
+    # Keep the old Shortcut working until it has successfully sent its credential.
+    assert (await client.post(_url(), json=payload)).status_code == 200
+    assert (await client.post(_url(), json=payload, headers={"Authorization": "Bearer forged"})).status_code == 401
+    response = await client.post(_url(), json=payload, headers={"Authorization": "Bearer credential-one"})
+    assert response.status_code == 200
+    assert response.json()["status"] == "duplicate"
+    assert (await client.post(_url(), json=payload)).status_code == 401
+    storage.set_setting("wallet_credential_hash", hashlib.sha256(b"credential-two").hexdigest())
+    assert (await client.post(_url(), json=payload, headers={"Authorization": "Bearer credential-one"})).status_code == 401
+    assert (await client.post(_url(), json=payload, headers={"Authorization": "Bearer credential-two"})).status_code == 200
+    storage.revoke_wallet_credential()
+    assert (await client.post(_url(), json=payload, headers={"Authorization": "Bearer credential-two"})).status_code == 401
+    assert (await client.post(_url(), json=payload)).status_code == 401
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(('body', 'status'), [
+    (b'{"merchant":"Private Merchant"}', 400),
+    (b'{"amount":12,"merchant":{}}', 422),
+    (b'{"amount":"secret-invalid-amount","merchant":"Private Merchant"}', 400),
+    (b'{"amount":"NaN","merchant":"Private Merchant"}', 400),
+    (b'{"amount":12,"merchant":" "}', 400),
+    (b'{broken-json', 422),
+    (b'\xff', 422),
+])
+async def test_invalid_wallet_request_is_retained(client, in_memory_db, body, status):
+    import base64
+    from src.ingestion import IngestionPipeline
+
+    response = await client.post(_url(), content=body)
+    assert response.status_code == status
+    assert 'secret-invalid-amount' not in response.text
+    storage = Storage(in_memory_db)
+    issues = storage.list_capture_issues()
+    assert len(issues) == 1
+    issue = issues[0]
+    assert issue['source'] == 'wallet_request'
+    assert issue['status'] == 'unrecognized'
+    assert 'payload' not in issue and 'source_id' not in issue
+    row = in_memory_db.execute('SELECT payload FROM source_events').fetchone()
+    assert base64.b64decode(row['payload']) == body
+    assert in_memory_db.execute('SELECT COUNT(*) FROM transactions').fetchone()[0] == 0
+    pipeline = IngestionPipeline(storage)
+    pipeline.retry_pending()
+    assert storage.list_capture_issues()[0]['attempts'] == 1
+    storage.retry_source_event(issue['id'])
+    pipeline.retry_pending()
+    assert storage.list_capture_issues()[0]['status'] == 'unrecognized'
+
+
+@pytest.mark.asyncio
+async def test_unauthorized_invalid_wallet_body_is_not_retained(client, in_memory_db):
+    storage = Storage(in_memory_db)
+    storage.revoke_wallet_credential()
+    response = await client.post(_url(), content=b'{broken')
+    assert response.status_code == 401
+    assert in_memory_db.execute('SELECT COUNT(*) FROM source_events').fetchone()[0] == 0
+
+
+@pytest.mark.asyncio
+async def test_wallet_raw_evidence_links_reformatted_duplicate(client, in_memory_db):
+    import json
+    payload = {'amount': 12.5, 'merchant': 'Cafe', 'date': '2026-09-06T12:00:00', 'extra': 'original evidence'}
+    first = await client.post(_url(), json=payload)
+    second = await client.post(_url(), content=json.dumps(payload, indent=2))
+    assert first.json()['transaction_id'] == second.json()['transaction_id']
+    assert second.json()['status'] == 'duplicate'
+    rows = in_memory_db.execute("SELECT * FROM source_events WHERE source = 'wallet_request'").fetchall()
+    assert len(rows) == 2
+    assert all(row['status'] == 'processed' and row['transaction_id'] == first.json()['transaction_id'] for row in rows)

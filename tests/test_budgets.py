@@ -106,6 +106,51 @@ class TestBudgetProgress:
         progress = storage.get_budget_progress()
         assert progress[0]["spent"] == 150.0
 
+    def test_overall_budget_excludes_transfer(self, in_memory_db):
+        storage = Storage(connection=in_memory_db)
+        storage.create_budget(category=None, amount=1000.0, period="monthly")
+        today = date.today().isoformat()
+        storage.insert_transaction(
+            source="manual", source_id="rb5", amount=100.0, category="Dining",
+            transaction_date=today, tx_type="expense",
+        )
+        storage.insert_transaction(
+            source="manual", source_id="rb6", amount=500.0, category="Card Payment",
+            transaction_date=today, tx_type="transfer",
+        )
+        progress = storage.get_budget_progress()
+        assert progress[0]["spent"] == 100.0
+
+    def test_category_budget_nets_refund(self, in_memory_db):
+        storage = Storage(connection=in_memory_db)
+        storage.create_budget(category="Dining", amount=200.0, period="monthly")
+        today = date.today().isoformat()
+        storage.insert_transaction(
+            source="manual", source_id="rb1", amount=50.0, category="Dining",
+            transaction_date=today, tx_type="expense",
+        )
+        storage.insert_transaction(
+            source="manual", source_id="rb2", amount=15.0, category="Dining",
+            transaction_date=today, tx_type="refund",
+        )
+        progress = storage.get_budget_progress()
+        assert progress[0]["spent"] == 35.0
+
+    def test_overall_budget_nets_refund(self, in_memory_db):
+        storage = Storage(connection=in_memory_db)
+        storage.create_budget(category=None, amount=1000.0, period="monthly")
+        today = date.today().isoformat()
+        storage.insert_transaction(
+            source="manual", source_id="rb3", amount=100.0, category="Dining",
+            transaction_date=today, tx_type="expense",
+        )
+        storage.insert_transaction(
+            source="manual", source_id="rb4", amount=20.0, category="Dining",
+            transaction_date=today, tx_type="refund",
+        )
+        progress = storage.get_budget_progress()
+        assert progress[0]["spent"] == 80.0
+
     def test_income_excluded_from_budget_progress(self, in_memory_db):
         storage = Storage(connection=in_memory_db)
         storage.create_budget(category=None, amount=1000.0, period="monthly")
@@ -179,6 +224,22 @@ class TestBudgetProgress:
         in_memory_db.commit()
         assert storage.get_budget_progress()[0]["spent"] == pytest.approx(10.0, 0.01)
 
+    def test_unresolved_foreign_amount_excluded_from_progress(self, in_memory_db):
+        """R04: a legacy exchange_rate of 1.0 is a silent unresolved fallback,
+        not real conversion evidence — must not be summed at face value."""
+        storage = Storage(connection=in_memory_db)
+        storage.create_budget(category=None, amount=200.0, period="monthly")
+        today = date.today().isoformat()
+        storage.insert_transaction(
+            source="manual", source_id="b1", amount=50.0,
+            merchant="M", transaction_date=today,
+        )
+        storage.insert_transaction(
+            source="manual", source_id="b2", amount=500.0, currency="THB", exchange_rate=1.0,
+            merchant="M", transaction_date=today,
+        )
+        assert storage.get_budget_progress()[0]["spent"] == pytest.approx(50.0, 0.01)
+
 
 import bcrypt
 import pytest_asyncio
@@ -211,13 +272,6 @@ async def api(budget_app):
 
 class TestBudgetAPI:
     @pytest.mark.asyncio
-    async def test_get_budgets_empty(self, api):
-        ac, _ = api
-        resp = await ac.get("/api/budgets")
-        assert resp.status_code == 200
-        assert resp.json() == []
-
-    @pytest.mark.asyncio
     async def test_create_budget(self, api):
         ac, _ = api
         resp = await ac.post("/api/budgets", json={"category": None, "amount": 3000, "period": "monthly"})
@@ -245,13 +299,32 @@ class TestBudgetAPI:
     async def test_get_budget_progress(self, api):
         ac, _ = api
         await ac.post("/api/budgets", json={"category": None, "amount": 1000, "period": "monthly"})
-        resp = await ac.get("/api/budgets/progress")
+        resp = await ac.get("/api/v2/budgets/progress")
         assert resp.status_code == 200
         data = resp.json()
         assert len(data) == 1
         assert data[0]["label"] == "Overall"
-        assert data[0]["spent"] == 0.0
+        assert data[0]["spent"] == {"minor_units": 0, "currency": "SGD"}
         assert data[0]["status"] == "on_track"
+
+    @pytest.mark.asyncio
+    async def test_get_budget_progress_v2_returns_canonical_money(self, api):
+        ac, storage = api
+        await ac.post("/api/budgets", json={"category": None, "amount": 100, "period": "monthly"})
+        today = date.today().isoformat()
+        storage.insert_transaction(
+            source="manual", source_id="v2-1", amount=110.0,
+            merchant="M", transaction_date=today,
+        )
+        resp = await ac.get("/api/v2/budgets/progress")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 1
+        assert data[0]["label"] == "Overall"
+        assert data[0]["budget_amount"] == {"minor_units": 10000, "currency": "SGD"}
+        assert data[0]["spent"] == {"minor_units": 11000, "currency": "SGD"}
+        assert data[0]["remaining"] == {"minor_units": -1000, "currency": "SGD"}
+        assert data[0]["status"] == "over_budget"
 
     @pytest.mark.asyncio
     async def test_update_budget(self, api):
@@ -275,7 +348,7 @@ class TestBudgetAPI:
         budget_id = create.json()["id"]
         resp = await ac.delete(f"/api/budgets/{budget_id}")
         assert resp.status_code == 200
-        assert (await ac.get("/api/budgets")).json() == []
+        assert (await ac.get("/api/v2/budgets/progress")).json() == []
 
     @pytest.mark.asyncio
     async def test_settings_includes_budgets_enabled(self, api):

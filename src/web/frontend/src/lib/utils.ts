@@ -6,21 +6,33 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+/** A refund is money coming back, same display sign as income — the stored
+ * `amount` column is always positive regardless of type. */
+export function isCreditType(type: string | null | undefined): boolean {
+  return type === 'income' || type === 'refund';
+}
+
+// Building an Intl.NumberFormat is the expensive part, and long transaction
+// lists format on every row; keep one per currency and precision.
+const currencyFormats = new Map<string, Intl.NumberFormat>();
+function currencyFormat(currency: string, whole: boolean): Intl.NumberFormat {
+  const key = `${currency}:${whole}`;
+  let format = currencyFormats.get(key);
+  if (!format) {
+    format = new Intl.NumberFormat('en-SG', whole
+      ? { style: 'currency', currency, minimumFractionDigits: 0, maximumFractionDigits: 0 }
+      : { style: 'currency', currency, minimumFractionDigits: 2 });
+    currencyFormats.set(key, format);
+  }
+  return format;
+}
+
 export function formatCurrency(amount: number, currency = 'SGD'): string {
-  return new Intl.NumberFormat('en-SG', {
-    style: 'currency',
-    currency,
-    minimumFractionDigits: 2,
-  }).format(amount);
+  return currencyFormat(currency, false).format(amount);
 }
 
 export function formatCurrencyWhole(amount: number, currency = 'SGD'): string {
-  return new Intl.NumberFormat('en-SG', {
-    style: 'currency',
-    currency,
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount);
+  return currencyFormat(currency, true).format(amount);
 }
 
 export function formatDate(date: string): string {
@@ -46,6 +58,15 @@ export function formatShortDate(date: string): string {
  * Handles null/undefined gracefully. Handles both "YYYY-MM-DD" (bare) and
  * "YYYY-MM-DDTHH:MM:SS" (ISO) formats.
  */
+/** Just the time of day ("10:05 am"), or '' for a date-only record. */
+export function formatTimeOfDay(date: string | null | undefined): string {
+  const tIdx = date?.indexOf('T') ?? -1;
+  if (!date || tIdx === -1 || date.slice(tIdx + 1).startsWith('00:00')) return '';
+  const [y, m, d] = date.slice(0, tIdx).split('-').map(Number);
+  const [h, min] = date.slice(tIdx + 1).split(':').map(Number);
+  return new Date(y, m - 1, d, h, min).toLocaleTimeString('en-SG', { hour: 'numeric', minute: '2-digit', hour12: true });
+}
+
 export function formatDateTime(date: string | null | undefined): string {
   if (!date) return '—';
   const tIdx = date.indexOf('T');
@@ -70,6 +91,21 @@ export function formatDateTime(date: string | null | undefined): string {
     return `${dateStr}, ${timeStr}`;
   }
   return dateStr;
+}
+
+/**
+ * The calendar-day bucket a transaction_date belongs to for grouping
+ * purposes — the same bare-date-substring convention formatDate/
+ * formatDateTime already use (no timezone conversion), so a transaction's
+ * group header always matches its own displayed date.
+ */
+export function localDayKey(date: string | null | undefined): string {
+  if (!date) return 'undated';
+  return date.slice(0, 10);
+}
+
+export function formatDayHeading(dayKey: string): string {
+  return dayKey === 'undated' ? 'No date' : formatDate(dayKey);
 }
 
 const DEFAULT_CATEGORY_COLORS: Record<string, string> = {
@@ -101,38 +137,9 @@ export function getCategoryColor(category: string): string {
 /** Re-exported palette for the category color picker in Settings. */
 export const PALETTE = SPECTRUM_PALETTE;
 
-/** Find the nearest spectrum color to `hex` by Euclidean distance in RGB. */
-export function nearestSpectrum(hex: string): string {
-  const target = hexToRgb(hex);
-  if (!target) return SPECTRUM_PALETTE[0];
-  let best = SPECTRUM_PALETTE[0];
-  let bestDist = Infinity;
-  for (const candidate of SPECTRUM_PALETTE) {
-    const c = hexToRgb(candidate)!;
-    const d = (target.r - c.r) ** 2 + (target.g - c.g) ** 2 + (target.b - c.b) ** 2;
-    if (d < bestDist) { bestDist = d; best = candidate; }
-  }
-  return best;
-}
-
-function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
-  const m = hex.replace('#', '').match(/^([0-9a-f]{6})$/i);
-  if (!m) return null;
-  const n = parseInt(m[1], 16);
-  return { r: (n >> 16) & 0xff, g: (n >> 8) & 0xff, b: n & 0xff };
-}
-
 /** Format a Date to "YYYY-MM-DD" in local time. */
 export function toDateStr(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-/** Map spending pace % to a spectrum colour. */
-export function getPaceColor(percent: number): string {
-  if (percent < 80)  return COLOR_MINT;
-  if (percent <= 100) return COLOR_TEAL;
-  if (percent <= 115) return COLOR_TANGERINE;
-  return COLOR_CORAL;
 }
 
 /** Map budget utilisation % to a spectrum colour. */
@@ -149,4 +156,13 @@ export function getGoalTone(percent: number): { color: string } {
   if (percent < 50) return { color: COLOR_HONEY };
   if (percent < 75) return { color: COLOR_MINT };
   return             { color: COLOR_TEAL };
+}
+
+/** Every ISO date (YYYY-MM-DD) from start to end inclusive, in order. */
+export function datesInRange(start: string, end: string): string[] {
+  const days: string[] = [];
+  for (let d = new Date(`${start}T00:00:00Z`); d.toISOString().slice(0, 10) <= end; d.setUTCDate(d.getUTCDate() + 1)) {
+    days.push(d.toISOString().slice(0, 10));
+  }
+  return days;
 }

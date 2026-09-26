@@ -15,7 +15,7 @@ Single Python monolith, one process, eight subsystems:
 6. **Categorization** — keyword matching + learned merchant overrides, with match source tracking
 7. **Intelligence** — recurring transaction detection, spending insights, multi-currency exchange rates, analytics
 8. **Finance System** — budgets (monthly/weekly), savings goals with contributions, trip expense tracking, subscriptions with upcoming-transaction tracking
-9. **LLM Intelligence** — optional Gemini Flash layer for anomaly explanations, natural-language Telegram parsing, and weekly/monthly AI insights; `None` when `gemini_api_key` is absent
+9. **LLM Intelligence** — optional Gemini Flash layer for natural-language Telegram parsing and daily AI insights; `None` unless `gemini_api_key` is set and `gemini_policy_confirmed: true`
 
 All data in SQLite with WAL mode. Multi-user system with per-user expense DBs and a shared admin DB. Supports income and expense tracking.
 
@@ -40,7 +40,7 @@ docker-compose.yml:
 - `EXPENSE_DB_PATH` — override per-user DB path (rarely used)
 - `EXPENSE_CONFIG_PATH` — override config file path (defaults to `config.yaml`)
 - `GMAIL_CREDENTIALS_JSON` — base64-encoded credentials.json (alternative to volume mount)
-- `GEMINI_API_KEY` — Google Gemini API key; enables LLM Intelligence when set (overrides `gemini_api_key` in config.yaml)
+- `GEMINI_API_KEY` — Google Gemini API key (overrides `gemini_api_key` in config.yaml). LLM Intelligence also requires `gemini_policy_confirmed: true` in config.yaml; a key alone leaves it disabled
 
 **No Railway.** All previous AGENTS.md references to Railway, Railway volumes, and base64 env vars for credentials are obsolete. The `/data/` volume is a local bind mount.
 
@@ -113,9 +113,9 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 ## Key Design Decisions
 
 - `source_id` UNIQUE constraint prevents duplicate transactions
-- Cross-source dedup: same merchant + amount from different sources within 10 minutes → single record
+- Cross-source dedup: a unique candidate with matching merchant, amount, currency, type, and transaction time within 10 minutes links both source events to one record. Date-only/missing times and ambiguous candidates remain separate. Never compare ingestion time.
 - `raw_data` column stores original payloads for re-parsing
-- Categories auto-assigned via keyword matching, overridable via `/recategorize` (learns merchant overrides)
+- Categories auto-assigned via keyword matching, overridable via `/recategorize` (transaction-only by default; `--remember` explicitly learns future merchant overrides)
 - `type` column distinguishes `expense` (default) from `income` transactions
 - `exchange_rate` column normalizes foreign currency to SGD; all summaries use `amount * exchange_rate`
 - Categorizer returns `(category, match_source)` tuple — match_source is `"learned"`, `"keyword:<kw>"`, or `"default"`
@@ -124,7 +124,7 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 - Exchange rates cached for 24 hours with fallback hardcoded rates when API unreachable
 - All sensitive config in `config.yaml` (gitignored) — mounted as a read-only volume in Docker
 - Categories have a `type` column (`needs`/`wants`/`neutral`) used for financial health scoring
-- Active trip auto-assigns new transactions via `storage.auto_assign_to_active_trip(tx_id)` — one active trip at a time
+- Active trip auto-assigns new transactions through the ingestion outbox's capture-time trip job — one active trip at a time
 - `IngestionPipeline` is the single path for all transaction ingestion (Gmail and Webhook) — never bypass it
 
 ## Multi-User System
@@ -141,7 +141,7 @@ The system supports multiple users. Each user has:
 
 **`UserContext`** fields: `username`, `storage`, `categorizer`, `poller`, `db_path`, `token_path`, `exchange_service`.
 
-**Admin panel** at `/admin` — separate `FastAPI` app mounted on the main app. Uses a separate admin session (not a user session). IP-based login lockout after 5 failures.
+**Admin panel** at `/admin` — separate `FastAPI` app mounted on the main app. Uses a separate admin session (not a user session). Login is rate-limited by the connecting client address (5 attempts per 15 minutes, `LoginRateLimiter` in `src/web/auth.py`, shared with the dashboard login); `X-Forwarded-For` is not trusted.
 
 **Seeding:** On first boot, if `app.db` has no users, the admin user is created from `config.yaml` (`web.admin_username` / `web.password_hash`). Existing Telegram `chat_id` from a legacy single-user DB is migrated automatically.
 
@@ -154,7 +154,7 @@ The system supports multiple users. Each user has:
 ### Storage Layer
 
 - Every expense-only query uses `(type IS NULL OR type = 'expense')` — never just `type = 'expense'`. Pre-migration rows have a NULL type and are silently dropped otherwise.
-- All mutating methods (`update_transaction`, `delete_transaction`, `update_category`, `delete_category`) pre-check existence and raise `ValueError("<entity> not found")` on miss. The API layer catches `ValueError` and returns HTTP 404. Never raise `HTTPException` from Storage.
+- All mutating methods (`update_transaction`, `delete_transaction`, `update_category`, `delete_category`) pre-check existence and raise `NotFound` on miss; state clashes raise `Conflict` (both `ValueError` subclasses in `src/storage.py`). Routes map them through `_http_error` (404/409, else the route's default status) — never by matching message text. Never raise `HTTPException` from Storage.
 - `delete_category` cascades: reassigns all affected transactions to `'Other'` and deletes matching `merchant_overrides`. Returns the reassigned count, surfaced as `{"status": "ok", "reassigned": count}` in the API.
 - `app_settings` stores all values as `TEXT`. Always cast to `float`/`int` at the call site. `set_setting` always receives `str(val)`.
 - `ingestion_state` is dual-purpose: Gmail poller state (keyed by source name, e.g. `"dbs_paylah"`) and the Telegram chat ID (stored under `source='telegram_chat_id'`, value in `last_processed_id`). Note: Telegram chat IDs have moved to `app.db users.telegram_chat_id` for new users — the `ingestion_state` approach is legacy.
@@ -170,11 +170,19 @@ The system supports multiple users. Each user has:
 
 - `require_auth` is `Depends(require_auth)` added to each route individually — there is no global auth middleware. Forgetting it on a new route silently makes it public.
 - All responses are raw `dict`/`list` — no Pydantic response models. All DB columns including `raw_data` and `ingested_at` are returned to the client.
-- `PUT /api/transactions/{id}` auto-calls `storage.set_merchant_override()` when the category changes, but does not call `categorizer.reload_overrides()` — the web API holds no categorizer reference.
-- `PUT /api/settings` is all-or-nothing: validates all fields, collects errors into a dict, raises HTTP 422 with the errors dict, or writes all values atomically. Never writes a partial update.
-- Manual transactions via the web API use `source_id = f"manual_{uuid4().hex[:12]}"`. Telegram `/add` uses `f"manual-{timestamp}-{amount}"`. Both use `source="manual"` and coexist in the DB.
+- `PUT /api/transactions/{id}` changes only that transaction unless `remember_category: true` is explicit. Storage commits the correction and remembered merchant rule atomically. Existing rules stay unchanged for transaction-only edits. Ingestion reloads overrides before future matching. Telegram category callbacks/editing use the same transaction-only default; `/recategorize <id> [category] --remember` explicitly saves a rule.
+- Date/type corrections are validated by `Storage.update_transaction` before any write. Dates accept extended ISO dates/timestamps and retain supplied offsets; explicit invalid/null dates or unknown types are rejected. The web detail editor submits date/type only when changed, so legacy NULL types and original timestamps survive unrelated edits. Source observations and their timestamp precision remain unchanged by corrections.
+- Monetary corrections use the same atomic Storage path: amounts must be finite/non-negative; rates finite/positive or explicitly NULL for unknown; currencies normalize three alphabetic characters to uppercase (format validation, not a currency registry). Changing to a foreign currency clears the previous rate unless a replacement is supplied; changing to SGD sets 1. Unchanged monetary fields are omitted by the editor. Foreign legacy 1 rates remain unresolved in shared facts; these checks do not migrate float storage or automated capture paths.
+- Web manual creation and Telegram `/add`, `/cash`, `/income`, and confirmed NL drafts use `Storage.create_manual_transaction`, sharing `src/transaction_validation.py` with corrections. Missing foreign rates remain NULL; SGD uses 1. Only manual/cash sources and expense/income creation are accepted. Web IDs remain generated by the caller; Telegram commands and NL confirmations use the durable identities below. Telegram `/add`, `/cash`, and confirmed NL entry request `assign_to_active_trip=True`: transaction and capture-time trip job commit atomically, then dispatch outside the Storage lock through the shared outbox. Web entry and `/income` retain their existing no-auto-trip behavior. Validation/duplicate failures create no follow-ups. Web and direct Telegram request idempotency are described below; durable raw Telegram update capture and full ingestion/command unification remain pending.
+- Web `POST /api/transactions` accepts an optional `Idempotency-Key` (1–128 ASCII letters/digits/underscore/hyphen). `Storage.create_web_transaction` serializes lookup/create and atomically retains a request fingerprint with the transaction/evidence. Exact submitted JSON fields (ignoring property order) define replay identity before generated date/source defaults. Same-key replay returns the current transaction; changed fields or a deleted transaction return 409. Request records survive deletion and are informational in the audit. Legacy callers without a key retain existing behavior. The web form retains a key only while mounted; offline/reload persistence remains pending.
+- Direct Telegram `/add`, `/cash`, and `/income` use `Storage.create_telegram_transaction` when chat/message IDs are available. The private key is `telegram:<chat_id>:<message_id>` (separate from web keys); command plus submitted argument tokens define its fingerprint before generated dates, categories, or rates. Receipt, transaction, evidence, and requested trip job commit atomically. Replays report the existing ID, retain corrections/capture-time trip, and dispatch only existing pending jobs. Changed messages/commands and deleted transactions require correction in Activity. New source IDs are `telegram-` plus a full SHA-256 of the private key, preventing same-second collisions without exposing chat/message IDs. Legacy IDs are retained; in-process direct-command callers without IDs retain existing behavior. NL confirmation uses the separate draft identity below.
+- NL confirmation buttons carry a random 32-hex draft token (`nl_confirm:<token>`, `nl_edit:<token>`, `nl_cancel:<token>`). Migration 5 stores one active draft per chat in the per-user `telegram_drafts` table, before card delivery. It holds only proposed amount/currency/merchant/category/date fields, has a fixed 24-hour expiry, and survives restart. Expiry is enforced on reads/confirmation; expired payloads are lazily deleted on the next draft read/save. User isolation comes from the resolved per-user Storage, and reads/discards also require the originating chat ID. Replacing/canceling/manual Edit invalidates only the matching card. Production confirmation passes `chat_id` to `Storage.confirm_telegram_draft`, which re-reads the stored fields and atomically deletes the draft with the request receipt, evidence, transaction, and requested confirmation-time trip job. Validation/write failures retain the draft. Existing internal accepted-draft callers without `chat_id` keep their receipt replay interface. New source IDs use `telegram-nl-<token>`; generated FX is excluded from replay identity. Stale/legacy/wrong-owner/expired cards cannot save newer drafts. `context.user_data` is no longer the draft authority. Full command unification and operator-triggered NL replay remain pending.
+- Migration 6 retains `telegram_draft_messages`: a hash of chat/message identity, a fingerprint of trimmed message text, and the original draft token. The message link and draft save atomically. NL redelivery checks this before any model call: active drafts reuse their original fields/token/deadline; changed messages or consumed/canceled/replaced/expired drafts direct the user to Activity or a new entry. Recheck on save prevents concurrent proposals from replacing the accepted one. Retained links intentionally survive draft deletion and must not be treated as orphaned foreign keys. Raw text is not stored in this table. Unrecognized input and failures before draft persistence leave no draft-message link; raw input capture below retains the observation. Legacy/in-process callers without message IDs retain their prior behavior.
+- Identified NL input is committed to `source_events` (`source='telegram_nl'`, `parser_version='telegram-nl:1'`) before parsing, only for a linked user with the optional model service enabled. The original message text stays server-side. Started processing attempts are persisted before model calls and capped at five per message identity, including crashes. Redelivery can retry; the generic bank/Wallet worker explicitly excludes these observations, and capture retry endpoints reject them. Parsing/draft failures remain visible with fixed sanitized error codes; Review directs recovery through Telegram and offers no automatic retry button. Saving a draft marks its raw observation processed atomically; confirmation links it to the purchase in the same commit and groups it with manual provenance. Raw observation precision stays unknown, so it does not enable cross-source matching. Receipt alone creates no transaction or follow-ups. Unfinished Telegram input can be marked handled or returned to Review through authenticated capture resolution endpoints. Migration 7 retains a separate resolution marker without changing original evidence or processing status. Default Review and Home attention counts exclude handled input; include_handled exposes it with a handled flag. Handled redelivery and in-flight draft saves are blocked. Reopening does not queue parsing or reset attempts. Bank/Wallet and processed observations cannot be resolved this way. Raw-input replay tooling remains pending.
+- `PUT /api/settings` is all-or-nothing: validates all fields against the `SETTINGS` table in `src/web/app.py` (which also drives GET), raises HTTP 422 with an errors dict, or writes every value in one transaction (`Storage.set_settings`).
+- Manual transactions via the web API use `source_id = f"manual_{uuid4().hex[:12]}"`. Identified Telegram `/add` uses the hashed message identity described above; legacy entries use `f"manual-{timestamp}-{amount}"`. Both use `source="manual"` and coexist in the DB.
 - The SPA catch-all `/{full_path:path}` is only registered at startup if `src/web/dist/` exists. If the frontend is not built, all non-API paths return 404.
-- All DB calls in the web layer go through `await _db(fn, *args)` — a single-worker `ThreadPoolExecutor` that serialises DB work off the event loop.
+- All DB calls in the web layer go through `await _db(fn, *args)` — a `ThreadPoolExecutor` that keeps SQLite off the event loop. Each `Storage` serialises its own calls, so workers only run different databases concurrently.
 - Finance features (budgets, goals, trips) are gated by `app_settings` flags: `budgets_enabled`, `goals_enabled`, `trips_enabled`. The API does not gate them — gating is UI-only.
 
 ### Ingestion Pipeline
@@ -182,16 +190,51 @@ The system supports multiple users. Each user has:
 All transaction ingestion (Gmail and Webhook) goes through `IngestionPipeline` (`src/ingestion.py`). Never bypass it.
 
 Steps in order:
-1. Same-source dedup (`source_id_exists`)
+1. Same-source dedup (`record_source_event` — one source event per source/source_id)
 2. Cross-source dedup (`find_cross_source_duplicate` — 10-minute window)
 3. Exchange rate lookup (skipped if currency is SGD)
 4. Categorization (`categorizer.reload_overrides()` then `categorizer.categorize()`)
 5. `storage.insert_transaction()`
-6. `storage.auto_assign_to_active_trip(tx_id)` (best-effort, never raises)
-7. `RecurringDetector.run()` (best-effort, never raises)
-8. Returns the stored transaction dict with `_match_source` key added
+6. Commit trip, recurring-analysis, and transaction-notification jobs in `ingestion_outbox` atomically with the transaction. Historical capture creates no follow-up jobs; trip jobs retain the trip active at capture time.
+7. Dispatch follow-ups outside the reconciliation/DB lock. `RecurringDetector.detect()` errors remain retryable; successful detection atomically queues a suggestion. Telegram callbacks return the send Future, which must complete before acknowledgement.
+8. Return the stored transaction dict with `_match_source` key added. Follow-up failures do not undo capture. The existing 120-second capture worker also retries outbox jobs, stopping after five recorded failures. Authenticated `/api/v2/capture/followups` list/retry endpoints expose no payloads.
+
+Outbox workers serialize per `Storage` in this single-process service. Delivery is at least once: a crash after Telegram accepts a message but before local acknowledgement can repeat the message. Never hold the storage reconciliation lock while dispatching follow-ups.
 
 The `IngestionPipeline` is instantiated per-user inside `UserManager._build_context()`.
+
+### Capture trust foundation
+
+- Authenticated `/api/v2/transactions/{id}/provenance` exposes only the transaction ID and grouped input channels with `evidence_recorded`. Group raw/parsed Wallet observations together and Gmail/bank observations together; only processed events linked to that transaction establish retained evidence. A legacy/manual recorded source alone is not retained capture evidence. Never expose payloads, source IDs, or payment identifiers through this interface.
+- Accepted manual/cash entries now commit a `source_events` snapshot atomically with the transaction and requested trip job. `parser_version='manual:1'` snapshots contain accepted command fields after caller parsing/categorization, with numeric representations stored as strings. They are processed-only, retain unknown timestamp precision, and are not replayable `ParseResult` payloads. Do not enqueue them in the generic capture retry path or infer automatic cross-source matching eligibility from their timestamp strings. Corrections/deletion retain the snapshot; legacy manual records are not backfilled.
+- `source_events` retains the original observation, parser version, status, attempts, linked transaction, timestamp precision, and namespaced payment identity. Raw payloads and payment metadata stay server-side.
+- Cross-source reconciliation requires explicit `minute`/`second` precision on both observations. `date` and `unknown` observations, including legacy evidence, remain separate even when transaction strings contain midnight. UOB card/transit date-only alerts retain their existing `T00:00:00` storage format but declare `date` precision.
+- Payment identity conflicts exclude a candidate only within the same namespace. `wallet_card_label`, `uob_card_last4`, and `uob_account_suffix` are different evidence types; never equate a Wallet label/device identity with a bank card suffix. Matching identifiers supplement the time/merchant/amount/currency/type checks, never replace them.
+- Gmail persists source events before advancing checkpoints. It captures configured senders independent of read status and never changes inbox labels.
+- Initial/resync history is bounded to 90 days, paginated with persisted progress. Expired history restarts bounded synchronization. Automatic processing retries stop after five failures; unrecognized events remain recorded.
+- Historical Gmail capture does not notify or join the currently active trip.
+- `GmailPoller.poll_once()` now returns stored transaction dictionaries. `force_poll()` and the background loop use this same path; concurrent cycles and repeated starts are serialized.
+- Wallet always uses `IngestionPipeline`, including contexts without a configured poller pipeline.
+- Wallet credential hashes live in per-user settings. First valid Bearer request makes credentials mandatory. Revocation keeps intake closed. Never put credentials in URL query parameters or ordinary status responses.
+- OAuth state is opaque, single-use, expires after ten minutes, and is bound to the initiating web session. Telegram `/reauth` links to authenticated Settings.
+- Recovery CLI: `python -m scripts.backup --help`; see `docs/operations/backups.md`. Never copy live SQLite files for backup.
+- Pre-upgrade audit: `python -m scripts.db_audit DATABASE` opens an existing database read-only and reports integrity, foreign-key, missing-constraint, and migration findings. Run it on isolated restored copies before initialization. Retained source-event/outbox links to deleted transactions are informational, not orphans to clean up automatically. It never migrates or repairs data.
+
+### Shared spending facts
+
+- `/plan` is the upcoming timeline; existing finance controls live at `/plan/manage`. Opt-in legacy Finance redirects target management, preserving query/hash. `?subscription=<id>` opens the existing subscription detail, and older Plan links with `tab`/subscription parameters redirect to management. Authenticated `/api/v2/plan/upcoming` lists only recorded pending, unmatched charges for active/possibly-cancelled subscriptions over 1–90 days, with bounded pagination and unpaginated estimated subtotals. Unknown/invalid amounts stay unknown. Every charge is estimated; there is no confirmed-amount metadata or full future schedule expansion. Subscription mutations invalidate `plan-upcoming` and Home. Plan correction/dismissal commands check pending/unmatched status and active schedule under the Storage lock. Date/amount corrections validate atomically; omitted values preserve legacy precision and null means unknown amount. Timeline edits omit unchanged rounded amounts. Dismissal requires UI confirmation and does not cancel the subscription/provider. Expected-date edits can influence later scheduler anchors; no schedule-exception or revision model exists yet.
+
+- Telegram `/week` and `/month` resolve per-user shared weekly/monthly facts in the bot timezone. Read facts and bounded spending/income evidence under the Storage lock, then send outside it. Preserve partial/indicative labels, absent income, negative recorded net flow, and separate comparable windows. Evidence lists show up to 50 per measure with explicit counts. These commands do not append legacy budget-pace notes. `/today` and `/yesterday` use shared daily facts, comparing only the requested local date with the same weekday seven days earlier. Authenticated `/api/v2/spending/day` exposes the same contract. Daily commands retain bounded evidence and navigation, with no legacy pace advice. The morning digest composes compact shared yesterday and current-month reports under one Storage lock, released before delivery. It excludes legacy velocity/merchant/anomaly alerts and cached AI prose; daily optional AI generation for the dashboard remains separate. `/balance` consumes the shared current-month facts, distinguishes absent from recorded zero income, and labels the result recorded net flow rather than account balance. Partial records suppress net flow; indicative conversions stay labeled. Scheduled Sunday reports use the same week-to-date facts; first-of-month reports use the completed previous month. Scheduled reports omit evidence lists and bound category labels for compact delivery. They do not call the model or append cached weekly/monthly narratives; daily optional AI generation remains separate.
+
+- `/api/v2/spending/review` lists all-history unresolved spending records using the same selection/conversion rules as evidence. Reason codes distinguish missing dates, unresolved money, and unknown classification; transfers and usable indicative FX are excluded. The read-only list resolves membership from current data, not dismissals. Invalidate `spending-review` after transaction mutations and preserve `/review?spending_offset=...` when closing details.
+- Home is the unconditional landing experience (see "Navigation Pattern"). `/api/v2/home` composes shared facts and sanitized capture freshness; `/home`, `/evidence`, and `/review` are lazy-loaded authenticated screens. Keep failed/stale/partial states explicit and invalidate Home/evidence queries after transaction mutations. Capture list APIs support `limit` and `offset`. The backend `home_briefing_enabled` setting (`app_settings` table, `src/web/app.py`) still exists but is no longer read by the frontend as of 2026-09-25 — left in place, not cleaned up.
+
+- Explore is one dashboard (`ExplorePatternsPage` + `components/explore/`): a pulse band of month facts (tiles link to evidence via the approved `CardLink`), the optional AI daily read, a three-row "Worth a look" summary (full list at `/explore/signals`), the biggest mover, a score-only health summary (full breakdown at `/explore/health`), then Over time / By category / By merchant / Recurring modes held in `?mode=`. Authenticated `/api/v2/spending/signals` (month-to-date purchases over `anomaly_multiplier`× the merchant's average before the month, needing two prior resolved purchases and honouring `excluded_from_baseline`, plus first-seen merchants) and `/api/v2/spending/monthly` (per-calendar-month spending/income, absent income stays null) are shared facts. `Storage.get_health_score` now delegates to `spending_facts.health_score` (same 50/30/20 formula; unresolved amounts are excluded and reported via `status`/`unresolved_count`; budget adherence and unusual purchases use shared rows). The legacy summary/trend/balance/insights, `/api/v2/overview/*`, `/api/v2/analytics/{comparison,merchants,velocity,alerts}`, `/api/analytics/yoy` and `/api/income-vs-expense` endpoints had no caller and were removed (2026-09-26); unknown `/api/*` paths return 404 rather than the SPA shell.
+- New reporting uses `src/spending_facts.py` through locked Storage wrappers. The additive authenticated `/api/v2/spending/month`, `/api/v2/spending/week`, and `/api/v2/spending/evidence` endpoints share classification, Decimal rounding, timezone projection, and evidence selection. See `docs/operations/spending-facts.md` for compatibility limits.
+- Report SGD integer minor units rounded per transaction; storage remains legacy floats until the audited migration. Never describe this compatibility calculation as a completed money migration.
+- Always expose partial/indicative status with known subtotals. Legacy foreign `1.0` rates are unresolved, not proof of conversion. Undated observations make comparisons unavailable. Missing income is absent, and negative recorded net flow is retained.
+- Weekly facts compare Monday through the requested weekday with the same weekdays seven days earlier. Both monthly and weekly facts share monetary and evidence calculations.
+- Use the response's separate comparison periods for evidence drill-downs: short previous months truncate the comparable current window, not the main month-to-date total.
 
 ### Parser System
 
@@ -203,11 +246,12 @@ The `IngestionPipeline` is instantiated per-user inside `UserManager._build_cont
 | Email parsers (`dbs_paylah`, `uob_card`, `uob_paynow`, `uob_transfer`, `uob_nets`, `uob_paynow_sent`) | Gmail RFC822 `Message-ID` header (falls back to `msg["id"]`). Assigned in `GmailPoller._parse_message` — overwrites whatever `source_id` the parser returned (e.g. DBS Transaction Ref is discarded). Email parsers therefore set `source_id=""` or `None`. |
 | `apple_wallet` | `sha256(merchant:amount::date)[:16]` — double colon is intentional (empty card-field slot for backward compat). Set by the parser, not overwritten. |
 | web manual | `manual_{uuid4().hex[:12]}` |
-| bot `/add`, `/cash` | `manual-{YYYYMMDDHHMMSS}-{amount}` |
+| bot `/add`, `/cash`, `/income` | New identified messages: `telegram-` + SHA-256(`telegram:<chat_id>:<message_id>`). Legacy/in-process callers retain timestamp/amount IDs (`manual-` or `cash-` prefix). |
+| confirmed NL draft | `telegram-nl-<32-hex draft token>`; legacy records retain their IDs. |
 
 - Apple Wallet hash uses `f"{merchant}:{amount}::{date}"` — the double colon is a deliberate empty card-field slot for backward compatibility with pre-card-name records. Do not add the card field into this hash.
 - Currency parsing precedence: ISO code prefix (`PLN 3.78`) → multi-char symbols (`S$`, `A$`, `HK$`, `RM`...) → single-char symbols (`£`, `€`...) → bare number defaults to SGD. Multi-char must be checked before single-char to avoid `S$` matching as `$`.
-- DBS PayLah! infers `datetime.now().year` because the email format omits the year. A December email processed in January will have the wrong year — this is a known limitation.
+- DBS PayLah! infers `local_now().year` because the email format omits the year. A December email processed in January will have the wrong year — this is a known limitation.
 - `UobParser` handles all UOB email formats in a single class (card purchase, accumulated transit, card reversal, PayNow received, one-time transfer, NETS QR payment, PayNow transfer sent). Source values: `uob_card`, `uob_paynow`, `uob_transfer`, `uob_nets`, `uob_paynow_sent`. Card reversals emit `tx_type="income"`. `uob_paynow` is incoming PayNow (income); `uob_paynow_sent` is outbound PayNow transfer (expense).
 
 ### Telegram Bot
@@ -227,13 +271,13 @@ The `IngestionPipeline` is instantiated per-user inside `UserManager._build_cont
 - `transaction_date` is stored as ISO 8601 string `"YYYY-MM-DDTHH:MM:SS"`. Range queries must use `DATE(transaction_date) >= ?`. Display truncates to `[:10]`.
 - `raw_data` for Apple Wallet transactions is `str(dict)` (Python `repr`), not valid JSON. Re-parsing requires `ast.literal_eval`, not `json.loads`.
 - DB path resolution: `DATA_DIR = "/data" if os.path.isdir("/data") else "data"`. Per-user DB: `{DATA_DIR}/users/{username}/expense_tracker.db`. Admin DB: `{DATA_DIR}/app.db`. The `EXPENSE_DB_PATH` env var overrides only the legacy single-user path, not per-user paths.
-- Migrations in `init_db` wrap each `ALTER TABLE` in bare `except: pass` — SQLite has no `ADD COLUMN IF NOT EXISTS`. All new column migrations must follow this pattern.
-- `RecurringDetector` runs inside `IngestionPipeline.ingest()` (both Gmail and Webhook paths). It looks back 90 days and is instantiated per-`UserContext` (stateful — reused across ingestion calls for the same user).
+- The baseline tables (and the few columns added to them before migrations existed) are created by `init_db` in `src/db.py`. New schema changes use ordered, transactional migrations in `src/migrations.py`; do not add new swallowed migration errors.
+- `RecurringDetector.detect()` runs through the ingestion outbox (both Gmail and Webhook paths). It looks back 90 days and is instantiated per-`UserContext` (stateful — reused across ingestion calls for the same user).
 - The `source` column has no `CHECK` constraint — invalid values insert silently. Valid values: `dbs_paylah`, `uob_card`, `uob_paynow`, `uob_paynow_sent`, `uob_transfer`, `uob_nets`, `apple_wallet`, `manual`, `cash`.
 
 ### Testing Conventions
 
-- The schema in `tests/conftest.py` `in_memory_db` fixture must mirror the fully-migrated schema in `main.py init_db`. When adding a migration column in `main.py`, also add it to the `conftest.py` schema string.
+- The `in_memory_db` fixture calls production `src.db.init_db(":memory:")`. New additive migrations live in ordered `src/migrations.py` and run in production and tests. Append migrations; never edit released versions.
 - There is no shared `Storage` or `Categorizer` fixture — tests instantiate them inline: `Storage(in_memory_db)`.
 - `sample_categories` fixture uses comma-separated string keywords (`"restaurant,cafe,food"`). `sample_config` uses Python lists. Both mirror real usage: Storage receives the comma-separated string form; Categorizer receives the list form from YAML.
 
@@ -241,7 +285,8 @@ The `IngestionPipeline` is instantiated per-user inside `UserManager._build_cont
 
 | File | Purpose |
 |------|---------|
-| `src/main.py` | Entry point — starts all services, creates DB schema with migrations, seeds admin user |
+| `src/main.py` | Entry point — starts all services, seeds admin user |
+| `src/db.py` | `init_db` / `init_app_db`: open a database, create baseline tables, run migrations |
 | `src/config.py` | Loads `config.yaml` + environment variable overrides, exposes `local_now()` |
 | `src/storage.py` | `Storage`: all SQLite CRUD for per-user DBs. `AdminStorage`: users, sessions, admin sessions, Telegram link tokens in `app.db` |
 | `src/categorizer.py` | Matches merchant names to categories via keywords + learned overrides, returns match source |
@@ -253,7 +298,7 @@ The `IngestionPipeline` is instantiated per-user inside `UserManager._build_cont
 | `src/exchange.py` | Exchange rate service with API fetching, 24h caching, and fallback rates |
 | `src/recurring.py` | Recurring transaction detection from spending patterns |
 | `src/subscriptions.py` | `SubscriptionMatcher`: daily job — generates upcoming charges, auto-matches transactions, flags possibly-cancelled subscriptions |
-| `src/llm_service.py` | `LLMService`: thin Gemini Flash wrapper for anomaly explanations, Telegram NL parsing, and weekly/monthly insights; `create_llm_service(config)` returns `None` when `gemini_api_key` is absent |
+| `src/llm_service.py` | `LLMService`: thin Gemini Flash wrapper for Telegram NL parsing and the daily dashboard insight; `create_llm_service(config)` returns `None` unless `gemini_api_key` is set and `gemini_policy_confirmed` is true |
 | `src/parsers/base.py` | Abstract `BankParser` — defines `can_parse()` / `parse()`, `ParseResult` dataclass |
 | `src/parsers/dbs_paylah.py` | DBS PayLah! email → Transaction (SGD prefix, To: merchant, Transaction Ref) |
 | `src/parsers/uob.py` | All UOB alert email formats → Transaction (card purchase, transit, reversal, PayNow, transfer) |
@@ -268,29 +313,47 @@ The `IngestionPipeline` is instantiated per-user inside `UserManager._build_cont
 
 ## Frontend UI Design System
 
+### Mandatory reuse and approval gate
+
+**Reuse an existing element whenever it serves the same interaction or visual role. Do not invent a parallel design.** This applies to classic and new-experience pages, admin/auth/onboarding, and development previews. Read [docs/design-language.md](docs/design-language.md), search `src/web/frontend/src/components/ui/` and domain components, and inspect an existing caller before changing UI.
+
+- Identify the canonical component and its existing props/variants before implementation. Compose those components for new screens; layout, content, data and accessibility wiring do not justify a new button, pill, card or control style.
+- Use `Button` for command/CTA/icon actions (`asChild` with a real link for navigation CTAs); `Badge` for noninteractive labels; `Tabs` for switching panels; `ActivityRowShell`/`CategoryAvatar` for transaction-like rows; existing card wrappers, field utilities and Radix wrappers for their documented roles. See the registry in design-language.md §7.0.
+- `className`, inline styles, local CSS, `motion.button`, or wrapping a `Badge` in a button must not be used to bypass reuse and create a new visual variant. Layout/width and documented semantic colour are allowed; new radius, padding scale, fill, hover, selection or motion treatments belong in an approved shared owner.
+- Preserve semantics: a status badge is not a filter toggle, a form choice is not automatically a tab, and a calendar cell is not a primary CTA. Keep existing specialised controls while consolidating their repeated implementations; do not force them into an unsuitable component merely to remove native tags.
+- **Before creating a new UI primitive, visual variant, interaction pattern or interface treatment that the existing system cannot express, stop that part of the implementation and ask the user for explicit approval.** First prepare a concrete written proposal: closest existing components inspected, why composition is insufficient, proposed API/states/tokens, intended consumers and migration impact. Do not implement the new element or its bespoke prototype before approval. Continue independent work that reuses existing elements.
+- This gate also covers extracting a missing shared primitive from duplicated page markup (for example a filter chip or switch). A plan's proposed component name is not approval to create it. Once the user explicitly approves that element/scope, do not ask again for its documented uses.
+- Routine reuse, bug/accessibility fixes restoring an established contract, and new pages composed entirely from approved elements need no new design approval. TypeScript data interfaces are not UI elements and are outside this gate.
+- After an approved addition, put it in the appropriate shared module, migrate the agreed consumers, and update the design-language registry with usage, states and approval context. Never leave a new page-local copy as a competing standard.
+- In each UI change summary, name reused components, approved additions (if any), and the visual/interaction checks run. Existing duplicated code is migration debt, not precedent for new duplication.
+
+The [production-polish surface audit](docs/plans/2026-09-17-cashe-production-experience-polish.md#mandatory-first-pass-ui-surface-audit-and-consolidation) names the current duplicates and migration targets. Its consolidation work precedes new polish; missing primitives listed there remain approval-gated.
+
 ### Tech Stack
 
 React 19 + TypeScript + Vite. Tailwind CSS v4 (`@theme` block in `index.css` — no config file). Recharts for all charts. Radix UI primitives (Dialog, Select, DropdownMenu, Tabs, Separator, Slot). shadcn/ui component patterns with CVA (class-variance-authority). lucide-react for all icons. TanStack Query for server state. Frontend root: `src/web/frontend/src/`.
 
 ### Color Tokens
 
-Defined in `src/web/frontend/src/index.css` under `@theme`. These become both CSS custom properties and Tailwind utility classes.
+Defined in `src/web/frontend/src/index.css` under `@theme`, keyed off `:root[data-theme]`. These become both CSS custom properties and Tailwind utility classes. The table below lists the **dark** (default) values — dark is `:root`'s base, light overrides live under `:root[data-theme="light"]`. `ThemeProvider` (`src/hooks/ThemeProvider.tsx`) resolves `system`/`light`/`dark` and follows the OS preference by default; never hardcode a theme's hex value in a component — use the token.
 
-| Token | Hex | Role |
+| Token | Dark hex | Role |
 |---|---|---|
-| `--color-background` | `#0B0B14` | Page background |
-| `--color-card` | `#161624` | Card surfaces, tooltip background |
+| `--color-background` | `#0B0B14` | Page background (light: `#F6F5F8`) |
+| `--color-card` | `#161624` | Card surfaces, tooltip background (light: `#FFFFFF`) |
 | `--color-card-elev` | `#1B1B2C` | Elevated surfaces (dialogs, dropdowns, toasts) |
 | `--color-card-hover` | `#1C1C22` | Bar chart hover cursor (Radix compat) |
-| `--color-border` | `#2A2A3F` | All borders and dividers |
-| `--color-foreground` | `#EEEAF5` | Primary text |
-| `--color-muted` | `#7A7488` | Secondary text, axis ticks, labels |
-| `--color-teal` / `--color-ring` | `#00D4AA` | CTAs, active states, trend lines, focus ring |
+| `--color-border` | `#2A2A3F` | All borders and dividers (light: `#D9D5E1`) |
+| `--color-foreground` | `#EEEAF5` | Primary text (light: `#201C2C`) |
+| `--color-muted` | `#7A7488` | Secondary text, axis ticks, labels (light: `#625C70`, dark: `#A8A1B5` — both meet 4.5:1 AA on card/elevated surfaces) |
+| `--color-teal` / `--color-ring` | `#00D4AA` | CTAs, active states, trend lines, focus ring (light: `#007A63`) |
 | `--color-accent` | `#EEEAF5` | Radix UI compat token only — **not** the brand teal |
 | `--color-destructive` | `#FF453A` | Delete actions, error messages, overspend alerts |
 | `--color-success` | `#00D4AA` (= teal) | Income amounts, "on track" / saved status |
 | `--color-warning` | `#FBBF24` (= honey) | Unusual spending alerts |
 | `--color-info` | `#34D399` (= mint) | Informational, "under pace" velocity |
+
+Full palette, gradients, spacing, radii, elevation, states (loading/empty/error/stale/offline/estimated), motion, and accessibility rules: **`docs/design-language.md` is the single source of truth** for visual/interaction direction — read it before any UI change, not just this summary.
 
 **Semantic color rules — these have caused real bugs, apply carefully:**
 - `text-destructive` for delete buttons, error messages, and "spending ahead of pace" — **never `text-accent`**.
@@ -345,39 +408,45 @@ Three tiers — use the highest applicable tier, not the lower primitives direct
 |---|---|---|
 | `PageCard` | Content, tables, lists, SVG-based visuals | `CardContent` retains `p-4` padding |
 | `ChartCard` | Recharts chart components | `CardContent className="p-0"` — charts render edge-to-edge |
-| `StatCard` | Compact numeric KPI display | Props: `label`, `value`, `variant` (`'expense'`/`'income'`/`'neutral'`) |
+| `StatCard` | Compact numeric KPI display | Actual props: `label`, `value`, `color`, optional `delta`, `sparklineData`, `hero`, `subtext` |
 | `HeroCard` | Large prominent stat with gradient wash | Used for savings overview, health score hero |
-| `HighlightCard` | Secondary accent stats in pairs | Paired with HeroCard |
+| `HighlightCard` | Supported positive-outcome highlight | Teal emphasis, subject to the per-viewport glow budget; not mandatory pairing |
 
-All accept `title`, `children`, and optional `action` (rendered right-aligned in the header). `className` is forwarded to the Card root for one-off overrides.
+`PageCard`, `ChartCard`, `HeroCard` and `HighlightCard` accept `title`, `children` and optional `action`. `StatCard` uses its own API above. `className` permits layout placement, not an unapproved new surface style.
 
 **Tier 3 — Bespoke (use raw `Card`):**
 - Alert card in Analytics — `border-warning/30` semantics, intentionally not abstracted
 - Login card — unique layout, not a repeating pattern
 
+These are existing exceptions, not permission to create new bespoke surfaces. Persistent list/detail chrome can retain an existing base-Card composition when a wrapper would break scrolling. New exceptions require the approval gate above.
+
 ### CSS Utility Classes
 
 Utility classes defined in `src/web/frontend/src/index.css` under `@layer components`:
 
-- **`.input-field`** — use on native `<input>` elements: `px-3 py-1.5 text-sm bg-background border border-border rounded-md text-foreground`. Replaces the repeated inline string.
-- **`.btn-action`** — use for primary save/submit `<button>` elements outside the Button CVA system: `px-4 py-1.5 text-sm bg-foreground text-background rounded-md hover:opacity-90`.
+- **`.input-field`** — use on native `<input>` elements: `px-3 py-1.5 text-sm bg-background border border-border rounded-sm text-foreground`. Replaces the repeated inline string.
+- **`.btn-action`** — removed. All callers migrated to `Button` with the appropriate variant; do not reintroduce it or another primary-button path.
 - **`.btn-gradient`** — gradient background for the `default` Button variant. Do not apply manually; the CVA default variant uses it.
 - **`.select-field`** — use on all native `<select>` elements. Includes the white SVG chevron via `background-image`. Never use `.input-field` on a `<select>`.
 - **`.grid-scroll-panel`** — use on grid-area children that may contain long content: `overflow-y: auto; min-height: 0`. The `min-height: 0` is critical and must not be removed.
-- **`.toggle-on`** — gradient active state for toggle switches. Applied by the toggle component; do not apply manually.
-- **`.area-header`**, **`.area-title`**, **`.area-left`**, **`.area-right`**, **`.area-top`** — `grid-area` assignments for named CSS Grid template areas. No-ops outside a grid parent (safe on mobile).
-- **`.page-grid-overview`**, **`.page-grid-analytics`**, **`.page-grid-finance`**, **`.page-grid-settings`** — per-page grid template definitions with responsive `@media` overrides. Mobile: single-column stack. Desktop (`md+`): multi-column viewport-filling grid.
+- **`.toggle-on`** — the switch fill, owned by `components/ui/switch.tsx`. Use `Switch`; never apply the class directly.
+- **`.area-title`**, **`.area-left`**, **`.area-right`** — `grid-area` assignments for named CSS Grid template areas. No-ops outside a grid parent (safe on mobile).
+- **`.page-grid-settings`** — the remaining per-page grid template definition with responsive `@media` overrides. Mobile: single-column stack. Desktop (`md+`): multi-column viewport-filling grid.
 - **Radix `<SelectTrigger>` chevron** — always `opacity-50` (`<ChevronDown className="h-4 w-4 opacity-50" />`). Do not change to `text-foreground` or any explicit color. The 50% opacity is intentional and must be preserved across all usages.
 
 ### Navigation Pattern
 
-Sidebar (`hidden md:flex`, `w-56` md / `w-64` lg, `sticky top-0 h-screen`, `bg-card border-r border-border`) + bottom tabs (`md:hidden fixed bottom-0 h-16`, `bg-card border-t border-border`). Main content always has `pb-20 md:pb-0` for bottom-tab clearance.
+Sidebar (`hidden md:flex`, `w-14` md / `w-56` lg, `sticky top-0 h-screen`, `bg-card border-r border-border`) + bottom tabs (`md:hidden`, `bg-card border-t border-border`, `BottomTabs.tsx`). Main content has `pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0` for bottom-tab and Home-indicator clearance.
 
-Nav item states: active `bg-foreground/10 text-foreground font-medium`, inactive `text-muted hover:text-foreground hover:bg-foreground/5`. Six routes: Overview `/`, Transactions `/transactions`, Analytics `/analytics`, Finance `/finance`, Merchants `/merchants`, Settings `/settings`.
+Nav item states: active `bg-foreground/10 text-foreground font-medium`, inactive `text-muted hover:text-foreground hover:bg-foreground/5`. All nav targets have a 44px minimum hit area.
+
+**Single navigation mode (2026-09-25):** four destinations — Home `/`, Activity `/activity`, Plan `/plan` (+ `/plan/manage` for the existing subscriptions/budgets/goals tools), Explore `/explore` (nested: the dashboard index, `signals`, `health` and `merchants`; `/explore/insights` redirects to `/explore`). Settings and Review move behind the profile menu; Review also links from Home/Activity. `/overview` redirects to Home; the legacy `OverviewPage` is archived at `archive/legacy-overview-2026-09-26/`.
+
+Old classic URLs (`/transactions`, `/analytics`, `/merchants`, `/finance`) redirect to their new-experience equivalent with suffix/query/fragment intact (`LegacyRedirect`), unconditionally. The `settings.home_briefing_enabled` toggle and the branching it drove (`AppShell`/`Sidebar`/`BottomTabs`/`CommandPalette`'s `newExperience` prop, the classic-vs-new ternaries in `App.tsx`, the "New experience" Settings row) were removed from `src/web/frontend/src`; the original, both-branches versions of those six files are preserved at `archive/legacy-classic-navigation-2026-09-25/` for reference or rollback. `FinancePage`, `MerchantsPage`, and `TransactionsPage` were never classic-only — each is still rendered directly by a current route (`/plan/manage`, `/explore/merchants`, `/activity`) — so only their old bare-URL rendering was removed, not the components themselves. `AnalyticsPage` was removed when Explore's Spending patterns and Insights merged into one dashboard (2026-09-25); its unique content (health score, AI daily read, alerts, income vs. spending) moved onto shared facts in `ExplorePatternsPage`.
 
 ### Dashboard Layout Principles
 
-Four rules that govern how all dashboard pages are structured. Introduced to eliminate page-level scrolling on desktop and keep interactive controls always visible.
+Four rules that govern how dashboard pages are structured on desktop. Originally introduced to eliminate page-level scrolling everywhere; **revised** — Home and Explore now scroll naturally like a normal page, while Activity (`/activity`, `/transactions`) and the Plan management view (`/plan/manage`) keep the viewport-filling, non-scrolling split layout so their list/detail panels and persistent action bars stay independently scrollable and always visible. Apply rules 1–4 below only to that latter group (and to the legacy classic-nav grid pages, which are unchanged); Home/Explore/Plan's timeline are plain stacked content with normal browser scroll and do not use `page-grid-*`/`grid-scroll-panel` at all.
 
 #### 1. Viewport-Native Grid Layout
 
@@ -393,9 +462,6 @@ On `md+` screens, dashboard pages fill the viewport with CSS Grid — no page-le
 
 | Page | CSS class | Areas | Columns (md+) | Rows (md+) |
 |---|---|---|---|---|
-| Overview | `.page-grid-overview` | `"header header" / "left right"` | `1fr 1.2fr` | `auto 1fr` |
-| Analytics | `.page-grid-analytics` | `"header header" / "left right"` | `1fr 1fr` | `auto 1fr` |
-| Finance | `.page-grid-finance` | `"top top" / "left right"` | `1fr 1fr` | `auto 1fr` |
 | Settings | `.page-grid-settings` | `"title title" / "left right"` | `1fr 1fr` | `auto 1fr` |
 
 **Panel assignments:**
@@ -446,23 +512,23 @@ const pageItems = (items ?? []).slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 Pagination control (only rendered when `totalPages > 1`):
 ```tsx
 <div className="flex items-center gap-1">
-  <Button variant="ghost" size="icon" className="h-6 w-6"
+  <Button variant="ghost" size="icon" className="min-h-11 min-w-11" aria-label="Previous page"
     onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>
-    <ChevronLeft className="h-3 w-3" />
+    <ChevronLeft className="h-4 w-4" />
   </Button>
   <span className="text-xs text-muted">{page}/{totalPages}</span>
-  <Button variant="ghost" size="icon" className="h-6 w-6"
+  <Button variant="ghost" size="icon" className="min-h-11 min-w-11" aria-label="Next page"
     onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}>
-    <ChevronRight className="h-3 w-3" />
+    <ChevronRight className="h-4 w-4" />
   </Button>
 </div>
 ```
 
 ### Common UI Patterns
 
-- **Quick-select chips:** `px-2.5 py-1 text-xs rounded-full border transition-colors`. Active: `border-foreground text-foreground bg-foreground/10`. Inactive: `border-border text-muted hover:text-foreground`. "All time" chip is never highlighted active.
-- **Segmented / inline toggle:** Container `flex rounded-md border border-border overflow-hidden`. Active button: `bg-primary text-primary-foreground`. Inactive: `text-muted hover:text-foreground`. Subsequent buttons add `border-l border-border`.
-- **Source labels:** Use `SOURCE_DISPLAY_LABELS` from `@/components/icons/sources` for human-readable source display names (e.g. `'DBS PayLah!'`, used in `TransactionDetail.tsx`). `SOURCE_LABELS` contains single-character glyphs for the `SourceGlyph` component and must not be used for readable text. Never hardcode source strings in UI text.
+- **Filter / quick-select chips:** use `ChoiceChip` (`components/ui/choice-chip.tsx`). "All time" is never highlighted as selected.
+- **Single-choice form values:** use `SegmentedChoice`. Same-panel view switches use `Tabs`; route selectors use `routeTabClassName`. Do not hand-build segmented button rows.
+- **Source labels:** Use `SOURCE_DISPLAY_LABELS` from `@/lib/sourceLabels` for human-readable source display names (e.g. `'DBS PayLah!'`, used in `TransactionDetail.tsx`). `SOURCE_LABELS` there holds single-character glyphs and must not be used for readable text. Never hardcode source strings in UI text.
 - **Error feedback:** Always `text-sm text-destructive`, inline below the relevant field or immediately below the submit button.
 - **Loading state:** Replace button label text (e.g. "Saving…"). Never leave the button without visual feedback during async operations.
 
@@ -538,7 +604,7 @@ Test files: `test_storage.py`, `test_categorizer.py`, `test_parsers.py`, `test_t
 - Use `config.example.yaml` as the template — it has placeholder values only
 - On Oracle Cloud, `config.yaml` and `credentials.json` are mounted as read-only volumes in docker-compose
 - Web sessions expire after 30 days of inactivity (sliding window, enforced in `AdminStorage.verify_session`)
-- Admin panel has IP-based login lockout: 5 failed attempts → 15-minute lockout
+- Admin and dashboard logins are rate-limited per connecting client address: 5 attempts per 15-minute window
 - New users created via admin panel have `force_password_change=1` — they are redirected to `SetPasswordPage` on first login
 - Telegram linking uses time-limited tokens (`telegram_link_tokens` table) rather than direct chat ID entry
 
@@ -560,7 +626,7 @@ Test files: `test_storage.py`, `test_categorizer.py`, `test_parsers.py`, `test_t
 
 - **Adding a new bank parser:** Create `src/parsers/<bank>.py` extending `BankParser`, add sender filter to `config.yaml`, add test in `tests/test_parsers.py`
 - **Adding a Telegram command:** Add handler in `src/telegram_bot.py`, register in `setup_handlers()`, follow existing command pattern
-- **Changing the schema:** Update `src/main.py` `init_db()` + add `ALTER TABLE` migration, update `tests/conftest.py` schema
+- **Changing the schema:** Append a version in `src/migrations.py`; tests use production `init_db` and those same migrations.
 - **Adding an API endpoint:** Add route in `src/web/app.py` inside `create_dashboard_app()`, add `Depends(require_auth)`. Finance feature routes also need `Depends(_get_storage)`.
 - **Adding a category color:** Add the color to `getCategoryColor()` defaults and the 20-color `PALETTE` array in `src/web/frontend/src/lib/utils.ts`
 - **Adding a new chart component:** Create in `src/components/charts/`. Import all Recharts config from `src/lib/chartTheme.ts`. Wrap in `ChartCard` from `src/components/ui/cards.tsx` if the component owns its card.
@@ -581,3 +647,51 @@ Default label vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `read
 ### Domain docs
 
 Single-context layout — `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+
+
+### Navigation (formerly "next experience")
+
+Primary navigation is Home `/`, Activity `/activity`, Plan `/plan`, Explore `/explore` — unconditionally, since the classic/new toggle was removed (2026-09-25; see "Navigation Pattern" above). Settings and capture review are in Profile; merchant drill-downs use `/explore/merchants/:merchantName`. Legacy routes redirect with suffix/query/fragment preserved. Home/Explore naturally scroll, overriding the universal desktop viewport-grid rule for these pages. Activity keeps independent list/detail scrolling and preserves parent component state across detail URLs. See docs/design-language.md “Next experience navigation”.
+
+
+### Appearance
+
+System/light/dark preferences are supplied by `ThemeProvider` and selected in Profile. Theme changes must preserve drafts and mounted page state. Use semantic CSS tokens for HTML/SVG surfaces, `text-on-brand` over spectrum gradient buttons, and `useChartTheme()` for Recharts colors (explicit per-theme hex values centralized in `lib/chartTheme.ts`). Dark muted token is now `#A8A1B5`; light token overrides are in `index.css`. Neutral text contrast is tested; rendered/device accessibility validation remains required.
+
+### Subscription match integrity
+
+- `match_upcoming_transaction` and `link_transaction_to_subscription` validate expense/legacy-NULL actuals and reject reuse across predictions under the Storage lock. Exact accepted matches/links are replayable; `SubscriptionMatchConflict` maps to HTTP 409. Missing records map to 404, invalid transaction IDs/classification/date to 422. Legacy dismissal now shares Plan's pending-state guard.
+- Direct historical links use shared SGD conversion/rounding and retain unknown foreign estimates. Existing duplicate links are not migrated or repaired; uniqueness is enforced by commands within the single-process service.
+
+### Paused subscription schedules
+
+- Subscription status accepts `active`, `possibly_cancelled`, `paused`, or `cancelled`; invalid status updates fail before any field is written. Pause/resume are Cashe tracking controls, never provider billing actions.
+- Paused schedules retain history and pending dates but are excluded from Plan/Home predictions, next-charge metadata, active totals, and automatic scheduler processing. Resume retains overdue dates. The scheduler re-reads current status and processes each schedule under the Storage reconciliation lock so stale snapshots cannot overwrite pauses/cancellations.
+
+### Schedule confirmation provenance
+
+- Migration 8 stores explicit schedule confirmation in `subscription_confirmations`; legacy schedules remain `unknown`. Web creation supplies `confirmation_source="user"`; accepted Telegram recurring suggestions supply `"recurring_suggestion"`. Creation and confirmation commit atomically. Detection alone does not confirm anything.
+- Authenticated subscription `/confirm` records a user decision without reactivating paused/cancelled schedules or changing charges. Repeats preserve original source/timestamp. Subscription reads and Plan expose sanitized `confirmation_source`; future dates/amounts remain estimates regardless of schedule confirmation. Confirmation is historical acceptance, not a revision snapshot or provider evidence.
+
+### Telegram recurring suggestion acceptance
+
+- Migration 9 stores `subscription_suggestion_acceptances` keyed by per-user Telegram chat/message identity. `accept_subscription_suggestion` commits schedule, confirmation, and receipt atomically under the Storage lock. Receipts intentionally have no subscription foreign key and survive deletion; never clean them up as orphans.
+- Replay preserves original schedule identity even after edits and rejects deleted targets/changed fields. A first acceptance reuses one exact merchant/frequency schedule (including paused/cancelled) without reactivation; ambiguous matches require review. Existing confirmation provenance survives reuse. Legacy callbacks retain their merchant-truncation and non-durable pending/dismissed limitations; new callbacks use migration 10 records.
+
+### Durable recurring suggestion buttons
+
+- Migration 10 persists full-field `recurring_suggestions` before Telegram delivery. New buttons contain opaque IDs, resolved only within the user's Storage and original chat. Pending records with identical chat/merchant/frequency/average are reused; later patterns after resolution may create new records.
+- Acceptance and dismissal are atomic/replayable and conflict with each other. Accepted schedule links survive deletion to prevent same-button resurrection. Both durable and legacy acceptance use `_subscription_from_suggestion` under their caller's lock/transaction. This helper must never commit independently.
+- The bot notification bridge selects the target user's Storage, persists off the event loop, then sends without the Storage lock. Its send Future still gates outbox acknowledgement. Older callbacks remain supported; new durable records do not repair old truncated merchant names or change average-amount conversion semantics.
+
+### Web recurring suggestion review
+
+- Authenticated `/api/v2/recurring/review` exposes bounded pending suggestions with only opaque ID, merchant, and frequency. Do not expose destination chat IDs or treat stored observed averages as SGD.
+- Web accept/dismiss resolves inside the authenticated user's Storage through `resolve_recurring_review`, which delegates under the same lock to Telegram's command. Browser requests never supply chat identity. Cross-channel replay/conflict/deletion rules remain shared.
+- Review lists durable suggestions from live ingestion analysis independently of Telegram linkage; adding Home suggestion counts remains pending. Invalidate `recurring-review`, subscription/upcoming, Plan, and Home queries after resolution.
+
+### Telegram-independent recurring capture
+
+- Migration 11 preserves existing recurring suggestions while allowing an unbound NULL chat. Successful recurring analysis atomically commits the Review record, a delivery job carrying its ID, and acknowledgement. `_prepare_recurring_suggestion` is an uncommitted helper owned by the caller transaction.
+- Suggestion delivery callbacks now receive `(merchant, frequency, avg_amount, suggestion_id)`. The bot binds that retained pending ID before sending and uses its stored fields. Already resolved IDs skip sending; never recreate them on delivery retry or silently overwrite an existing different chat binding.
+- Missing Telegram linkage/callback leaves the Review record available and completes optional delivery without sending; no bulk replay on later linkage. Pending legacy delivery jobs gain an ID without redetection. Historical capture still creates no follow-ups; completed legacy jobs are not backfilled.

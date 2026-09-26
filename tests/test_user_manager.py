@@ -48,6 +48,14 @@ def _make_admin_storage():
             username TEXT NOT NULL REFERENCES users(username) ON DELETE CASCADE,
             expires_at DATETIME NOT NULL
         );
+        CREATE TABLE job_runs (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            job_name      TEXT NOT NULL,
+            status        TEXT NOT NULL DEFAULT 'running' CHECK(status IN ('running', 'succeeded', 'failed')),
+            started_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            finished_at   DATETIME,
+            error_code    TEXT
+        );
     """)
     return AdminStorage(conn)
 
@@ -241,3 +249,46 @@ class TestLoadAllUsersSchedulerJobs:
         assert "daily_bob" in added_job_ids
         assert "weekly_bob" in added_job_ids
         assert "monthly_bob" in added_job_ids
+
+
+# ---------------------------------------------------------------------------
+# _tracked — persisted job-run health tracking
+# ---------------------------------------------------------------------------
+
+class TestTrackedJobs:
+    def test_successful_job_is_recorded(self, tmp_path):
+        admin = _make_admin_storage()
+        um = _make_user_manager(str(tmp_path), admin)
+        calls = []
+        wrapped = um._tracked("test_job", lambda: calls.append(1))
+        wrapped()
+        assert calls == [1]
+        health = {row["job_name"]: row for row in admin.get_job_health()}
+        assert health["test_job"]["status"] == "succeeded"
+
+    def test_failing_job_is_recorded_and_reraised(self, tmp_path):
+        admin = _make_admin_storage()
+        um = _make_user_manager(str(tmp_path), admin)
+
+        def boom():
+            raise RuntimeError("synthetic failure")
+        wrapped = um._tracked("test_job", boom)
+        with pytest.raises(RuntimeError, match="synthetic failure"):
+            wrapped()
+        health = {row["job_name"]: row for row in admin.get_job_health()}
+        assert health["test_job"]["status"] == "failed"
+        assert health["test_job"]["error_code"] == "RuntimeError"
+
+    def test_subscription_matcher_and_capture_retry_jobs_are_tracked(self, tmp_path):
+        from unittest.mock import MagicMock
+        admin = _make_admin_storage()
+        mock_scheduler = MagicMock()
+        jobs = {}
+        mock_scheduler.add_job.side_effect = lambda fn, *a, **kw: jobs.update({kw["id"]: fn})
+        um = _make_user_manager(str(tmp_path), admin, scheduler=mock_scheduler)
+        um.create_user("alice", PW_HASH)
+        um._register_scheduler_jobs("alice")
+
+        jobs["subscription_matcher_alice"]()
+        health = {row["job_name"]: row for row in admin.get_job_health()}
+        assert health["subscription_matcher_alice"]["status"] == "succeeded"

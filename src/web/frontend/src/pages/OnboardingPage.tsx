@@ -102,7 +102,7 @@ export function OnboardingPage() {
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-4">
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[700px] h-[400px] rounded-full bg-accent/5 blur-3xl" />
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[700px] h-[400px] rounded-full bg-teal/5 blur-3xl" />
       </div>
 
       <div className="relative w-full max-w-md space-y-6">
@@ -119,7 +119,7 @@ export function OnboardingPage() {
                 key={i}
                 className={`h-1.5 rounded-full transition-all ${
                   i + 1 <= stepIndex
-                    ? 'bg-accent w-4'
+                    ? 'bg-teal w-4'
                     : 'bg-border w-1.5'
                 }`}
               />

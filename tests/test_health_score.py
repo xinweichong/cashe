@@ -79,6 +79,19 @@ class TestHealthScoreSavingsRate:
         assert result["components"]["savings_rate"]["score"] == pytest.approx(0.0, abs=0.1)
 
 
+    def test_refund_nets_against_expense_improving_savings_rate(self, in_memory_db):
+        """Income=1000, expense=900, refund=100 → net expense=800, savings=200,
+        rate=0.20 → score=40 (same as test_benchmark_savings_rate_gives_40_pts,
+        just reaching it via a refund instead of a smaller original purchase)."""
+        storage = Storage(connection=in_memory_db)
+        _seed_categories(in_memory_db)
+        _insert_tx(in_memory_db, "inc1", 1000.0, "Income", tx_type="income")
+        _insert_tx(in_memory_db, "exp1", 900.0, "Dining", tx_type="expense")
+        _insert_tx(in_memory_db, "ref1", 100.0, "Dining", tx_type="refund")
+        result = storage.get_health_score(months=1)
+        assert result["components"]["savings_rate"]["score"] == pytest.approx(40.0, abs=0.1)
+
+
 class TestHealthScoreNeedsWantsRatio:
     def test_needs_below_benchmark_gives_full_20_pts(self, in_memory_db):
         """Income=1000, needs=400 (40% < 50%) → needs_score = 20"""
@@ -125,6 +138,17 @@ class TestHealthScoreNeedsWantsRatio:
         result = storage.get_health_score(months=1)
         assert result["components"]["wants_ratio"]["score"] == pytest.approx(0.0, abs=0.1)
 
+    def test_refund_nets_within_its_own_category_ratio(self, in_memory_db):
+        """Income=1000, needs=750 expense - 250 refund (same 'Transport'
+        needs category) = 500 net → 50% → same as test_needs_at_benchmark."""
+        storage = Storage(connection=in_memory_db)
+        _seed_categories(in_memory_db)
+        _insert_tx(in_memory_db, "inc1", 1000.0, "Income", tx_type="income")
+        _insert_tx(in_memory_db, "exp1", 750.0, "Transport", tx_type="expense")
+        _insert_tx(in_memory_db, "ref1", 250.0, "Transport", tx_type="refund")
+        result = storage.get_health_score(months=1)
+        assert result["components"]["needs_ratio"]["score"] == pytest.approx(20.0, abs=0.1)
+
 
 class TestHealthScoreAnomalyFrequency:
     def test_zero_anomalies_gives_10_pts(self, in_memory_db):
@@ -161,6 +185,35 @@ class TestHealthScoreAnomalyFrequency:
         result = storage.get_health_score(months=1)
         assert result["components"]["anomaly_frequency"]["score"] == pytest.approx(0.0, abs=0.1)
         assert result["components"]["anomaly_frequency"]["value"] == 5
+
+    def test_unresolved_foreign_transactions_never_crash_or_flag(self, in_memory_db):
+        """R04: an unresolved conversion (legacy exchange_rate=1.0 on a
+        foreign currency) must not be comparable to a merchant average —
+        previously `amount * exchange_rate` was never NULL so this couldn't
+        crash; the canonical-aware expression can be NULL for a genuinely
+        unresolved transaction, and both the merchant-average AVG() and the
+        per-transaction comparison must tolerate that."""
+        storage = Storage(connection=in_memory_db)
+        _seed_categories(in_memory_db)
+        in_memory_db.execute("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('anomaly_multiplier', '2.0')")
+        in_memory_db.commit()
+        _insert_tx(in_memory_db, "inc1", 1000.0, "Income", tx_type="income")
+        for i in range(5):
+            _insert_tx(in_memory_db, f"e{i}", 50.0, "Dining", merchant="RestaurantA")
+        # A merchant with only unresolved historical data (AVG -> NULL).
+        _insert_tx(in_memory_db, "hist-unresolved", 5000.0, "Dining", merchant="RestaurantB",
+                   exchange_rate=1.0, date="2025-01-15")
+        in_memory_db.execute(
+            "UPDATE transactions SET currency = 'THB' WHERE source_id = 'hist-unresolved'"
+        )
+        # And an unresolved transaction in the scoring period itself.
+        _insert_tx(in_memory_db, "period-unresolved", 5000.0, "Dining", merchant="RestaurantA", exchange_rate=1.0)
+        in_memory_db.execute(
+            "UPDATE transactions SET currency = 'THB' WHERE source_id = 'period-unresolved'"
+        )
+        in_memory_db.commit()
+        result = storage.get_health_score(months=1)
+        assert result["components"]["anomaly_frequency"]["value"] == 0
 
 
 class TestHealthScoreTotal:
@@ -275,7 +328,7 @@ class TestHealthScoreAPI:
     @pytest.mark.asyncio
     async def test_no_income_returns_has_income_false(self, api):
         ac, storage = api
-        resp = await ac.get("/api/health-score")
+        resp = await ac.get("/api/v2/analytics/health-score")
         assert resp.status_code == 200
         data = resp.json()
         assert data["has_income_data"] is False
@@ -300,7 +353,7 @@ class TestHealthScoreAPI:
             (today,),
         )
         in_memory_db.commit()
-        resp = await ac.get("/api/health-score")
+        resp = await ac.get("/api/v2/analytics/health-score")
         assert resp.status_code == 200
         data = resp.json()
         assert data["has_income_data"] is True
@@ -312,7 +365,7 @@ class TestHealthScoreAPI:
     @pytest.mark.asyncio
     async def test_months_param_accepted(self, api):
         ac, _ = api
-        resp = await ac.get("/api/health-score?months=3")
+        resp = await ac.get("/api/v2/analytics/health-score?months=3")
         assert resp.status_code == 200
 
     @pytest.mark.asyncio
@@ -324,7 +377,7 @@ class TestHealthScoreAPI:
         app = create_dashboard_app(user_manager, admin_storage)
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
-            resp = await ac.get("/api/health-score")
+            resp = await ac.get("/api/v2/analytics/health-score")
             assert resp.status_code == 401
 
 

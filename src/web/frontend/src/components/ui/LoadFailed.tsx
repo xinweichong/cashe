@@ -10,3 +10,8 @@ export function LoadFailed({ onRetry }: { onRetry: () => void }) {
     </div>
   );
 }
+
+// An inline "Retry" link for a sentence about a failed load or refresh.
+export function RetryLink({ onRetry }: { onRetry: () => void }) {
+  return <Button type="button" variant="link" size="sm" className="h-auto min-h-11 p-0 align-baseline" onClick={onRetry}>Retry</Button>;
+}

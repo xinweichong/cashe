@@ -310,3 +310,67 @@ def test_password_hash_update(in_memory_admin_db):
     store.update_user("alice", password_hash="new_hash")
     user = store.get_user("alice")
     assert user["password_hash"] == "new_hash"
+
+
+# ── Job health ──────────────────────────────────────────────────────────────
+
+def test_job_run_records_start_and_success(in_memory_admin_db):
+    store = AdminStorage(in_memory_admin_db)
+    run_id = store.record_job_start("backup")
+    store.record_job_success(run_id)
+    health = store.get_job_health()
+    assert len(health) == 1
+    assert health[0]["job_name"] == "backup"
+    assert health[0]["status"] == "succeeded"
+    assert health[0]["started_at"] is not None
+    assert health[0]["finished_at"] is not None
+    assert health[0]["error_code"] is None
+    assert health[0]["consecutive_failures"] == 0
+
+
+def test_job_run_records_failure_with_bounded_error_code(in_memory_admin_db):
+    store = AdminStorage(in_memory_admin_db)
+    run_id = store.record_job_start("backup")
+    store.record_job_failure(run_id, "SQLITE_BUSY: " + "x" * 500)
+    health = store.get_job_health()
+    assert health[0]["status"] == "failed"
+    assert len(health[0]["error_code"]) <= 200
+
+
+def test_job_health_reports_latest_run_per_job(in_memory_admin_db):
+    store = AdminStorage(in_memory_admin_db)
+    first = store.record_job_start("backup")
+    store.record_job_success(first)
+    second = store.record_job_start("backup")
+    store.record_job_failure(second, "UploadError")
+    health = store.get_job_health()
+    assert len(health) == 1
+    assert health[0]["status"] == "failed"
+    assert health[0]["error_code"] == "UploadError"
+
+
+def test_job_health_counts_consecutive_failures(in_memory_admin_db):
+    store = AdminStorage(in_memory_admin_db)
+    ok = store.record_job_start("capture_retry")
+    store.record_job_success(ok)
+    for _ in range(3):
+        run_id = store.record_job_start("capture_retry")
+        store.record_job_failure(run_id, "Timeout")
+    health = store.get_job_health()
+    assert health[0]["consecutive_failures"] == 3
+
+
+def test_job_health_tracks_jobs_independently(in_memory_admin_db):
+    store = AdminStorage(in_memory_admin_db)
+    backup_run = store.record_job_start("backup")
+    store.record_job_success(backup_run)
+    retry_run = store.record_job_start("capture_retry")
+    store.record_job_failure(retry_run, "Timeout")
+    health = {row["job_name"]: row for row in store.get_job_health()}
+    assert health["backup"]["status"] == "succeeded"
+    assert health["capture_retry"]["status"] == "failed"
+
+
+def test_job_health_empty_when_no_runs(in_memory_admin_db):
+    store = AdminStorage(in_memory_admin_db)
+    assert store.get_job_health() == []

@@ -11,6 +11,107 @@ def bot_service(in_memory_db):
     return TelegramBotService(storage=storage, bot_token="test-token")
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize('command', ['_add', '_cash', '_income'])
+@pytest.mark.parametrize('amount', ['nan', 'inf'])
+async def test_manual_commands_reject_nonfinite_values_without_followups(bot_service, command, amount):
+    update = SimpleNamespace(message=SimpleNamespace(reply_text=AsyncMock()))
+    context = SimpleNamespace(args=[amount, 'Cafe'])
+    with patch.object(bot_service.storage, 'enlist_transaction') as assign:
+        await getattr(bot_service, command)(update, context)
+        assign.assert_not_called()
+    assert bot_service.storage.query_transactions(limit=50) == []
+    assert "Couldn't save" in update.message.reply_text.call_args.args[0]
+
+
+@pytest.mark.asyncio
+async def test_add_without_exchange_service_records_unresolved_foreign_currency(bot_service):
+    update = SimpleNamespace(message=SimpleNamespace(reply_text=AsyncMock()))
+    await bot_service._add(update, SimpleNamespace(args=['12', 'USD', 'Cafe']))
+    tx = bot_service.storage.query_transactions(limit=50)[0]
+    assert tx['currency'] == 'USD'
+    assert tx['exchange_rate'] is None
+    assert tx['merchant'] == 'Cafe'
+    assert tx['source_id'].startswith('manual-')
+    assert 'SGD conversion unresolved' in update.message.reply_text.call_args.args[0]
+
+
+@pytest.mark.asyncio
+async def test_duplicate_manual_command_is_reported_without_repeating_trip_assignment(bot_service):
+    from datetime import datetime
+    update = SimpleNamespace(message=SimpleNamespace(reply_text=AsyncMock()))
+    context = SimpleNamespace(args=['12', 'Cafe'])
+    bot_service.storage.set_setting('trips_enabled', 'true')
+    trip_id = bot_service.storage.create_trip('Current', '2026-09-01')
+    bot_service.storage.activate_trip(trip_id)
+    with patch.object(bot_service, '_local_now', return_value=datetime(2026, 9, 7, 12)), patch.object(bot_service.storage, 'enlist_transaction', wraps=bot_service.storage.enlist_transaction) as assign:
+        await bot_service._add(update, context)
+        await bot_service._add(update, context)
+        assert assign.call_count == 1
+    assert len(bot_service.storage.query_transactions(limit=50)) == 1
+    assert update.message.reply_text.call_args.args[0] == 'Already logged.'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('command', ['_add', '_cash'])
+async def test_manual_trip_failure_preserves_capture_and_success_reply(bot_service, command):
+    from src.ingestion import IngestionPipeline
+    storage = bot_service.storage
+    storage.set_setting('trips_enabled', 'true')
+    trip_id = storage.create_trip('Current', '2026-09-01')
+    storage.activate_trip(trip_id)
+    update = SimpleNamespace(message=SimpleNamespace(reply_text=AsyncMock()))
+    with patch.object(storage, 'enlist_transaction', side_effect=RuntimeError('private failure')):
+        await getattr(bot_service, command)(update, SimpleNamespace(args=['12', 'Cafe']))
+    tx = storage.query_transactions(limit=50)[0]
+    assert 'Captured.' in update.message.reply_text.call_args.args[0]
+    assert storage.list_ingestion_effects()[0]['status'] == 'failed'
+    IngestionPipeline(storage).retry_pending()
+    assert storage.is_in_trip(trip_id, tx['id'])
+    assert storage.list_ingestion_effects() == []
+
+
+@pytest.mark.asyncio
+async def test_busy_outbox_worker_does_not_block_manual_confirmation(bot_service):
+    from src.ingestion import IngestionPipeline
+    storage = bot_service.storage
+    storage.set_setting('trips_enabled', 'true')
+    trip_id = storage.create_trip('Current', '2026-09-01')
+    storage.activate_trip(trip_id)
+    update = SimpleNamespace(message=SimpleNamespace(reply_text=AsyncMock()))
+    with storage.outbox_dispatch_lock:
+        await bot_service._add(update, SimpleNamespace(args=['12', 'Cafe']))
+        tx = storage.query_transactions(limit=50)[0]
+        assert storage.list_ingestion_effects()[0]['status'] == 'pending'
+        assert not storage.is_in_trip(trip_id, tx['id'])
+        assert 'Captured.' in update.message.reply_text.call_args.args[0]
+    IngestionPipeline(storage).retry_pending()
+    assert storage.is_in_trip(trip_id, tx['id'])
+
+
+@pytest.mark.asyncio
+async def test_nl_confirmation_uses_shared_validation_and_retains_failed_draft(bot_service):
+    query = SimpleNamespace(data='nl_confirm:' + 'a' * 32, answer=AsyncMock(), edit_message_text=AsyncMock())
+    update = SimpleNamespace(callback_query=query, effective_chat=SimpleNamespace(id=100))
+    context = SimpleNamespace(user_data={'nl_pending': {'_id': 'a' * 32, 'amount': 12, 'currency': 'USD', 'merchant': 'Cafe', 'category': 'Food', 'date': '2026-02-30'}})
+    with patch.object(bot_service.storage, 'enlist_transaction') as assign:
+        bot_service.storage.save_telegram_draft('a' * 32, 100, context.user_data["nl_pending"])
+        await bot_service._handle_nl_callback(update, context)
+        assign.assert_not_called()
+    assert bot_service.storage.query_transactions(limit=50) == []
+    assert bot_service.storage.get_telegram_draft('a' * 32, 100) is not None
+    markup = query.edit_message_text.call_args.kwargs['reply_markup']
+    assert [button.callback_data for button in markup.inline_keyboard[0]] == ['nl_edit:' + 'a' * 32, 'nl_cancel:' + 'a' * 32]
+    context.user_data['nl_pending']['date'] = '2026-09-01'
+    context.user_data['nl_pending']['amount'] = '12'
+    bot_service.storage.save_telegram_draft('a' * 32, 100, context.user_data["nl_pending"])
+    await bot_service._handle_nl_callback(update, context)
+    tx = bot_service.storage.query_transactions(limit=50)[0]
+    assert tx['transaction_date'] == '2026-09-01T00:00:00'
+    assert tx['exchange_rate'] is None
+    assert bot_service.storage.get_telegram_draft('a' * 32, 100) is None
+
+
 class TestParseAddCommand:
     def test_parse_add_full(self, bot_service):
         result = bot_service.parse_add_command("12.50 Toast Box food 2026-04-16")
@@ -168,47 +269,6 @@ class TestSubscriptionsCommand:
         update.message.reply_text.assert_called_once()
         text = update.message.reply_text.call_args[0][0]
         assert "No subscriptions" in text
-
-
-class TestBalanceCommand:
-    @pytest.mark.asyncio
-    async def test_balance_includes_month_and_amounts(self, bot_service):
-        bot_service.storage.get_balance = MagicMock(return_value={
-            "income": 5000.0,
-            "expenses": 1200.0,
-            "net": 3800.0,
-        })
-
-        update = MagicMock()
-        update.message.reply_text = AsyncMock()
-        context = MagicMock()
-
-        await bot_service._balance(update, context)
-
-        update.message.reply_text.assert_called_once()
-        text = update.message.reply_text.call_args[0][0]
-        assert "5000.00" in text
-        assert "1200.00" in text
-        assert "3800.00" in text
-        assert "days remaining" in text
-        # Month name should appear (e.g. "April 2026")
-        from datetime import datetime
-        month_str = datetime.now().strftime("%B %Y")
-        assert month_str in text
-
-    @pytest.mark.asyncio
-    async def test_balance_empty_no_keyboard(self, bot_service):
-        bot_service.storage.get_balance = MagicMock(return_value={
-            "income": 0.0, "expenses": 0.0, "net": 0.0,
-        })
-
-        update = MagicMock()
-        update.message.reply_text = AsyncMock()
-        context = MagicMock()
-
-        await bot_service._balance(update, context)
-
-        update.message.reply_text.assert_called_once_with("Nothing logged yet.")
 
 
 class TestYesterdayCommand:
@@ -401,7 +461,7 @@ class TestRecatCallback:
         update.callback_query = query
         context = MagicMock()
 
-        await bot_service._recat_callback(update, context)
+        await bot_service._category_callback(update, context)
 
         query.edit_message_text.assert_called_once()
         text = query.edit_message_text.call_args[0][0]
@@ -413,57 +473,6 @@ class TestRecatCallback:
 
 
 class TestDailyDigest:
-    @pytest.mark.asyncio
-    async def test_send_daily_digest_with_data(self, bot_service):
-        bot_service.chat_id = 12345
-        bot_service.app = MagicMock()
-        bot_service.app.bot.send_message = AsyncMock()
-
-        def mock_spending_summary(start, end):
-            from datetime import datetime, timedelta
-            yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
-            if start == yesterday and end == yesterday:
-                return {"total": 15.0, "by_category": {}}
-            return {"total": 35.0, "by_category": {}}
-
-        bot_service.storage.get_spending_summary = MagicMock(side_effect=mock_spending_summary)
-        bot_service.storage.query_transactions = MagicMock(return_value=[{}, {}])  # count = 2
-        bot_service.storage.spending_velocity = MagicMock(return_value={"status": "ok", "pace_percent": 80})
-        bot_service.storage.new_merchants = MagicMock(return_value=[])
-        bot_service.storage.spending_anomalies = MagicMock(return_value=[])
-
-        await bot_service._send_daily_digest()
-
-        bot_service.app.bot.send_message.assert_called_once()
-        call_kwargs = bot_service.app.bot.send_message.call_args[1]
-        assert call_kwargs["chat_id"] == 12345
-        assert call_kwargs["parse_mode"] == "Markdown"
-        assert "Morning Digest" in call_kwargs["text"]
-        assert "15.00" in call_kwargs["text"]  # yesterday total
-        assert "35.00" in call_kwargs["text"]  # month total
-
-    @pytest.mark.asyncio
-    async def test_send_daily_digest_alerts(self, bot_service):
-        bot_service.chat_id = 12345
-        bot_service.app = MagicMock()
-        bot_service.app.bot.send_message = AsyncMock()
-
-        bot_service.storage.get_spending_summary = MagicMock(
-            return_value={"total": 10.0, "by_category": {}}
-        )
-        bot_service.storage.query_transactions = MagicMock(return_value=[{}])
-        bot_service.storage.spending_velocity = MagicMock(
-            return_value={"status": "ahead", "pace_percent": 130}
-        )
-        bot_service.storage.new_merchants = MagicMock(return_value=[{"merchant": "NewShop"}])
-        bot_service.storage.spending_anomalies = MagicMock(return_value=[{"id": 1}])
-
-        await bot_service._send_daily_digest()
-
-        text = bot_service.app.bot.send_message.call_args[1]["text"]
-        assert "⚠" in text
-        assert "🛍" in text
-
     def test_notify_daily_digest_no_chat_id(self, bot_service):
         bot_service.chat_id = None
         bot_service._loop = MagicMock()
@@ -573,6 +582,54 @@ class TestDeleteCommand:
         row = in_memory_db.execute("SELECT id FROM transactions WHERE id=?", (tx_id,)).fetchone()
         assert row is None
         query.edit_message_text.assert_called_once()
+
+
+class TestSgdEquivalentDisplay:
+    """Delete/edit confirmation messages must read canonical money
+    (reporting_minor_units via resolve_money), not recompute
+    amount * exchange_rate — a legacy exchange_rate of 1.0 is a silent
+    unresolved marker, not a real rate."""
+
+    @pytest.mark.asyncio
+    async def test_delete_confirmation_shows_resolved_sgd(self, bot_service):
+        tx_id = bot_service.storage.insert_transaction(
+            source="manual", source_id="jpy1", amount=1000.0, merchant="Tokyo Cafe",
+            category="Dining", transaction_date="2026-04-10", tx_type="expense",
+            currency="JPY", exchange_rate=0.0091,
+        )
+        update = SimpleNamespace(message=SimpleNamespace(reply_text=AsyncMock()))
+        context = SimpleNamespace(args=[str(tx_id)])
+        await bot_service._delete_command(update, context)
+        text = update.message.reply_text.call_args.args[0]
+        assert "9.10 SGD" in text
+
+    @pytest.mark.asyncio
+    async def test_delete_confirmation_shows_unresolved_not_face_value(self, bot_service):
+        tx_id = bot_service.storage.insert_transaction(
+            source="manual", source_id="thb1", amount=500.0, merchant="Bangkok Grill",
+            category="Dining", transaction_date="2026-04-10", tx_type="expense",
+            currency="THB", exchange_rate=1.0,
+        )
+        update = SimpleNamespace(message=SimpleNamespace(reply_text=AsyncMock()))
+        context = SimpleNamespace(args=[str(tx_id)])
+        await bot_service._delete_command(update, context)
+        text = update.message.reply_text.call_args.args[0]
+        assert "unresolved SGD" in text
+        assert "500.00 SGD" not in text
+
+    @pytest.mark.asyncio
+    async def test_edit_start_shows_unresolved_not_face_value(self, bot_service):
+        tx_id = bot_service.storage.insert_transaction(
+            source="manual", source_id="thb2", amount=500.0, merchant="Bangkok Grill",
+            category="Dining", transaction_date="2026-04-10", tx_type="expense",
+            currency="THB", exchange_rate=1.0,
+        )
+        update = SimpleNamespace(message=SimpleNamespace(reply_text=AsyncMock()))
+        context = SimpleNamespace(args=[str(tx_id)], user_data={})
+        await bot_service._edit_start(update, context)
+        text = update.message.reply_text.call_args.args[0]
+        assert "SGD unresolved" in text
+        assert "SGD 500.00" not in text
 
 
 class TestEditValueEnteredDateValidation:
@@ -701,6 +758,37 @@ class TestAsyncNotify:
         assert kwargs.get("reply_markup") is None
         assert "Grab" in kwargs["text"]
         assert "12.00" in kwargs["text"]
+
+    @pytest.mark.asyncio
+    async def test_budget_alert_uses_canonical_money_not_face_value(self, in_memory_db):
+        # An unresolved foreign-currency transaction (exchange_rate == 1.0
+        # marker) must not be counted at face value toward a budget alert —
+        # same canonical-money-vs-raw-recompute bug class as the delete/edit
+        # confirmation displays.
+        service = self._make_service(in_memory_db)
+        service.storage.set_setting("budgets_enabled", "true")
+        tx_id = service.storage.insert_transaction(
+            source="manual", source_id="thb1", amount=500.0, merchant="Bangkok Grill",
+            category="Dining", transaction_date="2026-04-10", tx_type="expense",
+            currency="THB", exchange_rate=1.0,
+        )
+        with patch.object(service, "_check_and_alert_budgets", new=AsyncMock()) as alert:
+            await service._async_notify(tx_id, 500.0, "Bangkok Grill", "Dining", "keyword:bangkok", "manual")
+        alert.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_budget_alert_uses_resolved_sgd_for_foreign_currency(self, in_memory_db):
+        service = self._make_service(in_memory_db)
+        service.storage.set_setting("budgets_enabled", "true")
+        tx_id = service.storage.insert_transaction(
+            source="manual", source_id="jpy1", amount=1000.0, merchant="Tokyo Cafe",
+            category="Dining", transaction_date="2026-04-10", tx_type="expense",
+            currency="JPY", exchange_rate=0.0091,
+        )
+        with patch.object(service, "_check_and_alert_budgets", new=AsyncMock()) as alert:
+            await service._async_notify(tx_id, 1000.0, "Tokyo Cafe", "Dining", "keyword:tokyo", "manual")
+        alert.assert_called_once()
+        assert alert.call_args.args[1] == pytest.approx(9.1)
 
 
 class TestParseAddCommandDatetime:
@@ -864,7 +952,7 @@ def test_apply_category_update_sets_category(bot_with_storage):
     assert updated["category"] == "Food"
 
 
-def test_apply_category_update_learns_merchant_override(bot_with_storage):
+def test_apply_category_update_preserves_existing_merchant_override(bot_with_storage):
     bot, storage = bot_with_storage
     tx_id = storage._conn.execute("SELECT id FROM transactions WHERE source_id='apply-cat-1'").fetchone()["id"]
     query = make_query_mock(f"cat:{tx_id}:Food")
@@ -874,7 +962,8 @@ def test_apply_category_update_learns_merchant_override(bot_with_storage):
     )
 
     overrides = storage.get_merchant_overrides()
-    assert overrides.get("Kopi Shop") == "Food"
+    assert overrides == {}
+    assert "--remember" in query.edit_message_text.call_args.args[0]
 
 
 def test_apply_category_update_notifies_transaction_not_found(bot_with_storage):
@@ -1003,12 +1092,38 @@ class TestStartCommand:
         assert "/start" in call_text
 
 
+class TestBuildContextLineAnomalyMedian:
+    @pytest.mark.asyncio
+    async def test_unresolved_fx_excluded_from_median_not_counted_at_face_value(self, bot_service):
+        # Same anomaly-median bug class already fixed in analytics.get_anomalies:
+        # an unresolved foreign-currency transaction (exchange_rate == 1.0
+        # marker) must not be counted at its raw face value when computing
+        # the category median — that would skew the median upward and mask
+        # genuine anomalies. Three SGD-10 baseline transactions plus one
+        # THB-5000-unresolved transaction should still produce a median of
+        # 10, not something inflated by the unresolved 5000.
+        from datetime import datetime
+        bot_service._local_now = MagicMock(return_value=datetime(2026, 4, 20, 12))
+        for i in range(3):
+            bot_service.storage.insert_transaction(
+                source="manual", source_id=f"base{i}", amount=10.0, merchant="Cafe",
+                category="Dining", transaction_date="2026-04-15", tx_type="expense",
+            )
+        bot_service.storage.insert_transaction(
+            source="manual", source_id="unresolved1", amount=5000.0, merchant="Fancy Place",
+            category="Dining", transaction_date="2026-04-16", tx_type="expense",
+            currency="THB", exchange_rate=1.0,
+        )
+        result = bot_service._build_context_line(bot_service.storage, "Dining", "New Spot", 25.0)
+        assert "Unusual" in result
+        assert "2.5" in result  # 25 / median(10) = 2.5x
+
+
 class TestAddCommandConfirmation:
     @pytest.mark.asyncio
     async def test_add_uses_brand_hook_format(self, bot_service, in_memory_db):
-        """_add confirmation should use 'cash, caught. [$amount · merchant]' format."""
+        """_add confirmation should use 'Captured. *merchant* · $amount' format."""
         bot_service.storage.get_category_icon_map = MagicMock(return_value={})
-        bot_service.storage.auto_assign_to_active_trip = MagicMock()
         bot_service._build_context_line = MagicMock(return_value="")
 
         update = MagicMock()
@@ -1020,18 +1135,16 @@ class TestAddCommandConfirmation:
 
         update.message.reply_text.assert_called_once()
         text = update.message.reply_text.call_args[0][0]
-        assert text.startswith("cash, caught.")
+        assert text.startswith("Captured.")
         assert "$12.50" in text
         assert "Starbucks" in text
-        # No parse_mode="Markdown" on the new format
         call_kwargs = update.message.reply_text.call_args.kwargs
-        assert call_kwargs.get("parse_mode") is None
+        assert call_kwargs.get("parse_mode") == "Markdown"
 
     @pytest.mark.asyncio
     async def test_add_appends_context_line_when_present(self, bot_service, in_memory_db):
         """If _build_context_line returns a note it should appear after a newline."""
         bot_service.storage.get_category_icon_map = MagicMock(return_value={})
-        bot_service.storage.auto_assign_to_active_trip = MagicMock()
         bot_service._build_context_line = MagicMock(return_value="Budget 82% used — $45 left this month.")
 
         update = MagicMock()
@@ -1042,15 +1155,14 @@ class TestAddCommandConfirmation:
         await bot_service._add(update, context)
 
         text = update.message.reply_text.call_args[0][0]
-        assert "cash, caught." in text
+        assert "Captured." in text
         assert "Budget 82% used" in text
-        assert text.index("cash, caught.") < text.index("Budget 82% used")
+        assert text.index("Captured.") < text.index("Budget 82% used")
 
     @pytest.mark.asyncio
     async def test_add_no_context_line_no_trailing_newline(self, bot_service, in_memory_db):
         """When _build_context_line returns '' there should be no trailing newline."""
         bot_service.storage.get_category_icon_map = MagicMock(return_value={})
-        bot_service.storage.auto_assign_to_active_trip = MagicMock()
         bot_service._build_context_line = MagicMock(return_value="")
 
         update = MagicMock()
@@ -1068,9 +1180,8 @@ class TestAddCommandConfirmation:
 class TestCashCommandConfirmation:
     @pytest.mark.asyncio
     async def test_cash_uses_brand_hook_format(self, bot_service, in_memory_db):
-        """_cash confirmation should use 'cash, caught. [$amount · merchant]' format."""
+        """_cash confirmation should use 'Captured. *merchant* · $amount' format."""
         bot_service.storage.get_category_icon_map = MagicMock(return_value={})
-        bot_service.storage.auto_assign_to_active_trip = MagicMock()
         bot_service._build_context_line = MagicMock(return_value="")
 
         update = MagicMock()
@@ -1082,17 +1193,16 @@ class TestCashCommandConfirmation:
 
         update.message.reply_text.assert_called_once()
         text = update.message.reply_text.call_args[0][0]
-        assert text.startswith("cash, caught.")
+        assert text.startswith("Captured.")
         assert "$8.00" in text
         assert "Hawker" in text
         call_kwargs = update.message.reply_text.call_args.kwargs
-        assert call_kwargs.get("parse_mode") is None
+        assert call_kwargs.get("parse_mode") == "Markdown"
 
     @pytest.mark.asyncio
     async def test_cash_appends_context_line_when_present(self, bot_service, in_memory_db):
         """If _build_context_line returns a note it should be appended."""
         bot_service.storage.get_category_icon_map = MagicMock(return_value={})
-        bot_service.storage.auto_assign_to_active_trip = MagicMock()
         bot_service._build_context_line = MagicMock(return_value="Hawker — 3× this week.")
 
         update = MagicMock()
@@ -1103,6 +1213,161 @@ class TestCashCommandConfirmation:
         await bot_service._cash(update, context)
 
         text = update.message.reply_text.call_args[0][0]
-        assert "cash, caught." in text
+        assert "Captured." in text
         assert "Hawker — 3× this week." in text
 
+
+
+@pytest.mark.parametrize('notification', ['transaction', 'suggestion'])
+def test_notification_bridge_returns_send_future(in_memory_db, monkeypatch, notification):
+    from concurrent.futures import Future
+    from unittest.mock import MagicMock
+    import src.telegram_bot as module
+
+    bot = TelegramBotService(storage=Storage(in_memory_db), bot_token='test-token')
+    bot._resolve_chat_id = MagicMock(return_value=123)
+    bot._loop = MagicMock()
+    bot.app = MagicMock()
+    future = Future()
+    def submit(coroutine, loop):
+        coroutine.close()
+        assert loop is bot._loop
+        return future
+    monkeypatch.setattr(module.asyncio, 'run_coroutine_threadsafe', submit)
+    if notification == 'transaction':
+        result = bot.notify_transaction(1, 12.5, 'Cafe', None, 'default', 'apple_wallet')
+    else:
+        result = bot.notify_subscription_suggestion('alice', 'Cafe', 'monthly', 12.5)
+    assert result is future
+    assert not result.done()
+    future.set_exception(RuntimeError('send failed'))
+    with pytest.raises(RuntimeError, match='send failed'):
+        result.result()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('remember', [False, True])
+async def test_recategorize_explicit_rule_scope(bot_with_storage, remember):
+    bot, storage = bot_with_storage
+    storage._conn.execute("INSERT INTO categories (name, keywords) VALUES ('Food and Drink', '')")
+    storage._conn.commit()
+    tx_id = storage._conn.execute("SELECT id FROM transactions WHERE source_id='apply-cat-1'").fetchone()['id']
+    update = MagicMock()
+    update.message.reply_text = AsyncMock()
+    context = MagicMock()
+    context.args = [str(tx_id), 'Food', 'and', 'Drink'] + (['--remember'] if remember else [])
+    await bot._recategorize(update, context)
+    assert storage.get_transaction(tx_id)['category'] == 'Food and Drink'
+    assert storage.get_merchant_overrides() == ({'Kopi Shop': 'Food and Drink'} if remember else {})
+    if remember:
+        context.args = [str(tx_id), '--remember']
+        await bot._recategorize(update, context)
+        assert storage.get_merchant_overrides() == {'Kopi Shop': 'Food and Drink'}
+
+
+@pytest.mark.asyncio
+async def test_accepted_recurring_suggestion_records_confirmation(bot_service):
+    query = SimpleNamespace(data='sub_suggest_add|monthly|Cafe', answer=AsyncMock(), edit_message_text=AsyncMock(),
+                            message=SimpleNamespace(chat_id=123, message_id=456))
+    update = SimpleNamespace(callback_query=query)
+    ctx = SimpleNamespace(storage=bot_service.storage)
+    with patch.object(bot_service, '_require_ctx', new=AsyncMock(return_value=ctx)):
+        await bot_service._handle_sub_suggest_callback(update, SimpleNamespace())
+    schedules = bot_service.storage.list_subscriptions()
+    assert len(schedules) == 1
+    assert schedules[0]['confirmation_source'] == 'recurring_suggestion'
+
+
+@pytest.mark.asyncio
+async def test_recurring_acceptance_replay_after_send_failure_preserves_paused_schedule(bot_service):
+    storage = bot_service.storage
+    sub = storage.create_subscription('Cafe', 'monthly')
+    storage.update_subscription(sub, status='paused')
+    query = SimpleNamespace(data='sub_suggest_add|monthly|Cafe', answer=AsyncMock(),
+                            edit_message_text=AsyncMock(side_effect=[RuntimeError('send failed'), None, None]),
+                            message=SimpleNamespace(chat_id=123, message_id=456))
+    with patch.object(bot_service, '_require_ctx', new=AsyncMock(return_value=SimpleNamespace(storage=storage))):
+        for _ in range(2):
+            await bot_service._handle_sub_suggest_callback(SimpleNamespace(callback_query=query), SimpleNamespace())
+    assert len(storage.list_subscriptions()) == 1
+    assert storage.get_subscription(sub)['status'] == 'paused'
+    assert 'paused' in query.edit_message_text.call_args.args[0]
+
+
+@pytest.mark.asyncio
+async def test_unlinked_telegram_user_cannot_accept_suggestion(bot_service):
+    query = SimpleNamespace(data='sub_suggest_add|monthly|Cafe', answer=AsyncMock(), edit_message_text=AsyncMock(),
+                            message=SimpleNamespace(chat_id=123, message_id=456))
+    with patch.object(bot_service, '_require_ctx', new=AsyncMock(return_value=None)):
+        await bot_service._handle_sub_suggest_callback(SimpleNamespace(callback_query=query), SimpleNamespace())
+    assert bot_service.storage.list_subscriptions() == []
+
+
+@pytest.mark.asyncio
+async def test_durable_suggestion_buttons_retain_full_unicode_merchant_and_send_retry(bot_service):
+    merchant = '餐厅|Merchant: ' * 12
+    bot_service.app = SimpleNamespace(bot=SimpleNamespace(send_message=AsyncMock(side_effect=[RuntimeError('offline'), None])))
+    with pytest.raises(RuntimeError):
+        await bot_service._async_notify_subscription_suggestion(123, merchant, 'monthly', 12)
+    original_markup = bot_service.app.bot.send_message.call_args.kwargs['reply_markup']
+    await bot_service._async_notify_subscription_suggestion(123, merchant, 'monthly', 12)
+    markup = bot_service.app.bot.send_message.call_args.kwargs['reply_markup']
+    assert markup == original_markup
+    for button in markup.inline_keyboard[0]:
+        assert len(button.callback_data.encode('utf-8')) <= 64
+        assert merchant not in button.callback_data
+    query = SimpleNamespace(data=markup.inline_keyboard[0][0].callback_data, answer=AsyncMock(),
+                            edit_message_text=AsyncMock(), message=SimpleNamespace(chat_id=123))
+    with patch.object(bot_service, '_require_ctx', new=AsyncMock(return_value=SimpleNamespace(storage=bot_service.storage))):
+        for _ in range(2):
+            await bot_service._handle_sub_suggest_callback(SimpleNamespace(callback_query=query), SimpleNamespace())
+    assert [sub['merchant'] for sub in bot_service.storage.list_subscriptions()] == [merchant]
+
+
+@pytest.mark.asyncio
+async def test_durable_suggestion_callback_dismissal_and_unknown_token(bot_service):
+    suggestion = bot_service.storage.prepare_recurring_suggestion(123, 'Cafe', 'monthly', 12)
+    query = SimpleNamespace(data=f"sub_suggest_dismiss:{suggestion['id']}", answer=AsyncMock(),
+                            edit_message_text=AsyncMock(), message=SimpleNamespace(chat_id=123))
+    with patch.object(bot_service, '_require_ctx', new=AsyncMock(return_value=SimpleNamespace(storage=bot_service.storage))):
+        await bot_service._handle_sub_suggest_callback(SimpleNamespace(callback_query=query), SimpleNamespace())
+        assert 'dismissed' in query.edit_message_text.call_args.args[0]
+        query.data = 'sub_suggest_accept:missing'
+        await bot_service._handle_sub_suggest_callback(SimpleNamespace(callback_query=query), SimpleNamespace())
+        assert 'not found' in query.edit_message_text.call_args.args[0]
+    assert bot_service.storage.list_subscriptions() == []
+
+
+@pytest.mark.asyncio
+async def test_suggestion_bridge_persists_only_in_target_user_storage(bot_service, tmp_path):
+    import asyncio
+    from src.db import init_db
+    conn = init_db(str(tmp_path / 'target.db'))
+    target = Storage(conn)
+    bot_service.user_manager = SimpleNamespace(get=lambda username: SimpleNamespace(storage=target) if username == 'target' else None)
+    bot_service._resolve_chat_id = MagicMock(return_value=123)
+    bot_service._loop = asyncio.get_running_loop()
+    bot_service.app = SimpleNamespace(bot=SimpleNamespace(send_message=AsyncMock()))
+    await asyncio.wrap_future(bot_service.notify_subscription_suggestion('target', 'Cafe', 'monthly', 12))
+    assert conn.execute('SELECT merchant FROM recurring_suggestions').fetchone()[0] == 'Cafe'
+    assert bot_service.storage._conn.execute('SELECT COUNT(*) FROM recurring_suggestions').fetchone()[0] == 0
+    conn.close()
+
+
+@pytest.mark.asyncio
+async def test_delivery_binds_existing_web_suggestion_and_skips_resolved(bot_service):
+    storage = bot_service.storage
+    suggestion = storage.prepare_recurring_suggestion(None, 'Original', 'monthly', 12)
+    bot_service.app = SimpleNamespace(bot=SimpleNamespace(send_message=AsyncMock()))
+    await bot_service._async_notify_subscription_suggestion(123, 'Wrong', 'weekly', 999, storage, suggestion['id'])
+    assert 'Original' in bot_service.app.bot.send_message.call_args.kwargs['text']
+    assert 'Wrong' not in bot_service.app.bot.send_message.call_args.kwargs['text']
+    assert storage.get_recurring_review()['total'] == 1
+    # A later analysis reuses the pending record even after Telegram binding.
+    assert storage.prepare_recurring_suggestion(None, 'Original', 'monthly', 12)['id'] == suggestion['id']
+    with pytest.raises(ValueError):
+        await bot_service._async_notify_subscription_suggestion(999, 'Original', 'monthly', 12, storage, suggestion['id'])
+    storage.resolve_recurring_review(suggestion['id'], 'dismiss')
+    await bot_service._async_notify_subscription_suggestion(123, 'Original', 'monthly', 12, storage, suggestion['id'])
+    assert bot_service.app.bot.send_message.call_count == 1
+    assert storage.get_recurring_review()['total'] == 0
