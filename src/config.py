@@ -101,6 +101,8 @@ def load_config(config_path: str) -> dict[str, Any]:
         config.setdefault("web", {})["password_hash"] = password_hash
     if port_env := os.environ.get("PORT"):
         config.setdefault("server", {})["port"] = int(port_env)
+    if gemini_key := os.environ.get("GEMINI_API_KEY"):
+        config["gemini_api_key"] = gemini_key
     if tz_env := os.environ.get("TIMEZONE"):
         config["timezone"] = tz_env
     if url := _webhook_base_url_from_env():

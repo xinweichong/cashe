@@ -254,8 +254,8 @@ class UserManager:
             if ctx:
                 if self._llm_service:
                     _generate_llm_insight(ctx.storage, self._llm_service)
-                bot.notify_daily_digest(username)
-                if bot and ctx:
+                if bot:
+                    bot.notify_daily_digest(username)
                     _check_budget_alerts(ctx.storage, bot, username)
 
         def run_subscriptions():

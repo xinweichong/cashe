@@ -15,7 +15,7 @@ Single Python monolith, one process, eight subsystems:
 6. **Categorization** — keyword matching + learned merchant overrides, with match source tracking
 7. **Intelligence** — recurring transaction detection, spending insights, multi-currency exchange rates, analytics
 8. **Finance System** — budgets (monthly/weekly), savings goals with contributions, trip expense tracking, subscriptions with upcoming-transaction tracking
-9. **LLM Intelligence** — optional Gemini Flash layer for natural-language Telegram parsing and daily AI insights; `None` when `gemini_api_key` is absent
+9. **LLM Intelligence** — optional Gemini Flash layer for natural-language Telegram parsing and daily AI insights; `None` unless `gemini_api_key` is set and `gemini_policy_confirmed: true`
 
 All data in SQLite with WAL mode. Multi-user system with per-user expense DBs and a shared admin DB. Supports income and expense tracking.
 
@@ -40,7 +40,7 @@ docker-compose.yml:
 - `EXPENSE_DB_PATH` — override per-user DB path (rarely used)
 - `EXPENSE_CONFIG_PATH` — override config file path (defaults to `config.yaml`)
 - `GMAIL_CREDENTIALS_JSON` — base64-encoded credentials.json (alternative to volume mount)
-- `GEMINI_API_KEY` — Google Gemini API key; enables LLM Intelligence when set (overrides `gemini_api_key` in config.yaml)
+- `GEMINI_API_KEY` — Google Gemini API key (overrides `gemini_api_key` in config.yaml). LLM Intelligence also requires `gemini_policy_confirmed: true` in config.yaml; a key alone leaves it disabled
 
 **No Railway.** All previous AGENTS.md references to Railway, Railway volumes, and base64 env vars for credentials are obsolete. The `/data/` volume is a local bind mount.
 
@@ -298,7 +298,7 @@ The `IngestionPipeline` is instantiated per-user inside `UserManager._build_cont
 | `src/exchange.py` | Exchange rate service with API fetching, 24h caching, and fallback rates |
 | `src/recurring.py` | Recurring transaction detection from spending patterns |
 | `src/subscriptions.py` | `SubscriptionMatcher`: daily job — generates upcoming charges, auto-matches transactions, flags possibly-cancelled subscriptions |
-| `src/llm_service.py` | `LLMService`: thin Gemini Flash wrapper for Telegram NL parsing and the daily dashboard insight; `create_llm_service(config)` returns `None` when `gemini_api_key` is absent |
+| `src/llm_service.py` | `LLMService`: thin Gemini Flash wrapper for Telegram NL parsing and the daily dashboard insight; `create_llm_service(config)` returns `None` unless `gemini_api_key` is set and `gemini_policy_confirmed` is true |
 | `src/parsers/base.py` | Abstract `BankParser` — defines `can_parse()` / `parse()`, `ParseResult` dataclass |
 | `src/parsers/dbs_paylah.py` | DBS PayLah! email → Transaction (SGD prefix, To: merchant, Transaction Ref) |
 | `src/parsers/uob.py` | All UOB alert email formats → Transaction (card purchase, transit, reversal, PayNow, transfer) |

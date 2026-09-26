@@ -1332,7 +1332,9 @@ class TelegramBotService:
 
         try:
             categories = [c["name"] for c in ctx.storage.get_categories()]
-            parsed = self.llm_service.parse_telegram_message(text, categories, self.timezone)
+            parsed = await asyncio.to_thread(
+                self.llm_service.parse_telegram_message, text, categories, self.timezone,
+            )
             recognized = parsed and parsed.get("confidence", 0) >= 0.7 and parsed.get("amount") is not None
         except Exception:
             if event is not None:
@@ -1946,7 +1948,7 @@ class TelegramBotService:
             return
         await update.message.reply_text("Checking Gmail for new emails.")
         try:
-            count = poller.force_poll()
+            count = await asyncio.to_thread(poller.force_poll)
             if count == 0:
                 await update.message.reply_text("No new transactions found.")
             else:
