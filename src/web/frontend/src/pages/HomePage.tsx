@@ -1,5 +1,5 @@
 import { useId, useMemo, useState } from 'react';
-import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ArrowDown, ArrowRight, ArrowUp, ChevronRight, Plus } from 'lucide-react';
 import { evidenceLink, formatMoney } from '@/api/briefing';
@@ -22,6 +22,8 @@ import { DrillSheet } from '@/components/layout/DrillSheet';
 import { useIsPhone } from '@/hooks/useIsPhone';
 import { cn } from '@/lib/utils';
 import { useHomeBriefing } from '@/hooks/useBriefing';
+import { useUrlParams } from '@/hooks/useUrlParams';
+import { useDrill } from '@/hooks/useDrill';
 
 const PAGE = 'p-4 md:p-6 space-y-4 md:space-y-5 max-w-[1600px] text-base';
 const BAND = 'grid gap-4 md:gap-5 lg:grid-cols-12';
@@ -58,16 +60,11 @@ function MetricRow({ label, value, sub, tone, href }: { label: string; value: Re
 export function HomePage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const [search, setSearch] = useSearchParams();
   // Category and day selections live in the URL (replace-history) so the
   // evidence → correction → Back journey returns to the same selection.
-  const setParam = (key: 'category' | 'day' | 'lens', value: string | null) => {
-    const next = new URLSearchParams(search);
-    if (value) next.set(key, value); else next.delete(key);
-    setSearch(next, { replace: true });
-  };
-  const setSelectedCategory = (value: string | null) => setParam('category', value);
-  const setSelectedDate = (value: string | null) => setParam('day', value);
+  const [search, updateParams] = useUrlParams();
+  const setSelectedCategory = (value: string | null) => updateParams({ category: value || null });
+  const setSelectedDate = (value: string | null) => updateParams({ day: value || null });
   const withReturn = (href: string) => `${href}&returnTo=${encodeURIComponent(location.pathname + location.search)}`;
   const transactionLink = (id: number) => `/transactions/${id}?returnTo=${encodeURIComponent(location.pathname + location.search)}`;
   const [selectedChangeCategory, setSelectedChangeCategory] = useState<string | null>(null);
@@ -76,24 +73,11 @@ export function HomePage() {
   const isPhone = useIsPhone();
   const lensParam = search.get('lens') as HomeLens | null;
   const lens: HomeLens = lensParam && HOME_LENSES.includes(lensParam) ? lensParam : 'month';
-  const setLens = (value: HomeLens) => setParam('lens', value === 'month' ? null : value);
-  const drillParam = search.get('drill') as HomeDrill | null;
-  const drill = isPhone && drillParam && HOME_DRILLS.includes(drillParam) ? drillParam : null;
-  // A drill-in pushes history, so the phone's own back gesture closes it; a
-  // drill reached by deep link has nothing to go back to and is cleared.
-  const openDrill = (kind: HomeDrill, category?: string) => {
-    const next = new URLSearchParams(search);
-    next.set('drill', kind);
-    if (category) next.set('category', category);
-    setSearch(next, { state: { drill: true } });
-  };
-  const closeDrill = () => {
-    if ((location.state as { drill?: boolean } | null)?.drill) { navigate(-1); return; }
-    const next = new URLSearchParams(search);
-    next.delete('drill');
-    next.delete('category');
-    setSearch(next, { replace: true });
-  };
+  const setLens = (value: HomeLens) => updateParams({ lens: value === 'month' ? null : value });
+  const drills = useDrill(HOME_DRILLS);
+  const drill = isPhone ? drills.drill : null;
+  const openDrill = (kind: HomeDrill, category?: string) => drills.openDrill(kind, category ? { category } : {});
+  const closeDrill = () => drills.closeDrill(['category']);
   const query = useHomeBriefing();
   const currentStart = query.data?.facts.current.start;
   const currentEnd = query.data?.facts.current.end;

@@ -13,7 +13,7 @@ import { ChartCard } from '@/components/ui/cards';
 import { CHART_MOTION, useChartTheme } from '@/lib/chartTheme';
 import { X } from 'lucide-react';
 import { formatCurrency, isCreditType } from '@/lib/utils';
-import { ALL_TAGS, formatSGD } from '@/lib/merchants';
+import { ALL_TAGS } from '@/lib/merchants';
 
 export function MerchantProfile({
   merchant,
@@ -158,9 +158,9 @@ export function MerchantProfile({
       {/* Stats row */}
       <div className="grid grid-cols-2 gap-2">
         {[
-          { label: 'Total Spent', value: formatSGD(profile.total.minor_units / 100) },
+          { label: 'Total Spent', value: formatCurrency(profile.total.minor_units / 100) },
           { label: 'Transactions', value: String(profile.transaction_count) },
-          { label: 'Average', value: formatSGD(profile.avg_amount.minor_units / 100) },
+          { label: 'Average', value: formatCurrency(profile.avg_amount.minor_units / 100) },
           { label: 'Last Seen', value: profile.last_seen ?? '—' },
         ].map(({ label, value }) => (
           <div key={label} className="bg-background rounded-lg p-3 border border-border">
@@ -178,7 +178,7 @@ export function MerchantProfile({
               <XAxis dataKey="month" {...CHART_AXIS_PROPS} />
               <YAxis hide />
               <Tooltip
-                formatter={(v) => [formatSGD(Number(v ?? 0)), 'Spent']}
+                formatter={(v) => [formatCurrency(Number(v ?? 0)), 'Spent']}
                 contentStyle={CHART_TOOLTIP_STYLE}
                 cursor={CHART_CURSOR_BAR}
               />

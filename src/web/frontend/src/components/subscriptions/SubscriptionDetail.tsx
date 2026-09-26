@@ -9,6 +9,7 @@ import { CHART_MOTION, useChartTheme } from '@/lib/chartTheme';
 import { api, type Subscription, type Transaction, type UpcomingTransaction } from '@/api/client';
 import { SubscriptionForm } from './SubscriptionForm';
 import { invalidateSpendingQueries } from '@/hooks/useTransactions';
+import { toDateStr } from '@/lib/utils';
 
 interface SubscriptionDetailProps {
   subId: number;
@@ -70,8 +71,8 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
   // Transactions for upcoming match picker (last 90 days, all merchants).
   // Computed once per mount so the query key stays stable across re-renders.
   const [{ today, ninetyDaysAgo }] = useState(() => ({
-    today: new Date().toISOString().slice(0, 10),
-    ninetyDaysAgo: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+    today: toDateStr(new Date()),
+    ninetyDaysAgo: toDateStr(new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)),
   }));
   const { data: recentTxs = [] } = useQuery({
     queryKey: ['transactions', 'match-picker', ninetyDaysAgo, today],

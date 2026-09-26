@@ -1,6 +1,7 @@
 import type { SubscriptionConfirmation } from '@/lib/subscriptionConfirmation';
 import type { components } from './v2-schema.gen';
 import { request } from './client';
+import { formatCurrency } from '@/lib/utils';
 
 export type SubscriptionPriceChange = components['schemas']['SubscriptionPriceChange'];
 export type WeekdayPattern = components['schemas']['WeekdayPattern'];
@@ -130,7 +131,7 @@ export const briefingApi = {
   retryFollowup: (id: number) => request(`/api/v2/capture/followups/${id}/retry`, { method: 'POST' }),
 };
 export function formatMoney(value: Money): string {
-  return new Intl.NumberFormat('en-SG', { style: 'currency', currency: 'SGD', currencyDisplay: 'symbol' }).format(value.minor_units / 100);
+  return formatCurrency(value.minor_units / 100);
 }
 export function evidenceLink(period: SpendingPeriod, category?: string, measure = 'spending', merchant?: string): string {
   const query = new URLSearchParams({ start: period.start, end: period.end, measure });

@@ -12,9 +12,10 @@ import { MerchantProfile } from '@/components/merchants/MerchantProfile';
 import { slideInRightVariants } from '@/lib/motionPresets';
 import { Search } from 'lucide-react';
 import { LoadFailed } from '@/components/ui/LoadFailed';
-import { ALL_TAGS, formatSGD } from '@/lib/merchants';
+import { ALL_TAGS } from '@/lib/merchants';
 import { SPECTRUM_PALETTE } from '@/lib/chartTheme';
-import { getCategoryColor } from '@/lib/utils';
+import { getCategoryColor, formatCurrency } from '@/lib/utils';
+import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 
 function merchantInitialColor(name: string): string {
   const idx = name.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0) % SPECTRUM_PALETTE.length;
@@ -37,30 +38,23 @@ export function MerchantsPage() {
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState('total_spent');
   const [tagFilter, setTagFilter] = useState('');
-  const [selectedMerchant, setSelectedMerchant] = useState<string | null>(merchantName ?? null);
-  // Tracks the merchantName this render has already synced from, so a direct
-  // navigation to a new /merchants/:merchantName URL (not routed through
-  // handleRowClick) still opens the matching panel.
-  const [syncedMerchantName, setSyncedMerchantName] = useState(merchantName);
-  if (merchantName && merchantName !== syncedMerchantName) {
-    setSyncedMerchantName(merchantName);
-    setSelectedMerchant(merchantName);
-  }
+  // The open profile is the route's :merchantName; opening and closing navigate.
+  const selectedMerchant = merchantName ?? null;
+  const debouncedSearch = useDebouncedValue(search);
 
   const { data: merchants = [], isLoading, isError, refetch } = useQuery({
-    queryKey: ['merchant-intelligence-v2', sortBy, tagFilter, search],
+    queryKey: ['merchant-intelligence-v2', sortBy, tagFilter, debouncedSearch],
     queryFn: () =>
       api.getMerchantListV2({
         sort_by: sortBy as 'total_spent' | 'transaction_count' | 'last_seen' | 'merchant_name',
         tag: tagFilter || undefined,
-        search: search || undefined,
+        search: debouncedSearch || undefined,
         limit: 100,
       }),
     staleTime: 30_000,
   });
 
   const handleCloseProfile = () => {
-    setSelectedMerchant(null);
     navigate(`${merchantsPath}${location.search}`);
   };
 
@@ -68,7 +62,6 @@ export function MerchantsPage() {
     if (selectedMerchant === m.merchant) {
       handleCloseProfile();
     } else {
-      setSelectedMerchant(m.merchant);
       navigate(`${merchantsPath}/${encodeURIComponent(m.merchant)}${location.search}`);
     }
   };
@@ -100,14 +93,14 @@ export function MerchantsPage() {
             />
             <StatCard
               label="Total Spend"
-              value={formatSGD(merchants.reduce((sum, m) => sum + m.total.minor_units / 100, 0))}
+              value={formatCurrency(merchants.reduce((sum, m) => sum + m.total.minor_units / 100, 0))}
               color="warm"
             />
             {merchants.length > 0 && (
               <StatCard
                 label="Top Merchant"
                 value={merchants[0].display_name}
-                subtext={formatSGD(merchants[0].total.minor_units / 100)}
+                subtext={formatCurrency(merchants[0].total.minor_units / 100)}
               />
             )}
           </div>
@@ -231,7 +224,7 @@ export function MerchantsPage() {
                         </div>
                       </td>
                       <td className="px-4 py-3 text-right font-display font-bold text-foreground">
-                        {formatSGD(m.total.minor_units / 100)}
+                        {formatCurrency(m.total.minor_units / 100)}
                       </td>
                       <td className="px-4 py-3 text-right text-muted hidden sm:table-cell">
                         {m.transaction_count}

@@ -16,7 +16,7 @@ import { useToast } from '@/hooks/useToastContext';
 import { api, type Transaction, type TransactionV2, type DailyTotalV2, type BulkTransactionResultItemV2 } from '@/api/client';
 import { formatMoney } from '@/api/briefing';
 import { fadeUpVariants } from '@/lib/motionPresets';
-import { localDayKey } from '@/lib/utils';
+import { localDayKey, toDateStr } from '@/lib/utils';
 import { CheckSquare, Plus, Search, SlidersHorizontal, X } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -43,8 +43,7 @@ const ACTIVITY_SHEETS: readonly ActivitySheet[] = ['filters', 'add'];
 function currentWeek(): { start: string; end: string } {
   const today = new Date();
   const monday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - ((today.getDay() + 6) % 7));
-  const key = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-  return { start: key(monday), end: key(today) };
+  return { start: toDateStr(monday), end: toDateStr(today) };
 }
 
 // v2 transactions carry canonical Money instead of flat amount/currency

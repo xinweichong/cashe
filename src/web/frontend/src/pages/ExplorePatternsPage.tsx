@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/api/client';
 import { briefingApi, evidenceLink, formatMoney, type Money, type SpendingFacts } from '@/api/briefing';
@@ -32,6 +32,7 @@ import { useDrill } from '@/hooks/useDrill';
 import { useIsPhone } from '@/hooks/useIsPhone';
 import { useTrips } from '@/components/plan/planHooks';
 import { useCategories } from '@/hooks/useCategories';
+import { useUrlParams } from '@/hooks/useUrlParams';
 
 const WEEKDAY_LABELS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
@@ -197,16 +198,9 @@ function SpendingOverTime({ compactChips = false }: { compactChips?: boolean }) 
   }) : [];
 
   // Day → category → merchant investigation, held in the URL (replace).
-  const [search, setSearch] = useSearchParams();
+  const [search, updateParams] = useUrlParams();
   const dayParam = search.get('day');
   const selectedDay = dayParam && period && dayParam >= period.start && dayParam <= period.end ? dayParam : null;
-  function updateParams(changes: Record<string, string | null>) {
-    const params = new URLSearchParams(search);
-    for (const [key, value] of Object.entries(changes)) {
-      if (value === null) params.delete(key); else params.set(key, value);
-    }
-    setSearch(params, { replace: true });
-  }
   const dayBreakdown = useQuery({
     queryKey: ['explore-day-breakdown', selectedDay],
     queryFn: () => api.getCategoryBreakdownV2(selectedDay!, selectedDay!),
@@ -504,14 +498,10 @@ function ExploreGlance({ facts }: { facts: SpendingFacts | undefined }) {
 }
 
 export function ExplorePatternsPage() {
-  const [search, setSearch] = useSearchParams();
+  const [search, updateParams] = useUrlParams();
   const modeParam = search.get('mode');
   const mode: Mode = MODES.some(m => m.value === modeParam) ? (modeParam as Mode) : 'over-time';
-  function setMode(next: Mode) {
-    const params = new URLSearchParams(search);
-    if (next === 'over-time') params.delete('mode'); else params.set('mode', next);
-    setSearch(params, { replace: true });
-  }
+  const setMode = (next: Mode) => updateParams({ mode: next === 'over-time' ? null : next });
   const { data: facts } = useMonthFacts();
   const { data: trips } = useTrips();
   const isPhone = useIsPhone();
@@ -529,12 +519,7 @@ export function ExplorePatternsPage() {
     // matching lens; the phone's own choice is held separately in ?lens=.
     const lensParam = search.get('lens') as ExploreLens | null;
     const lens: ExploreLens = lensParam && EXPLORE_LENSES.includes(lensParam) ? lensParam : modeParam ? LENS_FOR_MODE[mode] : 'time';
-    const setLens = (next: ExploreLens) => {
-      const params = new URLSearchParams(search);
-      params.delete('mode');
-      if (next === 'time') params.delete('lens'); else params.set('lens', next);
-      setSearch(params, { replace: true });
-    };
+    const setLens = (next: ExploreLens) => updateParams({ mode: null, lens: next === 'time' ? null : next });
     const more = (items: { label: string; drill: ExploreDrill; show?: boolean }[]) => (
       <LensMore items={items.filter((i) => i.show !== false).map((i) => ({ label: i.label, onOpen: () => openDrill(i.drill) }))} />
     );

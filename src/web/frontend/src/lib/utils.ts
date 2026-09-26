@@ -12,21 +12,27 @@ export function isCreditType(type: string | null | undefined): boolean {
   return type === 'income' || type === 'refund';
 }
 
+// Building an Intl.NumberFormat is the expensive part, and long transaction
+// lists format on every row; keep one per currency and precision.
+const currencyFormats = new Map<string, Intl.NumberFormat>();
+function currencyFormat(currency: string, whole: boolean): Intl.NumberFormat {
+  const key = `${currency}:${whole}`;
+  let format = currencyFormats.get(key);
+  if (!format) {
+    format = new Intl.NumberFormat('en-SG', whole
+      ? { style: 'currency', currency, minimumFractionDigits: 0, maximumFractionDigits: 0 }
+      : { style: 'currency', currency, minimumFractionDigits: 2 });
+    currencyFormats.set(key, format);
+  }
+  return format;
+}
+
 export function formatCurrency(amount: number, currency = 'SGD'): string {
-  return new Intl.NumberFormat('en-SG', {
-    style: 'currency',
-    currency,
-    minimumFractionDigits: 2,
-  }).format(amount);
+  return currencyFormat(currency, false).format(amount);
 }
 
 export function formatCurrencyWhole(amount: number, currency = 'SGD'): string {
-  return new Intl.NumberFormat('en-SG', {
-    style: 'currency',
-    currency,
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount);
+  return currencyFormat(currency, true).format(amount);
 }
 
 export function formatDate(date: string): string {

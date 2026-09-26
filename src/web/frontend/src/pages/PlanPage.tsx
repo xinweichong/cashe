@@ -34,6 +34,7 @@ import { useIsPhone } from '@/hooks/useIsPhone';
 import { invalidateSpendingQueries } from '@/hooks/useTransactions';
 import { useSettings } from '@/hooks/useSettings';
 import { useHomeBriefing, useMonthForecast } from '@/hooks/useBriefing';
+import { useUrlParams } from '@/hooks/useUrlParams';
 
 const amountBasisLabels: Record<'matched_charge' | 'user' | 'unknown', string> = {
   matched_charge: 'Amount based on your last confirmed charge',
@@ -323,14 +324,12 @@ function SelectedDayDetail({ date }: { date: string }) {
   );
 }
 
-type Panel =
-  | { type: 'subscription'; id: number }
-  | { type: 'budget'; id: number }
-  | { type: 'goal'; id: number }
-  | { type: 'trip'; id: number };
+const PANEL_TYPES = ['subscription', 'budget', 'goal', 'trip'] as const;
+type Panel = { type: (typeof PANEL_TYPES)[number]; id: number };
 
 export function PlanPage() {
   const [search, setSearch] = useSearchParams();
+  const [, updateParams] = useUrlParams();
   const isDesktop = useIsDesktop();
   const isPhone = useIsPhone();
   const navigate = useNavigate();
@@ -344,13 +343,7 @@ export function PlanPage() {
   const offsetParam = Number(search.get('offset'));
   const offset = Number.isInteger(offsetParam) && offsetParam > 0 && offsetParam % 50 === 0 ? offsetParam : 0;
   const showCalendarMobile = search.get('view') === 'calendar';
-  function updateParams(changes: Record<string, string | null>) {
-    const params = new URLSearchParams(search);
-    for (const [key, value] of Object.entries(changes)) {
-      if (value === null) params.delete(key); else params.set(key, value);
-    }
-    setSearch(params, { replace: true });
-  }
+
   const setDays = (value: number) => updateParams({ days: value === 30 ? null : String(value), offset: null });
   const setOffset = (value: number) => updateParams({ offset: value ? String(value) : null });
   const setShowCalendarMobile = (open: boolean) => updateParams({ view: open ? 'calendar' : null });
@@ -361,35 +354,25 @@ export function PlanPage() {
   // time. Setting one clears the other three, so deep links (e.g. Explore's
   // "review this subscription") always land on a single, unambiguous panel.
   const panel: Panel | null = (() => {
-    const subId = Number(search.get('subscription'));
-    if (Number.isSafeInteger(subId) && subId > 0) return { type: 'subscription', id: subId };
-    const budgetId = Number(search.get('budget'));
-    if (Number.isSafeInteger(budgetId) && budgetId > 0) return { type: 'budget', id: budgetId };
-    const goalId = Number(search.get('goal'));
-    if (Number.isSafeInteger(goalId) && goalId > 0) return { type: 'goal', id: goalId };
-    const tripId = Number(search.get('trip'));
-    if (Number.isSafeInteger(tripId) && tripId > 0) return { type: 'trip', id: tripId };
+    for (const type of PANEL_TYPES) {
+      const id = Number(search.get(type));
+      if (Number.isSafeInteger(id) && id > 0) return { type, id };
+    }
     return null;
   })();
-  function panelHref(type: Panel['type'], id: number) {
+  function withPanel(type: Panel['type'] | null, id?: number) {
     const params = new URLSearchParams(search);
-    params.delete('subscription'); params.delete('budget'); params.delete('goal'); params.delete('trip');
-    params.set(type, String(id));
-    return `/plan?${params.toString()}`;
+    for (const other of PANEL_TYPES) params.delete(other);
+    if (type) params.set(type, String(id));
+    return params;
   }
+  const panelHref = (type: Panel['type'], id: number) => `/plan?${withPanel(type, id).toString()}`;
   // Opening a panel pushes history, so the back gesture closes it; closing
   // a panel that was opened here pops that entry instead of pushing another.
-  function openPanel(type: Panel['type'], id: number) {
-    const params = new URLSearchParams(search);
-    params.delete('subscription'); params.delete('budget'); params.delete('goal'); params.delete('trip');
-    params.set(type, String(id));
-    setSearch(params, { state: { panel: true } });
-  }
+  const openPanel = (type: Panel['type'], id: number) => setSearch(withPanel(type, id), { state: { panel: true } });
   function closePanel() {
     if ((location.state as { panel?: boolean } | null)?.panel) { navigate(-1); return; }
-    const params = new URLSearchParams(search);
-    params.delete('subscription'); params.delete('budget'); params.delete('goal'); params.delete('trip');
-    setSearch(params, { replace: true });
+    setSearch(withPanel(null), { replace: true });
   }
 
   const query = useQuery({
@@ -418,16 +401,8 @@ export function PlanPage() {
   }, [report]);
   const frequencies: Record<string, string> = { weekly: 'Weekly', biweekly: 'Every two weeks', monthly: 'Monthly', quarterly: 'Quarterly', annual: 'Annual' };
 
-  function selectDate(date: string) {
-    const params = new URLSearchParams(search);
-    if (params.get('date') === date) params.delete('date'); else params.set('date', date);
-    setSearch(params, { replace: true });
-  }
-  function setCalendarMonth(month: string) {
-    const params = new URLSearchParams(search);
-    params.set('month', month);
-    setSearch(params, { replace: true });
-  }
+  const selectDate = (date: string) => updateParams({ date: search.get('date') === date ? null : date });
+  const setCalendarMonth = (month: string) => updateParams({ month });
 
   // A date's charges can straddle an agenda page boundary; only treat the
   // highlighted agenda group as the full day when it cannot have been cut.

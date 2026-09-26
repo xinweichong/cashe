@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { ChoiceChip } from '@/components/ui/choice-chip';
 import { Input } from '@/components/ui/input';
 import { Search, SlidersHorizontal, X } from 'lucide-react';
-import { cn, getCategoryColor } from '@/lib/utils';
+import { cn, getCategoryColor, toDateStr } from '@/lib/utils';
 import type { Trip } from '@/api/client';
 
 const TYPE_OPTIONS: { value: string; label: string }[] = [
@@ -34,13 +34,21 @@ interface TransactionFiltersProps {
   variant?: 'default' | 'sheet';
 }
 
+// Local calendar dates, so a preset still matches between midnight and 8am
+// in Singapore (toISOString would give yesterday's UTC date).
+function quickRanges(today = new Date()) {
+  const [y, m, d] = [today.getFullYear(), today.getMonth(), today.getDate()];
+  const todayStr = toDateStr(today);
+  return [
+    { label: 'Last 30 days', start: toDateStr(new Date(y, m, d - 30)), end: todayStr },
+    { label: 'This month', start: toDateStr(new Date(y, m, 1)), end: todayStr },
+    { label: 'Last month', start: toDateStr(new Date(y, m - 1, 1)), end: toDateStr(new Date(y, m, 0)) },
+    { label: 'All time', start: '', end: '' },
+  ];
+}
+
 function quickSelectMatches(start: string, end: string): boolean {
-  const today = new Date();
-  const iso = (d: Date) => d.toISOString().slice(0, 10);
-  const todayStr = iso(today);
-  const monthStart = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`;
-  return (end === todayStr && (start === monthStart || start === iso(new Date(today.getFullYear(), today.getMonth(), today.getDate() - 30))))
-    || (start === iso(new Date(today.getFullYear(), today.getMonth() - 1, 1)) && end === iso(new Date(today.getFullYear(), today.getMonth(), 0)));
+  return quickRanges().some((range) => range.start !== '' && range.start === start && range.end === end);
 }
 
 export function TransactionFilters({
@@ -92,35 +100,7 @@ export function TransactionFilters({
     );
   };
 
-  const quickSelects = useMemo(() => {
-    const today = new Date();
-    const todayStr = today.toISOString().slice(0, 10);
-    return [
-      {
-        label: 'Last 30 days',
-        start: new Date(today.getFullYear(), today.getMonth(), today.getDate() - 30)
-          .toISOString().slice(0, 10),
-        end: todayStr,
-      },
-      {
-        label: 'This month',
-        start: `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-01`,
-        end: todayStr,
-      },
-      {
-        label: 'Last month',
-        start: (() => {
-          const d = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-          return d.toISOString().slice(0, 10);
-        })(),
-        end: (() => {
-          const d = new Date(today.getFullYear(), today.getMonth(), 0);
-          return d.toISOString().slice(0, 10);
-        })(),
-      },
-      { label: 'All time', start: '', end: '' },
-    ];
-  }, []); // empty deps: computed once per component mount
+  const quickSelects = useMemo(() => quickRanges(), []); // computed once per mount
 
   return (
     <div className="flex flex-col gap-2">

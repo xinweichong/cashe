@@ -4,6 +4,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { Button } from '@/components/ui/button';
 import { api, type Subscription } from '@/api/client';
 import { invalidateSpendingQueries } from '@/hooks/useTransactions';
+import { toDateStr } from '@/lib/utils';
 
 type Mode = 'create' | 'edit';
 
@@ -43,7 +44,7 @@ export function SubscriptionForm({ onClose, onSave, initial }: SubscriptionFormP
   const [error, setError] = useState<string | null>(null);
 
   // Today's start_date for the merchants query so the dropdown isn't empty.
-  const today = new Date().toISOString().slice(0, 10);
+  const today = toDateStr(new Date());
   const startOfYear = `${new Date().getFullYear()}-01-01`;
   const { data: merchants = [] } = useQuery({
     queryKey: ['merchants', startOfYear, today],
