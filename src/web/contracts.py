@@ -387,9 +387,7 @@ class AnnualRenewal(BaseModel):
 
 class SubscriptionReview(BaseModel):
     """R11 sub-project 4: overdue subscriptions, deterministic price-change
-    comparisons with annualized impact, and annual-renewal surfacing —
-    distinct from LLMService.explain_subscription_change's optional
-    free-text layer over these same facts."""
+    comparisons with annualized impact, and annual-renewal surfacing."""
     overdue: list[SubscriptionOverdueItem]
     price_changes: list[SubscriptionPriceChange]
     annual_renewals: list[AnnualRenewal]

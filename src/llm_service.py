@@ -39,6 +39,11 @@ class LLMService:
         )
         return response.text.strip()
 
+    def _call_json(self, prompt: str):
+        """_call, then parse the reply as JSON (tolerating a markdown fence)."""
+        raw = self._call(prompt).removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+        return json.loads(raw)
+
     def parse_telegram_message(self, text: str, categories: list[str], timezone: str = DEFAULT_TIMEZONE) -> Optional[dict]:
         """Parse free-text transaction message into structured fields.
 
@@ -61,9 +66,7 @@ Respond with valid JSON only, no markdown.
 
 Message: {text}"""
         try:
-            raw = self._call(prompt)
-            raw = raw.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
-            return json.loads(raw)
+            return self._call_json(prompt)
         except Exception as e:
             logger.warning("parse_telegram_message failed (%s): %s", type(e).__name__, str(e)[:120])
             return None
@@ -90,9 +93,7 @@ Respond with valid JSON only:
 {{"narrative": "...", "nudges": ["...", "...", "..."]}}
 No markdown, no extra text."""
         try:
-            raw = self._call(prompt)
-            raw = raw.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
-            data = json.loads(raw)
+            data = self._call_json(prompt)
             return {
                 "narrative": data.get("narrative", ""),
                 "nudges": data.get("nudges", [])[:3],
@@ -100,101 +101,6 @@ No markdown, no extra text."""
         except Exception as e:
             logger.warning("generate_period_insight failed (%s): %s", type(e).__name__, str(e)[:120])
             return {"narrative": "", "nudges": []}
-
-    def generate_weekly_insight(self, summary: dict) -> dict:
-        """Narrative + 2–3 nudges for last 7 days. Focuses on daily patterns and velocity.
-
-        summary keys: period_label, total_expense, total_income, top_categories,
-                      velocity_status, change_vs_last_week_pct
-        Returns {narrative: str, nudges: list[str]}
-        """
-        prompt = f"""You are a concise personal finance advisor writing for a mobile app.
-Given this 7-day spending summary for {summary.get('period_label', 'this week')}, write:
-1. A 2–3 sentence narrative focusing on daily spending patterns and pace.
-2. Exactly 2–3 short, actionable nudge strings (max 12 words each).
-
-Summary data:
-{json.dumps(summary, indent=2)}
-
-Respond with valid JSON only:
-{{"narrative": "...", "nudges": ["...", "...", "..."]}}
-No markdown, no extra text."""
-        try:
-            raw = self._call(prompt)
-            raw = raw.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
-            data = json.loads(raw)
-            return {"narrative": data.get("narrative", ""), "nudges": data.get("nudges", [])[:3]}
-        except Exception as e:
-            logger.warning("generate_weekly_insight failed (%s): %s", type(e).__name__, str(e)[:120])
-            return {"narrative": "", "nudges": []}
-
-    def generate_monthly_insight(self, summary: dict) -> dict:
-        """Narrative + 2–3 nudges for a calendar month. Focuses on category shifts and savings rate.
-
-        summary keys: period_label, total_expense, total_income, savings_rate,
-                      change_vs_last_month_pct, top_categories, velocity_status
-        Returns {narrative: str, nudges: list[str]}
-        """
-        prompt = f"""You are a concise personal finance advisor writing for a mobile app.
-Given this monthly spending summary for {summary.get('period_label', 'this month')}, write:
-1. A 2–3 sentence narrative focusing on category shifts vs last month and savings rate.
-2. Exactly 2–3 short, actionable nudge strings (max 12 words each).
-
-Summary data:
-{json.dumps(summary, indent=2)}
-
-Respond with valid JSON only:
-{{"narrative": "...", "nudges": ["...", "...", "..."]}}
-No markdown, no extra text."""
-        try:
-            raw = self._call(prompt)
-            raw = raw.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
-            data = json.loads(raw)
-            return {"narrative": data.get("narrative", ""), "nudges": data.get("nudges", [])[:3]}
-        except Exception as e:
-            logger.warning("generate_monthly_insight failed (%s): %s", type(e).__name__, str(e)[:120])
-            return {"narrative": "", "nudges": []}
-
-    def explain_anomaly(self, merchant: str, amount: float, avg: float, category: str) -> str:
-        """Return one sentence explaining an unusual transaction."""
-        prompt = f"""In one concise sentence (max 20 words), explain why a {category} charge of \
-${amount:.2f} at {merchant} is unusual given the typical amount is ${avg:.2f}. \
-No markdown."""
-        try:
-            return self._call(prompt)
-        except Exception as e:
-            logger.warning("explain_anomaly failed (%s): %s", type(e).__name__, str(e)[:120])
-            return ""
-
-    def explain_subscription_change(
-        self, merchant: str, label: str, old_amount: float, new_amount: float
-    ) -> str:
-        """Return one sentence noting a subscription price change."""
-        diff = new_amount - old_amount
-        annual = abs(diff) * 12
-        prompt = f"""In one sentence (max 25 words), note that {label or merchant} changed price \
-from ${old_amount:.2f} to ${new_amount:.2f}/month (${annual:.2f}/year {'more' if diff > 0 else 'less'}). \
-No markdown."""
-        try:
-            return self._call(prompt)
-        except Exception as e:
-            logger.warning("explain_subscription_change failed (%s): %s", type(e).__name__, str(e)[:120])
-            return ""
-
-    def generate_goal_coaching(self, goal: dict, spending: dict) -> str:
-        """Return a short paragraph with coaching toward a savings goal."""
-        prompt = f"""In 2–3 sentences, give practical advice to help reach this savings goal faster.
-Focus on the highest-spending categories as the lever. Be specific and encouraging.
-No markdown.
-
-Goal: {json.dumps(goal, indent=2)}
-Spending context: {json.dumps(spending, indent=2)}"""
-        try:
-            return self._call(prompt)
-        except Exception as e:
-            logger.warning("generate_goal_coaching failed (%s): %s", type(e).__name__, str(e)[:120])
-            return ""
-
 
 def create_llm_service(config: dict) -> Optional[LLMService]:
     """Return LLMService only when both an API key and an explicit policy

@@ -2911,9 +2911,7 @@ class Storage:
         """R11: overdue subscriptions, deterministic price-change
         comparisons with annualized impact, and annual-renewal surfacing
         with supporting charges — all computed from canonical matched-
-        charge amounts. Distinct from LLMService.explain_subscription_change,
-        an optional free-text layer over these same deterministic facts,
-        never their source."""
+        charge amounts."""
         from src.spending_facts import money, resolve_money
         from src.subscriptions import FREQUENCY_DAYS
         today = local_now().date()

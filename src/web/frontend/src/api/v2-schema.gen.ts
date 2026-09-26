@@ -1805,9 +1805,7 @@ export interface components {
         /**
          * SubscriptionReview
          * @description R11 sub-project 4: overdue subscriptions, deterministic price-change
-         *     comparisons with annualized impact, and annual-renewal surfacing —
-         *     distinct from LLMService.explain_subscription_change's optional
-         *     free-text layer over these same facts.
+         *     comparisons with annualized impact, and annual-renewal surfacing.
          */
         SubscriptionReview: {
             /** Annual Renewals */

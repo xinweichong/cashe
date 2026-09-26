@@ -2790,7 +2790,7 @@
         "type": "object"
       },
       "SubscriptionReview": {
-        "description": "R11 sub-project 4: overdue subscriptions, deterministic price-change\ncomparisons with annualized impact, and annual-renewal surfacing \u2014\ndistinct from LLMService.explain_subscription_change's optional\nfree-text layer over these same facts.",
+        "description": "R11 sub-project 4: overdue subscriptions, deterministic price-change\ncomparisons with annualized impact, and annual-renewal surfacing.",
         "properties": {
           "annual_renewals": {
             "items": {
