@@ -10,10 +10,36 @@ from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone, date
 from typing import Optional
 
-from src.config import local_now
+from src.config import DEFAULT_TIMEZONE, local_now
 from src.transaction_validation import normalize_transaction_fields
 
 _VALID_TYPES: frozenset[str] = frozenset({"needs", "wants", "neutral"})
+
+
+def _sgd_sql(alias: str = "") -> str:
+    """SQL for a row's SGD amount: the read-time twin of
+    spending_facts.resolve_money. Canonical reporting_minor_units first, then
+    an SGD face value, then a real (non-1.0) exchange rate; NULL when the
+    conversion is unresolved."""
+    c = f"{alias}." if alias else ""
+    return (
+        f"(CASE WHEN {c}reporting_minor_units IS NOT NULL THEN {c}reporting_minor_units / 100.0 "
+        f"WHEN {c}currency = 'SGD' OR {c}currency IS NULL THEN {c}amount "
+        f"WHEN {c}exchange_rate IS NOT NULL AND {c}exchange_rate > 0 AND {c}exchange_rate != 1 "
+        f"THEN {c}amount * {c}exchange_rate ELSE NULL END)"
+    )
+
+
+def _parse_tags(tags: str | None) -> list[str]:
+    """merchant_tags.tags is a comma-separated string."""
+    return [t.strip() for t in (tags or "").split(",") if t.strip()]
+
+
+_SGD = _sgd_sql()
+_SGD_T = _sgd_sql("t")
+# Refunds count against spending.
+_SIGNED_SGD = f"(CASE WHEN type = 'refund' THEN -1 ELSE 1 END) * {_SGD}"
+_SIGNED_SGD_T = f"(CASE WHEN t.type = 'refund' THEN -1 ELSE 1 END) * {_SGD_T}"
 
 
 def _locked(method):
@@ -61,17 +87,17 @@ class Storage:
         self.outbox_dispatch_lock = threading.Lock()
 
     @_locked
-    def get_day_spending_facts(self, as_of=None, timezone="Asia/Singapore") -> dict:
+    def get_day_spending_facts(self, as_of=None, timezone=DEFAULT_TIMEZONE) -> dict:
         from src.spending_facts import day_facts
         return day_facts(self._conn, as_of, timezone)
 
     @_locked
-    def get_month_spending_facts(self, as_of=None, timezone="Asia/Singapore") -> dict:
+    def get_month_spending_facts(self, as_of=None, timezone=DEFAULT_TIMEZONE) -> dict:
         from src.spending_facts import month_facts
         return month_facts(self._conn, as_of, timezone)
 
     @_locked
-    def get_week_spending_facts(self, as_of=None, timezone="Asia/Singapore") -> dict:
+    def get_week_spending_facts(self, as_of=None, timezone=DEFAULT_TIMEZONE) -> dict:
         from src.spending_facts import week_facts
         return week_facts(self._conn, as_of, timezone)
 
@@ -81,48 +107,48 @@ class Storage:
         return spending_evidence(self._conn, start, end, **filters)
 
     @_locked
-    def get_weekday_pattern(self, as_of=None, weeks: int = 8, timezone="Asia/Singapore") -> dict:
+    def get_weekday_pattern(self, as_of=None, weeks: int = 8, timezone=DEFAULT_TIMEZONE) -> dict:
         from src.spending_facts import weekday_pattern
         return weekday_pattern(self._conn, as_of, weeks, timezone)
 
     @_locked
-    def get_month_forecast(self, as_of=None, timezone="Asia/Singapore") -> dict:
+    def get_month_forecast(self, as_of=None, timezone=DEFAULT_TIMEZONE) -> dict:
         from src.forecast import month_forecast
         return month_forecast(self._conn, as_of, timezone)
 
     @_locked
-    def get_forecast_scenario(self, adjustments: list[dict], as_of=None, timezone="Asia/Singapore") -> dict:
+    def get_forecast_scenario(self, adjustments: list[dict], as_of=None, timezone=DEFAULT_TIMEZONE) -> dict:
         from src.forecast import scenario
         return scenario(self._conn, adjustments, as_of, timezone)
 
     @_locked
-    def get_daily_totals(self, start, end, timezone="Asia/Singapore") -> list[dict]:
+    def get_daily_totals(self, start, end, timezone=DEFAULT_TIMEZONE) -> list[dict]:
         from src.spending_facts import daily_totals
         return daily_totals(self._conn, start, end, timezone)
 
     @_locked
-    def get_category_breakdown(self, start, end, timezone="Asia/Singapore") -> dict:
+    def get_category_breakdown(self, start, end, timezone=DEFAULT_TIMEZONE) -> dict:
         from src.spending_facts import category_breakdown
         return category_breakdown(self._conn, start, end, timezone)
 
     @_locked
-    def get_merchant_ranking_facts(self, start, end, timezone="Asia/Singapore", category=None, limit=10) -> list[dict]:
+    def get_merchant_ranking_facts(self, start, end, timezone=DEFAULT_TIMEZONE, category=None, limit=10) -> list[dict]:
         from src.spending_facts import merchant_ranking
         return merchant_ranking(self._conn, start, end, timezone, category, limit)
 
     @_locked
-    def get_category_daily_trend(self, start, end, timezone="Asia/Singapore", categories=None) -> list[dict]:
+    def get_category_daily_trend(self, start, end, timezone=DEFAULT_TIMEZONE, categories=None) -> list[dict]:
         from src.spending_facts import category_daily_trend
         return category_daily_trend(self._conn, start, end, timezone, categories)
 
     @_locked
-    def get_spending_signals(self, as_of=None, timezone="Asia/Singapore") -> dict:
+    def get_spending_signals(self, as_of=None, timezone=DEFAULT_TIMEZONE) -> dict:
         from src.spending_facts import spending_signals
         multiplier = float(self.get_setting("anomaly_multiplier", "2.0"))
         return spending_signals(self._conn, as_of, timezone, multiplier)
 
     @_locked
-    def get_monthly_flows(self, months: int = 6, as_of=None, timezone="Asia/Singapore") -> list[dict]:
+    def get_monthly_flows(self, months: int = 6, as_of=None, timezone=DEFAULT_TIMEZONE) -> list[dict]:
         from src.spending_facts import monthly_flows
         return monthly_flows(self._conn, months, as_of, timezone)
 
@@ -185,12 +211,8 @@ class Storage:
             params.append(trip_id)
         if needs_review:
             conditions.append(
-                """(DATE(transactions.transaction_date) IS NULL
-                    OR (CASE WHEN transactions.reporting_minor_units IS NOT NULL THEN transactions.reporting_minor_units
-                             WHEN transactions.currency = 'SGD' OR transactions.currency IS NULL THEN CAST(ROUND(transactions.amount * 100) AS INTEGER)
-                             WHEN transactions.exchange_rate IS NOT NULL AND transactions.exchange_rate > 0 AND transactions.exchange_rate != 1
-                                  THEN CAST(ROUND(transactions.amount * transactions.exchange_rate * 100) AS INTEGER)
-                             ELSE NULL END) IS NULL
+                f"""(DATE(transactions.transaction_date) IS NULL
+                    OR {_sgd_sql("transactions")} IS NULL
                     OR COALESCE(transactions.type, 'expense') NOT IN ('expense', 'refund', 'income')
                     OR transactions.merchant IS NULL OR transactions.category IS NULL)"""
             )
@@ -211,15 +233,10 @@ class Storage:
         return [dict(r) for r in rows]
 
     @_locked
-    def get_upcoming_plan(self, days=30, timezone="Asia/Singapore", limit=50, offset=0, on_date=None) -> dict:
-        from src.spending_facts import convert_legacy_sgd, money
-        if not 1 <= days <= 90 or not 1 <= limit <= 100 or offset < 0:
-            raise ValueError("Invalid upcoming query")
-        if on_date is not None:
-            start = end = on_date
-        else:
-            start = local_now(timezone).date()
-            end = start + timedelta(days=days - 1)
+    def _pending_upcoming(self, start: date, end: date) -> list[dict]:
+        """Pending, unmatched charges of active (or possibly cancelled)
+        subscriptions expected between start and end inclusive, in date order."""
+        from src.spending_facts import money, sgd_minor
         items = []
         for row in self._conn.execute(
             """SELECT u.id, u.expected_date, u.expected_amount, u.date_basis, u.amount_basis,
@@ -232,7 +249,7 @@ class Storage:
                AND DATE(u.expected_date) >= ? AND DATE(u.expected_date) <= ?
                ORDER BY DATE(u.expected_date), u.id""", (start.isoformat(), end.isoformat()),
         ):
-            minor, _ = convert_legacy_sgd({"amount": row["expected_amount"], "currency": "SGD"})
+            minor = sgd_minor(row["expected_amount"])
             items.append({"id": row["id"], "subscription_id": row["subscription_id"],
                           "label": row["label"], "date": row["expected_date"],
                           "frequency": row["frequency"], "schedule_status": row["status"],
@@ -240,6 +257,19 @@ class Storage:
                           "date_basis": row["date_basis"], "amount_basis": row["amount_basis"],
                           "amount_basis_transaction_id": row["amount_basis_transaction_id"],
                           "amount": money(minor) if minor is not None else None})
+        return items
+
+    @_locked
+    def get_upcoming_plan(self, days=30, timezone=DEFAULT_TIMEZONE, limit=50, offset=0, on_date=None) -> dict:
+        from src.spending_facts import money
+        if not 1 <= days <= 90 or not 1 <= limit <= 100 or offset < 0:
+            raise ValueError("Invalid upcoming query")
+        if on_date is not None:
+            start = end = on_date
+        else:
+            start = local_now(timezone).date()
+            end = start + timedelta(days=days - 1)
+        items = self._pending_upcoming(start, end)
         unknown = sum(item["amount"] is None for item in items)
         return {"start": start.isoformat(), "end": end.isoformat(), "timezone": timezone,
                 "enabled": self.get_setting("subscriptions_enabled", "false") == "true",
@@ -248,39 +278,32 @@ class Storage:
                 "unknown_count": unknown, "status": "partial" if unknown else "estimated"}
 
     @_locked
-    def get_upcoming_calendar(self, start, end, timezone="Asia/Singapore") -> dict:
+    def get_upcoming_calendar(self, start, end, timezone=DEFAULT_TIMEZONE) -> dict:
         """Complete per-day pending-charge summary for a bounded calendar
         window, aggregated server-side over every matching row (same
         pending/unmatched/active-subscription filter as get_upcoming_plan)
         so a day's count and total are never truncated by a page limit."""
-        from src.spending_facts import convert_legacy_sgd, money
+        from src.spending_facts import money
         if end < start or (end - start).days > 62:
             raise ValueError("Invalid calendar window")
         days: dict[str, dict] = {}
-        for row in self._conn.execute(
-            """SELECT DATE(u.expected_date) AS d, u.expected_amount
-               FROM upcoming_transactions u JOIN subscriptions s ON s.id = u.subscription_id
-               WHERE u.status = 'pending' AND u.matched_transaction_id IS NULL
-               AND s.status IN ('active', 'possibly_cancelled')
-               AND DATE(u.expected_date) >= ? AND DATE(u.expected_date) <= ?
-               ORDER BY d""", (start.isoformat(), end.isoformat()),
-        ):
-            entry = days.setdefault(row["d"], {"known_minor": 0, "unknown_count": 0, "recorded_charge_count": 0})
+        for item in self._pending_upcoming(start, end):
+            day = date.fromisoformat(item["date"][:10]).isoformat()
+            entry = days.setdefault(day, {"known_minor": 0, "unknown_count": 0, "recorded_charge_count": 0})
             entry["recorded_charge_count"] += 1
-            minor, _ = convert_legacy_sgd({"amount": row["expected_amount"], "currency": "SGD"})
-            if minor is None:
+            if item["amount"] is None:
                 entry["unknown_count"] += 1
             else:
-                entry["known_minor"] += minor
+                entry["known_minor"] += item["amount"]["minor_units"]
         return {"start": start.isoformat(), "end": end.isoformat(), "timezone": timezone,
                 "days": [{"date": d, "known_total": money(v["known_minor"]),
                           "unknown_count": v["unknown_count"], "recorded_charge_count": v["recorded_charge_count"]}
                          for d, v in sorted(days.items())]}
 
     @_locked
-    def get_home_briefing(self, timezone="Asia/Singapore") -> dict:
+    def get_home_briefing(self, timezone=DEFAULT_TIMEZONE) -> dict:
         from src.money import to_minor_units
-        from src.spending_facts import convert_legacy_sgd, money, resolve_money
+        from src.spending_facts import money, resolve_money
         today = local_now(timezone).date()
         facts = self.get_month_spending_facts(today, timezone)
         # R13: one overall spending target, reusing the existing budget
@@ -306,23 +329,10 @@ class Storage:
             })
         upcoming = []
         if self.get_setting("subscriptions_enabled", "false") == "true":
-            for row in self._conn.execute(
-                """SELECT u.id, u.expected_date, u.expected_amount, u.date_basis, u.amount_basis,
-                          u.amount_basis_transaction_id, s.id AS subscription_id,
-                          COALESCE(s.label, s.merchant) AS label
-                   FROM upcoming_transactions u JOIN subscriptions s ON s.id = u.subscription_id
-                   WHERE u.status = 'pending' AND u.matched_transaction_id IS NULL
-                   AND s.status IN ('active', 'possibly_cancelled')
-                   AND DATE(u.expected_date) >= ? AND DATE(u.expected_date) <= ?
-                   ORDER BY u.expected_date, u.id""",
-                (today.isoformat(), (today + timedelta(days=13)).isoformat()),
-            ):
-                minor, _ = convert_legacy_sgd({"amount": row["expected_amount"], "currency": "SGD"})
-                upcoming.append({"id": row["id"], "subscription_id": row["subscription_id"],
-                                 "label": row["label"], "date": row["expected_date"],
-                                 "date_basis": row["date_basis"], "amount_basis": row["amount_basis"],
-                                 "amount_basis_transaction_id": row["amount_basis_transaction_id"],
-                                 "amount": money(minor) if minor is not None else None})
+            home_keys = ("id", "subscription_id", "label", "date", "date_basis", "amount_basis",
+                         "amount_basis_transaction_id", "amount")
+            upcoming = [{k: item[k] for k in home_keys}
+                        for item in self._pending_upcoming(today, today + timedelta(days=13))]
         increased_commitments = []
         if self.get_setting("subscriptions_enabled", "false") == "true":
             # R10: a subscription/recurring commitment whose most recent
@@ -351,7 +361,7 @@ class Storage:
         }
 
     @_locked
-    def get_spending_review(self, *, timezone="Asia/Singapore", limit=50, offset=0) -> dict:
+    def get_spending_review(self, *, timezone=DEFAULT_TIMEZONE, limit=50, offset=0) -> dict:
         from src.spending_facts import spending_review
         return spending_review(self._conn, timezone=timezone, limit=limit, offset=offset)
 
@@ -697,7 +707,7 @@ class Storage:
 
     @_locked
     def create_web_transaction(self, body: dict, *, source_id: str, request_key=None,
-                               timezone="Asia/Singapore") -> dict:
+                               timezone=DEFAULT_TIMEZONE) -> dict:
         # Fingerprint submitted fields before generating defaults (especially time).
         # Keys are scoped by the per-user database and retained after deletion.
         receipt = None
@@ -978,12 +988,7 @@ class Storage:
                 "currency": fields.get("currency", tx["currency"]),
                 "exchange_rate": fields.get("exchange_rate", tx["exchange_rate"]),
             })
-            fields["original_minor_units"] = canonical["original_minor_units"]
-            fields["reporting_minor_units"] = canonical["reporting_minor_units"]
-            fields["conversion_status"] = canonical["conversion_status"]
-            fields["conversion_rate"] = canonical["conversion_rate"]
-            fields["conversion_source"] = canonical["conversion_source"]
-            fields["conversion_quoted_at"] = canonical["conversion_quoted_at"]
+            fields.update({k: v for k, v in canonical.items() if k != "issue"})
 
         changed_fields = {
             key: {"old": tx.get(key), "new": value}
@@ -1441,7 +1446,7 @@ class Storage:
         self, start_date: str, end_date: str
     ) -> dict:
         rows = self._conn.execute(
-            """SELECT category, SUM((CASE WHEN type = 'refund' THEN -1 ELSE 1 END) * (CASE WHEN reporting_minor_units IS NOT NULL THEN reporting_minor_units / 100.0 WHEN currency = 'SGD' OR currency IS NULL THEN amount WHEN exchange_rate IS NOT NULL AND exchange_rate > 0 AND exchange_rate != 1 THEN amount * exchange_rate ELSE NULL END)) as total
+            f"""SELECT category, SUM({_SIGNED_SGD}) as total
                FROM transactions
                WHERE DATE(transaction_date) >= ? AND DATE(transaction_date) <= ?
                AND (type IS NULL OR type = 'expense' OR type = 'refund')
@@ -1457,7 +1462,7 @@ class Storage:
     @_locked
     def get_income_summary(self, start_date: str, end_date: str) -> dict:
         rows = self._conn.execute(
-            """SELECT category, SUM((CASE WHEN reporting_minor_units IS NOT NULL THEN reporting_minor_units / 100.0 WHEN currency = 'SGD' OR currency IS NULL THEN amount WHEN exchange_rate IS NOT NULL AND exchange_rate > 0 AND exchange_rate != 1 THEN amount * exchange_rate ELSE NULL END)) as total
+            f"""SELECT category, SUM({_SGD}) as total
                FROM transactions
                WHERE DATE(transaction_date) >= ? AND DATE(transaction_date) <= ?
                AND type = 'income'
@@ -1476,8 +1481,8 @@ class Storage:
     @_locked
     def get_merchant_ranking(self, start_date: str, end_date: str, limit: int = 10, category: str | None = None) -> list[dict]:
         rows = self._conn.execute(
-            """SELECT merchant, COUNT(*) FILTER (WHERE type IS NULL OR type = 'expense') as visits,
-                      SUM((CASE WHEN type = 'refund' THEN -1 ELSE 1 END) * (CASE WHEN reporting_minor_units IS NOT NULL THEN reporting_minor_units / 100.0 WHEN currency = 'SGD' OR currency IS NULL THEN amount WHEN exchange_rate IS NOT NULL AND exchange_rate > 0 AND exchange_rate != 1 THEN amount * exchange_rate ELSE NULL END)) as total
+            f"""SELECT merchant, COUNT(*) FILTER (WHERE type IS NULL OR type = 'expense') as visits,
+                      SUM({_SIGNED_SGD}) as total
                FROM transactions
                WHERE DATE(transaction_date) >= ? AND DATE(transaction_date) <= ?
                AND merchant IS NOT NULL AND (type IS NULL OR type = 'expense' OR type = 'refund')
@@ -1490,7 +1495,7 @@ class Storage:
     @_locked
     def get_average_daily(self, start_date: str, end_date: str) -> float:
         row = self._conn.execute(
-            """SELECT COALESCE(SUM((CASE WHEN type = 'refund' THEN -1 ELSE 1 END) * (CASE WHEN reporting_minor_units IS NOT NULL THEN reporting_minor_units / 100.0 WHEN currency = 'SGD' OR currency IS NULL THEN amount WHEN exchange_rate IS NOT NULL AND exchange_rate > 0 AND exchange_rate != 1 THEN amount * exchange_rate ELSE NULL END)), 0) as total
+            f"""SELECT COALESCE(SUM({_SIGNED_SGD}), 0) as total
                FROM transactions
                WHERE DATE(transaction_date) >= ? AND DATE(transaction_date) <= ?
                AND (type IS NULL OR type = 'expense' OR type = 'refund')""",
@@ -1505,9 +1510,9 @@ class Storage:
     @_locked
     def get_trend_by_category(self, start_date: str, end_date: str) -> list[dict]:
         rows = self._conn.execute(
-            """SELECT DATE(transaction_date) as date,
+            f"""SELECT DATE(transaction_date) as date,
                       COALESCE(category, 'Other') as category,
-                      SUM((CASE WHEN type = 'refund' THEN -1 ELSE 1 END) * (CASE WHEN reporting_minor_units IS NOT NULL THEN reporting_minor_units / 100.0 WHEN currency = 'SGD' OR currency IS NULL THEN amount WHEN exchange_rate IS NOT NULL AND exchange_rate > 0 AND exchange_rate != 1 THEN amount * exchange_rate ELSE NULL END)) as amount
+                      SUM({_SIGNED_SGD}) as amount
                FROM transactions
                WHERE DATE(transaction_date) >= ? AND DATE(transaction_date) <= ?
                AND (type IS NULL OR type = 'expense' OR type = 'refund')
@@ -1738,9 +1743,9 @@ class Storage:
             WITH merchant_stats AS (
                 SELECT
                     t.merchant,
-                    ROUND(SUM((CASE WHEN t.type = 'refund' THEN -1 ELSE 1 END) * (CASE WHEN t.reporting_minor_units IS NOT NULL THEN t.reporting_minor_units / 100.0 WHEN t.currency = 'SGD' OR t.currency IS NULL THEN t.amount WHEN t.exchange_rate IS NOT NULL AND t.exchange_rate > 0 AND t.exchange_rate != 1 THEN t.amount * t.exchange_rate ELSE NULL END)), 2) as total_sgd,
+                    ROUND(SUM({_SIGNED_SGD_T}), 2) as total_sgd,
                     COUNT(*) FILTER (WHERE t.type IS NULL OR t.type = 'expense') as transaction_count,
-                    ROUND(AVG((CASE WHEN t.reporting_minor_units IS NOT NULL THEN t.reporting_minor_units / 100.0 WHEN t.currency = 'SGD' OR t.currency IS NULL THEN t.amount WHEN t.exchange_rate IS NOT NULL AND t.exchange_rate > 0 AND t.exchange_rate != 1 THEN t.amount * t.exchange_rate ELSE NULL END)) FILTER (WHERE t.type IS NULL OR t.type = 'expense'), 2) as avg_amount_sgd,
+                    ROUND(AVG({_SGD_T}) FILTER (WHERE t.type IS NULL OR t.type = 'expense'), 2) as avg_amount_sgd,
                     DATE(MIN(t.transaction_date)) as first_seen,
                     DATE(MAX(t.transaction_date)) as last_seen
                 FROM transactions t
@@ -1774,7 +1779,7 @@ class Storage:
         result = []
         for r in rows:
             d = dict(r)
-            d["tags"] = [t.strip() for t in d["tags"].split(",") if t.strip()]
+            d["tags"] = _parse_tags(d["tags"])
             result.append(d)
         return result
 
@@ -1782,13 +1787,13 @@ class Storage:
     def get_merchant_profile(self, merchant: str) -> dict | None:
         """Return full stats for a single merchant, or None if merchant has no transactions."""
         row = self._conn.execute(
-            """
+            f"""
             SELECT
                 t.merchant,
-                ROUND(SUM((CASE WHEN t.type = 'refund' THEN -1 ELSE 1 END) * (CASE WHEN t.reporting_minor_units IS NOT NULL THEN t.reporting_minor_units / 100.0 WHEN t.currency = 'SGD' OR t.currency IS NULL THEN t.amount WHEN t.exchange_rate IS NOT NULL AND t.exchange_rate > 0 AND t.exchange_rate != 1 THEN t.amount * t.exchange_rate ELSE NULL END)), 2) as total_sgd,
+                ROUND(SUM({_SIGNED_SGD_T}), 2) as total_sgd,
                 COUNT(*) as row_count,
                 COUNT(*) FILTER (WHERE t.type IS NULL OR t.type = 'expense') as transaction_count,
-                ROUND(AVG((CASE WHEN t.reporting_minor_units IS NOT NULL THEN t.reporting_minor_units / 100.0 WHEN t.currency = 'SGD' OR t.currency IS NULL THEN t.amount WHEN t.exchange_rate IS NOT NULL AND t.exchange_rate > 0 AND t.exchange_rate != 1 THEN t.amount * t.exchange_rate ELSE NULL END)) FILTER (WHERE t.type IS NULL OR t.type = 'expense'), 2) as avg_amount_sgd,
+                ROUND(AVG({_SGD_T}) FILTER (WHERE t.type IS NULL OR t.type = 'expense'), 2) as avg_amount_sgd,
                 DATE(MIN(t.transaction_date)) as first_seen,
                 DATE(MAX(t.transaction_date)) as last_seen
             FROM transactions t
@@ -1812,7 +1817,7 @@ class Storage:
         profile["tags"] = []
         profile["notes"] = ""
         if tags_row:
-            profile["tags"] = [t.strip() for t in (tags_row["tags"] or "").split(",") if t.strip()]
+            profile["tags"] = _parse_tags(tags_row["tags"])
             profile["notes"] = tags_row["notes"] or ""
         alias_row = self._conn.execute(
             "SELECT display_name FROM merchant_aliases WHERE merchant = ?", (merchant,)
@@ -1830,7 +1835,7 @@ class Storage:
             return {"merchant": merchant, "tags": [], "notes": ""}
         return {
             "merchant": merchant,
-            "tags": [t.strip() for t in (row["tags"] or "").split(",") if t.strip()],
+            "tags": _parse_tags(row["tags"]),
             "notes": row["notes"] or "",
         }
 
@@ -1948,9 +1953,9 @@ class Storage:
     def get_merchant_trend(self, merchant: str, months: int = 6) -> dict:
         """Return monthly spend totals for a merchant over the last N months."""
         rows = self._conn.execute(
-            """
+            f"""
             SELECT strftime('%Y-%m', transaction_date) as month,
-                   ROUND(SUM((CASE WHEN type = 'refund' THEN -1 ELSE 1 END) * (CASE WHEN reporting_minor_units IS NOT NULL THEN reporting_minor_units / 100.0 WHEN currency = 'SGD' OR currency IS NULL THEN amount WHEN exchange_rate IS NOT NULL AND exchange_rate > 0 AND exchange_rate != 1 THEN amount * exchange_rate ELSE NULL END)), 2) as total,
+                   ROUND(SUM({_SIGNED_SGD}), 2) as total,
                    COUNT(*) FILTER (WHERE type IS NULL OR type = 'expense') as count
             FROM transactions
             WHERE merchant = ?
@@ -2040,7 +2045,7 @@ class Storage:
 
             if b["category"] is None:
                 spent_row = self._conn.execute(
-                    """SELECT COALESCE(SUM((CASE WHEN type = 'refund' THEN -1 ELSE 1 END) * (CASE WHEN reporting_minor_units IS NOT NULL THEN reporting_minor_units / 100.0 WHEN currency = 'SGD' OR currency IS NULL THEN amount WHEN exchange_rate IS NOT NULL AND exchange_rate > 0 AND exchange_rate != 1 THEN amount * exchange_rate ELSE NULL END)), 0) as total
+                    f"""SELECT COALESCE(SUM({_SIGNED_SGD}), 0) as total
                        FROM transactions
                        WHERE (type IS NULL OR type = 'expense' OR type = 'refund')
                          AND DATE(transaction_date) BETWEEN ? AND ?""",
@@ -2048,7 +2053,7 @@ class Storage:
                 ).fetchone()
             else:
                 spent_row = self._conn.execute(
-                    """SELECT COALESCE(SUM((CASE WHEN type = 'refund' THEN -1 ELSE 1 END) * (CASE WHEN reporting_minor_units IS NOT NULL THEN reporting_minor_units / 100.0 WHEN currency = 'SGD' OR currency IS NULL THEN amount WHEN exchange_rate IS NOT NULL AND exchange_rate > 0 AND exchange_rate != 1 THEN amount * exchange_rate ELSE NULL END)), 0) as total
+                    f"""SELECT COALESCE(SUM({_SIGNED_SGD}), 0) as total
                        FROM transactions
                        WHERE (type IS NULL OR type = 'expense' OR type = 'refund') AND category = ?
                          AND DATE(transaction_date) BETWEEN ? AND ?""",
@@ -2308,20 +2313,19 @@ class Storage:
     @_locked
     def get_savings_overview(self, month: str) -> dict:
         """Return income, expenses, savings, and how much has been manually allocated to goals for the given month."""
-        import calendar as _cal
         year, mon = int(month[:4]), int(month[5:7])
-        last_day = _cal.monthrange(year, mon)[1]
+        last_day = calendar.monthrange(year, mon)[1]
         start = f"{month}-01"
         end = f"{month}-{last_day:02d}"
 
         income = self._conn.execute(
-            """SELECT COALESCE(SUM((CASE WHEN reporting_minor_units IS NOT NULL THEN reporting_minor_units / 100.0 WHEN currency = 'SGD' OR currency IS NULL THEN amount WHEN exchange_rate IS NOT NULL AND exchange_rate > 0 AND exchange_rate != 1 THEN amount * exchange_rate ELSE NULL END)), 0) as total
+            f"""SELECT COALESCE(SUM({_SGD}), 0) as total
                FROM transactions WHERE type = 'income'
                AND DATE(transaction_date) BETWEEN ? AND ?""",
             (start, end),
         ).fetchone()["total"]
         expenses = self._conn.execute(
-            """SELECT COALESCE(SUM((CASE WHEN type = 'refund' THEN -1 ELSE 1 END) * (CASE WHEN reporting_minor_units IS NOT NULL THEN reporting_minor_units / 100.0 WHEN currency = 'SGD' OR currency IS NULL THEN amount WHEN exchange_rate IS NOT NULL AND exchange_rate > 0 AND exchange_rate != 1 THEN amount * exchange_rate ELSE NULL END)), 0) as total
+            f"""SELECT COALESCE(SUM({_SIGNED_SGD}), 0) as total
                FROM transactions WHERE (type IS NULL OR type = 'expense' OR type = 'refund')
                AND DATE(transaction_date) BETWEEN ? AND ?""",
             (start, end),
@@ -2343,7 +2347,7 @@ class Storage:
     # ── Financial Health Score ──────────────────────────────────────────────
 
     @_locked
-    def get_health_score(self, months: int = 1, timezone="Asia/Singapore") -> dict:
+    def get_health_score(self, months: int = 1, timezone=DEFAULT_TIMEZONE) -> dict:
         from src.spending_facts import health_score
         multiplier = float(self.get_setting("anomaly_multiplier", "2.0"))
         return health_score(self._conn, months, None, timezone, multiplier)
@@ -2493,7 +2497,7 @@ class Storage:
             return None
 
         rows = self._conn.execute(
-            """SELECT (CASE WHEN t.reporting_minor_units IS NOT NULL THEN t.reporting_minor_units / 100.0 WHEN t.currency = 'SGD' OR t.currency IS NULL THEN t.amount WHEN t.exchange_rate IS NOT NULL AND t.exchange_rate > 0 AND t.exchange_rate != 1 THEN t.amount * t.exchange_rate ELSE NULL END) as amt_sgd,
+            f"""SELECT {_SGD_T} as amt_sgd,
                       t.category,
                       DATE(t.transaction_date) as tx_date,
                       t.currency,
@@ -2895,7 +2899,7 @@ class Storage:
     def _get_subscription_last_amount(self, sub_id: int) -> float | None:
         """Not locked — only called from within locked methods."""
         row = self._conn.execute(
-            """SELECT (CASE WHEN t.reporting_minor_units IS NOT NULL THEN t.reporting_minor_units / 100.0 WHEN t.currency = 'SGD' OR t.currency IS NULL THEN t.amount WHEN t.exchange_rate IS NOT NULL AND t.exchange_rate > 0 AND t.exchange_rate != 1 THEN t.amount * t.exchange_rate ELSE NULL END) AS sgd_amount
+            f"""SELECT {_SGD_T} AS sgd_amount
                FROM upcoming_transactions u
                JOIN transactions t ON t.id = u.matched_transaction_id
                WHERE u.subscription_id = ? AND u.status = 'matched'
@@ -3238,7 +3242,6 @@ class Storage:
         return generate_summary(self._conn, report_type)
 
 
-import secrets
 import random
 import string
 

@@ -1,7 +1,6 @@
 import asyncio
 import calendar
 import functools
-import json
 import logging
 import re
 import secrets
@@ -13,7 +12,7 @@ from telegram import BotCommand, InlineKeyboardButton, InlineKeyboardMarkup, Men
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ConversationHandler, ContextTypes, MessageHandler, filters
 
 from src.categorizer import Categorizer
-from src.config import local_now
+from src.config import DEFAULT_TIMEZONE, local_now
 from src.exchange import ExchangeRateService
 from src.storage import Storage, TransactionRequestConflict
 from src.spending_facts import resolve_money
@@ -115,7 +114,7 @@ class TelegramBotService:
         categorizer: Optional[Categorizer] = None,
         exchange_service: Optional[ExchangeRateService] = None,
         dashboard_url: str = "",
-        timezone: str = "Asia/Singapore",
+        timezone: str = DEFAULT_TIMEZONE,
         poller=None,
         oauth_redirect_uri: str = "",
         admin_storage=None,
@@ -826,13 +825,11 @@ class TelegramBotService:
         # Detect currency in the amount portion
         currency = "SGD"
         exchange_rate = 1.0
-        amount_text = context.args[0]
         if len(context.args) >= 2:
             # Check if second arg is a currency code
             from src.exchange import CURRENCY_CODES
             if context.args[1].upper() in CURRENCY_CODES:
                 currency = context.args[1].upper()
-                amount_text = f"{context.args[0]} {context.args[1]}"
                 # Rebuild text without currency for parse_add_command
                 text = " ".join([context.args[0]] + list(context.args[2:]))
                 rate_result = self.exchange_service.get_rate(currency) if self.exchange_service else None

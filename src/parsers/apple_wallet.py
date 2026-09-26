@@ -1,7 +1,7 @@
 import hashlib
 import re
 from datetime import datetime
-from typing import Optional, Any
+from typing import Optional
 from src.parsers.base import ParseResult
 
 

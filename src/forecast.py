@@ -6,6 +6,7 @@ not renamed, replaced, or deleted here — both remain available until the new
 method's backtested performance actually justifies retiring the old one.
 """
 import statistics
+import calendar
 from datetime import date, timedelta
 
 from src.config import DEFAULT_TIMEZONE, local_now
@@ -13,19 +14,14 @@ from src.config import DEFAULT_TIMEZONE, local_now
 # enforcement — reused here rather than reimplemented so the forecast agrees
 # with every other money surface on refund netting, transfer exclusion, and
 # canonical-money resolution by construction, not by parallel maintenance.
-from src.spending_facts import _period as period_totals, _rows as ledger_rows, _signed as signed_amount, convert_legacy_sgd, money, resolve_money
+from src.spending_facts import _period as period_totals, _rows as ledger_rows, _signed as signed_amount, money, resolve_money, sgd_minor
 
 LOOKBACK_WEEKS = 8
 MIN_ELIGIBLE_WEEKS = 4
 
 
 def _month_bounds(as_of: date) -> tuple[date, date]:
-    start = as_of.replace(day=1)
-    if start.month == 12:
-        end = start.replace(year=start.year + 1, month=1, day=1) - timedelta(days=1)
-    else:
-        end = start.replace(month=start.month + 1, day=1) - timedelta(days=1)
-    return start, end
+    return as_of.replace(day=1), as_of.replace(day=calendar.monthrange(as_of.year, as_of.month)[1])
 
 
 def _lookback_window(as_of: date, weeks: int = LOOKBACK_WEEKS) -> tuple[date, date]:
@@ -136,7 +132,7 @@ def month_forecast(conn, as_of: date | None = None, timezone: str = DEFAULT_TIME
         if row[0] is None:
             unpriced_count += 1
             continue
-        minor, _ = convert_legacy_sgd({"amount": row[0], "currency": "SGD"})
+        minor = sgd_minor(row[0])
         if minor is None:
             unpriced_count += 1
         else:
@@ -285,8 +281,7 @@ def scenario(conn, adjustments: list[dict], as_of: date | None = None, timezone:
                 else:
                     total = 0
                     for row in pending_rows:
-                        minor, _ = convert_legacy_sgd({"amount": row[0], "currency": "SGD"})
-                        total += minor or 0
+                        total += sgd_minor(row[0]) or 0
                     delta_minor = -total
 
         else:

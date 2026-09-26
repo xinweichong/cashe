@@ -50,7 +50,7 @@ def create_dashboard_app(
     exchange_service=None,
     host_base_url: str = "",
     llm_service=None,
-    timezone: str = "Asia/Singapore",
+    timezone: str = DEFAULT_TIMEZONE,
 ) -> FastAPI:
     app = FastAPI(title="Expense Tracker Dashboard")
     app.add_middleware(GZipMiddleware, minimum_size=500)

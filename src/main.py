@@ -6,7 +6,6 @@ import os
 import sys
 import sqlite3
 import threading
-from datetime import datetime, timedelta
 from pathlib import Path
 
 # Add project root to sys.path so `src.*` imports work when run directly
@@ -17,8 +16,8 @@ import atexit
 import uvicorn
 from apscheduler.schedulers.background import BackgroundScheduler
 
-from src.config import load_config
-from src.storage import Storage, AdminStorage
+from src.config import DEFAULT_TIMEZONE, load_config
+from src.storage import AdminStorage
 from src.parsers.dbs_paylah import DbsPaylahParser
 from src.parsers.uob import UobParser
 from src.telegram_bot import TelegramBotService
@@ -423,13 +422,13 @@ def main():
         exchange_service=exchange_service,
         dashboard_url=dashboard_url,
         oauth_redirect_uri=f"{dashboard_url.rstrip('/')}/oauth/callback",
-        timezone=config.get("timezone", "Asia/Singapore"),
+        timezone=config.get("timezone", DEFAULT_TIMEZONE),
         llm_service=llm_service,
     )
 
     parsers = [DbsPaylahParser(), UobParser()]
 
-    scheduler = BackgroundScheduler(timezone=config.get("timezone", "Asia/Singapore"))
+    scheduler = BackgroundScheduler(timezone=config.get("timezone", DEFAULT_TIMEZONE))
 
     from src.user_manager import UserManager
     user_manager = UserManager(
@@ -469,7 +468,7 @@ def main():
         exchange_service=exchange_service,
         host_base_url=dashboard_url,
         llm_service=llm_service,
-        timezone=config.get("timezone", "Asia/Singapore"),
+        timezone=config.get("timezone", DEFAULT_TIMEZONE),
     )
 
     # Admin app (user management)

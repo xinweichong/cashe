@@ -12,6 +12,7 @@ Raises whatever src.storage raises (ValueError, RevisionConflict,
 TransactionRequestConflict) — callers translate those into their own
 presentation layer.
 """
+from src.config import DEFAULT_TIMEZONE
 
 
 def _refund_evidence(tx: dict, *, warning: str | None = None) -> dict:
@@ -120,7 +121,7 @@ def create_manual(storage, **fields) -> dict:
     return to_v2(storage.get_transaction(tx_id), storage)
 
 
-def create_web(storage, body: dict, *, source_id: str, request_key=None, timezone="Asia/Singapore") -> dict:
+def create_web(storage, body: dict, *, source_id: str, request_key=None, timezone=DEFAULT_TIMEZONE) -> dict:
     tx = storage.create_web_transaction(body, source_id=source_id, request_key=request_key, timezone=timezone)
     return to_v2(tx, storage)
 

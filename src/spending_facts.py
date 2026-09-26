@@ -58,6 +58,13 @@ def convert_legacy_sgd(row: dict) -> tuple[int | None, str]:
         return None, "unresolved"
 
 
+def sgd_minor(amount) -> int | None:
+    """An SGD amount (e.g. a planned charge's expected amount) in minor
+    units; None when it is missing, invalid or negative."""
+    minor, _ = convert_legacy_sgd({"amount": amount, "currency": "SGD"})
+    return minor
+
+
 def resolve_money(row: dict) -> tuple[int | None, str]:
     """Prefer the canonical reporting_minor_units/conversion_status Storage
     already computed at write time (single source of truth); a NULL

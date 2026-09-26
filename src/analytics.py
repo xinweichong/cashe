@@ -1,5 +1,6 @@
 """Analytics computation module — pure functions that query the transactions table."""
 
+import calendar
 import sqlite3
 from datetime import datetime, timedelta
 from typing import Any
@@ -14,10 +15,7 @@ def _get_month_range(date_str: str | None = None, now: datetime | None = None):
     else:
         d = now if now is not None else local_now()
     start = d.replace(day=1)
-    if d.month == 12:
-        end = d.replace(year=d.year + 1, month=1, day=1) - timedelta(days=1)
-    else:
-        end = d.replace(month=d.month + 1, day=1) - timedelta(days=1)
+    end = d.replace(day=calendar.monthrange(d.year, d.month)[1])
     return start.strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d")
 
 
@@ -188,10 +186,7 @@ def get_merchant_trend(
 
     now = now if now is not None else local_now()
     current_month_str = now.strftime("%Y-%m")
-    if now.month == 1:
-        prev_month_str = now.replace(year=now.year - 1, month=12).strftime("%Y-%m")
-    else:
-        prev_month_str = now.replace(month=now.month - 1).strftime("%Y-%m")
+    prev_month_str = (now.replace(day=1) - timedelta(days=1)).strftime("%Y-%m")
 
     months_by_key = {m["month"]: m["total"] for m in months}
     current_month = months_by_key.get(current_month_str, 0)
@@ -215,25 +210,15 @@ def get_spending_velocity(conn: sqlite3.Connection, now: datetime | None = None)
     mtd_start = now.replace(day=1).strftime("%Y-%m-%d")
 
     # Last month range
-    if now.month == 1:
-        last_start = now.replace(year=now.year - 1, month=12, day=1)
-    else:
-        last_start = now.replace(month=now.month - 1, day=1)
-    if last_start.month == 12:
-        last_end = last_start.replace(year=last_start.year + 1, month=1, day=1) - timedelta(days=1)
-    else:
-        last_end = last_start.replace(month=last_start.month + 1, day=1) - timedelta(days=1)
+    last_end = now.replace(day=1) - timedelta(days=1)
+    last_start = last_end.replace(day=1)
 
     current_mtd = _query_total(conn, mtd_start, today)
     last_month_total = _query_total(conn, last_start.strftime("%Y-%m-%d"), last_end.strftime("%Y-%m-%d"))
 
     # Project: if we're on day X of N days in the month, project based on daily rate
-    if now.month < 12:
-        days_in_month_end = now.replace(month=now.month + 1, day=1) - timedelta(days=1)
-    else:
-        days_in_month_end = now.replace(year=now.year + 1, month=1, day=1) - timedelta(days=1)
     days_elapsed = now.day
-    total_days = days_in_month_end.day
+    total_days = calendar.monthrange(now.year, now.month)[1]
 
     daily_rate = current_mtd / days_elapsed if days_elapsed > 0 else 0
     projected_total = daily_rate * total_days

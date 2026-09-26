@@ -9,6 +9,8 @@ import json
 import logging
 from typing import Optional
 
+from src.config import DEFAULT_TIMEZONE
+
 logger = logging.getLogger(__name__)
 
 
@@ -37,7 +39,7 @@ class LLMService:
         )
         return response.text.strip()
 
-    def parse_telegram_message(self, text: str, categories: list[str], timezone: str = "Asia/Singapore") -> Optional[dict]:
+    def parse_telegram_message(self, text: str, categories: list[str], timezone: str = DEFAULT_TIMEZONE) -> Optional[dict]:
         """Parse free-text transaction message into structured fields.
 
         Returns {amount, currency, merchant, date, category_hint, confidence}

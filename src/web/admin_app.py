@@ -5,7 +5,7 @@ import secrets
 import string
 from datetime import datetime, timedelta, timezone
 
-from fastapi import FastAPI, Request, Response, HTTPException, Depends
+from fastapi import FastAPI, Request, HTTPException, Depends
 from fastapi.responses import JSONResponse, FileResponse
 
 logger = logging.getLogger(__name__)

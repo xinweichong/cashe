@@ -9,6 +9,7 @@ import sqlite3
 from dataclasses import dataclass
 from typing import Optional
 
+from src.config import DEFAULT_TIMEZONE
 from src.subscriptions import SubscriptionMatcher
 
 logger = logging.getLogger(__name__)
@@ -242,7 +243,7 @@ class UserManager:
         if self._scheduler is None:
             return
         ctx = self.get(username)
-        tz = self._config.get("timezone", "Asia/Singapore")
+        tz = self._config.get("timezone", DEFAULT_TIMEZONE)
         bot = self._bot
 
         def weekly():

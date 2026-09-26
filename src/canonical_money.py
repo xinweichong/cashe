@@ -28,16 +28,29 @@ class CanonicalTransactionMoney(TypedDict):
     conversion_quoted_at: Optional[str]
 
 
-def _empty(issue: str) -> CanonicalTransactionMoney:
+def _result(
+    original: Optional[int] = None,
+    reporting: Optional[int] = None,
+    *,
+    status: Optional[str] = None,
+    rate: Optional[str] = None,
+    source: Optional[str] = None,
+    quoted_at: Optional[str] = None,
+    issue: Optional[str] = None,
+) -> CanonicalTransactionMoney:
     return {
         "issue": issue,
-        "original_minor_units": None,
-        "reporting_minor_units": None,
-        "conversion_status": None,
-        "conversion_rate": None,
-        "conversion_source": None,
-        "conversion_quoted_at": None,
+        "original_minor_units": original,
+        "reporting_minor_units": reporting,
+        "conversion_status": status,
+        "conversion_rate": rate,
+        "conversion_source": source,
+        "conversion_quoted_at": quoted_at,
     }
+
+
+def _empty(issue: str) -> CanonicalTransactionMoney:
+    return _result(issue=issue)
 
 
 def compute_transaction_canonical(
@@ -74,38 +87,15 @@ def compute_transaction_canonical(
         return _empty("unknown_currency")
 
     if currency == "SGD":
-        return {
-            "issue": None,
-            "original_minor_units": original_minor,
-            "reporting_minor_units": original_minor,
-            "conversion_status": "native",
-            "conversion_rate": "1",
-            "conversion_source": "native",
-            "conversion_quoted_at": None,
-        }
+        return _result(original_minor, original_minor, status="native", rate="1", source="native")
 
     if rate_override is not None:
         if rate_override.status == "unresolved" or rate_override.rate is None:
-            return {
-                "issue": None,
-                "original_minor_units": original_minor,
-                "reporting_minor_units": None,
-                "conversion_status": "unresolved",
-                "conversion_rate": None,
-                "conversion_source": None,
-                "conversion_quoted_at": None,
-            }
+            return _result(original_minor, status="unresolved")
         rate_dec = Decimal(str(rate_override.rate))
         reporting_minor = to_minor_units(amount_dec * rate_dec, "SGD")
-        return {
-            "issue": None,
-            "original_minor_units": original_minor,
-            "reporting_minor_units": reporting_minor,
-            "conversion_status": rate_override.status,
-            "conversion_rate": str(rate_dec),
-            "conversion_source": rate_override.source,
-            "conversion_quoted_at": quoted_at,
-        }
+        return _result(original_minor, reporting_minor, status=rate_override.status,
+                       rate=str(rate_dec), source=rate_override.source, quoted_at=quoted_at)
 
     rate_ok = (
         exchange_rate is not None
@@ -117,24 +107,9 @@ def compute_transaction_canonical(
         and exchange_rate != 1
     )
     if not rate_ok:
-        return {
-            "issue": None,
-            "original_minor_units": original_minor,
-            "reporting_minor_units": None,
-            "conversion_status": "unresolved",
-            "conversion_rate": None,
-            "conversion_source": None,
-            "conversion_quoted_at": None,
-        }
+        return _result(original_minor, status="unresolved")
 
     rate_dec = Decimal(str(exchange_rate))
     reporting_minor = to_minor_units(amount_dec * rate_dec, "SGD")
-    return {
-        "issue": None,
-        "original_minor_units": original_minor,
-        "reporting_minor_units": reporting_minor,
-        "conversion_status": "indicative",
-        "conversion_rate": str(rate_dec),
-        "conversion_source": "legacy_backfill",
-        "conversion_quoted_at": None,
-    }
+    return _result(original_minor, reporting_minor, status="indicative",
+                   rate=str(rate_dec), source="legacy_backfill")

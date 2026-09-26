@@ -11,24 +11,6 @@ class TestExchangeRateService:
         result = svc.get_rate("SGD")
         assert result == RateResult(status="native", rate=1.0, source="native")
 
-    def test_parse_currency_detects_thb(self):
-        svc = ExchangeRateService()
-        amount, currency = svc.parse_currency_amount("500 THB")
-        assert amount == 500.0
-        assert currency == "THB"
-
-    def test_parse_currency_no_currency_returns_sgd(self):
-        svc = ExchangeRateService()
-        amount, currency = svc.parse_currency_amount("12.50")
-        assert amount == 12.50
-        assert currency == "SGD"
-
-    def test_parse_currency_jpy(self):
-        svc = ExchangeRateService()
-        amount, currency = svc.parse_currency_amount("2000 JPY")
-        assert amount == 2000.0
-        assert currency == "JPY"
-
     def test_fallback_rate_is_labeled_indicative_not_resolved(self):
         svc = ExchangeRateService()
         svc._rates = {}  # Empty cache, no fetch
@@ -37,30 +19,6 @@ class TestExchangeRateService:
         assert result.status == "indicative"
         assert result.rate == FALLBACK_RATES["THB"]
         assert result.source == "fallback"
-
-    def test_parse_currency_invalid_amount(self):
-        svc = ExchangeRateService()
-        amount, currency = svc.parse_currency_amount("abc")
-        assert amount == 0.0
-        assert currency == "SGD"
-
-    def test_parse_currency_usd(self):
-        svc = ExchangeRateService()
-        amount, currency = svc.parse_currency_amount("100 USD")
-        assert amount == 100.0
-        assert currency == "USD"
-
-    def test_parse_currency_case_insensitive(self):
-        svc = ExchangeRateService()
-        amount, currency = svc.parse_currency_amount("500 thb")
-        assert amount == 500.0
-        assert currency == "THB"
-
-    def test_parse_currency_unknown_code_defaults_sgd(self):
-        svc = ExchangeRateService()
-        amount, currency = svc.parse_currency_amount("500 XYZ")
-        assert amount == 500.0
-        assert currency == "SGD"
 
     def test_get_rate_unknown_but_has_fallback_is_indicative(self):
         svc = ExchangeRateService()

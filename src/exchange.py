@@ -28,6 +28,8 @@ class RateResult:
     rate: Optional[float] = None
     source: Optional[str] = None
 
+# Currencies Telegram accepts after an amount ("12 THB") — deliberately a
+# short list of travel currencies, not every code src/money.py can store.
 CURRENCY_CODES = {
     "USD", "EUR", "GBP", "JPY", "THB", "MYR", "IDR", "PHP",
     "VND", "CNY", "HKD", "TWD", "KRW", "AUD", "NZD", "CAD",
@@ -97,13 +99,3 @@ class ExchangeRateService:
             return RateResult(status="indicative", rate=fallback, source="fallback")
         logger.warning("No rate or fallback for %s; unresolved", currency)
         return RateResult(status="unresolved")
-
-    def parse_currency_amount(self, text: str) -> tuple[float, str]:
-        parts = text.strip().split()
-        try:
-            amount = float(parts[0])
-        except (ValueError, IndexError):
-            return (0.0, "SGD")
-        if len(parts) >= 2 and parts[1].upper() in CURRENCY_CODES:
-            return (amount, parts[1].upper())
-        return (amount, "SGD")
