@@ -11,35 +11,15 @@ from datetime import datetime, timedelta, timezone, date
 from typing import Optional
 
 from src.config import DEFAULT_TIMEZONE, local_now
+from src.spending_facts import SGD_SQL, SGD_SQL_T, SIGNED_SGD_SQL, SIGNED_SGD_SQL_T, sgd_sql
 from src.transaction_validation import normalize_transaction_fields
 
 _VALID_TYPES: frozenset[str] = frozenset({"needs", "wants", "neutral"})
 
 
-def _sgd_sql(alias: str = "") -> str:
-    """SQL for a row's SGD amount: the read-time twin of
-    spending_facts.resolve_money. Canonical reporting_minor_units first, then
-    an SGD face value, then a real (non-1.0) exchange rate; NULL when the
-    conversion is unresolved."""
-    c = f"{alias}." if alias else ""
-    return (
-        f"(CASE WHEN {c}reporting_minor_units IS NOT NULL THEN {c}reporting_minor_units / 100.0 "
-        f"WHEN {c}currency = 'SGD' OR {c}currency IS NULL THEN {c}amount "
-        f"WHEN {c}exchange_rate IS NOT NULL AND {c}exchange_rate > 0 AND {c}exchange_rate != 1 "
-        f"THEN {c}amount * {c}exchange_rate ELSE NULL END)"
-    )
-
-
 def _parse_tags(tags: str | None) -> list[str]:
     """merchant_tags.tags is a comma-separated string."""
     return [t.strip() for t in (tags or "").split(",") if t.strip()]
-
-
-_SGD = _sgd_sql()
-_SGD_T = _sgd_sql("t")
-# Refunds count against spending.
-_SIGNED_SGD = f"(CASE WHEN type = 'refund' THEN -1 ELSE 1 END) * {_SGD}"
-_SIGNED_SGD_T = f"(CASE WHEN t.type = 'refund' THEN -1 ELSE 1 END) * {_SGD_T}"
 
 
 def _locked(method):
@@ -220,7 +200,7 @@ class Storage:
         if needs_review:
             conditions.append(
                 f"""(DATE(transactions.transaction_date) IS NULL
-                    OR {_sgd_sql("transactions")} IS NULL
+                    OR {sgd_sql("transactions")} IS NULL
                     OR COALESCE(transactions.type, 'expense') NOT IN ('expense', 'refund', 'income')
                     OR transactions.merchant IS NULL OR transactions.category IS NULL)"""
             )
@@ -1477,7 +1457,7 @@ class Storage:
         self, start_date: str, end_date: str
     ) -> dict:
         rows = self._conn.execute(
-            f"""SELECT category, SUM({_SIGNED_SGD}) as total
+            f"""SELECT category, SUM({SIGNED_SGD_SQL}) as total
                FROM transactions
                WHERE DATE(transaction_date) >= ? AND DATE(transaction_date) <= ?
                AND (type IS NULL OR type = 'expense' OR type = 'refund')
@@ -1493,7 +1473,7 @@ class Storage:
     @_locked
     def get_income_summary(self, start_date: str, end_date: str) -> dict:
         rows = self._conn.execute(
-            f"""SELECT category, SUM({_SGD}) as total
+            f"""SELECT category, SUM({SGD_SQL}) as total
                FROM transactions
                WHERE DATE(transaction_date) >= ? AND DATE(transaction_date) <= ?
                AND type = 'income'
@@ -1513,7 +1493,7 @@ class Storage:
     def get_merchant_ranking(self, start_date: str, end_date: str, limit: int = 10, category: str | None = None) -> list[dict]:
         rows = self._conn.execute(
             f"""SELECT merchant, COUNT(*) FILTER (WHERE type IS NULL OR type = 'expense') as visits,
-                      SUM({_SIGNED_SGD}) as total
+                      SUM({SIGNED_SGD_SQL}) as total
                FROM transactions
                WHERE DATE(transaction_date) >= ? AND DATE(transaction_date) <= ?
                AND merchant IS NOT NULL AND (type IS NULL OR type = 'expense' OR type = 'refund')
@@ -1526,7 +1506,7 @@ class Storage:
     @_locked
     def get_average_daily(self, start_date: str, end_date: str) -> float:
         row = self._conn.execute(
-            f"""SELECT COALESCE(SUM({_SIGNED_SGD}), 0) as total
+            f"""SELECT COALESCE(SUM({SIGNED_SGD_SQL}), 0) as total
                FROM transactions
                WHERE DATE(transaction_date) >= ? AND DATE(transaction_date) <= ?
                AND (type IS NULL OR type = 'expense' OR type = 'refund')""",
@@ -1543,7 +1523,7 @@ class Storage:
         rows = self._conn.execute(
             f"""SELECT DATE(transaction_date) as date,
                       COALESCE(category, 'Other') as category,
-                      SUM({_SIGNED_SGD}) as amount
+                      SUM({SIGNED_SGD_SQL}) as amount
                FROM transactions
                WHERE DATE(transaction_date) >= ? AND DATE(transaction_date) <= ?
                AND (type IS NULL OR type = 'expense' OR type = 'refund')
@@ -1788,9 +1768,9 @@ class Storage:
             WITH merchant_stats AS (
                 SELECT
                     t.merchant,
-                    ROUND(SUM({_SIGNED_SGD_T}), 2) as total_sgd,
+                    ROUND(SUM({SIGNED_SGD_SQL_T}), 2) as total_sgd,
                     COUNT(*) FILTER (WHERE t.type IS NULL OR t.type = 'expense') as transaction_count,
-                    ROUND(AVG({_SGD_T}) FILTER (WHERE t.type IS NULL OR t.type = 'expense'), 2) as avg_amount_sgd,
+                    ROUND(AVG({SGD_SQL_T}) FILTER (WHERE t.type IS NULL OR t.type = 'expense'), 2) as avg_amount_sgd,
                     DATE(MIN(t.transaction_date)) as first_seen,
                     DATE(MAX(t.transaction_date)) as last_seen
                 FROM transactions t
@@ -1835,10 +1815,10 @@ class Storage:
             f"""
             SELECT
                 t.merchant,
-                ROUND(SUM({_SIGNED_SGD_T}), 2) as total_sgd,
+                ROUND(SUM({SIGNED_SGD_SQL_T}), 2) as total_sgd,
                 COUNT(*) as row_count,
                 COUNT(*) FILTER (WHERE t.type IS NULL OR t.type = 'expense') as transaction_count,
-                ROUND(AVG({_SGD_T}) FILTER (WHERE t.type IS NULL OR t.type = 'expense'), 2) as avg_amount_sgd,
+                ROUND(AVG({SGD_SQL_T}) FILTER (WHERE t.type IS NULL OR t.type = 'expense'), 2) as avg_amount_sgd,
                 DATE(MIN(t.transaction_date)) as first_seen,
                 DATE(MAX(t.transaction_date)) as last_seen
             FROM transactions t
@@ -2000,7 +1980,7 @@ class Storage:
         rows = self._conn.execute(
             f"""
             SELECT strftime('%Y-%m', transaction_date) as month,
-                   ROUND(SUM({_SIGNED_SGD}), 2) as total,
+                   ROUND(SUM({SIGNED_SGD_SQL}), 2) as total,
                    COUNT(*) FILTER (WHERE type IS NULL OR type = 'expense') as count
             FROM transactions
             WHERE merchant = ?
@@ -2090,7 +2070,7 @@ class Storage:
 
             # A NULL category is the overall budget: every category counts.
             spent = self._conn.execute(
-                f"""SELECT COALESCE(SUM({_SIGNED_SGD}), 0) as total
+                f"""SELECT COALESCE(SUM({SIGNED_SGD_SQL}), 0) as total
                    FROM transactions
                    WHERE (type IS NULL OR type = 'expense' OR type = 'refund')
                      AND (? IS NULL OR category = ?)
@@ -2359,13 +2339,13 @@ class Storage:
         end = f"{month}-{last_day:02d}"
 
         income = self._conn.execute(
-            f"""SELECT COALESCE(SUM({_SGD}), 0) as total
+            f"""SELECT COALESCE(SUM({SGD_SQL}), 0) as total
                FROM transactions WHERE type = 'income'
                AND DATE(transaction_date) BETWEEN ? AND ?""",
             (start, end),
         ).fetchone()["total"]
         expenses = self._conn.execute(
-            f"""SELECT COALESCE(SUM({_SIGNED_SGD}), 0) as total
+            f"""SELECT COALESCE(SUM({SIGNED_SGD_SQL}), 0) as total
                FROM transactions WHERE (type IS NULL OR type = 'expense' OR type = 'refund')
                AND DATE(transaction_date) BETWEEN ? AND ?""",
             (start, end),
@@ -2544,7 +2524,7 @@ class Storage:
             return None
 
         rows = self._conn.execute(
-            f"""SELECT {_SGD_T} as amt_sgd,
+            f"""SELECT {SGD_SQL_T} as amt_sgd,
                       t.category,
                       DATE(t.transaction_date) as tx_date,
                       t.currency,
@@ -2856,7 +2836,7 @@ class Storage:
         only called from within locked methods."""
         rows = self._conn.execute(
             f"""SELECT subscription_id, sgd_amount FROM (
-                   SELECT u.subscription_id, {_SGD_T} AS sgd_amount,
+                   SELECT u.subscription_id, {SGD_SQL_T} AS sgd_amount,
                           ROW_NUMBER() OVER (PARTITION BY u.subscription_id ORDER BY t.transaction_date DESC) AS rn
                    FROM upcoming_transactions u JOIN transactions t ON t.id = u.matched_transaction_id
                    WHERE u.status = 'matched')

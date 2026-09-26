@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from src.config import local_now
+from src.spending_facts import SGD_SQL, SIGNED_SGD_SQL
 
 
 def _get_month_range(date_str: str | None = None, now: datetime | None = None):
@@ -43,18 +44,18 @@ def _get_previous_period(start: str, end: str):
 def _query_total(conn: sqlite3.Connection, start: str, end: str, category: str | None = None):
     """Query total spending for a date range, optionally filtered by category.
 
-    Uses reporting_minor_units (R02 canonical money, computed once at write
-    time) rather than amount * exchange_rate: a legacy exchange_rate of 1.0
-    is a silent unresolved fallback, not real conversion evidence, and the
-    raw multiplication has no currency validation. reporting_minor_units is
-    NULL for anything unresolved, which SUM already excludes.
+    Money goes through SIGNED_SGD_SQL, the same SGD rule as Storage's
+    aggregates and spending_facts.resolve_money: canonical
+    reporting_minor_units first, then an SGD face value, then a real
+    (non-1.0) exchange rate. Anything unresolved is NULL, which SUM skips —
+    a legacy 1.0 rate is never taken as conversion evidence.
 
     A refund (R05) nets against spending in its own period/category —
     never retroactively rewriting the original purchase's — so it's
     included here with its sign flipped, not excluded like a transfer.
     """
-    query = """
-        SELECT COALESCE(SUM(CASE WHEN type = 'refund' THEN -reporting_minor_units ELSE reporting_minor_units END), 0) / 100.0 as total
+    query = f"""
+        SELECT COALESCE(SUM({SIGNED_SGD_SQL}), 0) as total
         FROM transactions
         WHERE (type IS NULL OR type = 'expense' OR type = 'refund')
           AND DATE(transaction_date) >= ? AND DATE(transaction_date) <= ?
@@ -70,8 +71,8 @@ def _query_total(conn: sqlite3.Connection, start: str, end: str, category: str |
 def _category_totals(conn: sqlite3.Connection, start: str, end: str) -> dict[str, float]:
     """_query_total for every category at once."""
     rows = conn.execute(
-        """SELECT category,
-                  COALESCE(SUM(CASE WHEN type = 'refund' THEN -reporting_minor_units ELSE reporting_minor_units END), 0) / 100.0 AS total
+        f"""SELECT category,
+                  COALESCE(SUM({SIGNED_SGD_SQL}), 0) AS total
            FROM transactions
            WHERE (type IS NULL OR type = 'expense' OR type = 'refund') AND category IS NOT NULL
              AND DATE(transaction_date) >= ? AND DATE(transaction_date) <= ?
@@ -161,11 +162,11 @@ def get_top_merchants(
         start, end = _get_month_range(date)
 
     rows = conn.execute(
-        """
+        f"""
         SELECT merchant,
                COUNT(*) FILTER (WHERE type IS NULL OR type = 'expense') as count,
-               ROUND(COALESCE(SUM(CASE WHEN type = 'refund' THEN -reporting_minor_units ELSE reporting_minor_units END), 0) / 100.0, 2) as total,
-               ROUND(COALESCE(AVG(reporting_minor_units) FILTER (WHERE type IS NULL OR type = 'expense'), 0) / 100.0, 2) as avg_amount
+               ROUND(COALESCE(SUM({SIGNED_SGD_SQL}), 0), 2) as total,
+               ROUND(COALESCE(AVG({SGD_SQL}) FILTER (WHERE type IS NULL OR type = 'expense'), 0), 2) as avg_amount
         FROM transactions
         WHERE (type IS NULL OR type = 'expense' OR type = 'refund')
           AND merchant IS NOT NULL
@@ -185,9 +186,9 @@ def get_merchant_trend(
 ) -> dict:
     """Get spending trend for a specific merchant across months (ASC order for charting)."""
     rows = conn.execute(
-        """
+        f"""
         SELECT strftime('%Y-%m', transaction_date) as month,
-               ROUND(COALESCE(SUM(CASE WHEN type = 'refund' THEN -reporting_minor_units ELSE reporting_minor_units END), 0) / 100.0, 2) as total,
+               ROUND(COALESCE(SUM({SIGNED_SGD_SQL}), 0), 2) as total,
                COUNT(*) FILTER (WHERE type IS NULL OR type = 'expense') as count
         FROM transactions
         WHERE (type IS NULL OR type = 'expense' OR type = 'refund') AND merchant = ?
@@ -325,8 +326,8 @@ def generate_summary(
     ).fetchone()
 
     top_cat = conn.execute(
-        """
-        SELECT category, ROUND(COALESCE(SUM(CASE WHEN type = 'refund' THEN -reporting_minor_units ELSE reporting_minor_units END), 0) / 100.0, 2) as total
+        f"""
+        SELECT category, ROUND(COALESCE(SUM({SIGNED_SGD_SQL}), 0), 2) as total
         FROM transactions
         WHERE type IN ('expense', 'refund') AND category IS NOT NULL
           AND DATE(transaction_date) >= ? AND DATE(transaction_date) <= ?
@@ -337,11 +338,11 @@ def generate_summary(
     ).fetchone()
 
     biggest = conn.execute(
-        """
+        f"""
         SELECT merchant, amount, currency, category, transaction_date
         FROM transactions
         WHERE type='expense' AND DATE(transaction_date) >= ? AND DATE(transaction_date) <= ?
-        ORDER BY reporting_minor_units DESC LIMIT 1
+        ORDER BY {SGD_SQL} DESC LIMIT 1
         """,
         [start, end],
     ).fetchone()

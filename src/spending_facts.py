@@ -81,6 +81,27 @@ def resolve_money(row: dict) -> tuple[int | None, str]:
         return None, "unresolved"
     return convert_legacy_sgd(row)
 
+def sgd_sql(alias: str = "") -> str:
+    """SQL for a row's SGD amount: the read-time twin of
+    resolve_money. Canonical reporting_minor_units first, then
+    an SGD face value, then a real (non-1.0) exchange rate; NULL when the
+    conversion is unresolved."""
+    c = f"{alias}." if alias else ""
+    return (
+        f"(CASE WHEN {c}reporting_minor_units IS NOT NULL THEN {c}reporting_minor_units / 100.0 "
+        f"WHEN {c}currency = 'SGD' OR {c}currency IS NULL THEN {c}amount "
+        f"WHEN {c}exchange_rate IS NOT NULL AND {c}exchange_rate > 0 AND {c}exchange_rate != 1 "
+        f"THEN {c}amount * {c}exchange_rate ELSE NULL END)"
+    )
+
+
+SGD_SQL = sgd_sql()
+SGD_SQL_T = sgd_sql("t")
+# Refunds count against spending.
+SIGNED_SGD_SQL = f"(CASE WHEN type = 'refund' THEN -1 ELSE 1 END) * {SGD_SQL}"
+SIGNED_SGD_SQL_T = f"(CASE WHEN t.type = 'refund' THEN -1 ELSE 1 END) * {SGD_SQL_T}"
+
+
 
 def _rows(conn, start: date, end: date, timezone: str) -> list[dict]:
     tz = ZoneInfo(timezone)

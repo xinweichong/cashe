@@ -439,3 +439,19 @@ class TestTimezoneAwareDateRanges:
         result = get_spending_velocity(conn, now=now)
         assert result["current_mtd"] == 120.0
         conn.close()
+
+
+def test_query_total_counts_a_legacy_sgd_row_like_every_other_total(in_memory_db):
+    """A pre-canonical-money SGD row (no reporting_minor_units) counts at face
+    value here too, as it does in Storage's aggregates and spending_facts —
+    it used to be silently dropped from analytics totals only."""
+    from src.analytics import _query_total
+    in_memory_db.execute(
+        "INSERT INTO transactions (source, source_id, amount, currency, exchange_rate, merchant, transaction_date, type) "
+        "VALUES ('manual', 'legacy-1', 12.5, 'SGD', 1.0, 'Cafe', '2026-04-10', 'expense')"
+    )
+    in_memory_db.execute(
+        "INSERT INTO transactions (source, source_id, amount, currency, exchange_rate, merchant, transaction_date, type) "
+        "VALUES ('manual', 'legacy-thb', 300.0, 'THB', 1.0, 'Stall', '2026-04-10', 'expense')"
+    )
+    assert _query_total(in_memory_db, "2026-04-01", "2026-04-30") == 12.5
