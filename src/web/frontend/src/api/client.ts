@@ -297,6 +297,18 @@ export interface Anomaly {
   explanation?: string;
 }
 
+/** GET and PUT /api/settings (src/web/app.py SETTINGS). */
+export interface AppSettings {
+  anomaly_multiplier: number;
+  velocity_alert_threshold: number;
+  budgets_enabled: boolean;
+  goals_enabled: boolean;
+  trips_enabled: boolean;
+  subscriptions_enabled: boolean;
+  recurring_enabled: boolean;
+  home_briefing_enabled: boolean;
+}
+
 export const api = {
   // Auth
   login: (username: string, password: string) =>
@@ -554,37 +566,10 @@ export const api = {
     request<{ status: string }>(`/api/budgets/${id}`, { method: 'DELETE' }),
 
   // App Settings
-  getSettings: () =>
-    request<{
-      anomaly_multiplier: number;
-      velocity_alert_threshold: number;
-      budgets_enabled: boolean;
-      goals_enabled: boolean;
-      trips_enabled: boolean;
-      subscriptions_enabled: boolean;
-      recurring_enabled: boolean;
-      home_briefing_enabled: boolean;
-    }>('/api/settings'),
+  getSettings: () => request<AppSettings>('/api/settings'),
 
-  updateSettings: (data: {
-    anomaly_multiplier?: number;
-    velocity_alert_threshold?: number;
-    budgets_enabled?: boolean;
-    goals_enabled?: boolean;
-    trips_enabled?: boolean;
-    subscriptions_enabled?: boolean;
-    recurring_enabled?: boolean;
-    home_briefing_enabled?: boolean;
-  }) =>
-    request<{
-      anomaly_multiplier: number;
-      velocity_alert_threshold: number;
-      budgets_enabled: boolean;
-      goals_enabled: boolean;
-      trips_enabled: boolean;
-      subscriptions_enabled: boolean;
-      recurring_enabled: boolean;
-    }>('/api/settings', {
+  updateSettings: (data: Partial<AppSettings>) =>
+    request<AppSettings>('/api/settings', {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
