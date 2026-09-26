@@ -274,8 +274,8 @@ class TestSubscriptionsCommand:
 class TestYesterdayCommand:
     @pytest.mark.asyncio
     async def test_yesterday_sends_message_for_yesterday(self, bot_service):
-        from datetime import datetime, timedelta
-        yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+        from datetime import timedelta
+        yesterday = (bot_service._local_now() - timedelta(days=1)).strftime("%Y-%m-%d")
         bot_service.format_daily_summary = MagicMock(return_value=f"No transactions on {yesterday}")
 
         update = MagicMock()
@@ -939,40 +939,37 @@ def make_query_mock(data: str):
     return query
 
 
-def test_apply_category_update_sets_category(bot_with_storage):
+@pytest.mark.asyncio
+async def test_apply_category_update_sets_category(bot_with_storage):
     bot, storage = bot_with_storage
     tx_id = storage._conn.execute("SELECT id FROM transactions WHERE source_id='apply-cat-1'").fetchone()["id"]
     query = make_query_mock(f"cat:{tx_id}:Food")
 
-    asyncio.get_event_loop().run_until_complete(
-        bot._apply_category_update(tx_id, "Food", query)
-    )
+    await bot._apply_category_update(tx_id, "Food", query)
 
     updated = storage.get_transaction(tx_id)
     assert updated["category"] == "Food"
 
 
-def test_apply_category_update_preserves_existing_merchant_override(bot_with_storage):
+@pytest.mark.asyncio
+async def test_apply_category_update_preserves_existing_merchant_override(bot_with_storage):
     bot, storage = bot_with_storage
     tx_id = storage._conn.execute("SELECT id FROM transactions WHERE source_id='apply-cat-1'").fetchone()["id"]
     query = make_query_mock(f"cat:{tx_id}:Food")
 
-    asyncio.get_event_loop().run_until_complete(
-        bot._apply_category_update(tx_id, "Food", query)
-    )
+    await bot._apply_category_update(tx_id, "Food", query)
 
     overrides = storage.get_merchant_overrides()
     assert overrides == {}
     assert "--remember" in query.edit_message_text.call_args.args[0]
 
 
-def test_apply_category_update_notifies_transaction_not_found(bot_with_storage):
+@pytest.mark.asyncio
+async def test_apply_category_update_notifies_transaction_not_found(bot_with_storage):
     bot, storage = bot_with_storage
     query = make_query_mock("cat:99999:Food")
 
-    asyncio.get_event_loop().run_until_complete(
-        bot._apply_category_update(99999, "Food", query)
-    )
+    await bot._apply_category_update(99999, "Food", query)
 
     query.edit_message_text.assert_called_once_with("Transaction not found.")
 
@@ -1040,52 +1037,56 @@ def _make_update(chat_id: int, args: list = None):
 
 
 class TestStartCommand:
-    def test_valid_token_links_chat_id(self, in_memory_db):
+    @pytest.mark.asyncio
+    async def test_valid_token_links_chat_id(self, in_memory_db):
         """Sending /start <valid-token> writes the chat_id to the user record."""
         bot, admin_storage = _make_multi_user_bot(in_memory_db)
         token = admin_storage.create_telegram_link_token("alice")
 
         update, ctx = _make_update(chat_id=99001, args=[token])
-        asyncio.get_event_loop().run_until_complete(bot._start(update, ctx))
+        await bot._start(update, ctx)
 
         user = admin_storage.get_user("alice")
         assert user["telegram_chat_id"] == "99001"
         update.message.reply_text.assert_called_once_with("Linked. Your Telegram is connected to cashe.")
 
-    def test_invalid_token_replies_with_error(self, in_memory_db):
+    @pytest.mark.asyncio
+    async def test_invalid_token_replies_with_error(self, in_memory_db):
         """Sending /start <bad-token> replies with an invalid code message."""
         bot, admin_storage = _make_multi_user_bot(in_memory_db)
 
         update, ctx = _make_update(chat_id=99002, args=["CASHE-BADTOK"])
-        asyncio.get_event_loop().run_until_complete(bot._start(update, ctx))
+        await bot._start(update, ctx)
 
         user = admin_storage.get_user("alice")
         assert user["telegram_chat_id"] is None
         call_text = update.message.reply_text.call_args[0][0]
         assert "invalid" in call_text.lower() or "expired" in call_text.lower()
 
-    def test_token_is_consumed_and_cannot_be_reused(self, in_memory_db):
+    @pytest.mark.asyncio
+    async def test_token_is_consumed_and_cannot_be_reused(self, in_memory_db):
         """A valid token is one-time use — second /start with same token is rejected."""
         bot, admin_storage = _make_multi_user_bot(in_memory_db)
         token = admin_storage.create_telegram_link_token("alice")
 
         update1, ctx1 = _make_update(chat_id=99003, args=[token])
-        asyncio.get_event_loop().run_until_complete(bot._start(update1, ctx1))
+        await bot._start(update1, ctx1)
 
         # Second use — same token should be rejected
         update2, ctx2 = _make_update(chat_id=99004, args=[token])
-        asyncio.get_event_loop().run_until_complete(bot._start(update2, ctx2))
+        await bot._start(update2, ctx2)
 
         # Alice should still be linked to 99003, not 99004
         user = admin_storage.get_user("alice")
         assert user["telegram_chat_id"] == "99003"
 
-    def test_start_with_no_args_prompts_for_code(self, in_memory_db):
+    @pytest.mark.asyncio
+    async def test_start_with_no_args_prompts_for_code(self, in_memory_db):
         """/start with no args (and no user_manager) prompts the user to get a code."""
         bot, admin_storage = _make_multi_user_bot(in_memory_db)
 
         update, ctx = _make_update(chat_id=99005, args=[])
-        asyncio.get_event_loop().run_until_complete(bot._start(update, ctx))
+        await bot._start(update, ctx)
 
         # No user should be linked; user prompted to use a code
         call_text = update.message.reply_text.call_args[0][0]
