@@ -609,63 +609,6 @@ class TestQueryTransactions:
         assert summary["by_category"]["Food"] == 35.0
 
 
-class TestCategories:
-    def test_load_categories(self, storage, sample_categories):
-        storage.load_categories(sample_categories)
-        cats = storage.get_categories()
-        assert len(cats) == 6
-        assert cats[0]["name"] == "Food"
-
-    def test_load_categories_idempotent(self, storage, sample_categories):
-        storage.load_categories(sample_categories)
-        storage.load_categories(sample_categories)
-        cats = storage.get_categories()
-        assert len(cats) == 6
-
-
-class TestIngestionState:
-    def test_get_initial_state(self, storage):
-        state = storage.get_ingestion_state("dbs_paylah")
-        assert state is None
-
-    def test_update_and_get_state(self, storage):
-        storage.update_ingestion_state("dbs_paylah", "msg-123", "2026-04-16T12:00:00")
-        state = storage.get_ingestion_state("dbs_paylah")
-        assert state["last_processed_id"] == "msg-123"
-
-    def test_update_state_overwrites(self, storage):
-        storage.update_ingestion_state("dbs_paylah", "msg-123", "2026-04-16T12:00:00")
-        storage.update_ingestion_state("dbs_paylah", "msg-456", "2026-04-16T13:00:00")
-        state = storage.get_ingestion_state("dbs_paylah")
-        assert state["last_processed_id"] == "msg-456"
-
-
-class TestDuplicateCheck:
-    def test_is_duplicate_false_for_new(self, storage):
-        assert storage.is_duplicate("dbs_paylah", "email-123") is False
-
-    def test_is_duplicate_true_after_insert(self, storage):
-        storage.insert_transaction(
-            source="dbs_paylah", source_id="email-123", amount=5.0,
-            merchant="Test", transaction_date="2026-04-16T12:00:00",
-        )
-        assert storage.is_duplicate("dbs_paylah", "email-123") is True
-
-    def test_recent_transaction_exists(self, storage):
-        storage.insert_transaction(
-            source="apple_wallet", source_id="aw-1", amount=12.50,
-            merchant="Toast Box", transaction_date="2026-04-16T12:00:00",
-        )
-        assert storage.recent_transaction_exists("Toast Box", 12.50, minutes=5) is True
-
-    def test_recent_transaction_not_exists_different_amount(self, storage):
-        storage.insert_transaction(
-            source="apple_wallet", source_id="aw-1", amount=12.50,
-            merchant="Toast Box", transaction_date="2026-04-16T12:00:00",
-        )
-        assert storage.recent_transaction_exists("Toast Box", 99.99, minutes=5) is False
-
-
 class TestCrossSourceDedup:
     def test_find_cross_source_duplicate_match(self, storage):
         tx_id = storage.insert_transaction(
@@ -977,43 +920,6 @@ class TestInsights:
         )
         avg = storage.get_average_daily("2026-04-01", "2026-04-30")
         assert avg == pytest.approx(60.0 / 30)
-
-    def test_get_trend(self, storage):
-        # Insert transactions on different dates
-        storage.insert_transaction(
-            source="manual", source_id="m1", amount=10.0,
-            merchant="A", transaction_date="2026-04-10T12:00:00",
-        )
-        storage.insert_transaction(
-            source="manual", source_id="m2", amount=20.0,
-            merchant="B", transaction_date="2026-04-12T12:00:00",
-        )
-        storage.insert_transaction(
-            source="manual", source_id="m3", amount=15.0,
-            merchant="C", transaction_date="2026-04-11T12:00:00",
-        )
-        trend = storage.get_trend("2026-04-01", "2026-04-30")
-        assert len(trend) == 3
-        # Should be sorted by date
-        assert trend[0]["date"] == "2026-04-10"
-        assert trend[0]["amount"] == 10.0
-        assert trend[1]["date"] == "2026-04-11"
-        assert trend[1]["amount"] == 15.0
-        assert trend[2]["date"] == "2026-04-12"
-        assert trend[2]["amount"] == 20.0
-
-    def test_get_trend_nets_refund_on_its_own_day(self, storage):
-        storage.insert_transaction(
-            source="manual", source_id="m1", amount=10.0, merchant="A",
-            transaction_date="2026-04-10T12:00:00", tx_type="expense",
-        )
-        storage.insert_transaction(
-            source="manual", source_id="m2", amount=4.0, merchant="A",
-            transaction_date="2026-04-10T13:00:00", tx_type="refund",
-        )
-        trend = storage.get_trend("2026-04-01", "2026-04-30")
-        day = next(t for t in trend if t["date"] == "2026-04-10")
-        assert day["amount"] == 6.0
 
     def test_get_period_comparison(self, storage):
         # Insert transactions in April (current)
@@ -1370,19 +1276,10 @@ class TestAnalyticsWrappers:
         result = storage.top_merchants_by_period()
         assert isinstance(result, list)
 
-    def test_merchant_trend_chart_returns_dict(self, storage):
-        result = storage.merchant_trend_chart("Starbucks")
-        assert isinstance(result, dict)
-        assert "months" in result
-
     def test_spending_velocity_returns_dict(self, storage):
         result = storage.spending_velocity()
         assert isinstance(result, dict)
         assert "pace_percent" in result
-
-    def test_spending_anomalies_returns_list(self, storage):
-        result = storage.spending_anomalies()
-        assert isinstance(result, list)
 
     def test_new_merchants_returns_list(self, storage):
         result = storage.new_merchants()

@@ -272,13 +272,6 @@ async def api(budget_app):
 
 class TestBudgetAPI:
     @pytest.mark.asyncio
-    async def test_get_budgets_empty(self, api):
-        ac, _ = api
-        resp = await ac.get("/api/budgets")
-        assert resp.status_code == 200
-        assert resp.json() == []
-
-    @pytest.mark.asyncio
     async def test_create_budget(self, api):
         ac, _ = api
         resp = await ac.post("/api/budgets", json={"category": None, "amount": 3000, "period": "monthly"})
@@ -306,12 +299,12 @@ class TestBudgetAPI:
     async def test_get_budget_progress(self, api):
         ac, _ = api
         await ac.post("/api/budgets", json={"category": None, "amount": 1000, "period": "monthly"})
-        resp = await ac.get("/api/budgets/progress")
+        resp = await ac.get("/api/v2/budgets/progress")
         assert resp.status_code == 200
         data = resp.json()
         assert len(data) == 1
         assert data[0]["label"] == "Overall"
-        assert data[0]["spent"] == 0.0
+        assert data[0]["spent"] == {"minor_units": 0, "currency": "SGD"}
         assert data[0]["status"] == "on_track"
 
     @pytest.mark.asyncio
@@ -355,7 +348,7 @@ class TestBudgetAPI:
         budget_id = create.json()["id"]
         resp = await ac.delete(f"/api/budgets/{budget_id}")
         assert resp.status_code == 200
-        assert (await ac.get("/api/budgets")).json() == []
+        assert (await ac.get("/api/v2/budgets/progress")).json() == []
 
     @pytest.mark.asyncio
     async def test_settings_includes_budgets_enabled(self, api):

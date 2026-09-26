@@ -354,7 +354,7 @@ class TestCategoryBreakdownV2:
     async def test_reconciles_with_home_briefing_current_period_total(self, client):
         """The whole point of this endpoint: its category totals must sum to
         the same figure Home's hero shows for the identical period, unlike
-        the legacy /api/v2/overview/* aggregates (see the increment-3
+        the since-removed /api/v2/overview/* aggregates (see the increment-3
         finding in docs/plans/2026-09-16-cashe-design-language-restoration.md)."""
         await client.post("/api/transactions", json={
             "amount": 12.0, "merchant": "A", "category": "Food", "type": "expense",
@@ -557,7 +557,7 @@ class TestUpdateTransactionV2:
         assert current["revision"] == 2
         assert current["merchant"] == "First Edit"
         # The conflicting edit must not have been applied.
-        unchanged = await client.get(f"/api/transactions/{tx_id}")
+        unchanged = await client.get(f"/api/v2/transactions/{tx_id}")
         assert unchanged.json()["merchant"] == "First Edit"
 
     @pytest.mark.asyncio
@@ -822,7 +822,7 @@ class TestUndoTransactionV2:
         current = response.json()["detail"]["current"]
         assert current["revision"] == 3
         assert current["merchant"] == "Second Edit"
-        unchanged = await client.get(f"/api/transactions/{tx_id}")
+        unchanged = await client.get(f"/api/v2/transactions/{tx_id}")
         assert unchanged.json()["merchant"] == "Second Edit"
 
     @pytest.mark.asyncio
@@ -879,7 +879,7 @@ class TestDeleteTransaction:
         assert delete_resp.status_code == 200
 
         # Verify it's gone
-        get_resp = await client.get(f"/api/transactions/{tx_id}")
+        get_resp = await client.get(f"/api/v2/transactions/{tx_id}")
         assert get_resp.status_code == 404
 
     @pytest.mark.asyncio
@@ -905,7 +905,7 @@ class TestDeleteTransactionV2:
         assert data["original"] == {"minor_units": 800, "currency": "SGD"}
         assert "deleted_at" in data and data["deleted_at"]
 
-        get_resp = await client.get(f"/api/transactions/{tx_id}")
+        get_resp = await client.get(f"/api/v2/transactions/{tx_id}")
         assert get_resp.status_code == 404
 
     @pytest.mark.asyncio
@@ -935,7 +935,7 @@ class TestRestoreTransactionV2:
         assert data["reporting"] == {"minor_units": 800, "currency": "SGD"}
         assert data["conversion"]["status"] == "native"
 
-        get_resp = await client.get(f"/api/transactions/{tx_id}")
+        get_resp = await client.get(f"/api/v2/transactions/{tx_id}")
         assert get_resp.status_code == 200
         assert get_resp.json()["merchant"] == "To Delete"
 
@@ -980,147 +980,6 @@ class TestRestoreTransactionV2:
         response = await client.post(f"/api/v2/transactions/{tx_id}/restore")
         assert response.status_code == 200
         assert response.json()["revision"] == 3
-
-
-class TestOverviewV2:
-    @pytest.mark.asyncio
-    async def test_summary_returns_canonical_money(self, client):
-        await client.post("/api/v2/transactions", json={
-            "amount": 15.00, "category": "Food", "type": "expense", "transaction_date": "2026-04-16T12:00:00",
-        })
-        await client.post("/api/v2/transactions", json={
-            "amount": 5.00, "category": "Transport", "type": "expense", "transaction_date": "2026-04-16T12:00:00",
-        })
-        response = await client.get("/api/v2/overview/summary", params={
-            "start_date": "2026-04-01", "end_date": "2026-04-30",
-        })
-        assert response.status_code == 200
-        data = response.json()
-        assert data["start"] == "2026-04-01"
-        assert data["end"] == "2026-04-30"
-        assert data["total"] == {"minor_units": 2000, "currency": "SGD"}
-        assert data["by_category"]["Food"] == {"minor_units": 1500, "currency": "SGD"}
-        assert data["by_category"]["Transport"] == {"minor_units": 500, "currency": "SGD"}
-
-    @pytest.mark.asyncio
-    async def test_summary_excludes_unresolved_foreign_amount(self, client):
-        await client.post("/api/v2/transactions", json={
-            "amount": 50.00, "type": "expense", "transaction_date": "2026-04-16T12:00:00",
-        })
-        await client.post("/api/v2/transactions", json={
-            "amount": 500.00, "currency": "THB", "exchange_rate": 1.0,
-            "type": "expense", "transaction_date": "2026-04-16T12:00:00",
-        })
-        response = await client.get("/api/v2/overview/summary", params={
-            "start_date": "2026-04-01", "end_date": "2026-04-30",
-        })
-        assert response.json()["total"] == {"minor_units": 5000, "currency": "SGD"}
-
-    @pytest.mark.asyncio
-    async def test_trend_returns_daily_points(self, client):
-        await client.post("/api/v2/transactions", json={
-            "amount": 10.00, "type": "expense", "transaction_date": "2026-04-10T12:00:00",
-        })
-        await client.post("/api/v2/transactions", json={
-            "amount": 20.00, "type": "expense", "transaction_date": "2026-04-12T12:00:00",
-        })
-        response = await client.get("/api/v2/overview/trend", params={
-            "start_date": "2026-04-01", "end_date": "2026-04-30",
-        })
-        assert response.status_code == 200
-        data = response.json()
-        assert data == [
-            {"date": "2026-04-10", "amount": {"minor_units": 1000, "currency": "SGD"}},
-            {"date": "2026-04-12", "amount": {"minor_units": 2000, "currency": "SGD"}},
-        ]
-
-    @pytest.mark.asyncio
-    async def test_merchants_returns_ranking(self, client):
-        await client.post("/api/v2/transactions", json={
-            "amount": 10.00, "merchant": "Toast Box", "type": "expense", "transaction_date": "2026-04-10T12:00:00",
-        })
-        await client.post("/api/v2/transactions", json={
-            "amount": 25.00, "merchant": "Grab", "type": "expense", "transaction_date": "2026-04-11T12:00:00",
-        })
-        response = await client.get("/api/v2/overview/merchants", params={
-            "start_date": "2026-04-01", "end_date": "2026-04-30",
-        })
-        assert response.status_code == 200
-        data = response.json()
-        assert data[0]["merchant"] == "Grab"
-        assert data[0]["total"] == {"minor_units": 2500, "currency": "SGD"}
-        assert data[0]["visits"] == 1
-
-    @pytest.mark.asyncio
-    async def test_merchants_filters_by_category(self, client):
-        await client.post("/api/v2/transactions", json={
-            "amount": 10.00, "merchant": "Toast Box", "category": "Food", "type": "expense", "transaction_date": "2026-04-10T12:00:00",
-        })
-        await client.post("/api/v2/transactions", json={
-            "amount": 25.00, "merchant": "Grab", "category": "Transport", "type": "expense", "transaction_date": "2026-04-11T12:00:00",
-        })
-        response = await client.get("/api/v2/overview/merchants", params={
-            "start_date": "2026-04-01", "end_date": "2026-04-30", "category": "Food",
-        })
-        assert response.status_code == 200
-        data = response.json()
-        assert [m["merchant"] for m in data] == ["Toast Box"]
-
-    @pytest.mark.asyncio
-    async def test_balance_returns_income_expenses_net(self, client):
-        await client.post("/api/v2/transactions", json={
-            "amount": 3000.00, "category": "Salary", "type": "income", "transaction_date": "2026-04-16T12:00:00",
-        })
-        await client.post("/api/v2/transactions", json={
-            "amount": 1200.00, "category": "Rent", "type": "expense", "transaction_date": "2026-04-16T12:00:00",
-        })
-        response = await client.get("/api/v2/overview/balance", params={
-            "start_date": "2026-04-01", "end_date": "2026-04-30",
-        })
-        assert response.status_code == 200
-        data = response.json()
-        assert data["income"] == {"minor_units": 300000, "currency": "SGD"}
-        assert data["expenses"] == {"minor_units": 120000, "currency": "SGD"}
-        assert data["net"] == {"minor_units": 180000, "currency": "SGD"}
-
-    @pytest.mark.asyncio
-    async def test_balance_net_can_be_negative(self, client):
-        await client.post("/api/v2/transactions", json={
-            "amount": 100.00, "category": "Salary", "type": "income", "transaction_date": "2026-04-16T12:00:00",
-        })
-        await client.post("/api/v2/transactions", json={
-            "amount": 400.00, "category": "Rent", "type": "expense", "transaction_date": "2026-04-16T12:00:00",
-        })
-        response = await client.get("/api/v2/overview/balance", params={
-            "start_date": "2026-04-01", "end_date": "2026-04-30",
-        })
-        assert response.json()["net"] == {"minor_units": -30000, "currency": "SGD"}
-
-    @pytest.mark.asyncio
-    async def test_trend_by_category_gap_fills_with_null_money(self, client):
-        await client.post("/api/v2/transactions", json={
-            "amount": 10.00, "category": "Food", "type": "expense", "transaction_date": "2026-04-10T12:00:00",
-        })
-        await client.post("/api/v2/transactions", json={
-            "amount": 20.00, "category": "Transport", "type": "expense", "transaction_date": "2026-04-11T12:00:00",
-        })
-        response = await client.get("/api/v2/overview/trend-by-category", params={
-            "start_date": "2026-04-01", "end_date": "2026-04-30",
-        })
-        assert response.status_code == 200
-        data = response.json()
-        day10 = next(d for d in data if d["date"] == "2026-04-10")
-        day11 = next(d for d in data if d["date"] == "2026-04-11")
-        assert day10["categories"]["Food"] == {"minor_units": 1000, "currency": "SGD"}
-        assert day10["categories"]["Transport"] is None
-        assert day11["categories"]["Transport"] == {"minor_units": 2000, "currency": "SGD"}
-        assert day11["categories"]["Food"] is None
-
-    @pytest.mark.asyncio
-    async def test_requires_auth(self, client):
-        await client.post("/api/logout")
-        response = await client.get("/api/v2/overview/summary")
-        assert response.status_code == 401
 
 
 @pytest.mark.asyncio
@@ -1261,7 +1120,7 @@ class TestBudgetAPI:
     @pytest.mark.asyncio
     async def test_list_budget_progress(self, client):
         await client.post("/api/budgets", json={"amount": 300.0, "period": "monthly"})
-        resp = await client.get("/api/budgets/progress")
+        resp = await client.get("/api/v2/budgets/progress")
         assert resp.status_code == 200
         data = resp.json()
         assert isinstance(data, list)
@@ -1300,7 +1159,7 @@ class TestBudgetAPI:
         assert delete_resp.status_code == 200
 
         # Confirm removed from progress list
-        progress_resp = await client.get("/api/budgets/progress")
+        progress_resp = await client.get("/api/v2/budgets/progress")
         assert progress_resp.status_code == 200
         ids = [b["id"] for b in progress_resp.json()]
         assert budget_id not in ids
@@ -1983,7 +1842,7 @@ async def test_duplicate_review_dismiss_merge_and_undo_privacy_and_auth(client, 
     merge = await client.post('/api/v2/duplicates/merge', json={'survivor_id': survivor, 'loser_id': loser})
     assert merge.status_code == 200
     merge_id = merge.json()['merge_id']
-    assert (await client.get(f'/api/transactions/{loser}')).status_code == 404
+    assert (await client.get(f'/api/v2/transactions/{loser}')).status_code == 404
     assert 'private' not in merge.text
 
     bad_merge = await client.post('/api/v2/duplicates/merge', json={'survivor_id': survivor, 'loser_id': survivor})
@@ -1991,7 +1850,7 @@ async def test_duplicate_review_dismiss_merge_and_undo_privacy_and_auth(client, 
 
     undo = await client.post(f'/api/v2/duplicates/merges/{merge_id}/undo')
     assert undo.status_code == 200
-    assert (await client.get(f'/api/transactions/{loser}')).status_code == 200
+    assert (await client.get(f'/api/v2/transactions/{loser}')).status_code == 200
     assert (await client.post(f'/api/v2/duplicates/merges/{merge_id}/undo')).status_code == 404
 
     await client.post('/api/logout')

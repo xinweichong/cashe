@@ -328,7 +328,7 @@ class TestHealthScoreAPI:
     @pytest.mark.asyncio
     async def test_no_income_returns_has_income_false(self, api):
         ac, storage = api
-        resp = await ac.get("/api/health-score")
+        resp = await ac.get("/api/v2/analytics/health-score")
         assert resp.status_code == 200
         data = resp.json()
         assert data["has_income_data"] is False
@@ -353,7 +353,7 @@ class TestHealthScoreAPI:
             (today,),
         )
         in_memory_db.commit()
-        resp = await ac.get("/api/health-score")
+        resp = await ac.get("/api/v2/analytics/health-score")
         assert resp.status_code == 200
         data = resp.json()
         assert data["has_income_data"] is True
@@ -365,7 +365,7 @@ class TestHealthScoreAPI:
     @pytest.mark.asyncio
     async def test_months_param_accepted(self, api):
         ac, _ = api
-        resp = await ac.get("/api/health-score?months=3")
+        resp = await ac.get("/api/v2/analytics/health-score?months=3")
         assert resp.status_code == 200
 
     @pytest.mark.asyncio
@@ -377,7 +377,7 @@ class TestHealthScoreAPI:
         app = create_dashboard_app(user_manager, admin_storage)
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as ac:
-            resp = await ac.get("/api/health-score")
+            resp = await ac.get("/api/v2/analytics/health-score")
             assert resp.status_code == 401
 
 

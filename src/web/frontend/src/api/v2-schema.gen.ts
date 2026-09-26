@@ -4,40 +4,6 @@
  */
 
 export interface paths {
-    "/api/v2/analytics/alerts": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Analytics Alerts V2 */
-        get: operations["analytics_alerts_v2_api_v2_analytics_alerts_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v2/analytics/comparison": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Analytics Comparison V2 */
-        get: operations["analytics_comparison_v2_api_v2_analytics_comparison_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/v2/analytics/health-score": {
         parameters: {
             query?: never;
@@ -47,40 +13,6 @@ export interface paths {
         };
         /** Health Score V2 */
         get: operations["health_score_v2_api_v2_analytics_health_score_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v2/analytics/merchants": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Analytics Merchants V2 */
-        get: operations["analytics_merchants_v2_api_v2_analytics_merchants_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v2/analytics/velocity": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Analytics Velocity V2 */
-        get: operations["analytics_velocity_v2_api_v2_analytics_velocity_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -387,91 +319,6 @@ export interface paths {
         };
         /** Merchant Profile V2 */
         get: operations["merchant_profile_v2_api_v2_merchants__merchant__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v2/overview/balance": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Balance V2 */
-        get: operations["balance_v2_api_v2_overview_balance_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v2/overview/merchants": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Overview Merchants V2 */
-        get: operations["overview_merchants_v2_api_v2_overview_merchants_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v2/overview/summary": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Overview Summary V2 */
-        get: operations["overview_summary_v2_api_v2_overview_summary_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v2/overview/trend": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Overview Trend V2 */
-        get: operations["overview_trend_v2_api_v2_overview_trend_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/v2/overview/trend-by-category": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Trend By Category V2 */
-        get: operations["trend_by_category_v2_api_v2_overview_trend_by_category_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1028,12 +875,6 @@ export interface components {
             /** Supporting Charges */
             supporting_charges: components["schemas"]["SupportingCharge"][];
         };
-        /** Balance */
-        Balance: {
-            expenses: components["schemas"]["Money"];
-            income: components["schemas"]["Money"];
-            net: components["schemas"]["Money"];
-        };
         /** BudgetProgress */
         BudgetProgress: {
             budget_amount: components["schemas"]["Money"];
@@ -1217,16 +1058,6 @@ export interface components {
             /** Category */
             category: string;
             change: components["schemas"]["Money"];
-        };
-        /** CategoryComparison */
-        CategoryComparison: {
-            /** Category */
-            category: string;
-            change: components["schemas"]["Money"];
-            /** Change Percent */
-            change_percent: number | null;
-            current: components["schemas"]["Money"];
-            previous: components["schemas"]["Money"];
         };
         /** CategoryTrendPoint */
         CategoryTrendPoint: {
@@ -1532,23 +1363,6 @@ export interface components {
             /** Transaction Count */
             transaction_count: number;
         };
-        /** MerchantTrendMonth */
-        MerchantTrendMonth: {
-            /** Count */
-            count: number;
-            /** Month */
-            month: string;
-            total: components["schemas"]["Money"];
-        };
-        /** MerchantTrendV2 */
-        MerchantTrendV2: {
-            current_month: components["schemas"]["Money"];
-            /** Merchant */
-            merchant: string;
-            /** Months */
-            months: components["schemas"]["MerchantTrendMonth"][];
-            previous_month: components["schemas"]["Money"];
-        };
         /** Money */
         Money: {
             /**
@@ -1622,16 +1436,6 @@ export interface components {
             /** Unresolved Count */
             unresolved_count: number;
         };
-        /** NewMerchant */
-        NewMerchant: {
-            amount: components["schemas"]["Money"];
-            /** Category */
-            category: string | null;
-            /** First Date */
-            first_date: string;
-            /** Merchant */
-            merchant: string;
-        };
         /** OneOffDriver */
         OneOffDriver: {
             amount: components["schemas"]["Money"];
@@ -1651,34 +1455,6 @@ export interface components {
             currency: string;
             /** Minor Units */
             minor_units: number | null;
-        };
-        /** OverviewSummary */
-        OverviewSummary: {
-            /** By Category */
-            by_category: {
-                [key: string]: components["schemas"]["Money"];
-            };
-            /** End */
-            end: string;
-            /** Start */
-            start: string;
-            total: components["schemas"]["Money"];
-        };
-        /** PeriodComparison */
-        PeriodComparison: {
-            change: components["schemas"]["Money"];
-            /** Change Percent */
-            change_percent: number | null;
-            /** Current End */
-            current_end: string;
-            /** Current Start */
-            current_start: string;
-            current_total: components["schemas"]["Money"];
-            /** Previous End */
-            previous_end: string;
-            /** Previous Start */
-            previous_start: string;
-            previous_total: components["schemas"]["Money"];
         };
         /** PlanMutationResponse */
         PlanMutationResponse: {
@@ -1877,34 +1653,6 @@ export interface components {
             base: components["schemas"]["MonthForecast"];
             result: components["schemas"]["ScenarioProjection"] | null;
         };
-        /** SpendingAlerts */
-        SpendingAlerts: {
-            /** Anomalies */
-            anomalies: components["schemas"]["SpendingAnomaly"][];
-            /** New Merchants */
-            new_merchants: components["schemas"]["NewMerchant"][];
-        };
-        /** SpendingAnomaly */
-        SpendingAnomaly: {
-            amount: components["schemas"]["Money"];
-            avg_amount: components["schemas"]["Money"];
-            /** Category */
-            category: string | null;
-            /** Explanation */
-            explanation?: string | null;
-            /** Id */
-            id: number;
-            /** Merchant */
-            merchant: string | null;
-            /** Transaction Date */
-            transaction_date: string;
-        };
-        /** SpendingComparison */
-        SpendingComparison: {
-            /** Categories */
-            categories: components["schemas"]["CategoryComparison"][];
-            overall: components["schemas"]["PeriodComparison"];
-        };
         /** SpendingEvidence */
         SpendingEvidence: {
             /** Items */
@@ -1925,7 +1673,7 @@ export interface components {
              * Conversion Status
              * @enum {string}
              */
-            conversion_status: "native" | "indicative" | "unresolved";
+            conversion_status: "native" | "resolved" | "indicative" | "unresolved";
             /** Date */
             date: string | null;
             /** Id */
@@ -2026,23 +1774,6 @@ export interface components {
             remaining: components["schemas"]["Money"];
             target: components["schemas"]["Money"];
         };
-        /** SpendingVelocity */
-        SpendingVelocity: {
-            current_mtd: components["schemas"]["Money"];
-            /** Days Elapsed */
-            days_elapsed: number;
-            last_month_total: components["schemas"]["Money"];
-            /** Pace Percent */
-            pace_percent: number;
-            projected_total: components["schemas"]["Money"];
-            /**
-             * Status
-             * @enum {string}
-             */
-            status: "ahead" | "on_track" | "behind";
-            /** Total Days */
-            total_days: number;
-        };
         /** SubscriptionOverdueItem */
         SubscriptionOverdueItem: {
             /** Days Since Last Charge */
@@ -2104,21 +1835,6 @@ export interface components {
             one_off_driver: components["schemas"]["OneOffDriver"] | null;
             /** Overlap Note */
             overlap_note: string;
-        };
-        /** TopMerchant */
-        TopMerchant: {
-            avg_amount: components["schemas"]["Money"];
-            /** Count */
-            count: number;
-            /** Merchant */
-            merchant: string;
-            total: components["schemas"]["Money"];
-        };
-        /** TopMerchantsResult */
-        TopMerchantsResult: {
-            /** Top */
-            top: components["schemas"]["TopMerchant"][];
-            trend: components["schemas"]["MerchantTrendV2"] | null;
         };
         /**
          * TransactionCorrection
@@ -2292,12 +2008,6 @@ export interface components {
             transaction_date: string | null;
             /** Type */
             type: string;
-        };
-        /** TrendPoint */
-        TrendPoint: {
-            amount: components["schemas"]["Money"];
-            /** Date */
-            date: string;
         };
         /** TripCategoryTotal */
         TripCategoryTotal: {
@@ -2509,58 +2219,6 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    analytics_alerts_v2_api_v2_analytics_alerts_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SpendingAlerts"];
-                };
-            };
-        };
-    };
-    analytics_comparison_v2_api_v2_analytics_comparison_get: {
-        parameters: {
-            query?: {
-                period?: string;
-                date?: string | null;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SpendingComparison"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     health_score_v2_api_v2_analytics_health_score_get: {
         parameters: {
             query?: {
@@ -2588,58 +2246,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    analytics_merchants_v2_api_v2_analytics_merchants_get: {
-        parameters: {
-            query?: {
-                limit?: number;
-                merchant?: string | null;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TopMerchantsResult"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    analytics_velocity_v2_api_v2_analytics_velocity_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SpendingVelocity"];
                 };
             };
         };
@@ -3159,168 +2765,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MerchantSummary"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    balance_v2_api_v2_overview_balance_get: {
-        parameters: {
-            query?: {
-                start_date?: string | null;
-                end_date?: string | null;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Balance"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    overview_merchants_v2_api_v2_overview_merchants_get: {
-        parameters: {
-            query?: {
-                start_date?: string | null;
-                end_date?: string | null;
-                limit?: number;
-                category?: string | null;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MerchantRanking"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    overview_summary_v2_api_v2_overview_summary_get: {
-        parameters: {
-            query?: {
-                start_date?: string | null;
-                end_date?: string | null;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["OverviewSummary"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    overview_trend_v2_api_v2_overview_trend_get: {
-        parameters: {
-            query?: {
-                start_date?: string | null;
-                end_date?: string | null;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TrendPoint"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    trend_by_category_v2_api_v2_overview_trend_by_category_get: {
-        parameters: {
-            query?: {
-                start_date?: string | null;
-                end_date?: string | null;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CategoryTrendPoint"][];
                 };
             };
             /** @description Validation Error */

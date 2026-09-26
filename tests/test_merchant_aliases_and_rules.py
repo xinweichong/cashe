@@ -44,7 +44,6 @@ def test_clearing_an_alias_reverts_display_name_to_the_raw_merchant(ledger):
     storage.set_merchant_alias('Cafe', 'The Corner Cafe')
     storage.set_merchant_alias('Cafe', '')
     assert storage.get_merchant_list()[0]['display_name'] == 'Cafe'
-    assert storage.get_merchant_aliases() == {}
 
 
 def test_rule_impact_counts_only_transactions_with_a_different_category(ledger):

@@ -337,7 +337,7 @@ async def test_oauth_state_is_bound_expiring_and_single_use(in_memory_db, monkey
     app = create_dashboard_app(manager, admin)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         await client.post("/api/login", json={"username": TEST_USERNAME, "password": TEST_PASSWORD})
-        response = await client.get("/api/connections/gmail/connect-url")
+        response = await client.get("/api/onboarding/gmail/connect-url")
         state = response.json()["url"]
         assert state != TEST_USERNAME and len(state) >= 32
         if invalid == "session":

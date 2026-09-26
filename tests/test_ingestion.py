@@ -163,15 +163,12 @@ def test_second_email_purchase_does_not_reuse_first_match(storage):
     assert pipeline.ingest(_result(source="uob_card", source_id="email-2")) is not None
 
 
-def test_backfill_does_not_join_active_trip_or_notify_suggestions(storage, monkeypatch):
-    assign = MagicMock()
-    monkeypatch.setattr(storage, "auto_assign_to_active_trip", assign)
+def test_backfill_does_not_notify_suggestions(storage, monkeypatch):
     callback = MagicMock()
     detector = MagicMock()
     detector.detect.return_value = {"frequency": "monthly", "avg_amount": 12.5}
     pipeline = IngestionPipeline(storage, detector=detector, on_recurring_pattern=callback)
     assert pipeline.ingest(_result(), historical=True) is not None
-    assign.assert_not_called()
     callback.assert_not_called()
 
 

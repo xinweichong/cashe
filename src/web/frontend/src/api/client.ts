@@ -7,13 +7,9 @@ export type TransactionCreateV2 = components['schemas']['TransactionCreate'];
 export type TransactionCorrectionV2 = components['schemas']['TransactionCorrection'];
 export type TransactionDeletionV2 = components['schemas']['TransactionDeletion'];
 export type TripSummaryV2 = components['schemas']['TripSummary'];
-export type OverviewSummaryV2 = components['schemas']['OverviewSummary'];
-export type TrendPointV2 = components['schemas']['TrendPoint'];
 export type MerchantRankingV2 = components['schemas']['MerchantRanking'];
 export type BudgetProgressV2 = components['schemas']['BudgetProgress'];
 export type MerchantSummaryV2 = components['schemas']['MerchantSummary'];
-export type HealthScoreV2 = components['schemas']['HealthScore'];
-export type BalanceV2 = components['schemas']['Balance'];
 export type CategoryTrendPointV2 = components['schemas']['CategoryTrendPoint'];
 export type GoalProgressV2 = components['schemas']['GoalProgress'];
 export type DailyTotalV2 = components['schemas']['DailyTotal'];
@@ -277,61 +273,9 @@ export interface SessionInfo {
 
 // Legacy analytics response shapes — these endpoints are slated for
 // migration onto shared spending facts; see docs/plans completion roadmap R04.
-export interface SpendingSummary {
-  total: number;
-  by_category: Record<string, number>;
-}
-
-export interface Balance {
-  income: number;
-  expenses: number;
-  net: number;
-}
-
 export interface TrendPoint {
   date: string;
   amount: number;
-}
-
-export interface TrendByCategoryPoint {
-  date: string;
-  [category: string]: string | number | null;
-}
-
-export interface SpendingInsights {
-  merchants: { merchant: string; visits: number; total: number }[];
-  average_daily: number;
-}
-
-export interface PeriodComparison {
-  current_start: string;
-  current_end: string;
-  previous_start: string;
-  previous_end: string;
-  current_total: number;
-  previous_total: number;
-  change: number;
-  change_percent: number | null;
-}
-
-export interface CategoryComparison {
-  category: string;
-  current: number;
-  previous: number;
-  change: number;
-  change_percent: number | null;
-}
-
-export interface AnalyticsComparison {
-  overall: PeriodComparison;
-  categories: CategoryComparison[];
-}
-
-export interface TopMerchant {
-  merchant: string;
-  count: number;
-  total: number;
-  avg_amount: number;
 }
 
 export interface MerchantTrend {
@@ -340,21 +284,6 @@ export interface MerchantTrend {
   current_month: number;
   previous_month: number;
   trend: 'up' | 'down' | 'stable';
-}
-
-export interface AnalyticsMerchants {
-  top: TopMerchant[];
-  trend: MerchantTrend | null;
-}
-
-export interface SpendingVelocity {
-  current_mtd: number;
-  last_month_total: number;
-  projected_total: number;
-  days_elapsed: number;
-  total_days: number;
-  pace_percent: number;
-  status: string;
 }
 
 export interface Anomaly {
@@ -366,23 +295,6 @@ export interface Anomaly {
   transaction_date: string;
   avg_amount: number;
   explanation?: string;
-}
-
-export interface NewMerchant {
-  merchant: string;
-  first_date: string;
-  category: string | null;
-  amount: number;
-}
-
-export interface AnalyticsAlerts {
-  anomalies: Anomaly[];
-  new_merchants: NewMerchant[];
-}
-
-export interface AnalyticsSummaries {
-  monthly: Record<string, unknown> | null;
-  weekly: Record<string, unknown> | null;
 }
 
 export const api = {
@@ -441,9 +353,6 @@ export const api = {
   disconnectGmail: () =>
     request<{ status: string }>('/api/connections/gmail', { method: 'DELETE' }),
 
-  getGmailReconnectUrl: () =>
-    request<{ url: string }>('/api/connections/gmail/connect-url'),
-
   // Transactions
   getTransactions: (params?: Record<string, string | number>) => {
     const query = params
@@ -453,9 +362,6 @@ export const api = {
       : '';
     return request<Transaction[]>(`/api/transactions${query}`);
   },
-
-  getTransaction: (id: number) =>
-    request<Transaction>(`/api/transactions/${id}`),
 
   getTransactionProvenance: (id: number) =>
     request<TransactionProvenance>(`/api/v2/transactions/${id}/provenance`),
@@ -532,39 +438,6 @@ export const api = {
     request<TransactionDeletionV2>(`/api/v2/transactions/${id}`, { method: 'DELETE' }),
 
   // Summary & Analytics
-  getSummary: (start_date: string, end_date: string) =>
-    request<SpendingSummary>(`/api/summary?start_date=${start_date}&end_date=${end_date}`),
-
-  getSummaryV2: (start_date: string, end_date: string) =>
-    request<OverviewSummaryV2>(`/api/v2/overview/summary?start_date=${start_date}&end_date=${end_date}`),
-
-  getTrend: (start_date: string, end_date: string) =>
-    request<TrendPoint[]>(`/api/trend?start_date=${start_date}&end_date=${end_date}`),
-
-  getTrendV2: (start_date: string, end_date: string) =>
-    request<TrendPointV2[]>(`/api/v2/overview/trend?start_date=${start_date}&end_date=${end_date}`),
-
-  getMerchantRankingV2: (start_date: string, end_date: string, limit = 10, category?: string) => {
-    const params = new URLSearchParams({ start_date, end_date, limit: String(limit) });
-    if (category) params.set('category', category);
-    return request<MerchantRankingV2[]>(`/api/v2/overview/merchants?${params}`);
-  },
-
-  getTrendByCategory: (start_date: string, end_date: string) =>
-    request<TrendByCategoryPoint[]>(`/api/trend/by-category?start_date=${start_date}&end_date=${end_date}`),
-
-  getTrendByCategoryV2: (start_date: string, end_date: string) =>
-    request<CategoryTrendPointV2[]>(`/api/v2/overview/trend-by-category?start_date=${start_date}&end_date=${end_date}`),
-
-  getBalance: (start_date: string, end_date: string) =>
-    request<Balance>(`/api/balance?start_date=${start_date}&end_date=${end_date}`),
-
-  getBalanceV2: (start_date: string, end_date: string) =>
-    request<BalanceV2>(`/api/v2/overview/balance?start_date=${start_date}&end_date=${end_date}`),
-
-  getInsights: (start_date: string, end_date: string) =>
-    request<SpendingInsights>(`/api/insights?start_date=${start_date}&end_date=${end_date}`),
-
   getMerchants: (start_date: string, end_date: string) =>
     request<string[]>(`/api/merchants?start_date=${start_date}&end_date=${end_date}`),
 
@@ -603,51 +476,12 @@ export const api = {
     request<string[]>('/api/apple-wallet/cards'),
 
   // Analytics endpoints
-  getAnalyticsComparison: (period: string, date?: string) => {
-    const params = new URLSearchParams({ period });
-    if (date) params.set('date', date);
-    return request<AnalyticsComparison>(`/api/analytics/comparison?${params}`);
-  },
-
-  getAnalyticsMerchants: (limit = 10, merchant?: string) => {
-    const params = new URLSearchParams({ limit: String(limit) });
-    if (merchant) params.set('merchant', merchant);
-    return request<AnalyticsMerchants>(`/api/analytics/merchants?${params}`);
-  },
-
-  getAnalyticsVelocity: () =>
-    request<SpendingVelocity>('/api/analytics/velocity'),
-
-  getAnalyticsAlerts: () =>
-    request<AnalyticsAlerts>('/api/analytics/alerts'),
-
-  getAnalyticsSummaries: () =>
-    request<AnalyticsSummaries>('/api/analytics/summaries'),
-
   getAnalyticsInsight: () =>
     request<LLMInsight>('/api/analytics/insight'),
 
   getRecurring: () => request<RecurringTransaction[]>('/api/recurring'),
 
   // Merchant Intelligence
-  getMerchantIntelligenceList: (params?: {
-    sort_by?: 'total_spent' | 'transaction_count' | 'last_seen' | 'merchant_name';
-    tag?: string;
-    category?: string;
-    search?: string;
-    limit?: number;
-    offset?: number;
-  }) => {
-    const query = params
-      ? '?' + new URLSearchParams(
-          Object.entries(params)
-            .filter(([, v]) => v !== undefined && v !== '')
-            .map(([k, v]) => [k, String(v)])
-        ).toString()
-      : '';
-    return request<MerchantSummary[]>(`/api/merchant-intelligence${query}`);
-  },
-
   getMerchantListV2: (params?: {
     sort_by?: 'total_spent' | 'transaction_count' | 'last_seen' | 'merchant_name';
     tag?: string;
@@ -665,9 +499,6 @@ export const api = {
       : '';
     return request<MerchantSummaryV2[]>(`/api/v2/merchants${query}`);
   },
-
-  getMerchantProfile: (merchant: string) =>
-    request<MerchantProfile>(`/api/merchant-intelligence/${encodeURIComponent(merchant)}`),
 
   getMerchantProfileV2: (merchant: string) =>
     request<MerchantSummaryV2>(`/api/v2/merchants/${encodeURIComponent(merchant)}`),
@@ -705,10 +536,6 @@ export const api = {
     ),
 
   // Budgets
-  getBudgets: () => request<Budget[]>('/api/budgets'),
-
-  getBudgetProgress: () => request<BudgetProgress[]>('/api/budgets/progress'),
-
   getBudgetProgressV2: () => request<BudgetProgressV2[]>('/api/v2/budgets/progress'),
 
   createBudget: (data: { category: string | null; amount: number; period: string }) =>
@@ -725,12 +552,6 @@ export const api = {
 
   deleteBudget: (id: number) =>
     request<{ status: string }>(`/api/budgets/${id}`, { method: 'DELETE' }),
-
-  getHealthScore: (months?: number) =>
-    request<HealthScore>(`/api/health-score${months ? `?months=${months}` : ''}`),
-
-  getHealthScoreV2: (months?: number) =>
-    request<HealthScoreV2>(`/api/v2/analytics/health-score${months ? `?months=${months}` : ''}`),
 
   // App Settings
   getSettings: () =>
@@ -769,8 +590,6 @@ export const api = {
     }),
 
   // Goals
-  getGoals: () => request<GoalProgress[]>('/api/goals'),
-
   getGoalsV2: () => request<GoalProgressV2[]>('/api/v2/goals'),
 
   createGoal: (data: { name: string; target_amount: number; target_date?: string }) =>
@@ -793,9 +612,6 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
-
-  getGoalContributions: (id: number) =>
-    request<GoalContribution[]>(`/api/goals/${id}/contributions`),
 
   updateContribution: (goalId: number, contributionId: number, data: { amount?: number; note?: string | null; contributed_date?: string }) =>
     request<GoalProgress>(`/api/goals/${goalId}/contributions/${contributionId}`, {
@@ -861,9 +677,6 @@ export const api = {
   // Subscriptions
   getSubscriptions: () =>
     request<{ subscriptions: Subscription[]; summary: SubscriptionSummary }>('/api/subscriptions'),
-
-  getSubscriptionSummary: () =>
-    request<SubscriptionSummary>('/api/subscriptions/summary'),
 
   getSubscriptionReviewV2: () =>
     request<SubscriptionReviewV2>('/api/v2/subscriptions/review'),

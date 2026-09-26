@@ -181,32 +181,6 @@ class TestTripTransactions:
         storage.delist_transaction(trip_id, tx_id)
         assert len(storage.get_trip_transactions(trip_id)) == 0
 
-    def test_auto_assign_adds_to_active_trip(self, in_memory_db):
-        storage = Storage(connection=in_memory_db)
-        in_memory_db.execute("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('trips_enabled', 'true')")
-        in_memory_db.commit()
-        trip_id = storage.create_trip(name="Active Trip", start_date="2026-04-01")
-        storage.activate_trip(trip_id)
-        tx_id = _insert_tx(in_memory_db, "t1")
-        storage.auto_assign_to_active_trip(tx_id)
-        assert len(storage.get_trip_transactions(trip_id)) == 1
-
-    def test_auto_assign_no_op_when_disabled(self, in_memory_db):
-        storage = Storage(connection=in_memory_db)
-        # trips_enabled defaults to false
-        trip_id = storage.create_trip(name="Active Trip", start_date="2026-04-01")
-        storage.activate_trip(trip_id)
-        tx_id = _insert_tx(in_memory_db, "t1")
-        storage.auto_assign_to_active_trip(tx_id)
-        assert len(storage.get_trip_transactions(trip_id)) == 0
-
-    def test_auto_assign_no_op_when_no_active_trip(self, in_memory_db):
-        storage = Storage(connection=in_memory_db)
-        in_memory_db.execute("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('trips_enabled', 'true')")
-        in_memory_db.commit()
-        tx_id = _insert_tx(in_memory_db, "t1")
-        storage.auto_assign_to_active_trip(tx_id)  # no active trip → no-op, no error
-
     def test_is_in_trip_true(self, in_memory_db):
         storage = Storage(connection=in_memory_db)
         trip_id = storage.create_trip(name="X", start_date="2026-04-01")

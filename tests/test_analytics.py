@@ -1,5 +1,3 @@
-import json
-import os
 import pytest
 from datetime import datetime, timedelta
 import sqlite3
@@ -15,8 +13,6 @@ from src.analytics import (
     get_anomalies,
     check_new_merchants,
     generate_summary,
-    load_summary,
-    get_yoy_comparison,
 )
 
 
@@ -386,12 +382,8 @@ class TestNewMerchants:
 
 
 class TestSummaryReport:
-    def test_generate_monthly_summary(self, db_with_transactions, tmp_path):
-        result = generate_summary(
-            db_with_transactions,
-            report_type="monthly",
-            cache_dir=str(tmp_path),
-        )
+    def test_generate_monthly_summary(self, db_with_transactions):
+        result = generate_summary(db_with_transactions, report_type="monthly")
         assert result["total_spent"] == 400.0
         assert result["transaction_count"] == 4
         assert "top_category" in result
@@ -418,26 +410,6 @@ class TestSummaryReport:
         assert result["top_category"]["total"] == 70.0
         assert result["transaction_count"] == 1  # refund isn't counted as an expense transaction
         conn.close()
-
-    def test_summary_cached_to_file(self, db_with_transactions, tmp_path):
-        generate_summary(
-            db_with_transactions,
-            report_type="monthly",
-            cache_dir=str(tmp_path),
-        )
-        # Check that a JSON file was created
-        files = os.listdir(tmp_path)
-        assert any(f.endswith(".json") for f in files)
-
-    def test_load_cached_summary(self, db_with_transactions, tmp_path):
-        original = generate_summary(
-            db_with_transactions,
-            report_type="monthly",
-            cache_dir=str(tmp_path),
-        )
-        loaded = load_summary(str(tmp_path), report_type="monthly")
-        assert loaded["total_spent"] == original["total_spent"]
-
 
 class TestTimezoneAwareDateRanges:
     def test_get_month_range_accepts_now_param(self):
@@ -467,54 +439,3 @@ class TestTimezoneAwareDateRanges:
         result = get_spending_velocity(conn, now=now)
         assert result["current_mtd"] == 120.0
         conn.close()
-
-
-class TestYoYComparison:
-    def test_returns_correct_month_count(self, in_memory_db):
-        result = get_yoy_comparison(in_memory_db, months=6)
-        assert len(result) == 6
-
-    def test_month_labels_present(self, in_memory_db):
-        result = get_yoy_comparison(in_memory_db, months=3)
-        for row in result:
-            assert "month_label" in row
-            assert "month" in row
-            assert "this_year_expenses" in row
-            assert "last_year_expenses" in row
-            assert "this_year_income" in row
-            assert "last_year_income" in row
-
-    def test_empty_db_returns_zeros(self, in_memory_db):
-        result = get_yoy_comparison(in_memory_db, months=3)
-        assert all(r["this_year_expenses"] == 0.0 for r in result)
-        assert all(r["last_year_expenses"] == 0.0 for r in result)
-
-    def test_unresolved_foreign_amount_is_excluded_not_face_valued(self, in_memory_db):
-        storage = Storage(in_memory_db)
-        now = datetime.now().strftime("%Y-%m-%d")
-        storage.insert_transaction(
-            source="manual", source_id="known", amount=50.0, transaction_date=now,
-        )
-        storage.insert_transaction(
-            source="manual", source_id="unresolved-foreign", amount=500.0,
-            currency="THB", exchange_rate=1.0, transaction_date=now,
-        )
-        result = get_yoy_comparison(in_memory_db, months=1)
-        assert result[0]["this_year_expenses"] == 50.0
-
-    def test_ordered_oldest_to_newest(self, in_memory_db):
-        result = get_yoy_comparison(in_memory_db, months=6)
-        months = [r["month"] for r in result]
-        assert months == sorted(months)
-
-    def test_this_year_expenses_nets_refund(self, in_memory_db):
-        storage = Storage(in_memory_db)
-        now = datetime.now().strftime("%Y-%m-%d")
-        storage.insert_transaction(
-            source="manual", source_id="yoy-purchase", amount=100.0, transaction_date=now, tx_type="expense",
-        )
-        storage.insert_transaction(
-            source="manual", source_id="yoy-refund", amount=30.0, transaction_date=now, tx_type="refund",
-        )
-        result = get_yoy_comparison(in_memory_db, months=1)
-        assert result[0]["this_year_expenses"] == 70.0

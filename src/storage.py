@@ -1455,20 +1455,6 @@ class Storage:
         }
 
     @_locked
-    def load_categories(self, categories: list[dict]) -> None:
-        for cat in categories:
-            self._conn.execute(
-                """INSERT INTO categories (name, keywords, icon, color)
-                   VALUES (?, ?, ?, ?)
-                   ON CONFLICT(name) DO UPDATE SET
-                     keywords = excluded.keywords,
-                     icon     = excluded.icon,
-                     color    = excluded.color""",
-                (cat["name"], cat["keywords"], cat["icon"], cat.get("color")),
-            )
-        self._conn.commit()
-
-    @_locked
     def get_income_summary(self, start_date: str, end_date: str) -> dict:
         rows = self._conn.execute(
             """SELECT category, SUM((CASE WHEN reporting_minor_units IS NOT NULL THEN reporting_minor_units / 100.0 WHEN currency = 'SGD' OR currency IS NULL THEN amount WHEN exchange_rate IS NOT NULL AND exchange_rate > 0 AND exchange_rate != 1 THEN amount * exchange_rate ELSE NULL END)) as total
@@ -1515,18 +1501,6 @@ class Storage:
         end = datetime.strptime(end_date, "%Y-%m-%d")
         days = max((end - start).days + 1, 1)
         return total / days
-
-    @_locked
-    def get_trend(self, start_date: str, end_date: str) -> list[dict]:
-        rows = self._conn.execute(
-            """SELECT DATE(transaction_date) as date, SUM((CASE WHEN type = 'refund' THEN -1 ELSE 1 END) * (CASE WHEN reporting_minor_units IS NOT NULL THEN reporting_minor_units / 100.0 WHEN currency = 'SGD' OR currency IS NULL THEN amount WHEN exchange_rate IS NOT NULL AND exchange_rate > 0 AND exchange_rate != 1 THEN amount * exchange_rate ELSE NULL END)) as amount
-               FROM transactions
-               WHERE DATE(transaction_date) >= ? AND DATE(transaction_date) <= ?
-               AND (type IS NULL OR type = 'expense' OR type = 'refund')
-               GROUP BY DATE(transaction_date) ORDER BY date""",
-            (start_date, end_date),
-        ).fetchall()
-        return [{"date": r["date"], "amount": r["amount"]} for r in rows]
 
     @_locked
     def get_trend_by_category(self, start_date: str, end_date: str) -> list[dict]:
@@ -1596,53 +1570,6 @@ class Storage:
             "SELECT name, icon FROM categories WHERE icon IS NOT NULL"
         ).fetchall()
         return {row["name"]: row["icon"] for row in rows}
-
-    @_locked
-    def get_ingestion_state(self, source: str) -> Optional[dict]:
-        row = self._conn.execute(
-            "SELECT * FROM ingestion_state WHERE source = ?", (source,)
-        ).fetchone()
-        return dict(row) if row else None
-
-    @_locked
-    def update_ingestion_state(
-        self, source: str, last_id: str, last_at: str
-    ) -> None:
-        self._conn.execute(
-            """INSERT OR REPLACE INTO ingestion_state
-               (source, last_processed_id, last_processed_at, updated_at)
-               VALUES (?, ?, ?, CURRENT_TIMESTAMP)""",
-            (source, last_id, last_at),
-        )
-        self._conn.commit()
-
-    @_locked
-    def is_duplicate(self, source: str, source_id: str) -> bool:
-        row = self._conn.execute(
-            "SELECT 1 FROM transactions WHERE source = ? AND source_id = ?",
-            (source, source_id),
-        ).fetchone()
-        return row is not None
-
-    @_locked
-    def source_id_exists(self, source_id: str) -> bool:
-        row = self._conn.execute(
-            "SELECT 1 FROM transactions WHERE source_id = ?", (source_id,)
-        ).fetchone()
-        return row is not None
-
-    @_locked
-    def recent_transaction_exists(
-        self, merchant: str, amount: float, minutes: int = 5
-    ) -> bool:
-        cutoff = datetime.now(timezone.utc) - timedelta(minutes=minutes)
-        cutoff_str = cutoff.strftime("%Y-%m-%d %H:%M:%S")
-        row = self._conn.execute(
-            """SELECT 1 FROM transactions
-               WHERE merchant = ? AND amount = ? AND ingested_at >= ?""",
-            (merchant, amount, cutoff_str),
-        ).fetchone()
-        return row is not None
 
     @_locked
     def add_category(self, name: str, keywords: str, icon: str = "📌", color: Optional[str] = None, cat_type: str = "neutral") -> None:
@@ -1953,11 +1880,6 @@ class Storage:
                 (merchant, display_name),
             )
         self._conn.commit()
-
-    @_locked
-    def get_merchant_aliases(self) -> dict[str, str]:
-        rows = self._conn.execute("SELECT merchant, display_name FROM merchant_aliases").fetchall()
-        return {r["merchant"]: r["display_name"] for r in rows}
 
     @_locked
     def get_category_rule_impact(self, merchant: str, category: str) -> int:
@@ -2553,16 +2475,6 @@ class Storage:
             (trip_id, limit, offset),
         ).fetchall()
         return [dict(r) for r in rows]
-
-    @_locked
-    def auto_assign_to_active_trip(self, tx_id: int) -> None:
-        """If trips_enabled and an active trip exists, add tx_id to it. No-op otherwise."""
-        if self.get_setting("trips_enabled", "false") != "true":
-            return
-        active = self.get_active_trip()
-        if not active:
-            return
-        self.enlist_transaction(active["id"], tx_id, added_by="auto")
 
     @_locked
     def is_in_trip(self, trip_id: int, tx_id: int) -> bool:
@@ -3311,19 +3223,9 @@ class Storage:
         return get_top_merchants(self._conn, limit, period, date)
 
     @_locked
-    def merchant_trend_chart(self, merchant: str) -> dict:
-        from src.analytics import get_merchant_trend
-        return get_merchant_trend(self._conn, merchant)
-
-    @_locked
     def spending_velocity(self) -> dict:
         from src.analytics import get_spending_velocity
         return get_spending_velocity(self._conn)
-
-    @_locked
-    def spending_anomalies(self, multiplier: float = 2.0) -> list[dict]:
-        from src.analytics import get_anomalies
-        return get_anomalies(self._conn, multiplier)
 
     @_locked
     def new_merchants(self) -> list[dict]:

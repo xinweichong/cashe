@@ -38,7 +38,7 @@ async def test_digest_reconciles_daily_monthly_facts_without_legacy_queries_or_p
     add(bot.storage, 'Pay', '2026-09-07', 3, kind='income')
     add(bot.storage, 'Transfer', '2026-09-07', 99, kind='transfer')
     bot.storage.set_setting('llm_insight_content', '{"narrative":"STALE PRIVATE TEXT"}')
-    with patch.object(bot.storage, 'get_spending_summary', side_effect=AssertionError('legacy')), patch.object(bot.storage, 'spending_velocity', side_effect=AssertionError('legacy')), patch.object(bot.storage, 'new_merchants', side_effect=AssertionError('legacy')), patch.object(bot.storage, 'spending_anomalies', side_effect=AssertionError('legacy')), patch.object(bot.storage, 'get_spending_evidence', side_effect=AssertionError('evidence list')):
+    with patch.object(bot.storage, 'get_spending_summary', side_effect=AssertionError('legacy')), patch.object(bot.storage, 'spending_velocity', side_effect=AssertionError('legacy')), patch.object(bot.storage, 'new_merchants', side_effect=AssertionError('legacy')), patch.object(bot.storage, 'get_spending_evidence', side_effect=AssertionError('evidence list')):
         text = await digest(bot)
     daily, monthly = text.split('*Month to date*')
     assert 'Morning Digest' in daily

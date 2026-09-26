@@ -330,7 +330,7 @@ def client():
 class TestMerchantAPI:
     def test_get_merchant_list_empty(self, client):
         c, db = client
-        resp = c.get("/api/merchant-intelligence")
+        resp = c.get("/api/v2/merchants")
         assert resp.status_code == 200
         assert resp.json() == []
 
@@ -344,12 +344,12 @@ class TestMerchantAPI:
             (today,),
         )
         db.commit()
-        resp = c.get("/api/merchant-intelligence")
+        resp = c.get("/api/v2/merchants")
         assert resp.status_code == 200
         data = resp.json()
         assert len(data) == 1
         assert data[0]["merchant"] == "Grab"
-        assert data[0]["total_sgd"] == 25.0
+        assert data[0]["total"] == {"minor_units": 2500, "currency": "SGD"}
         assert data[0]["tags"] == []
 
     def test_get_merchant_profile(self, client):
@@ -362,13 +362,13 @@ class TestMerchantAPI:
             (today,),
         )
         db.commit()
-        resp = c.get("/api/merchant-intelligence/Grab")
+        resp = c.get("/api/v2/merchants/Grab")
         assert resp.status_code == 200
         assert resp.json()["merchant"] == "Grab"
 
     def test_get_merchant_profile_404_for_unknown(self, client):
         c, _ = client
-        resp = c.get("/api/merchant-intelligence/Unknown")
+        resp = c.get("/api/v2/merchants/Unknown")
         assert resp.status_code == 404
 
     def test_put_merchant_tags(self, client):
@@ -386,7 +386,7 @@ class TestMerchantAPI:
         )
         assert resp.status_code == 200
         # Verify stored
-        resp2 = c.get("/api/merchant-intelligence/Grab")
+        resp2 = c.get("/api/v2/merchants/Grab")
         assert resp2.json()["tags"] == ["online", "recurring"]
 
     def test_put_merchant_tags_rejects_invalid_tag(self, client):
@@ -418,7 +418,7 @@ class TestMerchantAPI:
             json={"notes": "Ride-hailing app"},
         )
         assert resp.status_code == 200
-        resp2 = c.get("/api/merchant-intelligence/Grab")
+        resp2 = c.get("/api/v2/merchants/Grab")
         assert resp2.json()["notes"] == "Ride-hailing app"
 
     def test_put_merchant_alias(self, client):
@@ -433,12 +433,11 @@ class TestMerchantAPI:
         resp = c.put("/api/merchant-intelligence/Grab/alias", json={"display_name": "Grab Rides"})
         assert resp.status_code == 200
         assert resp.json() == {"merchant": "Grab", "display_name": "Grab Rides"}
-        assert c.get("/api/merchant-intelligence/Grab").json()["display_name"] == "Grab Rides"
         assert c.get("/api/v2/merchants/Grab").json()["display_name"] == "Grab Rides"
         assert c.get("/api/v2/merchants").json()[0]["display_name"] == "Grab Rides"
         # Blanking the alias reverts display_name to the raw merchant.
         c.put("/api/merchant-intelligence/Grab/alias", json={"display_name": ""})
-        assert c.get("/api/merchant-intelligence/Grab").json()["display_name"] == "Grab"
+        assert c.get("/api/v2/merchants/Grab").json()["display_name"] == "Grab"
 
     def test_merchant_rule_impact_404_without_a_rule(self, client):
         c, db = client

@@ -241,7 +241,7 @@ class TestGoalAPI:
     @pytest.mark.asyncio
     async def test_get_goals_empty(self, api):
         ac, _ = api
-        resp = await ac.get("/api/goals")
+        resp = await ac.get("/api/v2/goals")
         assert resp.status_code == 200
         assert resp.json() == []
 
@@ -282,7 +282,7 @@ class TestGoalAPI:
         goal_id = create.json()["id"]
         resp = await ac.delete(f"/api/goals/{goal_id}")
         assert resp.status_code == 200
-        assert (await ac.get("/api/goals")).json() == []
+        assert (await ac.get("/api/v2/goals")).json() == []
 
     @pytest.mark.asyncio
     async def test_manual_contribution(self, api):
@@ -294,19 +294,18 @@ class TestGoalAPI:
             json={"amount": 250, "note": "Bonus"},
         )
         assert resp.status_code == 200
-        goals_resp = await ac.get("/api/goals")
-        assert goals_resp.json()[0]["saved_amount"] == 250.0
+        goals_resp = await ac.get("/api/v2/goals")
+        assert goals_resp.json()[0]["saved_amount"] == {"minor_units": 25000, "currency": "SGD"}
 
     @pytest.mark.asyncio
-    async def test_get_contributions(self, api):
-        ac, _ = api
+    async def test_contribute_records_a_manual_contribution(self, api):
+        ac, storage = api
         create = await ac.post("/api/goals", json={"name": "X", "target_amount": 1000})
         goal_id = create.json()["id"]
         await ac.post(f"/api/goals/{goal_id}/contribute", json={"amount": 100})
-        resp = await ac.get(f"/api/goals/{goal_id}/contributions")
-        assert resp.status_code == 200
-        assert len(resp.json()) == 1
-        assert resp.json()[0]["source"] == "manual"
+        contributions = storage.get_contributions(goal_id)
+        assert len(contributions) == 1
+        assert contributions[0]["source"] == "manual"
 
 
 class TestGoalAPIV2:

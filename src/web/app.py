@@ -3,12 +3,14 @@ import logging
 import os
 import secrets
 import hashlib
+import json
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime
 from functools import partial
 from typing import Literal, Optional
+from zoneinfo import ZoneInfo
 
 import bcrypt
 from fastapi import FastAPI, Request, Response, HTTPException, Depends, Query
@@ -22,21 +24,12 @@ from src.storage import RevisionConflict, SubscriptionMatchConflict, Transaction
 from src import transaction_commands
 from src.money import to_minor_units, from_minor_units
 from src.spending_facts import resolve_money
-from src.config import local_now
+from src.config import DEFAULT_TIMEZONE, local_now
 from src.web.auth import verify_password, create_session, verify_session, destroy_session
-from src.web.contracts import Balance, BudgetProgress, BulkTransactionRequest, BulkTransactionResultItem, BulkUndoRequest, CaptureFollowup, CaptureIssue, CaptureResolution, CategoryBreakdown, CategoryTrendPoint, DailyTotal, GoalProgress, HealthScore, HomeBriefing, MerchantRanking, MerchantSummary, OverviewSummary, QueuedResponse, SpendingAlerts, SpendingComparison, SpendingEvidence, SpendingFacts, SpendingReview, SpendingVelocity, TopMerchantsResult, TransactionCorrection, TransactionCreate, TransactionDeletion, TransactionProvenance, TransactionUndo, TransactionV2, TrendPoint, TripSummary, UpcomingPlan, UpcomingCalendar, PlanMutationResponse, RecurringReview, RecurringResolution, RefundMatchReview, RefundMatchResolution, DuplicateReview, DuplicateDismissal, DuplicateMergeRequest, DuplicateMergeResult, DuplicateMergeUndoResult, SubscriptionReview, WeekdayPattern, MonthForecast, ScenarioRequest, ScenarioResponse, SpendingSignals, MonthlyFlow
-from src.analytics import (
-    load_summary,
-    get_yoy_comparison,
-)
+from src.web.contracts import BudgetProgress, BulkTransactionRequest, BulkTransactionResultItem, BulkUndoRequest, CaptureFollowup, CaptureIssue, CaptureResolution, CategoryBreakdown, CategoryTrendPoint, DailyTotal, GoalProgress, HealthScore, HomeBriefing, MerchantRanking, MerchantSummary, QueuedResponse, SpendingEvidence, SpendingFacts, SpendingReview, TransactionCorrection, TransactionCreate, TransactionDeletion, TransactionProvenance, TransactionUndo, TransactionV2, TripSummary, UpcomingPlan, UpcomingCalendar, PlanMutationResponse, RecurringReview, RecurringResolution, RefundMatchReview, RefundMatchResolution, DuplicateReview, DuplicateDismissal, DuplicateMergeRequest, DuplicateMergeResult, DuplicateMergeUndoResult, SubscriptionReview, WeekdayPattern, MonthForecast, ScenarioRequest, ScenarioResponse, SpendingSignals, MonthlyFlow
 
 logger = logging.getLogger(__name__)
 
-
-SUMMARY_CACHE_DIR = os.environ.get(
-    "SUMMARY_CACHE_DIR",
-    os.path.join(os.path.dirname(__file__), "..", "data", "summaries")
-)
 
 # DB thread pool: allows concurrent read queries while serialising writes via SQLite WAL mode.
 _DB_EXECUTOR = ThreadPoolExecutor(max_workers=4)
@@ -549,7 +542,6 @@ def create_dashboard_app(
         ctx = user_manager.get(username)
         if ctx and ctx.poller and os.path.exists(ctx.poller.token_path):
             try:
-                import json
                 with open(ctx.poller.token_path) as f:
                     token_data = json.load(f)
                 access_token = token_data.get("token") or token_data.get("access_token")
@@ -571,32 +563,6 @@ def create_dashboard_app(
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(_DB_EXECUTOR, partial(admin_storage.update_user, username, gmail_connected=0))
         return {"status": "ok"}
-
-    @app.get("/api/connections/gmail/connect-url")
-    async def gmail_reconnect_url(request: Request, username: str = Depends(require_auth)):
-        ctx = user_manager.get(username)
-        if not ctx:
-            raise HTTPException(status_code=503, detail="User context not ready — please try again")
-        redirect_uri = f"{host_base_url.rstrip('/')}/oauth/callback"
-        for token, pending in list(oauth_states.items()):
-            if pending[0] == username or pending[2] <= time.monotonic():
-                del oauth_states[token]
-        state = secrets.token_urlsafe(32)
-        url = ctx.poller.get_auth_url(redirect_uri=redirect_uri, state=state)
-        oauth_states[state] = (username, request.cookies["session"], time.monotonic() + 600)
-        return {"url": url}
-
-    @app.get("/api/summary")
-    async def summary(
-        start_date: Optional[str] = None,
-        end_date: Optional[str] = None,
-        username: str = Depends(require_auth),
-    ):
-        storage = user_manager.get(username).storage
-        today = local_now()
-        start = start_date or f"{today.year}-{today.month:02d}-01"
-        end = end_date or today.strftime("%Y-%m-%d")
-        return await _db(storage.get_spending_summary, start_date=start, end_date=end)
 
     @app.get("/api/transactions")
     async def transactions(
@@ -855,14 +821,6 @@ def create_dashboard_app(
             status_code = 404 if "no deletion record" in msg else 409
             raise HTTPException(status_code=status_code, detail=msg)
 
-    @app.get("/api/transactions/{tx_id}")
-    async def get_transaction(tx_id: int, username: str = Depends(require_auth)):
-        storage = user_manager.get(username).storage
-        tx = await _db(storage.get_transaction, tx_id)
-        if not tx:
-            raise HTTPException(status_code=404, detail="Transaction not found")
-        return tx
-
     @app.post("/api/transactions")
     async def create_transaction(request: Request, username: str = Depends(require_auth)):
         storage = user_manager.get(username).storage
@@ -987,25 +945,6 @@ def create_dashboard_app(
 
     VALID_TAGS = {"online", "subscription", "foreign", "essential", "recurring"}
 
-    @app.get("/api/merchant-intelligence")
-    async def merchant_intelligence_list(
-        sort_by: str = "total_spent",
-        tag: Optional[str] = None,
-        category: Optional[str] = None,
-        search: Optional[str] = None,
-        limit: int = 25,
-        offset: int = 0,
-        storage=Depends(_get_storage),
-    ):
-        return await _db(storage.get_merchant_list,
-            sort_by=sort_by,
-            tag_filter=tag,
-            category_filter=category,
-            name_search=search,
-            limit=limit,
-            offset=offset,
-        )
-
     @app.get("/api/merchant-intelligence/{merchant}/trend")
     async def merchant_trend(merchant: str, storage=Depends(_get_storage)):
         return await _db(storage.get_merchant_trend, merchant)
@@ -1051,13 +990,6 @@ def create_dashboard_app(
             raise HTTPException(status_code=404, detail="No category rule for this merchant")
         updated = await _db(storage.apply_category_rule_to_existing, merchant, category)
         return {"status": "ok", "updated_count": updated}
-
-    @app.get("/api/merchant-intelligence/{merchant}")
-    async def merchant_intelligence_profile(merchant: str, storage=Depends(_get_storage)):
-        profile = await _db(storage.get_merchant_profile, merchant)
-        if not profile:
-            raise HTTPException(status_code=404, detail="Merchant not found")
-        return profile
 
     def _merchant_to_v2(d: dict) -> dict:
         # total_sgd/avg_amount_sgd can be NULL if every transaction for this
@@ -1108,90 +1040,11 @@ def create_dashboard_app(
             raise HTTPException(status_code=404, detail="Merchant not found")
         return _merchant_to_v2(profile)
 
-    @app.get("/api/balance")
-    async def balance(start_date: Optional[str] = None, end_date: Optional[str] = None, storage=Depends(_get_storage)):
-        today = local_now()
-        start = start_date or f"{today.year}-{today.month:02d}-01"
-        end = end_date or today.strftime("%Y-%m-%d")
-        return await _db(storage.get_balance, start, end)
-
-    @app.get("/api/v2/overview/balance", response_model=Balance)
-    async def balance_v2(start_date: Optional[str] = None, end_date: Optional[str] = None, storage=Depends(_get_storage)):
-        start, end = _default_month_range(start_date, end_date)
-        result = await _db(storage.get_balance, start, end)
-        return {
-            "income": _sgd_money(result["income"]),
-            "expenses": _sgd_money(result["expenses"]),
-            "net": _sgd_money(result["net"]),
-        }
-
-    @app.get("/api/health-score")
-    async def health_score(months: int = 1, storage=Depends(_get_storage)):
-        if months < 1 or months > 12:
-            raise HTTPException(status_code=400, detail="months must be between 1 and 12")
-        return await _db(storage.get_health_score, months, timezone)
-
     @app.get("/api/v2/analytics/health-score", response_model=HealthScore)
     async def health_score_v2(months: int = 1, storage=Depends(_get_storage)):
         if months < 1 or months > 12:
             raise HTTPException(status_code=400, detail="months must be between 1 and 12")
         return await _db(storage.get_health_score, months, timezone)
-
-    @app.get("/api/income-vs-expense")
-    async def income_vs_expense(months: int = 6, storage=Depends(_get_storage)):
-        today = local_now()
-        results = []
-        for i in range(months):
-            m = today.month - i
-            y = today.year
-            while m <= 0:
-                m += 12
-                y -= 1
-            m_start = f"{y}-{m:02d}-01"
-            if m == 12:
-                m_end = f"{y+1}-01-01"
-            else:
-                m_end = f"{y}-{m+1:02d}-01"
-            b = await _db(storage.get_balance, m_start, m_end)
-            results.append({"month": m_start[:7], "income": b["income"], "expenses": b["expenses"]})
-        return list(reversed(results))
-
-    @app.get("/api/trend")
-    async def trend(start_date: Optional[str] = None, end_date: Optional[str] = None, storage=Depends(_get_storage)):
-        today = local_now()
-        start = start_date or f"{today.year}-{today.month:02d}-01"
-        end = end_date or today.strftime("%Y-%m-%d")
-        return await _db(storage.get_trend, start, end)
-
-    @app.get("/api/trend/by-category")
-    async def trend_by_category(start_date: Optional[str] = None, end_date: Optional[str] = None, storage=Depends(_get_storage)):
-        today = local_now()
-        start = start_date or f"{today.year}-{today.month:02d}-01"
-        end = end_date or today.strftime("%Y-%m-%d")
-        return await _db(storage.get_trend_by_category, start, end)
-
-    @app.get("/api/v2/overview/trend-by-category", response_model=list[CategoryTrendPoint])
-    async def trend_by_category_v2(start_date: Optional[str] = None, end_date: Optional[str] = None, storage=Depends(_get_storage)):
-        start, end = _default_month_range(start_date, end_date)
-        rows = await _db(storage.get_trend_by_category, start, end)
-        return [
-            {
-                "date": r["date"],
-                "categories": {
-                    k: (_sgd_money(v) if v is not None else None)
-                    for k, v in r.items()
-                    if k != "date"
-                },
-            }
-            for r in rows
-        ]
-
-    @app.get("/api/merchants")
-    async def merchants(start_date: Optional[str] = None, end_date: Optional[str] = None, storage=Depends(_get_storage)):
-        today = local_now()
-        start = start_date or f"{today.year}-{today.month:02d}-01"
-        end = end_date or today.strftime("%Y-%m-%d")
-        return await _db(storage.get_merchants_in_range, start, end)
 
     def _default_month_range(start_date: Optional[str], end_date: Optional[str]) -> tuple[str, str]:
         today = local_now()
@@ -1200,293 +1053,38 @@ def create_dashboard_app(
             end_date or today.strftime("%Y-%m-%d"),
         )
 
+    @app.get("/api/merchants")
+    async def merchants(start_date: Optional[str] = None, end_date: Optional[str] = None, storage=Depends(_get_storage)):
+        return await _db(storage.get_merchants_in_range, *_default_month_range(start_date, end_date))
+
     def _sgd_money(value: float) -> dict:
         return {"minor_units": to_minor_units(value, "SGD"), "currency": "SGD"}
-
-    @app.get("/api/v2/overview/summary", response_model=OverviewSummary)
-    async def overview_summary_v2(start_date: Optional[str] = None, end_date: Optional[str] = None, username: str = Depends(require_auth)):
-        storage = user_manager.get(username).storage
-        start, end = _default_month_range(start_date, end_date)
-        result = await _db(storage.get_spending_summary, start_date=start, end_date=end)
-        return {
-            "start": start, "end": end,
-            "total": _sgd_money(result["total"]),
-            "by_category": {k: _sgd_money(v) for k, v in result["by_category"].items()},
-        }
-
-    @app.get("/api/v2/overview/trend", response_model=list[TrendPoint])
-    async def overview_trend_v2(start_date: Optional[str] = None, end_date: Optional[str] = None, username: str = Depends(require_auth)):
-        storage = user_manager.get(username).storage
-        start, end = _default_month_range(start_date, end_date)
-        rows = await _db(storage.get_trend, start, end)
-        return [{"date": r["date"], "amount": _sgd_money(r["amount"])} for r in rows]
-
-    @app.get("/api/v2/overview/merchants", response_model=list[MerchantRanking])
-    async def overview_merchants_v2(start_date: Optional[str] = None, end_date: Optional[str] = None, limit: int = 10,
-                                    category: Optional[str] = None, username: str = Depends(require_auth)):
-        storage = user_manager.get(username).storage
-        start, end = _default_month_range(start_date, end_date)
-        rows = await _db(storage.get_merchant_ranking, start, end, limit, category)
-        return [{"merchant": r["merchant"], "visits": r["visits"], "total": _sgd_money(r["total"])} for r in rows]
-
-    @app.get("/api/insights")
-    async def insights(start_date: Optional[str] = None, end_date: Optional[str] = None, storage=Depends(_get_storage)):
-        today = local_now()
-        start = start_date or f"{today.year}-{today.month:02d}-01"
-        end = end_date or today.strftime("%Y-%m-%d")
-        return {
-            "merchants": await _db(storage.get_merchant_ranking, start, end),
-            "average_daily": await _db(storage.get_average_daily, start, end),
-        }
 
     @app.get("/api/recurring")
     async def recurring(storage=Depends(_get_storage)):
         return await _db(storage.get_recurring_transactions)
 
-    @app.get("/api/analytics/comparison")
-    async def analytics_comparison(
-        period: str = "month",
-        date: Optional[str] = None,
-        storage=Depends(_get_storage),
-    ):
-        return await _db(storage.comparison, period=period, date=date)
-
-    @app.get("/api/v2/analytics/comparison", response_model=SpendingComparison)
-    async def analytics_comparison_v2(
-        period: str = "month",
-        date: Optional[str] = None,
-        storage=Depends(_get_storage),
-    ):
-        result = await _db(storage.comparison, period=period, date=date)
-        overall = result["overall"]
-        return {
-            "overall": {
-                "current_start": overall["current_start"],
-                "current_end": overall["current_end"],
-                "previous_start": overall["previous_start"],
-                "previous_end": overall["previous_end"],
-                "current_total": _sgd_money(overall["current_total"]),
-                "previous_total": _sgd_money(overall["previous_total"]),
-                "change": _sgd_money(overall["change"]),
-                "change_percent": overall["change_percent"],
-            },
-            "categories": [
-                {
-                    "category": c["category"],
-                    "current": _sgd_money(c["current"]),
-                    "previous": _sgd_money(c["previous"]),
-                    "change": _sgd_money(c["change"]),
-                    "change_percent": c["change_percent"],
-                }
-                for c in result["categories"]
-            ],
-        }
-
-
-    @app.get("/api/analytics/merchants")
-    async def analytics_merchants(
-        limit: int = 10,
-        merchant: Optional[str] = None,
-        storage=Depends(_get_storage),
-    ):
-        top = await _db(storage.top_merchants_by_period, limit=limit)
-        trend = await _db(storage.merchant_trend_chart, merchant) if merchant else None
-        return {"top": top, "trend": trend}
-
-
-    @app.get("/api/v2/analytics/merchants", response_model=TopMerchantsResult)
-    async def analytics_merchants_v2(
-        limit: int = 10,
-        merchant: Optional[str] = None,
-        storage=Depends(_get_storage),
-    ):
-        top = await _db(storage.top_merchants_by_period, limit=limit)
-        trend = await _db(storage.merchant_trend_chart, merchant) if merchant else None
-        return {
-            "top": [
-                {
-                    "merchant": m["merchant"],
-                    "count": m["count"],
-                    "total": _sgd_money(m["total"]),
-                    "avg_amount": _sgd_money(m["avg_amount"]),
-                }
-                for m in top
-            ],
-            "trend": None if trend is None else {
-                "merchant": trend["merchant"],
-                "months": [
-                    {"month": mo["month"], "total": _sgd_money(mo["total"]), "count": mo["count"]}
-                    for mo in trend["months"]
-                ],
-                "current_month": _sgd_money(trend["current_month"]),
-                "previous_month": _sgd_money(trend["previous_month"]),
-            },
-        }
-
-
-    @app.get("/api/analytics/velocity")
-    async def analytics_velocity(storage=Depends(_get_storage)):
-        return await _db(storage.spending_velocity)
-
-
-    @app.get("/api/v2/analytics/velocity", response_model=SpendingVelocity)
-    async def analytics_velocity_v2(storage=Depends(_get_storage)):
-        result = await _db(storage.spending_velocity)
-        return {
-            "current_mtd": _sgd_money(result["current_mtd"]),
-            "last_month_total": _sgd_money(result["last_month_total"]),
-            "projected_total": _sgd_money(result["projected_total"]),
-            "days_elapsed": result["days_elapsed"],
-            "total_days": result["total_days"],
-            "pace_percent": result["pace_percent"],
-            "status": result["status"],
-        }
-
-
-    @app.get("/api/analytics/alerts")
-    async def analytics_alerts(storage=Depends(_get_storage)):
-        multiplier = float(await _db(storage.get_setting, "anomaly_multiplier", "2.0"))
-        anomalies = await _db(storage.spending_anomalies, multiplier=multiplier)
-        if llm_service:
-            for a in anomalies:
-                try:
-                    a["explanation"] = llm_service.explain_anomaly(
-                        a["merchant"], a["amount"], a.get("avg_amount", a["amount"]), a["category"]
-                    )
-                except Exception:
-                    a["explanation"] = ""
-        return {
-            "anomalies": anomalies,
-            "new_merchants": await _db(storage.new_merchants),
-        }
-
-
-    @app.get("/api/v2/analytics/alerts", response_model=SpendingAlerts)
-    async def analytics_alerts_v2(storage=Depends(_get_storage)):
-        multiplier = float(await _db(storage.get_setting, "anomaly_multiplier", "2.0"))
-        anomalies = await _db(storage.spending_anomalies, multiplier=multiplier)
-        new_merchants = await _db(storage.new_merchants)
-        typed_anomalies = []
-        for a in anomalies:
-            explanation = None
-            if llm_service:
-                try:
-                    explanation = llm_service.explain_anomaly(
-                        a["merchant"], a["amount"], a.get("avg_amount", a["amount"]), a["category"]
-                    )
-                except Exception:
-                    explanation = ""
-            typed_anomalies.append({
-                "id": a["id"],
-                "merchant": a["merchant"],
-                # reporting_minor_units, not the raw original-currency `amount` —
-                # see SpendingAnomaly's docstring in contracts.py.
-                "amount": {"minor_units": a["reporting_minor_units"] or 0, "currency": "SGD"},
-                "category": a["category"],
-                "transaction_date": a["transaction_date"],
-                "avg_amount": _sgd_money(a["avg_amount"]),
-                "explanation": explanation,
-            })
-        return {
-            "anomalies": typed_anomalies,
-            "new_merchants": [
-                {
-                    "merchant": m["merchant"],
-                    "first_date": m["first_date"],
-                    "category": m["category"],
-                    "amount": {"minor_units": m["reporting_minor_units"] or 0, "currency": "SGD"},
-                }
-                for m in new_merchants
-            ],
-        }
-
-
-    @app.get("/api/analytics/summaries")
-    async def analytics_summaries(storage=Depends(_get_storage)):
-        loop = asyncio.get_running_loop()
-        monthly = await loop.run_in_executor(_DB_EXECUTOR, load_summary, SUMMARY_CACHE_DIR, "monthly")
-        weekly = await loop.run_in_executor(_DB_EXECUTOR, load_summary, SUMMARY_CACHE_DIR, "weekly")
-        return {"monthly": monthly, "weekly": weekly}
-
-
-    @app.get("/api/analytics/yoy")
-    async def get_yoy_endpoint(months: int = Query(default=12, ge=1, le=60), storage=Depends(_get_storage)):
-        return await _db(get_yoy_comparison, storage._conn, months)
-
-
     @app.get("/api/analytics/insight")
     async def get_analytics_insight(storage=Depends(_get_storage)):
-        import json as _json
         content_str = await _db(storage.get_setting, "llm_insight_content", "")
         generated_at = await _db(storage.get_setting, "llm_insight_generated_at", "")
         if not content_str:
             return {"content": None, "generated_at": None, "is_stale": True}
         try:
-            content = _json.loads(content_str)
+            content = json.loads(content_str)
         except Exception:
             content = None
         is_stale = True
         if generated_at:
-            from datetime import timedelta
             try:
                 gen = datetime.fromisoformat(generated_at)
                 if gen.tzinfo is None:
-                    from zoneinfo import ZoneInfo
-                    from src.config import DEFAULT_TIMEZONE
                     gen = gen.replace(tzinfo=ZoneInfo(DEFAULT_TIMEZONE))
                 is_stale = (local_now() - gen).total_seconds() > 25 * 3600
             except Exception:
                 pass
         return {"content": content, "generated_at": generated_at, "is_stale": is_stale}
 
-
-    @app.get("/api/analytics/insight/weekly")
-    async def get_weekly_insight(storage=Depends(_get_storage)):
-        import json as _json
-        content_str = await _db(storage.get_setting, "llm_weekly_insight_content", "")
-        generated_at = await _db(storage.get_setting, "llm_weekly_insight_generated_at", "")
-        if not content_str:
-            return {"content": None, "generated_at": None, "is_stale": True}
-        try:
-            content = _json.loads(content_str)
-        except Exception:
-            content = None
-        is_stale = True
-        if generated_at:
-            try:
-                gen = datetime.fromisoformat(generated_at)
-                if gen.tzinfo is None:
-                    from zoneinfo import ZoneInfo
-                    from src.config import DEFAULT_TIMEZONE
-                    gen = gen.replace(tzinfo=ZoneInfo(DEFAULT_TIMEZONE))
-                is_stale = (local_now() - gen).total_seconds() > 8 * 24 * 3600  # stale after 8 days
-            except Exception:
-                pass
-        return {"content": content, "generated_at": generated_at, "is_stale": is_stale}
-
-    @app.get("/api/analytics/insight/monthly")
-    async def get_monthly_insight(storage=Depends(_get_storage)):
-        import json as _json
-        content_str = await _db(storage.get_setting, "llm_monthly_insight_content", "")
-        generated_at = await _db(storage.get_setting, "llm_monthly_insight_generated_at", "")
-        if not content_str:
-            return {"content": None, "generated_at": None, "is_stale": True}
-        try:
-            content = _json.loads(content_str)
-        except Exception:
-            content = None
-        is_stale = True
-        if generated_at:
-            try:
-                gen = datetime.fromisoformat(generated_at)
-                if gen.tzinfo is None:
-                    from zoneinfo import ZoneInfo
-                    from src.config import DEFAULT_TIMEZONE
-                    gen = gen.replace(tzinfo=ZoneInfo(DEFAULT_TIMEZONE))
-                is_stale = (local_now() - gen).total_seconds() > 35 * 24 * 3600  # stale after 35 days
-            except Exception:
-                pass
-        return {"content": content, "generated_at": generated_at, "is_stale": is_stale}
 
     @app.get("/api/settings")
     async def get_settings(storage=Depends(_get_storage)):
@@ -1599,10 +1197,6 @@ def create_dashboard_app(
 
     # ── Budgets ──────────────────────────────────────────────────────────
 
-    @app.get("/api/budgets")
-    async def list_budgets(storage=Depends(_get_storage)):
-        return await _db(storage.get_budgets)
-
     @app.post("/api/budgets")
     async def create_budget(request: Request, storage=Depends(_get_storage)):
         body = await request.json()
@@ -1623,10 +1217,6 @@ def create_dashboard_app(
             raise HTTPException(status_code=409, detail=str(e))
         row = await _db(storage.get_budget, budget_id)
         return dict(row)
-
-    @app.get("/api/budgets/progress")
-    async def budget_progress(storage=Depends(_get_storage)):
-        return await _db(storage.get_budget_progress)
 
     @app.get("/api/v2/budgets/progress", response_model=list[BudgetProgress])
     async def budget_progress_v2(username: str = Depends(require_auth)):
@@ -1669,15 +1259,6 @@ def create_dashboard_app(
         return {"status": "ok"}
 
     # ── Goals ──────────────────────────────────────────────────────────────
-
-    @app.get("/api/goals")
-    async def list_goals(storage=Depends(_get_storage)):
-        goals = await _db(storage.get_goals)
-        results = []
-        for g in goals:
-            progress = await _db(storage.get_goal_progress, g["id"])
-            results.append(progress if progress else g)
-        return results
 
     @app.get("/api/v2/goals", response_model=list[GoalProgress])
     async def list_goals_v2(storage=Depends(_get_storage)):
@@ -1779,12 +1360,6 @@ def create_dashboard_app(
         except ValueError as e:
             raise HTTPException(status_code=404, detail=str(e))
         return await _db(storage.get_goal_progress, goal_id)
-
-    @app.get("/api/goals/{goal_id}/contributions")
-    async def goal_contributions(goal_id: int, storage=Depends(_get_storage)):
-        if not await _db(storage.get_goal, goal_id):
-            raise HTTPException(status_code=404, detail="Goal not found")
-        return await _db(storage.get_contributions, goal_id)
 
     @app.put("/api/goals/{goal_id}/contributions/{contribution_id}")
     async def update_contribution(goal_id: int, contribution_id: int, request: Request, storage=Depends(_get_storage)):
@@ -1966,10 +1541,6 @@ def create_dashboard_app(
 
     # ── Subscriptions ──────────────────────────────────────────────────────────
 
-    @app.get("/api/subscriptions/summary")
-    async def get_subscription_summary(storage=Depends(_get_storage)):
-        return await _db(storage.get_subscription_summary)
-
     @app.get("/api/subscriptions")
     async def list_subscriptions(storage=Depends(_get_storage)):
         subs = await _db(storage.list_subscriptions)
@@ -2111,8 +1682,11 @@ def create_dashboard_app(
 
         @app.get("/{full_path:path}")
         async def serve_spa(full_path: str):
+            # Unknown API paths are a 404, not the SPA shell with a 200.
+            if full_path == "api" or full_path.startswith("api/"):
+                raise HTTPException(status_code=404, detail="Not found")
             file_path = os.path.join(static_dist, full_path)
-            if os.path.isfile(file_path) and not full_path.startswith("api"):
+            if os.path.isfile(file_path):
                 return FileResponse(file_path)
             return FileResponse(os.path.join(static_dist, "index.html"))
 
