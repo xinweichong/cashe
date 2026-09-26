@@ -1,16 +1,14 @@
 import { subscriptionConfirmationLabels } from '@/lib/subscriptionConfirmation';
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { Ban, Pencil, Trash2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { ChartCard } from '@/components/ui/cards';
-import { CHART_MOTION, useChartTheme } from '@/lib/chartTheme';
 import { api, type Subscription, type Transaction, type UpcomingTransaction } from '@/api/client';
 import { SubscriptionForm } from './SubscriptionForm';
 import { invalidateSpendingQueries } from '@/hooks/useTransactions';
 import { toDateStr } from '@/lib/utils';
 import { FREQUENCY_LABELS } from '@/lib/subscriptionFrequency';
+import { MiniBarChart } from '@/components/charts/MiniBarChart';
 
 interface SubscriptionDetailProps {
   subId: number;
@@ -26,7 +24,6 @@ const FREQUENCY_MONTHLY_FACTOR: Record<Subscription['frequency'], number> = {
 };
 
 export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) {
-  const { CHART_AXIS_PROPS, CHART_CURSOR_BAR, CHART_TOOLTIP_STYLE, COLOR_TEAL } = useChartTheme();
   const qc = useQueryClient();
   const [showEdit, setShowEdit] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -300,16 +297,7 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
               )}
 
               {trendData.length >= 2 && (
-                <ChartCard title="Recent charges">
-                  <ResponsiveContainer width="100%" height={120}>
-                    <BarChart data={trendData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
-                      <XAxis dataKey="date" {...CHART_AXIS_PROPS} />
-                      <YAxis hide />
-                      <Tooltip contentStyle={CHART_TOOLTIP_STYLE} cursor={CHART_CURSOR_BAR} />
-                      <Bar {...CHART_MOTION} dataKey="amount" fill={COLOR_TEAL} radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </ChartCard>
+                <MiniBarChart title="Recent charges" data={trendData} xKey="date" valueKey="amount" valueLabel="Charged" />
               )}
 
               <p className="text-sm text-muted">{subscriptionConfirmationLabels[sub.confirmation_source]}. Future dates and amounts remain estimates.</p>

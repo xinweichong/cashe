@@ -8,7 +8,7 @@ import { ChartCard } from '@/components/ui/cards';
 import { LoadFailed } from '@/components/ui/LoadFailed';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { CHART_MOTION, COLOR_CORAL, useChartTheme } from '@/lib/chartTheme';
+import { COLOR_CORAL, useChartMotion, useChartTheme } from '@/lib/chartTheme';
 
 type Mode = '6mo' | '12mo' | 'yoy';
 const LABELS: Record<Mode, string> = { '6mo': '6M', '12mo': '12M', yoy: 'YoY' };
@@ -25,6 +25,7 @@ function monthLabel(month: string): string {
  */
 export function IncomeExpenseBar() {
   const { CHART_AXIS_PROPS, CHART_TOOLTIP_STYLE, CHART_CURSOR_BAR, CHART_LEGEND_STYLE, COLOR_TEAL, COLOR_MUTED_BAR } = useChartTheme();
+  const chartMotion = useChartMotion();
   const [mode, setMode] = useState<Mode>('6mo');
   const months = mode === '6mo' ? 6 : mode === '12mo' ? 12 : 24;
   const { data, isError, refetch } = useQuery({
@@ -60,13 +61,13 @@ export function IncomeExpenseBar() {
             <Legend wrapperStyle={CHART_LEGEND_STYLE} />
             {isYoY ? (
               <>
-                <Bar {...CHART_MOTION} dataKey="This year" fill={COLOR_CORAL} radius={[4, 4, 0, 0]} />
-                <Bar {...CHART_MOTION} dataKey="Year before" fill={COLOR_MUTED_BAR} radius={[4, 4, 0, 0]} />
+                <Bar {...chartMotion} dataKey="This year" fill={COLOR_CORAL} radius={[4, 4, 0, 0]} />
+                <Bar {...chartMotion} dataKey="Year before" fill={COLOR_MUTED_BAR} radius={[4, 4, 0, 0]} />
               </>
             ) : (
               <>
-                <Bar {...CHART_MOTION} dataKey="Income" fill={COLOR_TEAL} radius={[4, 4, 0, 0]} />
-                <Bar {...CHART_MOTION} dataKey="Spending" fill={COLOR_CORAL} radius={[4, 4, 0, 0]} />
+                <Bar {...chartMotion} dataKey="Income" fill={COLOR_TEAL} radius={[4, 4, 0, 0]} />
+                <Bar {...chartMotion} dataKey="Spending" fill={COLOR_CORAL} radius={[4, 4, 0, 0]} />
               </>
             )}
           </BarChart>

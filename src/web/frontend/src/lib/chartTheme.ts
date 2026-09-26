@@ -1,3 +1,4 @@
+import { useReducedMotion } from 'framer-motion';
 import { useTheme } from '@/hooks/useTheme';
 import type { CSSProperties } from 'react';
 
@@ -82,3 +83,9 @@ export function useChartTheme() {
 // it begin after the page or panel fade (~150ms) so the two never compete
 // for frames on a phone.
 export const CHART_MOTION = { animationBegin: 160, animationDuration: 520, animationEasing: 'ease-out' as const };
+
+/** CHART_MOTION for a series, switched off under reduced motion. */
+export function useChartMotion() {
+  const reduceMotion = useReducedMotion();
+  return { ...CHART_MOTION, isAnimationActive: !reduceMotion };
+}

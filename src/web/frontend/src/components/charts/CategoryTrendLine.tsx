@@ -1,12 +1,11 @@
 import { useMemo } from 'react';
-import { useReducedMotion } from 'framer-motion';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, ReferenceLine,
 } from 'recharts';
 import { Button } from '@/components/ui/button';
 import { formatCurrency, formatShortDate, getCategoryColor } from '@/lib/utils';
-import { formatDateTick, formatDateLabel, useChartTheme, CHART_MOTION, CHART_Y_DOMAIN } from '@/lib/chartTheme';
+import { formatDateTick, formatDateLabel, useChartTheme, useChartMotion, CHART_Y_DOMAIN } from '@/lib/chartTheme';
 
 interface CategoryTrendLineProps {
   data: Record<string, string | number | null>[];
@@ -19,7 +18,7 @@ export function CategoryTrendLine({ data, selectedDate, onSelectDate }: Category
   const { CHART_AXIS_PROPS, CHART_TOOLTIP_STYLE, CHART_CURSOR_LINE, CHART_LEGEND_STYLE, COLOR_MUTED_BAR } = useChartTheme();
   // Recharts' Line animates its draw-in on its own JS timer, independent of
   // the CSS-level reduced-motion override in index.css.
-  const reduceMotion = useReducedMotion();
+  const chartMotion = useChartMotion();
   const categories = useMemo(() => {
     const cats = new Set<string>();
     data.forEach(d => Object.keys(d).filter(k => k !== 'date').forEach(k => cats.add(k)));
@@ -69,7 +68,7 @@ export function CategoryTrendLine({ data, selectedDate, onSelectDate }: Category
           {activeIndex >= 0 && <ReferenceLine x={String(data[activeIndex].date)} stroke={COLOR_MUTED_BAR} strokeDasharray="3 3" />}
           {categories.map((cat) => (
             <Line
-              {...CHART_MOTION}
+              {...chartMotion}
               key={cat}
               type="monotone"
               dataKey={cat}
@@ -78,7 +77,6 @@ export function CategoryTrendLine({ data, selectedDate, onSelectDate }: Category
               dot={{ r: 2, fill: getCategoryColor(cat) }}
               activeDot={{ r: 4 }}
               connectNulls
-              isAnimationActive={!reduceMotion}
             />
           ))}
         </LineChart>

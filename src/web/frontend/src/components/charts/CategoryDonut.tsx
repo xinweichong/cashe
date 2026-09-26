@@ -1,10 +1,9 @@
 import { useMemo, useState } from 'react';
-import { useReducedMotion } from 'framer-motion';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { cn, getCategoryColor, formatCurrency } from '@/lib/utils';
 import { SelectableRow } from '@/components/ui/selectable-row';
 import { Button } from '@/components/ui/button';
-import { CHART_MOTION, useChartTheme } from '@/lib/chartTheme';
+import { useChartMotion, useChartTheme } from '@/lib/chartTheme';
 
 interface CategoryData {
   category: string;
@@ -12,7 +11,6 @@ interface CategoryData {
 }
 
 const REMAINING_LABEL = 'Remaining categories';
-const REMAINING_COLOR = '#3A3A46'; // COLOR_MUTED_BAR — distinguishable from any real category hue
 
 interface CategoryDonutProps {
   data: CategoryData[];
@@ -38,12 +36,13 @@ interface CategoryDonutProps {
 
 export function CategoryDonut({ data, selected, onSelect, onViewTransactions, showLegend = false, layout = 'stacked', size = 'default' }: CategoryDonutProps) {
   const compact = size === 'compact';
-  const { CHART_TOOLTIP_STYLE } = useChartTheme();
+  // The muted bar colour is distinguishable from any real category hue.
+  const { CHART_TOOLTIP_STYLE, COLOR_MUTED_BAR: REMAINING_COLOR } = useChartTheme();
   const [remainingExpanded, setRemainingExpanded] = useState(false);
   // Recharts' Pie animates its sweep on its own JS timer, independent of the
   // CSS-level reduced-motion override in index.css — must be wired here
   // explicitly or reduced-motion users still get the animated draw-in.
-  const reduceMotion = useReducedMotion();
+  const chartMotion = useChartMotion();
 
   // Memoised on `data` so a parent re-render (a lens switch, a selection)
   // hands Recharts the same slice array and the sweep never replays.
@@ -83,7 +82,7 @@ export function CategoryDonut({ data, selected, onSelect, onViewTransactions, sh
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie
-              {...CHART_MOTION}
+              {...chartMotion}
               data={sliceData}
               dataKey="total"
               nameKey="category"
@@ -92,7 +91,6 @@ export function CategoryDonut({ data, selected, onSelect, onViewTransactions, sh
               innerRadius="60%"
               outerRadius="85%"
               paddingAngle={2}
-              isAnimationActive={!reduceMotion}
               strokeWidth={0}
               onClick={(entry: { category?: string; payload?: CategoryData }) => {
                 const category = entry.category ?? entry.payload?.category;

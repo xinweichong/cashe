@@ -14,11 +14,12 @@ const COLOR_CLASS: Record<StatColor, string> = {
   default: 'text-foreground',
 };
 
+// Theme tokens, so the line follows light and dark mode.
 const SPARKLINE_COLOR: Record<StatColor, string> = {
-  teal:    '#00D4AA',
-  warm:    '#FBBF24',
-  coral:   '#FF6B6B',
-  mint:    '#34D399',
+  teal:    'var(--color-teal)',
+  warm:    'var(--color-honey)',
+  coral:   'var(--color-coral)',
+  mint:    'var(--color-mint)',
   default: 'var(--color-foreground)',
 };
 

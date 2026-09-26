@@ -1,19 +1,15 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
-} from 'recharts';
 import { Link } from 'react-router-dom';
 import { api } from '@/api/client';
 import type { Transaction } from '@/api/client';
 import { Badge } from '@/components/ui/badge';
 import { ChoiceChip } from '@/components/ui/choice-chip';
 import { Button } from '@/components/ui/button';
-import { ChartCard } from '@/components/ui/cards';
-import { CHART_MOTION, useChartTheme } from '@/lib/chartTheme';
 import { X } from 'lucide-react';
 import { formatCurrency, isCreditType } from '@/lib/utils';
 import { ALL_TAGS } from '@/lib/merchants';
+import { MiniBarChart } from '@/components/charts/MiniBarChart';
 
 export function MerchantProfile({
   merchant,
@@ -22,7 +18,6 @@ export function MerchantProfile({
   merchant: string;
   onClose: () => void;
 }) {
-  const { CHART_AXIS_PROPS, CHART_TOOLTIP_STYLE, CHART_CURSOR_BAR, COLOR_TEAL } = useChartTheme();
   const qc = useQueryClient();
 
   const { data: profile, isLoading } = useQuery({
@@ -172,20 +167,7 @@ export function MerchantProfile({
 
       {/* Spend trend — ChartCard used here (Recharts does not support CSS custom properties; all values come from chartTheme.ts) */}
       {chartData.length > 0 && (
-        <ChartCard title="Monthly Spend">
-          <ResponsiveContainer width="100%" height={120}>
-            <BarChart data={chartData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
-              <XAxis dataKey="month" {...CHART_AXIS_PROPS} />
-              <YAxis hide />
-              <Tooltip
-                formatter={(v) => [formatCurrency(Number(v ?? 0)), 'Spent']}
-                contentStyle={CHART_TOOLTIP_STYLE}
-                cursor={CHART_CURSOR_BAR}
-              />
-              <Bar {...CHART_MOTION} dataKey="Total" fill={COLOR_TEAL} radius={[3, 3, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </ChartCard>
+        <MiniBarChart title="Monthly Spend" data={chartData} xKey="month" valueKey="Total" valueLabel="Spent" />
       )}
 
       {/* Tags */}

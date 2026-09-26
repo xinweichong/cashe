@@ -1,12 +1,11 @@
 import { useId } from 'react';
-import { useReducedMotion } from 'framer-motion';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, Dot,
 } from 'recharts';
 import { Button } from '@/components/ui/button';
 import { formatCurrency, formatShortDate } from '@/lib/utils';
-import { formatDateTick, formatDateLabel, useChartTheme, CHART_MOTION, CHART_Y_DOMAIN } from '@/lib/chartTheme';
+import { formatDateTick, formatDateLabel, useChartTheme, useChartMotion, CHART_Y_DOMAIN } from '@/lib/chartTheme';
 
 interface TrendPoint {
   date: string;
@@ -30,7 +29,7 @@ export function TrendLine({ data, selectedDate, onSelectDate, chartHeight = 160,
   const gradientId = useId().replace(/:/g, '');
   // Recharts' Area animates its draw-in on its own JS timer, independent of
   // the CSS-level reduced-motion override in index.css.
-  const reduceMotion = useReducedMotion();
+  const chartMotion = useChartMotion();
 
   if (!data || data.length === 0) {
     return <div className="w-full h-full min-h-[160px] flex items-center justify-center text-muted text-sm">No trend data</div>;
@@ -73,13 +72,12 @@ export function TrendLine({ data, selectedDate, onSelectDate, chartHeight = 160,
               labelFormatter={formatDateLabel}
             />
             <Area
-              {...CHART_MOTION}
+              {...chartMotion}
               type="monotone"
               dataKey="amount"
               stroke={COLOR_TEAL}
               strokeWidth={2}
               fill={`url(#${gradientId})`}
-              isAnimationActive={!reduceMotion}
               activeDot={onSelectDate ? {
                 r: 5,
                 // Recharts' DotProps type omits `payload` even though it spreads the
