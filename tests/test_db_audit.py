@@ -7,7 +7,7 @@ from cryptography.fernet import Fernet
 
 from scripts.db_audit import audit_database, main
 from src.backups import create_snapshot, restore_snapshot
-from src.main import init_app_db, init_db
+from src.db import init_app_db, init_db
 
 
 @pytest.mark.parametrize('initialize,kind', [(init_db, 'user'), (init_app_db, 'admin')])
@@ -192,7 +192,7 @@ def test_partial_legacy_schema_is_not_a_clean_bill_of_health(tmp_path):
     report = audit_database(path)
     assert report['status'] == 'issues'
     assert report['absent_feature_tables'] == ['goal_contributions', 'trip_transactions', 'upcoming_transactions']
-    assert report['pending_migrations'] == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
+    assert report['pending_migrations'] == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24]
 
 
 def test_missing_file_is_not_created_and_corrupt_input_is_safe(tmp_path, capsys):

@@ -10,7 +10,7 @@ from statistics import median
 from tempfile import TemporaryDirectory
 from time import perf_counter
 
-from src.main import init_db
+from src.db import init_db
 from src.storage import Storage
 
 
@@ -70,7 +70,7 @@ def main() -> None:
     parser.add_argument("--runs", type=positive_int, default=5)
     parser.add_argument("--history-days", type=positive_int, default=240)
     args = parser.parse_args()
-    logging.getLogger("src.main").setLevel(logging.WARNING)
+    logging.getLogger("src.db").setLevel(logging.WARNING)
     print(json.dumps(benchmark(args.rows, args.runs, args.history_days), indent=2))
 
 

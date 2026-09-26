@@ -271,13 +271,13 @@ The `IngestionPipeline` is instantiated per-user inside `UserManager._build_cont
 - `transaction_date` is stored as ISO 8601 string `"YYYY-MM-DDTHH:MM:SS"`. Range queries must use `DATE(transaction_date) >= ?`. Display truncates to `[:10]`.
 - `raw_data` for Apple Wallet transactions is `str(dict)` (Python `repr`), not valid JSON. Re-parsing requires `ast.literal_eval`, not `json.loads`.
 - DB path resolution: `DATA_DIR = "/data" if os.path.isdir("/data") else "data"`. Per-user DB: `{DATA_DIR}/users/{username}/expense_tracker.db`. Admin DB: `{DATA_DIR}/app.db`. The `EXPENSE_DB_PATH` env var overrides only the legacy single-user path, not per-user paths.
-- Legacy baseline migrations remain in `init_db`. New schema changes use ordered, transactional migrations in `src/migrations.py`; do not add new swallowed migration errors.
+- The baseline tables (and the few columns added to them before migrations existed) are created by `init_db` in `src/db.py`. New schema changes use ordered, transactional migrations in `src/migrations.py`; do not add new swallowed migration errors.
 - `RecurringDetector.detect()` runs through the ingestion outbox (both Gmail and Webhook paths). It looks back 90 days and is instantiated per-`UserContext` (stateful — reused across ingestion calls for the same user).
 - The `source` column has no `CHECK` constraint — invalid values insert silently. Valid values: `dbs_paylah`, `uob_card`, `uob_paynow`, `uob_paynow_sent`, `uob_transfer`, `uob_nets`, `apple_wallet`, `manual`, `cash`.
 
 ### Testing Conventions
 
-- The `in_memory_db` fixture calls production `main.init_db(":memory:")`. New additive migrations live in ordered `src/migrations.py` and run in production and tests. Append migrations; never edit released versions.
+- The `in_memory_db` fixture calls production `src.db.init_db(":memory:")`. New additive migrations live in ordered `src/migrations.py` and run in production and tests. Append migrations; never edit released versions.
 - There is no shared `Storage` or `Categorizer` fixture — tests instantiate them inline: `Storage(in_memory_db)`.
 - `sample_categories` fixture uses comma-separated string keywords (`"restaurant,cafe,food"`). `sample_config` uses Python lists. Both mirror real usage: Storage receives the comma-separated string form; Categorizer receives the list form from YAML.
 
@@ -285,7 +285,8 @@ The `IngestionPipeline` is instantiated per-user inside `UserManager._build_cont
 
 | File | Purpose |
 |------|---------|
-| `src/main.py` | Entry point — starts all services, creates DB schema with migrations, seeds admin user |
+| `src/main.py` | Entry point — starts all services, seeds admin user |
+| `src/db.py` | `init_db` / `init_app_db`: open a database, create baseline tables, run migrations |
 | `src/config.py` | Loads `config.yaml` + environment variable overrides, exposes `local_now()` |
 | `src/storage.py` | `Storage`: all SQLite CRUD for per-user DBs. `AdminStorage`: users, sessions, admin sessions, Telegram link tokens in `app.db` |
 | `src/categorizer.py` | Matches merchant names to categories via keywords + learned overrides, returns match source |

@@ -3,7 +3,7 @@ import json
 import pytest
 
 from scripts.repair_orphans import find_orphans, main
-from src.main import init_db
+from src.db import init_db
 
 
 def test_find_orphans_lists_row_ids_referencing_a_missing_parent(tmp_path):

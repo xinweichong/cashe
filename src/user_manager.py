@@ -5,11 +5,11 @@ main.py and web/app.py never create them directly.
 """
 import logging
 import os
-import sqlite3
 from dataclasses import dataclass
 from typing import Optional
 
 from src.config import DEFAULT_TIMEZONE
+from src.db import init_db
 from src.subscriptions import SubscriptionMatcher
 
 logger = logging.getLogger(__name__)
@@ -93,8 +93,7 @@ class UserManager:
         user_dir = os.path.join(self._data_dir, "users", username)
         os.makedirs(user_dir, exist_ok=True)
 
-        db_path = os.path.join(user_dir, "expense_tracker.db")
-        _init_user_db(db_path)
+        db_path = self._user_db_path(username)
 
         # Record in admin DB (no-op if already exists)
         if self._admin_storage.get_user(username) is None:
@@ -149,7 +148,6 @@ class UserManager:
         from src.gmail_poller import GmailPoller
         from src.ingestion import IngestionPipeline
 
-        from src.main import init_db
         conn = init_db(db_path)
         storage = Storage(conn)
 
@@ -288,18 +286,6 @@ class UserManager:
                 id=f"capture_retry_{username}", replace_existing=True, max_instances=1,
             )
 
-
-
-# ---------------------------------------------------------------------------
-# DB initialisation (extracted so it can be called without a full UserManager)
-# ---------------------------------------------------------------------------
-
-def _init_user_db(db_path: str) -> sqlite3.Connection:
-    """Initialise (or open) a user's expense_tracker.db with the full schema."""
-    # Reuse the init_db logic from main.py by importing it at call time to
-    # avoid circular imports (main.py imports UserManager).
-    from src.main import init_db
-    return init_db(db_path)
 
 
 # ---------------------------------------------------------------------------

@@ -15,7 +15,7 @@ from itertools import count
 
 from src.analytics import get_spending_velocity
 from src.forecast import month_forecast
-from src.main import init_db
+from src.db import init_db
 from src.storage import Storage
 
 TARGET_MONTH_START = date(2026, 9, 1)

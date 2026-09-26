@@ -17,7 +17,7 @@ import bcrypt
 import uvicorn
 
 from src.config import local_now
-from src.main import init_app_db, init_db
+from src.db import init_app_db, init_db
 from src.storage import AdminStorage, Storage
 from src.web import auth
 from src.web.app import create_dashboard_app

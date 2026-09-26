@@ -17,7 +17,7 @@ def disable_secure_cookies(monkeypatch):
 @pytest.fixture
 def in_memory_db():
     """Provide an in-memory SQLite connection with schema applied."""
-    from src.main import init_db
+    from src.db import init_db
     conn = init_db(":memory:")
     conn.execute("PRAGMA foreign_keys = ON")
     yield conn

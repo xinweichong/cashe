@@ -165,7 +165,7 @@ async def test_admin_health_reports_job_runs(app, admin_db):
 @pytest.mark.asyncio
 async def test_admin_health_reports_per_user_capture_freshness(app, admin_db, user_manager):
     from types import SimpleNamespace
-    from src.main import init_db
+    from src.db import init_db
     from src.storage import Storage
     user_manager._storage.create_user("alice", bcrypt.hashpw(b"x", bcrypt.gensalt()).decode())
     alice_storage = Storage(init_db(":memory:"))

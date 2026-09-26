@@ -6,7 +6,7 @@ import pytest
 from cryptography.fernet import Fernet, InvalidToken
 
 from src.backups import create_snapshot, restore_snapshot
-from src.main import init_db, init_app_db
+from src.db import init_db, init_app_db
 
 
 def test_encrypted_snapshot_restores_wal_databases_and_credentials(tmp_path):

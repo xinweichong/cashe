@@ -3,7 +3,7 @@ from httpx import ASGITransport, AsyncClient
 
 from helpers import FakeMultiUserManager, TEST_USERNAME, make_admin_db_with_user
 from src.ingestion import IngestionPipeline
-from src.main import init_db
+from src.db import init_db
 from src.parsers.base import ParseResult
 from src.storage import AdminStorage, Storage
 from src.web import auth

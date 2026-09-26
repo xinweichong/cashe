@@ -6,7 +6,7 @@ from unittest.mock import ANY, MagicMock
 import pytest
 
 from src.ingestion import IngestionPipeline
-from src.main import init_db
+from src.db import init_db
 from src.parsers.base import ParseResult
 from src.storage import Storage
 

@@ -97,7 +97,7 @@ def main(argv=None) -> None:
     run_id = None
     if (args.data_dir / "app.db").is_file():
         try:
-            from src.main import init_app_db
+            from src.db import init_app_db
             admin_conn = init_app_db(str(args.data_dir / "app.db"))
             admin_store = AdminStorage(admin_conn)
             run_id = admin_store.record_job_start("backup")

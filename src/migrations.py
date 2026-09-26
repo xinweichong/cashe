@@ -102,6 +102,25 @@ def _snap_category_colours(conn: sqlite3.Connection) -> None:
     conn.execute(set_setting, ("category_colors_snapped_v2", "true"))
 
 
+def _default_category_types(conn: sqlite3.Connection) -> None:
+    """Give the built-in categories their needs/wants type. This used to run
+    on every startup, which reset any of them a user had set to 'neutral'."""
+    if not conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='categories'").fetchone():
+        return
+    if "type" not in {r[1] for r in conn.execute("PRAGMA table_info(categories)")}:
+        return
+    for type_val, names in (
+        ("needs", ("Transport", "Groceries", "Bills & Utilities", "Healthcare", "Housing", "Insurance")),
+        ("wants", ("Dining", "Entertainment", "Shopping", "Travel", "Subscriptions")),
+        ("neutral", ("Other", "Transfers", "Income")),
+    ):
+        conn.execute(
+            f"UPDATE categories SET type = ? WHERE name IN ({','.join('?' * len(names))}) "
+            "AND (type IS NULL OR type = 'neutral')",
+            [type_val, *names],
+        )
+
+
 MIGRATIONS = (
     (1, (
         """CREATE TABLE source_events (
@@ -451,6 +470,9 @@ MIGRATIONS = (
     )),
     (23, (
         _snap_category_colours,
+    )),
+    (24, (
+        _default_category_types,
     )),
 )
 

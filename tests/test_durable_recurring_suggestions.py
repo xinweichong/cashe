@@ -3,7 +3,7 @@ import sqlite3
 
 import pytest
 
-from src.main import init_db
+from src.db import init_db
 from src.storage import Storage, SubscriptionMatchConflict
 
 

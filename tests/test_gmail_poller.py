@@ -9,7 +9,7 @@ from src.gmail_poller import GmailPoller
 
 
 def _make_storage():
-    from src.main import init_db
+    from src.db import init_db
     return Storage(init_db(":memory:"))
 
 

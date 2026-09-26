@@ -4,7 +4,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from src.main import init_db
+from src.db import init_db
 from src.storage import Storage
 from src.telegram_bot import TelegramBotService
 from src.user_manager import UserManager, _monthly_summary, _weekly_summary

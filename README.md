@@ -489,7 +489,8 @@ All tests use in-memory SQLite — no database files created on disk. 623 tests 
 ```
 cashe/
 ├── src/
-│   ├── main.py              # Entry point — starts all services, runs DB migrations
+│   ├── main.py              # Entry point — starts all services
+│   ├── db.py                # Opens a user DB / app.db: baseline tables, then src/migrations.py
 │   ├── config.py            # Config loader + env-var fallback
 │   ├── storage.py           # SQLite CRUD, queries, insights, income, overrides, budgets, goals, trips, merchants, health score
 │   ├── categorizer.py       # Keyword matching + merchant overrides

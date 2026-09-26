@@ -1,7 +1,7 @@
 import sqlite3
 
 from src.migrations import migrate
-from src.main import init_db
+from src.db import init_db
 
 
 def test_migrations_preserve_old_transactions_and_are_idempotent():
@@ -13,7 +13,7 @@ def test_migrations_preserve_old_transactions_and_are_idempotent():
     assert conn.execute("SELECT * FROM transactions").fetchall() == [
         (42, "original-id", 1.25, None, None, None, None, None, None, None, None, 1, None, 0)
     ]
-    assert conn.execute("SELECT version FROM schema_migrations").fetchall() == [(1,), (2,), (3,), (4,), (5,), (6,), (7,), (8,), (9,), (10,), (11,), (12,), (13,), (14,), (15,), (16,), (17,), (18,), (19,), (20,), (21,), (22,), (23,)]
+    assert conn.execute("SELECT version FROM schema_migrations").fetchall() == [(1,), (2,), (3,), (4,), (5,), (6,), (7,), (8,), (9,), (10,), (11,), (12,), (13,), (14,), (15,), (16,), (17,), (18,), (19,), (20,), (21,), (22,), (23,), (24,)]
     assert conn.execute("SELECT COUNT(*) FROM source_events").fetchone()[0] == 0
     conn.close()
 
@@ -198,4 +198,28 @@ def test_matched_transaction_unique_index_rejects_duplicates_but_allows_distinct
     conn.execute("INSERT INTO upcoming_transactions(subscription_id, expected_date) VALUES (1, '2026-10-09')")
     conn.execute("INSERT INTO upcoming_transactions(subscription_id, expected_date) VALUES (1, '2026-11-09')")
     conn.commit()
+    conn.close()
+
+
+def test_reopening_a_database_keeps_a_users_category_type(tmp_path):
+    """The built-in category types are defaulted once (migration 24), not on
+    every open — it used to reset a category the user set to 'neutral'."""
+    path = str(tmp_path / "user.db")
+    conn = init_db(path)
+    conn.execute("INSERT INTO categories (name, keywords, icon, type) VALUES ('Dining', '', '', 'neutral')")
+    conn.commit()
+    conn.close()
+    conn = init_db(path)
+    assert conn.execute("SELECT type FROM categories WHERE name = 'Dining'").fetchone()[0] == "neutral"
+    conn.close()
+
+
+def test_init_db_adds_late_baseline_columns_to_an_old_database(tmp_path):
+    path = str(tmp_path / "old.db")
+    old = sqlite3.connect(path)
+    old.execute("CREATE TABLE categories (name TEXT PRIMARY KEY, keywords TEXT, icon TEXT)")
+    old.commit()
+    old.close()
+    conn = init_db(path)
+    assert {"color", "type"} <= {row[1] for row in conn.execute("PRAGMA table_info(categories)")}
     conn.close()

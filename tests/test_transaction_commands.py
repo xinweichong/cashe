@@ -30,7 +30,7 @@ class TestCreateManualWebParity:
     identity (source/source_id), which this test excludes."""
 
     def test_identical_input_produces_identical_canonical_output(self):
-        from src.main import init_db
+        from src.db import init_db
         storage_a = Storage(connection=init_db(":memory:"))
         storage_b = Storage(connection=init_db(":memory:"))
 

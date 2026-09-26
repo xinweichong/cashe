@@ -39,7 +39,7 @@ def test_existing_schedule_details_status_and_confirmation_are_preserved(storage
 
 
 def test_receipt_survives_reopen_and_deletion(tmp_path):
-    from src.main import init_db
+    from src.db import init_db
     path = str(tmp_path / 'user.db')
     conn = init_db(path)
     storage = Storage(conn)
@@ -87,7 +87,7 @@ def test_receipt_failure_rolls_back_schedule_and_confirmation(storage, in_memory
 
 
 def test_acceptance_receipts_are_isolated_per_user(tmp_path):
-    from src.main import init_db
+    from src.db import init_db
     first_conn = init_db(str(tmp_path / 'first.db'))
     second_conn = init_db(str(tmp_path / 'second.db'))
     first, second = Storage(first_conn), Storage(second_conn)

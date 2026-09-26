@@ -1,6 +1,6 @@
 import json
 
-from src.main import init_db
+from src.db import init_db
 from scripts.backfill_canonical_money import backfill_sgd_minor_units, backfill_transactions, main
 
 

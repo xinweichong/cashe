@@ -1342,7 +1342,7 @@ async def test_durable_suggestion_callback_dismissal_and_unknown_token(bot_servi
 @pytest.mark.asyncio
 async def test_suggestion_bridge_persists_only_in_target_user_storage(bot_service, tmp_path):
     import asyncio
-    from src.main import init_db
+    from src.db import init_db
     conn = init_db(str(tmp_path / 'target.db'))
     target = Storage(conn)
     bot_service.user_manager = SimpleNamespace(get=lambda username: SimpleNamespace(storage=target) if username == 'target' else None)
