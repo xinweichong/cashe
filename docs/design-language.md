@@ -5,6 +5,16 @@
 
 A standalone reference for everyone designing, building, or extending Cashe. This document is the source of truth for tokens, components, and brand. Application of the language to specific pages is covered in [`docs/superpowers/specs/2026-05-11-cashe-application-redesign.md`](superpowers/specs/2026-05-11-cashe-application-redesign.md).
 
+> **Direction B: HIG alignment (in progress, v3.1.0).** Cashe now follows Apple's Human Interface Guidelines for structure and behaviour, in the approved Direction B ("Wallet") look. The plan is [`docs/plans/2026-09-30-hig-alignment.md`](plans/2026-09-30-hig-alignment.md), and the approved components are P1–P12. Sections marked **Direction B** below override the older text next to them. During migration the older tokens still exist, marked deprecated, until their last caller moves over.
+>
+> In short:
+> - **Spectrum card:** at most one per screen, only at the top of a tab.
+> - **Glow and wash:** glows are retired; a faint radial wash shows only through frosted chrome.
+> - **Lists:** grouped lists with square rows inside an 18pt group. On iPad and desktop, the selected row is a 12pt inset pill.
+> - **Fonts:** Plus Jakarta Sans for titles, Inter for everything else, JetBrains Mono only for money. No eyebrow labels.
+> - **Interaction:** a pressed state on every tappable element, 44pt rows with touch and 36pt with a fine pointer.
+> - **Text size:** rem sizes, verified at 200%.
+
 ---
 
 ## 1 · Brand
@@ -195,6 +205,18 @@ The five anchor colours of the brand, ordered cool → warm. Each anchor has a s
 
 **Note:** Previous semantic tokens (`#30D158` success, `#FFD60A` warning, `#64D2FF` info, `#FF453A` destructive) are partially retired. Semantic warnings now use spectrum colours. The only retained generic semantic colour is `--color-destructive` because "delete / stop" needs a colour that doesn't appear in normal spending semantics.
 
+**Direction B system tokens** (`index.css`; light values in brackets):
+
+| Token | Dark | Role |
+|---|---|---|
+| `--color-separator` | foreground 10% | Hairlines between rows in a group |
+| `--color-fill-press` | foreground 8% | Pressed rows and controls (`pressable`) |
+| `--color-fill-hover` | foreground 5% | Hover with a fine pointer only |
+| `--color-on-teal` | `#0B0B14` (`#FFFFFF`) | Text on a teal selection fill |
+| `--color-scrim` | black 50% (ink 28%) | Behind sheets and context menus |
+| `--color-chrome` | card 66% (white 72%) | Frosted chrome fill, used with blur |
+| `--color-chrome-solid` | card | Chrome when blur is unavailable or reduced transparency is on |
+
 ### 2.3 Gradients
 
 Three signature gradients. Use them deliberately — gradients carry brand weight; they lose meaning when overused.
@@ -246,6 +268,11 @@ background: linear-gradient(135deg,
 ```
 
 B2 is exported from `Brand.tsx` as `B2_WASH` and applied to the `AppShell` root `div` in `AppShell.tsx`. Sidebar, mobile header, and bottom tabs use `bg-card/80 backdrop-blur-sm` so B2 bleeds through the chrome.
+
+**Direction B (supersedes the B2 wash and hero-numeric gradient text).**
+- **`.chrome-wash`:** two faint radial pools, teal at top-left and tangerine at bottom-right. They sit on the page background and are visible only through frosted chrome. Dark mixes teal 10% and tangerine 8%; light mixes 6% and 5%. `AppShell` switches from `.shell-wash` to it in plan step 3.
+- **`.spectrum-fill`:** the Full Spectrum as a *surface* for the spectrum hero card (P11), with `--color-on-brand` text. The gradient is the same in both themes. It appears on at most one card per screen, only at the top of a tab (Home, Plan, Explore).
+- **Gradient text is retired.** Hero numerics drop the soft-gradient text fill. Emphasis comes from size and weight. The wordmark's "$" is the only remaining gradient text, as a brand asset.
 
 ### 2.4 Category palette
 
@@ -313,6 +340,12 @@ Three families chosen for clear functional separation:
 - **Mono Eyebrow (Tier A — full):** `font-mono text-xs font-semibold uppercase tracking-[0.22em] text-muted`. For page kicker lines, `HeroCard`/`HighlightCard` titles, `StatCard` labels, and standalone KPI stat labels (INCOME · SPENT · SAVED, SAVED · TOWARD GOALS · UNALLOCATED, CONTRIBUTION HISTORY, etc.).
 - **Mono Eyebrow (Tier B — inline):** `font-mono text-xs text-muted`. For inline data descriptors that annotate a value without heading authority — budget period, goal deadline, velocity sub-stat, connection status, feature toggle descriptions.
 
+**Direction B type roles (supersede the eyebrow rules above):**
+- **Plus Jakarta Sans** names things: the large title (`text-large-title`, 2rem, 800), group headings above lists (`text-lg`, 700, title case), hero numbers, and the wordmark.
+- **Inter** does everything else: body, rows, controls, and the inline nav/sheet title (`text-headline`, 1.0625rem, 600). Former eyebrow labels become Inter captions (`text-xs`, muted, sentence case) or are removed. The heading carries its own weight.
+- **JetBrains Mono** is **money only**: amounts in rows, detail views and hero cards, with `tabular-nums`. IDs, timestamps, stat labels and kickers move to Inter.
+- **All font sizes are rem.** No px-locked labels. The in-app Larger text setting and browser zoom must both reach 200% without clipping. List rows stack (title, then details, then amount) at large sizes. Tab bar labels stay fixed, as on iOS.
+
 ### 3.4 Weights
 
 | Family | Available weights |
@@ -354,6 +387,15 @@ A 4px base scale, named explicitly. No usage change from Tailwind defaults — t
 | `radius-2xl` | 24 | Hero cards (Overview top card), large modals, splash containers |
 | `radius-pill` | 999 | Badges, status pills, period chips, progress bars |
 
+**Direction B roles** (px, since radii don't scale with text):
+
+| Token | px | Role |
+|---|---|---|
+| `radius-inset` | 12 | The selected row pill in split-view lists and the sidebar (iPad/desktop). Phone rows stay square |
+| `radius-group` | 18 | Grouped list (inset group). Rows inside are square, and only the group's outer corners round |
+| `radius-hero` | 22 | Spectrum hero card, sheet top corners |
+| `radius-capsule` | 26 | Floating tab bar |
+
 The icon container (`.cache-icon`) uses `border-radius: 22%` — a percentage-based radius so it scales with the icon's size (16px through 1024px).
 
 ---
@@ -371,6 +413,18 @@ Five tiers. Most surfaces use `elev-none` (a single 1px border on `--color-backg
 | `elev-glow-warm` | `0 0 0 1px rgba(251,146,60,.14), 0 0 48px -10px rgba(251,146,60,.34)` | Hero card on Overview, splash container |
 
 **The brand glow rule:** at most one warm glow and one teal glow visible on screen at a time. If a page would have two warm-glow cards (e.g., a hero + a "biggest spend" callout), demote one to `elev-none` and let the hero be the sole warm moment.
+
+**Direction B (supersedes the glow tiers, which are deprecated along with `.hero-glow-*`).** Content surfaces are flat. Depth comes from material and real offset shadows, never colored halos.
+
+| Token | Use |
+|---|---|
+| `chrome-frosted` (utility) | Tab bar, sidebar, nav bar, toolbar. Blur 20px with 1.6 saturation over `--color-chrome`. Falls back to `--color-chrome-solid` under `@supports not (backdrop-filter)` or `prefers-reduced-transparency: reduce`. Use it only where content scrolls beneath, never as decoration |
+| `--shadow-float` | Floating tab bar capsule |
+| `--shadow-sheet` | Sheet (P5) |
+| `--shadow-lift` | Row lifted by a context menu (P9) |
+| `--shadow-elev-md` | Dialogs, menus, toasts (unchanged) |
+
+The rule becomes **one spectrum card per screen**, replacing the rationed glow.
 
 ---
 
@@ -774,13 +828,31 @@ Source of truth for presets: [`src/lib/animations.tsx`](../src/web/frontend/src/
 - Entrances spring; exits are fast fades (0.1–0.2s ease-in). Leaving must always be quicker than arriving.
 - **Reduced motion:** every page-level or repeating animation gates on `useReducedMotion` — the pattern in `AppShell.tsx` is canonical. New animated surfaces must do the same.
 
+### 14.3 Direction B presets and interaction
+
+The source of truth is `src/lib/motionPresets.ts`. The table above is historical: its old link to `animations.tsx` no longer exists, and `springs.bouncy` has no approved use.
+
+| Export / token | Timing | Use |
+|---|---|---|
+| `EASE_IOS` / `--ease-ios` | `cubic-bezier(0.32, 0.72, 0, 1)` | Push/pop, sheet settle |
+| `stackPushVariants` | 0.35s ease-ios | Pushed page travels the full width (P6) |
+| `stackUnderVariants` | 0.35s ease-ios | The page beneath shifts −30% and dims to 70% brightness |
+| `sheetSpring` | 420 / 40, mass 0.9 | Sheet detent snaps (P5), no visible bounce |
+| `thumbSpring` | 500 / 38 | Segmented control thumb (P10), tab indicator |
+| `--dur-push` | 350ms | CSS counterpart to push/pop |
+| `pressable` (utility) | `--dur-fast` | Press fill on every tappable surface. Hover fill only with a fine pointer |
+| `pressable-scale` (utility) | `--dur-fast` | 0.97 scale while held, for discrete controls (buttons, tabs, segments). Off under reduced motion |
+
+Under reduced motion, pushes and sheets swap to `fadeVariants`, springs become instant, and the thumb jumps. Haptics (`lib/haptics.ts`) stay a no-op on iOS, so the visible pressed state must carry the feedback on its own.
+
 ---
 
 ## 15 · Accessibility
 
 - **Contrast:** `--color-foreground` on `--color-background` is ~15:1. `--color-muted` (`#7A7488`) on background is ~4.5:1 — the AA floor. Rules: never introduce text colour dimmer than `muted`; `muted` body copy is 12px (`text-xs`) minimum. The 11px mono eyebrows compensate with uppercase, tracking, and weight, and must label — not carry — primary information.
 - **Focus:** every interactive element shows `focus-visible:ring-2 ring-ring` (teal). Never `outline-none` without a focus-visible replacement. (The Button CVA already complies — match it.)
-- **Touch targets:** ≥36px effective target on touch viewports. Bump with responsive padding (`py-2 md:py-1`), never by changing the desktop design.
+- **Touch targets:** ≥36px effective target on touch viewports. Bump with responsive padding (`py-2 md:py-1`), never by changing the desktop design. **Direction B:** at least 44pt with touch. Rows use `min-h-row` (`--row-min`: 2.75rem, dropping to 2.25rem only under `pointer: fine`).
+- **Direction B checks per surface:** a Reduce Motion pass, a 200% text pass, a reduced-transparency/no-blur pass, a desktop keyboard pass (↑/↓ ↩ ⌫ Esc ⌘F ⌘K), and a phone gesture pass. Every swipe action is also reachable from the context menu and the detail page.
 - **Icon-only buttons** always carry `title` and `aria-label`.
 - **Reduced motion:** see §14.2.
 

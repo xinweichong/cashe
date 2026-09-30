@@ -2,6 +2,8 @@ import type { Variants } from 'framer-motion'
 
 // Mirrors --ease-out-expo in index.css.
 export const EASE_OUT_EXPO = [0.16, 1, 0.3, 1] as const
+// Mirrors --ease-ios: UIKit's push/pop and sheet-settle curve.
+export const EASE_IOS = [0.32, 0.72, 0, 1] as const
 
 // Quick crossfade for route and lens changes.
 export const quickFade = { duration: 0.18, ease: EASE_OUT_EXPO }
@@ -45,6 +47,26 @@ export const pushInRightVariants: Variants = {
   animate: { x: 0, transition: { duration: 0.3, ease: EASE_OUT_EXPO } },
   exit:    { x: '100%', transition: { duration: 0.2, ease: 'easeIn' as const } },
 }
+
+// ─── Navigation stack (P6) ───────────────────────────────────────────────────
+// The pushed page travels the full width; the page beneath slides a third
+// of the way and dims, as UIKit does. Callers swap both for fadeVariants
+// under reduced motion.
+const PUSH = { duration: 0.35, ease: EASE_IOS }
+export const stackPushVariants: Variants = {
+  initial: { x: '100%' },
+  animate: { x: 0, transition: PUSH },
+  exit:    { x: '100%', transition: PUSH },
+}
+export const stackUnderVariants: Variants = {
+  covered:   { x: '-30%', filter: 'brightness(0.7)', transition: PUSH },
+  uncovered: { x: 0, filter: 'brightness(1)', transition: PUSH },
+}
+
+// ─── Sheet detents (P5) and segmented thumb (P10) ────────────────────────────
+// Critically damped enough to settle without a visible bounce.
+export const sheetSpring = { type: 'spring' as const, stiffness: 420, damping: 40, mass: 0.9 }
+export const thumbSpring = { type: 'spring' as const, stiffness: 500, damping: 38 }
 
 // ─── Plain fade (reduced-motion stand-in for slides) ─────────────────────────
 export const fadeVariants: Variants = {

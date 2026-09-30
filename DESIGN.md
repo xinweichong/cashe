@@ -113,6 +113,15 @@ components:
 
 # Design System: cashe
 
+> **Direction B override (HIG alignment, v3.1.0, in progress).** Where this file conflicts with the "Direction B" sections of `docs/design-language.md`, those sections win. Plan: `docs/plans/2026-09-30-hig-alignment.md`; approved components P1–P12. The main differences:
+> - **Glow and wash:** glow tiers and the B2 wash are retired. The replacements are the `.chrome-wash` behind `chrome-frosted` chrome and at most one `.spectrum-fill` card per screen, only at a tab root.
+> - **Labels:** no mono eyebrow or kicker labels. Mono is used for money only.
+> - **Lists:** grouped lists (`radius-group` 18px) with square rows. On iPad and desktop, the selected row is an inset pill (`radius-inset` 12px).
+> - **Interaction:** `pressable` on every tappable surface, and `min-h-row` (44pt touch, 36pt fine pointer).
+> - **Text:** rem sizes, verified at 200%.
+>
+> This file and `.impeccable/design.json` get regenerated from the finished build at release (plan step 11).
+
 ## Overview
 
 **Creative North Star: "The Spectrum Instrument"**

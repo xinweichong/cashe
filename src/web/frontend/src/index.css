@@ -38,6 +38,15 @@
   --color-muted-foreground:     var(--color-muted);
   --color-card-foreground:      var(--color-foreground);
 
+  /* Direction B (HIG alignment, 2026-09-30) — see design-language.md §2.2 */
+  --color-separator:   color-mix(in srgb, var(--color-foreground) 10%, transparent);
+  --color-fill-press:  color-mix(in srgb, var(--color-foreground) 8%, transparent);
+  --color-fill-hover:  color-mix(in srgb, var(--color-foreground) 5%, transparent);
+  --color-on-teal:     #0B0B14;
+  --color-scrim:       rgb(0 0 0 / 0.5);
+  --color-chrome:      color-mix(in srgb, var(--color-card) 66%, transparent);
+  --color-chrome-solid: var(--color-card);
+
   /* Fonts */
   --font-display: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
   --font-body:    'Inter', system-ui, -apple-system, sans-serif;
@@ -51,6 +60,11 @@
   --radius-lg:   14px;
   --radius-2xl:  24px;
   --radius-pill: 9999px;
+  /* Direction B roles (§5). Radii stay in px: they don't scale with text. */
+  --radius-inset:   12px;  /* selected row pill in split-view lists and sidebar */
+  --radius-group:   18px;  /* grouped list (inset group) */
+  --radius-hero:    22px;  /* spectrum hero card, sheet top corners */
+  --radius-capsule: 26px;  /* floating tab bar */
 
   /* Type — §3.2 */
   --text-2xs: 0.6875rem;
@@ -69,6 +83,11 @@
   --text-5xl--line-height: 1.1;
   --text-6xl: 4.8125rem;
   --text-6xl--line-height: 1.05;
+  /* Direction B roles (§3.2) */
+  --text-large-title: 2rem;            /* tab-root large title, Plus Jakarta 800 */
+  --text-large-title--line-height: 1.1;
+  --text-headline: 1.0625rem;          /* inline nav title, sheet title, 17pt */
+  --text-headline--line-height: 1.3;
 
   /* Elevation — §6 */
   --shadow-elev-xs:   0 0 0 1px var(--color-border), 0 2px 6px rgba(0,0,0,.3);
@@ -77,8 +96,17 @@
   /* Motion */
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
 
+  --ease-ios:      cubic-bezier(0.32, 0.72, 0, 1); /* push/pop, sheet settle */
+
   --dur-fast:      150ms;
   --dur-base:      250ms;
+  --dur-push:      350ms;
+
+  /* Materials (§6.1) */
+  --blur-chrome:   20px;
+  --shadow-float:  0 10px 30px -10px rgb(0 0 0 / 0.5);   /* tab bar capsule */
+  --shadow-sheet:  0 -10px 30px rgb(0 0 0 / 0.3);
+  --shadow-lift:   0 16px 40px rgb(0 0 0 / 0.45);        /* context-menu row */
 
   /* Elevation & glow */
   --shadow-glow-teal:  0 0 0 1px rgba(0,212,170,.18), 0 0 36px -8px rgba(0,212,170,.4),
@@ -245,6 +273,8 @@ body {
   }
 
   /* ── Hero glow pulse (one per screen max) ──────────────────────────── */
+  /* Deprecated (HIG alignment): replaced by .spectrum-fill (P11) and
+     .chrome-wash. Removed once HeroCard/HighlightCard callers migrate. */
 
   .hero-glow-warm,
   .hero-glow-teal,
@@ -382,7 +412,91 @@ body {
   --shadow-elev-card: 0 4px 18px rgba(32,28,44,.08);
   --shadow-elev-xs: 0 0 0 1px var(--color-border), 0 2px 6px rgba(32,28,44,.06);
   --shadow-elev-md: 0 0 0 1px var(--color-border), 0 8px 24px rgba(32,28,44,.12);
+  --color-on-teal: #FFFFFF;
+  --color-scrim: rgb(20 16 30 / 0.28);
+  --color-chrome: color-mix(in srgb, #FFFFFF 72%, transparent);
+  --shadow-float: 0 10px 30px -12px rgb(32 28 44 / 0.22);
+  --shadow-sheet: 0 -10px 30px rgb(32 28 44 / 0.12);
+  --shadow-lift:  0 16px 40px rgb(32 28 44 / 0.2);
 }
+
+/* ── Direction B utilities (HIG alignment) ──────────────────────────────── */
+
+/* Row height: 44pt with touch, 36pt with a fine pointer (Mac convention). */
+:root { --row-min: 2.75rem; }
+@media (pointer: fine) { :root { --row-min: 2.25rem; } }
+@utility min-h-row { min-height: var(--row-min); }
+
+/* Frosted chrome (tab bar, sidebar, nav bar, toolbar). A specific effect,
+   not decoration: content scrolls under it. Solid when blur is unsupported
+   or the viewer asks for reduced transparency. */
+@utility chrome-frosted {
+  background-color: var(--color-chrome-solid);
+  @supports (backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px)) {
+    background-color: var(--color-chrome);
+    -webkit-backdrop-filter: blur(var(--blur-chrome)) saturate(1.6);
+    backdrop-filter: blur(var(--blur-chrome)) saturate(1.6);
+  }
+  @media (prefers-reduced-transparency: reduce) {
+    background-color: var(--color-chrome-solid);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
+/* Pressed state for every tappable surface: a fill while held, and a small
+   scale where the element is a discrete control. No scale under reduced motion. */
+@utility pressable {
+  transition: background-color var(--dur-fast) ease-out, transform var(--dur-fast) var(--ease-out-expo);
+  -webkit-tap-highlight-color: transparent;
+  &:active { background-color: var(--color-fill-press); }
+  @media (hover: hover) and (pointer: fine) {
+    &:hover:not(:active) { background-color: var(--color-fill-hover); }
+  }
+}
+@utility pressable-scale {
+  &:active { transform: scale(0.97); }
+  @media (prefers-reduced-motion: reduce) { &:active { transform: none; } }
+}
+
+/* Hairline separator inset to the text start, for grouped list rows. */
+@utility separator-inset {
+  position: relative;
+  & + &::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    right: 0;
+    left: var(--separator-inset, 1rem);
+    border-top: 0.5px solid var(--color-separator);
+  }
+}
+
+/* Faint radial wash, visible only through frosted chrome. Replaces
+   .shell-wash (B2) and the elev-glow tiers once AppShell migrates (step 3). */
+.chrome-wash {
+  background:
+    radial-gradient(120% 60% at 0% 0%, color-mix(in srgb, var(--color-teal) 10%, transparent), transparent 60%),
+    radial-gradient(120% 50% at 100% 100%, color-mix(in srgb, var(--color-tangerine) 8%, transparent), transparent 60%),
+    var(--color-background);
+  background-attachment: fixed;
+}
+:root[data-theme="light"] .chrome-wash {
+  background:
+    radial-gradient(120% 60% at 0% 0%, color-mix(in srgb, var(--color-teal) 6%, transparent), transparent 60%),
+    radial-gradient(120% 50% at 100% 100%, color-mix(in srgb, var(--color-tangerine) 5%, transparent), transparent 60%),
+    var(--color-background);
+  background-attachment: fixed;
+}
+
+/* Spectrum hero card surface (P11): the one brand fill per tab root. Text on
+   it uses --color-on-brand, which holds ≥4.5:1 against every stop. */
+.spectrum-fill {
+  background: linear-gradient(135deg, #00D4AA 0%, #34D399 25%, #FBBF24 50%, #FB923C 75%, #FF6B6B 100%);
+  color: var(--color-on-brand);
+}
+
+::selection { background: color-mix(in srgb, var(--color-teal) 30%, transparent); }
 :root[data-theme="light"] .select-field {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23201C2C' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
 }
