@@ -3,7 +3,7 @@ import { Suspense } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { Sidebar } from './Sidebar';
-import { BottomTabs } from './BottomTabs';
+import { BottomTabs, TAB_BAR_CLEARANCE } from './BottomTabs';
 import { CasheWordmark } from '@/components/ui/Brand';
 import { CommandPalette } from '@/components/CommandPalette';
 import { PullToRefresh } from './PullToRefresh';
@@ -18,16 +18,17 @@ export function AppShell() {
   // body already pads for the status bar and home indicator (index.css), so
   // the shell fills the rest rather than a full extra screen height.
   return (
-    <div className="min-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom))] flex experience-next shell-wash">
+    <div className="min-h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom))] flex experience-next chrome-wash">
       <CommandPalette />
       <Sidebar />
       <div className="flex-1 min-w-0 flex flex-col">
-        {/* Mobile-only top bar — hidden on md+ where sidebar provides branding */}
-        <header className="md:hidden sticky top-0 z-40 h-12 shrink-0 bg-card border-b border-border flex items-center px-4 gap-2">
+        {/* Phone-only top bar until each tab root carries its own NavBar (plan steps 4–10). */}
+        <header className="md:hidden sticky top-0 z-40 h-12 shrink-0 chrome-frosted border-b-[0.5px] border-separator flex items-center px-4 gap-2">
           <CasheWordmark size={22} />
           <div className="ml-auto"><ProfileMenu /></div>
         </header>
-        <main className="flex-1 min-w-0 pb-16 md:pb-0 overflow-hidden">
+        {/* overflow-x-clip, not hidden: a scroll container here would stop NavBar and Toolbar sticking. */}
+        <main className={`flex-1 min-w-0 overflow-x-clip ${TAB_BAR_CLEARANCE}`}>
           <AnimatePresence mode="wait" initial={false}>
             <motion.div
               key={pageKey}

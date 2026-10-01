@@ -99,7 +99,8 @@ export function ListRow({
     </>
   );
 
-  const shared = { id, className: rowClass, style, 'aria-label': aria['aria-label'] };
+  // data-list-row: the split view's arrow-key focus moves between these.
+  const shared = { id, className: rowClass, style, 'aria-label': aria['aria-label'], 'data-list-row': '' };
   if (to && !disabled) {
     return <Link {...shared} to={to} aria-current={selected ? 'page' : undefined}>{content}</Link>;
   }

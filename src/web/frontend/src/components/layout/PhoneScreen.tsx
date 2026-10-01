@@ -38,8 +38,8 @@ interface PhoneScreenProps<T extends string> {
 
 // Everything else in the phone's document height: body's status-bar and
 // home-indicator padding (index.css), AppShell's 3rem top bar, and main's
-// 4rem bottom padding for the tab bar. dvh tracks Safari's toolbars.
-export const PHONE_SCREEN_HEIGHT = 'h-[calc(100dvh-7rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))]';
+// 5rem TAB_BAR_CLEARANCE. dvh tracks Safari's toolbars.
+export const PHONE_SCREEN_HEIGHT = 'h-[calc(100dvh-8rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))]';
 
 // At the Larger text size a fixed one-screen layout leaves the panel only a
 // few rows, so the screen becomes page-scrolling instead: the glance, a

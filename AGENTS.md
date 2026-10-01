@@ -436,9 +436,14 @@ Utility classes defined in `src/web/frontend/src/index.css` under `@layer compon
 
 ### Navigation Pattern
 
-Sidebar (`hidden md:flex`, `w-14` md / `w-56` lg, `sticky top-0 h-screen`, `bg-card border-r border-border`) + bottom tabs (`md:hidden`, `bg-card border-t border-border`, `BottomTabs.tsx`). Main content has `pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0` for bottom-tab and Home-indicator clearance.
+**HIG alignment (Direction B, step 3, 2026-10-01; plan `docs/plans/2026-09-30-hig-alignment.md`).**
+- **Sidebar (P2, `Sidebar.tsx`):** a frosted panel inset 0.5rem from the window edge (`chrome-frosted rounded-group`). It's an icon rail at `md` and expanded at `lg`. The toggle button or ⌘⌥S overrides that, remembered per device (`cashe-sidebar`). Review (with the "to check" count) and Settings are sidebar items on md+, and `ProfileMenu showDestinations={false}` drops them from the menu there.
+- **Phone tab bar (P1, `BottomTabs.tsx`):** a floating frosted capsule. Home carries the count from `useAttentionCount`. `main` pads by `TAB_BAR_CLEARANCE` (`pb-20 md:pb-0`; `body` already pads the safe area). `main` is `overflow-x-clip`, not `overflow-hidden`, so `NavBar`/`Toolbar` can stick.
+- **Shell background:** `chrome-wash` replaces `shell-wash`. The phone top bar stays (frosted) until each tab root carries its own `NavBar` (steps 4–10).
+- **List and detail (P6/P7, `ListDetail.tsx`):** pages with details use this; the detail is a route. On a phone the detail is pushed over the mounted, inert list: `useStackBack()` (`stackContext.ts`) animates our own pops, and pops Safari already animated are not re-animated. The edge swipe back exists only in the home-screen app. On md+ the list and detail are side-by-side scrolling regions with `useListKeyboard` (↑/↓ focus `[data-list-row]`, ⌫ delete, Esc close, ⌘F `[data-list-search]`).
+- **`TaskSheet`:** gets a history entry from `useHistoryEntry`, so Back closes it through the discard check.
 
-Nav item states: active `bg-foreground/10 text-foreground font-medium`, inactive `text-muted hover:text-foreground hover:bg-foreground/5`. All nav targets have a 44px minimum hit area.
+Nav item states: the selected sidebar item is a teal fill with `text-on-teal`. The selected tab is a neutral `bg-fill-press` fill that slides between tabs. All nav targets have a 44px minimum hit area.
 
 **Single navigation mode (2026-09-25):** four destinations — Home `/`, Activity `/activity`, Plan `/plan` (+ `/plan/manage` for the existing subscriptions/budgets/goals tools), Explore `/explore` (nested: the dashboard index, `signals`, `health` and `merchants`; `/explore/insights` redirects to `/explore`). Settings and Review move behind the profile menu; Review also links from Home/Activity. `/overview` redirects to Home; the legacy `OverviewPage` is archived at `archive/legacy-overview-2026-09-26/`.
 

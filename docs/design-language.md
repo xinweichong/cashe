@@ -493,7 +493,10 @@ Current registry (paths relative to `src/web/frontend/src/`):
 | Row context menu (P9) | `components/ui/row-menu.tsx`: `RowMenu` | Radix ContextMenu: long-press, right-click, or the keyboard menu key. The row lifts over a scrim. Items take a lucide icon, `destructive` and `hidden` (for disabled features). Delete opens the caller's confirmation and never deletes directly. |
 | Swipe actions (P8) | `components/ui/swipe-row.tsx`: `SwipeRow` | Touch only (`pointer: coarse`); with a fine pointer it renders the row untouched. Trailing actions (swipe left) and leading actions (swipe right). A full swipe runs the outermost action, and `confirm` turns a destructive action into an in-row confirmation. One row is open at a time, and scrolling or tapping outside closes it. The left 24px belongs to the edge-swipe back gesture. Every action must also appear in `RowMenu` and on the detail page. |
 
-Step 3 adds the shell owners: frosted tab bar (P1), sidebar (P2), navigation stack (P6) and split view (P7).
+| Phone tab bar (P1) | `components/layout/BottomTabs.tsx`, `TAB_BAR_CLEARANCE` | Floating frosted capsule. The selected tab sits on a neutral fill that slides between tabs. Home shows the `useAttentionCount` badge. Labels stay 11px at every text size. |
+| Sidebar (P2) | `components/layout/Sidebar.tsx` | Frosted inset panel: a rail at md, expanded at lg, or the viewer's choice (toggle button, ⌘⌥S). Rail icons are centred. Review and Settings sit under "You" on md+. The selected item is teal with `text-on-teal`, and hover is a neutral fill. |
+| Navigation stack and split view (P6, P7) | `components/layout/ListDetail.tsx`, `stackContext.ts` (`useStackBack`), `hooks/useListKeyboard.ts` | One component for every list with details, where the detail is a route. On a phone the detail is pushed over the inert, still-mounted list (which shifts −30% and dims). Back comes from `useStackBack`, the browser, or an edge swipe in the home-screen app. On md+ the list and detail are side-by-side regions with Mac list keys. Replaces `SlideOver`, `DrillSheet` (for details) and `useDrill` as surfaces migrate. |
+| Overlay history | `hooks/useHistoryEntry.ts` | Used by `TaskSheet`: Back closes the overlay, and a refused close (an unsaved form) restores the entry. |
 
 Still not shared: a common category label (ActivityRowShell and Finance keep their own), and a public calendar date-cell primitive (Plan keeps one in-file recipe). Existing examples are references, not permission to clone them.
 
@@ -850,8 +853,7 @@ The source of truth is `src/lib/motionPresets.ts`. The table above is historical
 | Export / token | Timing | Use |
 |---|---|---|
 | `EASE_IOS` / `--ease-ios` | `cubic-bezier(0.32, 0.72, 0, 1)` | Push/pop, sheet settle |
-| `stackPushVariants` | 0.35s ease-ios | Pushed page travels the full width (P6) |
-| `stackUnderVariants` | 0.35s ease-ios | The page beneath shifts −30% and dims to 70% brightness |
+| `ListDetail` push (P6) | 0.35s ease-ios | The pushed page travels the full width; the page beneath tracks it from −30% and 70% brightness. Pixel offsets so a drag can drive both |
 | `sheetSpring` | 420 / 40, mass 0.9 | Sheet detent snaps (P5), no visible bounce |
 | `thumbSpring` | 500 / 38 | Segmented control thumb (P10), tab indicator |
 | `--dur-push` | 350ms | CSS counterpart to push/pop |

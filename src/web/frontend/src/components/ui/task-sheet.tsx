@@ -4,6 +4,7 @@ import { animate, motion, useDragControls, useMotionValue, useReducedMotion, typ
 import { SheetOverlay, SheetPortal } from '@/components/ui/sheet';
 import { ToolbarAction } from '@/components/ui/toolbar';
 import { useIsPhone } from '@/hooks/useIsPhone';
+import { useHistoryEntry } from '@/hooks/useHistoryEntry';
 import { sheetSpring } from '@/lib/motionPresets';
 import { cn } from '@/lib/utils';
 
@@ -13,7 +14,8 @@ import { cn } from '@/lib/utils';
 // its header; dragging the header snaps between detents or dismisses. A
 // dirty form never closes silently: every dismissal (drag, Escape, scrim,
 // Cancel) asks to discard first. On md+ the same API renders a centred
-// dialog. Details are pages in the navigation stack (P6), not sheets.
+// dialog. Back closes it too (useHistoryEntry). Details are pages in the
+// navigation stack (P6), not sheets.
 
 export type Detent = 'medium' | 'large';
 
@@ -52,6 +54,8 @@ export function TaskSheet({
     if (dirty) setConfirmingDiscard(true);
     else onOpenChange(false);
   };
+  // Back (gesture or button) closes the sheet, through the same discard check.
+  useHistoryEntry(open, () => { requestClose(); return !dirty; });
 
   const header = (
     <div className="grid min-h-11 grid-cols-[1fr_auto_1fr] items-center gap-2">
