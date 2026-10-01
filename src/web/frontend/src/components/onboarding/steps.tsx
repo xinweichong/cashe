@@ -36,20 +36,20 @@ export function WelcomeStep({
   return (
     <div className="space-y-6">
       <div>
-        <p className="text-xs font-mono uppercase tracking-[0.22em] text-muted mb-1">{username}</p>
-        <h2 className="text-xl font-semibold text-foreground">Connect your accounts.</h2>
+        <p className="mb-1 text-sm text-muted">Welcome, {username}</p>
+        <h2 className="font-display text-xl font-bold text-foreground">Connect your accounts</h2>
         <p className="text-sm text-muted mt-1">
           cashe can track your spending automatically. Choose how you'd like to connect:
         </p>
       </div>
 
       <div className="space-y-3">
-        <label className="flex items-start gap-3 p-3 rounded-lg border border-border cursor-pointer hover:bg-foreground/5 transition-colors">
+        <label className="pressable flex min-h-row cursor-pointer items-start gap-3 rounded-[12px] bg-fill-press p-3">
           <input
             type="checkbox"
             checked={wantsGmail}
             onChange={(e) => setWantsGmail(e.target.checked)}
-            className="mt-0.5 accent-accent"
+            className="mt-0.5 accent-teal"
           />
           <div>
             <p className="text-sm font-medium text-foreground">Import Gmail transactions</p>
@@ -57,12 +57,12 @@ export function WelcomeStep({
           </div>
         </label>
 
-        <label className="flex items-start gap-3 p-3 rounded-lg border border-border cursor-pointer hover:bg-foreground/5 transition-colors">
+        <label className="pressable flex min-h-row cursor-pointer items-start gap-3 rounded-[12px] bg-fill-press p-3">
           <input
             type="checkbox"
             checked={wantsAppleWallet}
             onChange={(e) => setWantsAppleWallet(e.target.checked)}
-            className="mt-0.5 accent-accent"
+            className="mt-0.5 accent-teal"
           />
           <div>
             <p className="text-sm font-medium text-foreground">Import Apple Wallet transactions</p>
@@ -230,7 +230,7 @@ export function TelegramStep({ onComplete, onSkip }: StepProps) {
             <li>Send this code:</li>
           </ol>
           <div className="flex items-center gap-2">
-            <div className="flex-1 font-mono text-sm bg-card border border-border rounded-md px-3 py-2 text-foreground">
+            <div className="flex-1 font-mono text-sm bg-fill-press rounded-[10px] px-3 py-2 text-foreground">
               /start {token}
             </div>
             <Button variant="outline" size="sm" onClick={handleCopy}>
@@ -298,7 +298,7 @@ export function AppleWalletStep({ onComplete, onSkip }: StepProps) {
           </p>
           {webhookUrl ? (
             <div className="flex items-center gap-2">
-              <div className="flex-1 font-mono text-xs bg-card border border-border rounded-md px-3 py-2 text-foreground break-all">
+              <div className="flex-1 font-mono text-xs bg-fill-press rounded-[10px] px-3 py-2 text-foreground break-all">
                 {webhookUrl}
               </div>
               <Button variant="outline" size="sm" onClick={handleCopyUrl}>
@@ -306,7 +306,7 @@ export function AppleWalletStep({ onComplete, onSkip }: StepProps) {
               </Button>
             </div>
           ) : (
-            <div className="h-9 bg-card border border-border rounded-md animate-pulse" />
+            <div className="h-9 rounded-[10px] bg-fill-press animate-pulse" />
           )}
           <Button variant="outline" onClick={() => window.open(CASHE_SHORTCUT_URL, '_blank')}>
             Add cashe Shortcut to iPhone →
