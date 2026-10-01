@@ -2,7 +2,6 @@ import { subscriptionConfirmationLabels } from '@/lib/subscriptionConfirmation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { api } from '@/api/client';
 import { briefingApi, formatMoney, type MonthForecast, type UpcomingPlan } from '@/api/briefing';
 import { Button } from '@/components/ui/button';
 import { StatusDot } from '@/components/ui/StatusDot';
@@ -15,7 +14,8 @@ import { SpectrumCard, SpectrumCardSkeleton } from '@/components/ui/SpectrumCard
 import { DetailHeader } from '@/components/ui/detail-panel';
 import { PageCard } from '@/components/ui/cards';
 import { useIsDesktop } from '@/hooks/useIsDesktop';
-import { cn, formatShortDate, formatCurrencyWhole, toDateStr } from '@/lib/utils';
+import { cn, formatShortDate, toDateStr } from '@/lib/utils';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { SavingsCard } from '@/components/plan/SavingsCard';
 import { BudgetsCard } from '@/components/plan/BudgetsCard';
 import { BudgetDetail } from '@/components/plan/BudgetDetail';
@@ -96,10 +96,10 @@ function ProjectionComposition({ data }: { data: MonthForecast }) {
   return (
     <div className="mt-4">
       <ProjectionBar data={data} />
-      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-2xs font-mono uppercase tracking-[0.1em] text-muted">
+      <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
         <span className="inline-flex items-center gap-1.5"><StatusDot tone="saved" />Recorded {formatMoney(data.recorded_actual)}</span>
-        <span className="inline-flex items-center gap-1.5"><StatusDot tone="active" />Scheduled (est.) {formatMoney(data.confirmed_commitments)}</span>
-        <span className="inline-flex items-center gap-1.5"><StatusDot tone="notable" />Remaining (est.) {formatMoney(data.remaining_variable_estimate)}</span>
+        <span className="inline-flex items-center gap-1.5"><StatusDot tone="active" />Scheduled, estimated {formatMoney(data.confirmed_commitments)}</span>
+        <span className="inline-flex items-center gap-1.5"><StatusDot tone="notable" />Rest of month, estimated {formatMoney(data.remaining_variable_estimate)}</span>
       </div>
     </div>
   );
@@ -116,7 +116,7 @@ function ProjectionComparisonFallback({ data }: { data: MonthForecast }) {
         <div className="h-2 rounded bg-foreground/10 mt-1 overflow-hidden"><div className="h-full bg-teal" style={{ width: `${(data.recorded_actual.minor_units / max) * 100}%` }} /></div>
       </div>
       <div>
-        <div className="flex justify-between text-sm"><span>Scheduled (est.)</span><span className="tabular-nums">{formatMoney(data.confirmed_commitments)}</span></div>
+        <div className="flex justify-between text-sm"><span>Scheduled, estimated</span><span className="tabular-nums">{formatMoney(data.confirmed_commitments)}</span></div>
         <div className="h-2 rounded bg-foreground/10 mt-1 overflow-hidden"><div className="h-full bg-honey" style={{ width: `${(data.confirmed_commitments.minor_units / max) * 100}%` }} /></div>
       </div>
     </div>
@@ -150,17 +150,18 @@ function ProjectionMonth() {
       />
       <div className="space-y-1 px-1 text-sm">
         {projected == null ? <>
-          <p className="text-muted">Not enough recorded history yet to project the rest of this month — at least 4 weeks of history is needed for each remaining weekday.</p>
+          <p className="max-w-prose text-muted">Not enough recorded history yet to project the rest of this month. A projection needs about 4 weeks of spending.</p>
           <ProjectionComparisonFallback data={data} />
         </> : <>
-          <p className="text-muted">Projected total for {data.period_start} to {data.period_end} · {formatMoney(data.recorded_actual)} recorded so far</p>
+          <p className="text-muted">Projected for {formatShortDate(data.period_start)}–{formatShortDate(data.period_end)} · {formatMoney(data.recorded_actual)} spent so far</p>
           <ProjectionComposition data={data} />
-          {data.projected_total_low && data.projected_total_high && <p className="text-muted">Likely range {formatMoney(data.projected_total_low)}–{formatMoney(data.projected_total_high)} — the lowest and highest ever recorded on these weekdays, not a statistical estimate.</p>}
+          {data.projected_total_low && data.projected_total_high && <p className="text-muted">Likely range {formatMoney(data.projected_total_low)}–{formatMoney(data.projected_total_high)}</p>}
           {!!data.unpriced_commitment_count && <p className="text-warning">{data.unpriced_commitment_count} upcoming charge{data.unpriced_commitment_count > 1 ? 's have' : ' has'} no known amount and {data.unpriced_commitment_count > 1 ? "aren't" : "isn't"} included.</p>}
           {data.reasons.includes('unresolved_conversion') && <p className="text-warning">Some recorded spending this month has an unresolved currency conversion and is excluded from the actual figure above.</p>}
           <details>
             <summary className="inline-flex min-h-11 cursor-pointer items-center text-teal">How this is calculated</summary>
-            <ul className="mt-1 list-disc space-y-1 pl-5 text-muted">
+            <ul className="mt-1 max-w-prose list-disc space-y-1 pl-5 text-muted">
+              {data.projected_total_low && data.projected_total_high && <li>The likely range is the lowest and highest you have spent on these weekdays before, not a statistical estimate.</li>}
               {data.assumptions.map((assumption, i) => <li key={i}>{assumption}</li>)}
             </ul>
           </details>
@@ -177,18 +178,6 @@ function useNextWeekCalendar() {
   const days = useMemo(() => Array.from({ length: 7 }, (_, i) => { const d = new Date(); d.setDate(d.getDate() + i); return toDateStr(d); }), []);
   const calendar = useQuery({ queryKey: ['plan-upcoming-calendar', days[0], days[6]], queryFn: () => briefingApi.upcomingCalendar(days[0], days[6]) });
   return { days, data: calendar.data };
-}
-
-function ThisMonthGroup() {
-  const { data: overview } = useQuery({ queryKey: ['savings-overview'], queryFn: () => api.getSavingsOverview(), staleTime: 30_000 });
-  const { data: week } = useNextWeekCalendar();
-  const count = (week?.days ?? []).reduce((sum, d) => sum + d.recorded_charge_count, 0);
-  return (
-    <ListGroup title="This month">
-      <ListRow title="Saved this month" subtitle={overview ? `${formatCurrencyWhole(overview.allocated_to_goals)} toward goals` : 'Income minus expenses'} amount={overview ? <span className="text-success">{formatCurrencyWhole(overview.savings)}</span> : undefined} value={overview ? undefined : '—'} />
-      <ListRow title="Upcoming this week" subtitle="Recorded pending schedules, next 7 days" value={week ? `${count} charge${count === 1 ? '' : 's'}` : '—'} />
-    </ListGroup>
-  );
 }
 
 function WeekStrip({ selectedDate, onSelect }: { selectedDate: string | null; onSelect: (d: string) => void }) {
@@ -236,8 +225,8 @@ function MonthCalendar({ month, onMonth, selectedDate, onSelect }: {
     <div data-testid="month-calendar">
       <PageCard title={bounds.label} action={
         <div className="flex gap-1">
-          <Button variant="ghost" size="sm" className="min-h-9 px-2" aria-label="Previous month" onClick={() => onMonth(shiftMonth(month, -1))}>‹</Button>
-          <Button variant="ghost" size="sm" className="min-h-9 px-2" aria-label="Next month" onClick={() => onMonth(shiftMonth(month, 1))}>›</Button>
+          <Button variant="ghost" size="icon" className="min-h-11 min-w-11" aria-label="Previous month" onClick={() => onMonth(shiftMonth(month, -1))}><ChevronLeft aria-hidden className="h-4 w-4" /></Button>
+          <Button variant="ghost" size="icon" className="min-h-11 min-w-11" aria-label="Next month" onClick={() => onMonth(shiftMonth(month, 1))}><ChevronRight aria-hidden className="h-4 w-4" /></Button>
         </div>
       }>
         {isError && !data ? <div role="alert"><LoadFailed onRetry={() => void refetch()} /></div> : <>
@@ -408,7 +397,7 @@ export function PlanPage() {
   );
 
   const chargeMeta = (item: UpcomingItem) => <>
-    <p className="text-muted"><time dateTime={item.date}>{item.date}</time> · {frequencyLabel(item.frequency)} · {item.date_basis === 'user' ? 'Date you set' : 'Scheduled estimate'}</p>
+    <p className="text-muted"><time dateTime={item.date}>{formatShortDate(item.date)}</time> · {frequencyLabel(item.frequency)} · {item.date_basis === 'user' ? 'Date you set' : 'Scheduled estimate'}</p>
     <p className="text-sm text-muted">{amountBasisLabels[item.amount_basis]}</p>
     <p className="text-sm text-muted">{subscriptionConfirmationLabels[item.confirmation_source]}</p>
     {item.schedule_status === 'possibly_cancelled' && <p className="text-warning">Schedule needs review: a previous charge may be overdue.</p>}
@@ -440,9 +429,12 @@ export function PlanPage() {
           </ListGroup> : <>
             <div className="px-1">
               <p className="font-mono text-3xl font-medium tabular-nums">{formatMoney(report.known_total)}</p>
-              <p className="text-muted">{report.status === 'partial' ? 'Known estimated subtotal' : 'Estimated charges'} · {report.start} to {report.end} · {report.timezone}</p>
-              {!!report.unknown_count && <p className="text-warning">{report.unknown_count} charges have unknown amounts and are excluded from this subtotal.</p>}
-              <p className="mt-1 text-sm text-muted">Dates and amounts are estimates, not confirmed charges. Only recorded pending schedules appear; this is not a complete forecast. Matched or dismissed charges are excluded.</p>
+              <p className="text-muted">{report.status === 'partial' ? 'Known estimated subtotal' : 'Estimated charges'}, {formatShortDate(report.start)}–{formatShortDate(report.end)}</p>
+              {!!report.unknown_count && <p className="text-warning">{report.unknown_count} {report.unknown_count === 1 ? 'charge has an unknown amount and isn’t' : 'charges have unknown amounts and aren’t'} included.</p>}
+              <details className="text-sm">
+                <summary className="inline-flex min-h-11 cursor-pointer items-center text-teal">About these estimates</summary>
+                <p className="max-w-prose text-muted">Dates and amounts are estimates, not confirmed charges. Only recorded pending schedules appear; this is not a complete forecast. Matched or dismissed charges are excluded.</p>
+              </details>
             </div>
             <div id="upcoming-agenda" tabIndex={-1} aria-label="Upcoming charges" className="rounded-group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
               {grouped.map(group => <div key={group.date} id={`agenda-date-${group.date}`} className="scroll-mt-24">
@@ -465,7 +457,12 @@ export function PlanPage() {
                 </ol>
               </div>)}
             </div>
-            {!report.items.length && <p className="px-1 py-2 text-muted">{report.total ? 'No charges on this page. Return to an earlier page.' : 'No pending charges recorded in this window. Add or review a subscription schedule to get started.'}</p>}
+            {!report.items.length && (report.total
+              ? <p className="px-1 py-2 text-muted">No charges on this page. Return to an earlier page.</p>
+              : <div className="px-1 py-2">
+                  <p className="text-muted">No pending charges recorded in this window.</p>
+                  {settings?.subscriptions_enabled && <Button type="button" variant="ghost" className="-ml-3 min-h-11 text-teal" onClick={() => document.getElementById('plan-subscriptions')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Add a subscription</Button>}
+                </div>)}
             {report.total > 50 && <nav aria-label="Upcoming charge pages" className="flex items-center justify-between gap-3">
               <Button variant="ghost" className="min-h-11 text-teal" disabled={!offset} onClick={() => setOffset(Math.max(0, offset - 50))}>Previous charges</Button>
               <span className="text-sm text-muted">{report.total} recorded charges</span>
@@ -485,15 +482,14 @@ export function PlanPage() {
     </div>
   ) : (
     <section aria-labelledby="plan-manage-heading" className="space-y-4">
-      <h2 id="plan-manage-heading" className="px-1 font-display text-xl font-bold tracking-[-0.01em]">Budgets, goals, subscriptions &amp; trips</h2>
+      <h2 id="plan-manage-heading" className="sr-only">Budgets, goals, subscriptions &amp; trips</h2>
       <div className="grid items-start gap-6 lg:grid-cols-2">
         <div className="space-y-6">
           {settings.budgets_enabled && <BudgetsCard onSelect={(id) => openPanel('budget', id)} />}
-          {settings.subscriptions_enabled && <SubscriptionsSection selectedSubId={panel?.type === 'subscription' ? panel.id : null} onSelectSub={(id) => openPanel('subscription', id)} />}
+          {settings.subscriptions_enabled && <div id="plan-subscriptions" className="scroll-mt-24"><SubscriptionsSection selectedSubId={panel?.type === 'subscription' ? panel.id : null} onSelectSub={(id) => openPanel('subscription', id)} /></div>}
           {settings.recurring_enabled && <RecurringCard />}
         </div>
         <div className="space-y-6">
-          {settings.goals_enabled && <SavingsCard />}
           {settings.goals_enabled && <GoalsCard onSelect={(id) => openPanel('goal', id)} />}
           {settings.trips_enabled && <TripsCard onSelect={(id) => openPanel('trip', id)} />}
         </div>
@@ -507,7 +503,7 @@ export function PlanPage() {
       <div className="space-y-8 px-4 pb-8">
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)] lg:items-start">
           <ProjectionMonth />
-          <ThisMonthGroup />
+          {settings?.goals_enabled && <SavingsCard />}
         </div>
         {timeline}
         {manage}
