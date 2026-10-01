@@ -98,7 +98,7 @@ test('changing horizon resets pagination', async () => {
   show();
   fireEvent.click(await screen.findByRole('button', { name: 'Next charges' }));
   await waitFor(() => expect(briefingApi.upcoming).toHaveBeenCalledWith(30, 50));
-  fireEvent.change(screen.getByRole('combobox'), { target: { value: '90' } });
+  fireEvent.click(screen.getByRole('radio', { name: 'Next 90 days' }));
   await waitFor(() => expect(briefingApi.upcoming).toHaveBeenCalledWith(90, 0));
 });
 

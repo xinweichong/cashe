@@ -1,18 +1,26 @@
 import type { CSSProperties, ReactNode } from 'react';
-import { X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { NavBar } from '@/components/ui/nav-bar';
+import { Toolbar, ToolbarAction } from '@/components/ui/toolbar';
+import { useIsPhone } from '@/hooks/useIsPhone';
+import { useStackBack, useStackLabel } from '@/components/layout/stackContext';
 
 // Building blocks shared by the Plan, subscription and merchant detail panels.
 
-export function DetailHeader({ title, subtitle, onClose }: { title: ReactNode; subtitle?: ReactNode; onClose: () => void }) {
+// Direction B (P3/P12, 2026-10-01): a detail's persistent chrome. A pushed
+// page on a phone gets the nav bar with a back button named for its parent;
+// an md+ inspector gets the toolbar with Done. Extra actions sit beside them.
+export function DetailHeader({ title, subtitle, onClose, actions }: { title: ReactNode; subtitle?: ReactNode; onClose: () => void; actions?: ReactNode }) {
+  const isPhone = useIsPhone();
+  const stackBack = useStackBack();
+  const backLabel = useStackLabel();
   return (
-    <div className="shrink-0 flex items-start justify-between p-4 border-b border-border">
-      <div>
-        <h2 className="text-lg font-bold font-display tracking-tight text-foreground">{title}</h2>
-        {subtitle}
-      </div>
-      <Button variant="ghost" size="icon" className="shrink-0" onClick={onClose} aria-label="Close"><X className="w-4 h-4" /></Button>
+    <div className="shrink-0">
+      {isPhone
+        ? <NavBar title={title} back={{ label: backLabel, onClick: stackBack }} trailing={actions} />
+        : <Toolbar title={title} trailing={<>{actions}<ToolbarAction tone="strong" onClick={onClose}>Done</ToolbarAction></>} />}
+      {subtitle && <div className="px-4 pt-3">{subtitle}</div>}
     </div>
   );
 }
@@ -34,9 +42,9 @@ export function StatTiles({ items, columns = 2 }: {
   return (
     <div className={cn('grid gap-2', columns === 3 ? 'grid-cols-3' : 'grid-cols-2')}>
       {items.map(({ label, value, color }) => (
-        <div key={label} className="bg-background rounded-lg p-3 border border-border">
-          <p className="text-2xs font-mono uppercase tracking-[0.06em] text-muted">{label}</p>
-          <p className="text-sm font-display font-bold text-foreground mt-0.5" style={color ? { color } as CSSProperties : undefined}>{value}</p>
+        <div key={label} className="rounded-[12px] bg-fill-press p-3">
+          <p className="text-xs text-muted">{label}</p>
+          <p className="mt-0.5 font-mono text-sm font-medium tabular-nums text-foreground" style={color ? { color } as CSSProperties : undefined}>{value}</p>
         </div>
       ))}
     </div>
@@ -64,5 +72,5 @@ export function ConfirmDestructive({ message, confirmLabel = 'Delete', pending, 
 }
 
 export function SectionLabel({ children, className }: { children: ReactNode; className?: string }) {
-  return <p className={cn('text-2xs font-mono font-semibold uppercase tracking-[0.22em] text-muted', className)}>{children}</p>;
+  return <h3 className={cn('font-display text-base font-bold text-foreground', className)}>{children}</h3>;
 }

@@ -33,18 +33,46 @@ interface ListDetailProps {
   /** Accessible names for the two regions. */
   listLabel: string;
   detailLabel?: string;
+  /** What the detail's back button calls the list, e.g. "Plan". */
+  backLabel?: string;
+  /**
+   * 'split' (default): a narrow list column beside the detail (Activity).
+   * 'inspector': the list is the whole page and the detail opens as a
+   * column on its right only while something is selected (Plan), the HIG
+   * inspector arrangement. Phones push the detail either way.
+   */
+  variant?: 'split' | 'inspector';
 }
 
 export function ListDetail(props: ListDetailProps) {
   const isPhone = useIsPhone();
-  return isPhone ? <PhoneStack {...props} /> : <SplitView {...props} />;
+  if (isPhone) return <PhoneStack {...props} />;
+  return props.variant === 'inspector' ? <Inspector {...props} /> : <SplitView {...props} />;
 }
 
-function SplitView({ list, detail, onClose, emptyDetail, onDeleteSelected, listLabel, detailLabel = 'Details' }: ListDetailProps) {
+function Inspector({ list, detail, onClose, onDeleteSelected, listLabel, detailLabel = 'Details', backLabel }: ListDetailProps) {
   const listRef = useRef<HTMLDivElement>(null);
   useListKeyboard(listRef, { onDelete: detail ? onDeleteSelected : undefined, onEscape: detail ? onClose : undefined });
   return (
-    <StackContext.Provider value={{ back: onClose }}>
+    <StackContext.Provider value={{ back: onClose, label: backLabel }}>
+      <div className="flex min-h-0 items-start">
+        <section ref={listRef} aria-label={listLabel} className="min-w-0 flex-1">{list}</section>
+        {detail && (
+          <section aria-label={detailLabel}
+            className="sticky top-[env(safe-area-inset-top)] h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom))] w-[26rem] shrink-0 overflow-y-auto overscroll-contain border-l-[0.5px] border-separator bg-background">
+            {detail}
+          </section>
+        )}
+      </div>
+    </StackContext.Provider>
+  );
+}
+
+function SplitView({ list, detail, onClose, emptyDetail, onDeleteSelected, listLabel, detailLabel = 'Details', backLabel }: ListDetailProps) {
+  const listRef = useRef<HTMLDivElement>(null);
+  useListKeyboard(listRef, { onDelete: detail ? onDeleteSelected : undefined, onEscape: detail ? onClose : undefined });
+  return (
+    <StackContext.Provider value={{ back: onClose, label: backLabel }}>
       <div className="flex h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom))] min-h-0">
         <section ref={listRef} aria-label={listLabel}
           className="w-[22rem] shrink-0 overflow-y-auto overscroll-contain border-r-[0.5px] border-separator lg:w-[24rem]">
@@ -64,7 +92,7 @@ function isStandalone() {
 
 const EDGE = 24;
 
-function PhoneStack({ list, detail, onClose }: ListDetailProps) {
+function PhoneStack({ list, detail, onClose, backLabel }: ListDetailProps) {
   const reduceMotion = useReducedMotion();
   const standalone = useMediaQuery('(display-mode: standalone)') || (typeof navigator !== 'undefined' && isStandalone());
   // Whether the next pop is ours to animate (our back button or edge swipe).
@@ -105,7 +133,7 @@ function PhoneStack({ list, detail, onClose }: ListDetailProps) {
         exit: (ours: boolean) => (ours ? { x: width, transition: push } : { opacity: 0, transition: { duration: 0 } }),
       };
   return (
-    <StackContext.Provider value={{ back }}>
+    <StackContext.Provider value={{ back, label: backLabel }}>
       <div className="relative">
         <motion.div
           aria-hidden={detail ? true : undefined}

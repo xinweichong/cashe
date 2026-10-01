@@ -8,7 +8,6 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { SelectableRow } from '@/components/ui/selectable-row';
 import { getGoalTone, formatCurrencyWhole } from '@/lib/utils';
-import { staggerContainerVariants, staggerItemVariants } from '@/lib/motionPresets';
 import { useGoals } from './planHooks';
 import { ProgressRing } from '@/components/ui/ProgressRing';
 
@@ -77,15 +76,16 @@ export function GoalsCard({ onSelect }: { onSelect: (id: number) => void }) {
       ) : goals.length === 0 ? (
         <p className="text-muted text-sm py-4 text-center">No goals yet. Add one to start tracking your savings.</p>
       ) : (
-        <motion.div variants={staggerContainerVariants} initial="initial" animate="animate">
+        <div>
+          {/* Rows render at rest (no stagger entrance); a removed row fades out. */}
           <AnimatePresence>
             {goals.map((g) => (
-              <motion.div key={g.id} variants={staggerItemVariants} exit={{ opacity: 0, transition: { duration: 0.15 } }}>
+              <motion.div key={g.id} exit={{ opacity: 0, transition: { duration: 0.15 } }}>
                 <GoalSummaryRow g={g} onSelect={() => onSelect(g.id)} />
               </motion.div>
             ))}
           </AnimatePresence>
-        </motion.div>
+        </div>
       )}
       {showAddForm && <AddGoalForm onAdd={() => setShowAddForm(false)} />}
     </PageCard>

@@ -4,12 +4,16 @@ import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-do
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/api/client';
 import { briefingApi, formatMoney, type MonthForecast, type UpcomingPlan } from '@/api/briefing';
-import { HeroCard, PageCard } from '@/components/ui/cards';
-import { StatCard } from '@/components/ui/StatCard';
 import { Button } from '@/components/ui/button';
 import { StatusDot } from '@/components/ui/StatusDot';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LoadFailed } from '@/components/ui/LoadFailed';
+import { ListGroup, ListRow } from '@/components/ui/list';
+import { NavBar } from '@/components/ui/nav-bar';
+import { SegmentedChoice } from '@/components/ui/segmented-choice';
+import { SpectrumCard, SpectrumCardSkeleton } from '@/components/ui/SpectrumCard';
+import { DetailHeader } from '@/components/ui/detail-panel';
+import { PageCard } from '@/components/ui/cards';
 import { useIsDesktop } from '@/hooks/useIsDesktop';
 import { cn, formatShortDate, formatCurrencyWhole, toDateStr } from '@/lib/utils';
 import { SavingsCard } from '@/components/plan/SavingsCard';
@@ -22,13 +26,8 @@ import { TripDetail } from '@/components/plan/TripDetail';
 import { RecurringCard } from '@/components/plan/RecurringCard';
 import { SubscriptionsSection } from '@/components/subscriptions/SubscriptionsSection';
 import { SubscriptionDetail } from '@/components/subscriptions/SubscriptionDetail';
-import { SelectableRow } from '@/components/ui/selectable-row';
-import { HeroAmount } from '@/components/ui/HeroAmount';
-import { LensGrow, LensMore, PHONE_SCREEN_HEIGHT, PhoneScreen, type Lens, LensAction } from '@/components/layout/PhoneScreen';
-import { SlideOver } from '@/components/layout/SlideOver';
-import { RecurringCharges } from '@/components/explore/RecurringCharges';
-import { useDrill } from '@/hooks/useDrill';
-import { DrillSheet } from '@/components/layout/DrillSheet';
+import { ListDetail } from '@/components/layout/ListDetail';
+import { ProfileMenu } from '@/components/layout/ProfileMenu';
 import { useIsPhone } from '@/hooks/useIsPhone';
 import { invalidateSpendingQueries } from '@/hooks/useTransactions';
 import { useSettings } from '@/hooks/useSettings';
@@ -124,82 +123,54 @@ function ProjectionComparisonFallback({ data }: { data: MonthForecast }) {
   );
 }
 
-function ProjectionHero() {
-  const { data, isError, refetch } = useMonthForecast();
-  return (
-    <HeroCard title="This month's projection" className="col-span-2">
-      <QueryState data={data} isError={isError} onRetry={() => void refetch()}>{(data) =>
-        data.projected_total == null ? <>
-          <p className="text-muted">Not enough recorded history yet to project the rest of this month — at least 4 weeks of history is needed for each remaining weekday.</p>
-          <ProjectionComparisonFallback data={data} />
-        </> : <>
-        <p className="font-display text-4xl md:text-5xl font-bold tracking-tight tabular-nums text-foreground">{formatMoney(data.projected_total)}</p>
-        <p className="mt-1 text-muted">Projected total for {data.period_start} to {data.period_end} · {formatMoney(data.recorded_actual)} recorded so far</p>
-        <ProjectionComposition data={data} />
-        {data.projected_total_low && data.projected_total_high && <p className="text-sm text-muted mt-3">Likely range {formatMoney(data.projected_total_low)}–{formatMoney(data.projected_total_high)} — the lowest and highest ever recorded on these weekdays, not a statistical estimate.</p>}
-        {!!data.unpriced_commitment_count && <p className="text-warning mt-1">{data.unpriced_commitment_count} upcoming charge{data.unpriced_commitment_count > 1 ? 's have' : ' has'} no known amount and {data.unpriced_commitment_count > 1 ? "aren't" : "isn't"} included.</p>}
-        {data.reasons.includes('unresolved_conversion') && <p className="text-warning mt-1">Some recorded spending this month has an unresolved currency conversion and is excluded from the actual figure above.</p>}
-        <details className="mt-2">
-          <summary className="cursor-pointer text-teal min-h-11 inline-flex items-center">How this is calculated</summary>
-          <ul className="text-sm text-muted list-disc pl-5 mt-2 space-y-1">
-            {data.assumptions.map((assumption, i) => <li key={i}>{assumption}</li>)}
-          </ul>
-        </details>
-      </>}</QueryState>
-    </HeroCard>
-  );
-}
-
-// The phone glance reads as pace against the monthly target, coloured by
-// where it lands on the spectrum (teal under, coral over), so the plan's
-// projection never looks like money already spent.
-function ProjectionGlance() {
+// Plan's one spectrum card (P11): this month's projection, estimated, with
+// pace against the overall target when one is set. The notes underneath keep
+// every qualification the projection carries.
+function ProjectionMonth() {
   const { data, isError, refetch } = useMonthForecast();
   const { data: briefing } = useHomeBriefing();
   const target = briefing?.spending_target?.target;
-  const month = new Date().toLocaleDateString('en-SG', { month: 'short' });
-  const projected = data?.projected_total ?? null;
+  if (!data) return isError
+    ? <div role="alert"><LoadFailed onRetry={() => void refetch()} /></div>
+    : <SpectrumCardSkeleton />;
+  const projected = data.projected_total;
+  const month = new Date(`${data.period_start}T00:00:00Z`).toLocaleDateString('en-SG', { month: 'long', timeZone: 'UTC' });
   const over = !!projected && !!target && projected.minor_units > target.minor_units;
   const gap = projected && target ? formatMoney({ ...target, minor_units: Math.abs(projected.minor_units - target.minor_units) }) : null;
-  const whole = (m: { minor_units: number }) => formatCurrencyWhole(m.minor_units / 100);
   return (
-    <HeroCard title={`On pace · ${month}`} className="p-4" glowColor={!target || !projected ? 'warm' : over ? 'coral' : 'teal'}>
-      <QueryState data={data} isError={isError} onRetry={() => void refetch()} skeleton={<><Skeleton className="h-10 w-44" /><Skeleton className="mt-3 h-3 w-full" /></>}>{(data) =>
-        projected == null ? <>
-          <p className="font-display text-4xl font-bold tracking-tight tabular-nums">{formatMoney(data.recorded_actual)}</p>
-          <p className="mt-1 text-xs text-muted">Recorded so far. A projection needs about 4 weeks of history.</p>
+    <div className="space-y-2">
+      <SpectrumCard
+        label={`${month} projection`}
+        meta="Recorded so far"
+        value={formatMoney(projected ?? data.recorded_actual)}
+        caption={projected
+          ? target ? `${gap} ${over ? 'over' : 'under'} your ${formatMoney(target)} target` : 'Projected for the month · no monthly target set'
+          : 'A projection needs about 4 weeks of history'}
+        status={projected ? 'estimated' : 'complete'}
+      />
+      <div className="space-y-1 px-1 text-sm">
+        {projected == null ? <>
+          <p className="text-muted">Not enough recorded history yet to project the rest of this month — at least 4 weeks of history is needed for each remaining weekday.</p>
+          <ProjectionComparisonFallback data={data} />
         </> : <>
-          <p className={cn('font-display text-4xl font-bold tracking-tight tabular-nums', target && (over ? 'text-coral' : 'text-teal'))}>{formatMoney(projected)}</p>
-          <p className="mt-1 text-sm text-muted">
-            {target ? <>Target {formatMoney(target)} · <span className={over ? 'text-coral' : 'text-teal'}>{gap} {over ? 'over' : 'under'}</span></> : 'Projected for the month · no monthly target set'}
-          </p>
-          {data.remaining_variable_estimate && projected.minor_units > 0 && <ProjectionBar data={data} compact />}
-          <p className="mt-2 flex gap-x-3 text-2xs font-mono text-muted whitespace-nowrap">
-            <span className="inline-flex items-center gap-1.5"><StatusDot tone="saved" />{whole(data.recorded_actual)} recorded</span>
-            <span className="inline-flex items-center gap-1.5"><StatusDot tone="active" />{whole(data.confirmed_commitments)} scheduled</span>
-            {data.remaining_variable_estimate && <span className="inline-flex items-center gap-1.5"><StatusDot tone="notable" />{whole(data.remaining_variable_estimate)} est.</span>}
-          </p>
-          {!!data.unpriced_commitment_count && <p className="mt-1 text-xs text-warning">{data.unpriced_commitment_count} upcoming charge{data.unpriced_commitment_count > 1 ? 's' : ''} with no amount not included.</p>}
-        </>}</QueryState>
-    </HeroCard>
+          <p className="text-muted">Projected total for {data.period_start} to {data.period_end} · {formatMoney(data.recorded_actual)} recorded so far</p>
+          <ProjectionComposition data={data} />
+          {data.projected_total_low && data.projected_total_high && <p className="text-muted">Likely range {formatMoney(data.projected_total_low)}–{formatMoney(data.projected_total_high)} — the lowest and highest ever recorded on these weekdays, not a statistical estimate.</p>}
+          {!!data.unpriced_commitment_count && <p className="text-warning">{data.unpriced_commitment_count} upcoming charge{data.unpriced_commitment_count > 1 ? 's have' : ' has'} no known amount and {data.unpriced_commitment_count > 1 ? "aren't" : "isn't"} included.</p>}
+          {data.reasons.includes('unresolved_conversion') && <p className="text-warning">Some recorded spending this month has an unresolved currency conversion and is excluded from the actual figure above.</p>}
+          <details>
+            <summary className="inline-flex min-h-11 cursor-pointer items-center text-teal">How this is calculated</summary>
+            <ul className="mt-1 list-disc space-y-1 pl-5 text-muted">
+              {data.assumptions.map((assumption, i) => <li key={i}>{assumption}</li>)}
+            </ul>
+          </details>
+        </>}
+      </div>
+    </div>
   );
 }
 
-type PlanLens = 'soon' | 'budgets' | 'goals' | 'subs' | 'trips';
-type PlanDrill = 'charge' | 'timeline' | 'recurring' | 'changes';
-const PLAN_DRILLS: readonly PlanDrill[] = ['charge', 'timeline', 'recurring', 'changes'];
-
-function SavedThisMonthStat() {
-  const { data: overview } = useQuery({ queryKey: ['savings-overview'], queryFn: () => api.getSavingsOverview(), staleTime: 30_000 });
-  return (
-    <StatCard
-      label="Saved this month"
-      value={overview ? formatCurrencyWhole(overview.savings) : '—'}
-      color="teal"
-      subtext={overview ? `${formatCurrencyWhole(overview.allocated_to_goals)} toward goals` : 'Income minus expenses'}
-    />
-  );
-}
+type PlanWindow = '14' | '30' | '90';
 
 // Today and the next six days, with their pending-charge calendar.
 function useNextWeekCalendar() {
@@ -208,16 +179,15 @@ function useNextWeekCalendar() {
   return { days, data: calendar.data };
 }
 
-function UpcomingThisWeekStat() {
-  const { data } = useNextWeekCalendar();
-  const count = (data?.days ?? []).reduce((sum, d) => sum + d.recorded_charge_count, 0);
+function ThisMonthGroup() {
+  const { data: overview } = useQuery({ queryKey: ['savings-overview'], queryFn: () => api.getSavingsOverview(), staleTime: 30_000 });
+  const { data: week } = useNextWeekCalendar();
+  const count = (week?.days ?? []).reduce((sum, d) => sum + d.recorded_charge_count, 0);
   return (
-    <StatCard
-      label="Upcoming this week"
-      value={data ? `${count} charge${count === 1 ? '' : 's'}` : '—'}
-      color="mint"
-      subtext="Recorded pending schedules, next 7 days"
-    />
+    <ListGroup title="This month">
+      <ListRow title="Saved this month" subtitle={overview ? `${formatCurrencyWhole(overview.allocated_to_goals)} toward goals` : 'Income minus expenses'} amount={overview ? <span className="text-success">{formatCurrencyWhole(overview.savings)}</span> : undefined} value={overview ? undefined : '—'} />
+      <ListRow title="Upcoming this week" subtitle="Recorded pending schedules, next 7 days" value={week ? `${count} charge${count === 1 ? '' : 's'}` : '—'} />
+    </ListGroup>
   );
 }
 
@@ -225,7 +195,7 @@ function WeekStrip({ selectedDate, onSelect }: { selectedDate: string | null; on
   const { days, data } = useNextWeekCalendar();
   const byDate = new Map((data?.days ?? []).map(d => [d.date, d]));
   return (
-    <div className="flex justify-between gap-1" data-testid="week-strip">
+    <div className="flex justify-between gap-1 rounded-group bg-card p-1.5" data-testid="week-strip">
       {days.map((date) => {
         const d = new Date(date + 'T00:00:00');
         return (
@@ -235,13 +205,13 @@ function WeekStrip({ selectedDate, onSelect }: { selectedDate: string | null; on
             onClick={() => onSelect(date)}
             aria-pressed={selectedDate === date}
             className={cn(
-              'flex-1 min-h-11 flex flex-col items-center justify-center gap-1 rounded-md text-sm',
-              selectedDate === date ? 'bg-teal/13 text-teal' : 'hover:bg-card-hover'
+              'flex min-h-11 flex-1 flex-col items-center justify-center gap-1 rounded-[12px] text-sm',
+              selectedDate === date ? 'bg-teal text-on-teal' : 'pressable'
             )}
           >
-            <span className="text-2xs text-muted">{WEEKDAY_LABELS[d.getDay()]}</span>
+            <span className={cn('text-2xs', selectedDate === date ? 'text-on-teal/80' : 'text-muted')}>{WEEKDAY_LABELS[d.getDay()]}</span>
             <span>{d.getDate()}</span>
-            {!!byDate.get(date)?.recorded_charge_count && <span className="w-1 h-1 rounded-full bg-tangerine" aria-hidden />}
+            {!!byDate.get(date)?.recorded_charge_count && <span className="h-1 w-1 rounded-full bg-tangerine" aria-hidden />}
           </button>
         );
       })}
@@ -287,7 +257,7 @@ function MonthCalendar({ month, onMonth, selectedDate, onSelect }: {
                   aria-pressed={selectedDate === date}
                   className={cn(
                     'aspect-square min-h-9 flex flex-col items-center justify-center rounded-md text-sm',
-                    selectedDate === date ? 'bg-teal/13 text-teal' : 'hover:bg-card-hover'
+                    selectedDate === date ? 'bg-teal text-on-teal' : 'pressable'
                   )}
                 >
                   {day}
@@ -329,9 +299,16 @@ function SelectedDayDetail({ date }: { date: string }) {
   );
 }
 
-const PANEL_TYPES = ['subscription', 'budget', 'goal', 'trip'] as const;
+const PANEL_TYPES = ['subscription', 'budget', 'goal', 'trip', 'charge'] as const;
 type Panel = { type: (typeof PANEL_TYPES)[number]; id: number };
+type UpcomingItem = UpcomingPlan['items'][number];
 
+// Plan is "the future" (HIG alignment, 2026-10-01): this month's projection,
+// upcoming charges, and the budgets, goals, subscriptions and trips that
+// shape them, on one scrolling page. A selected item opens through
+// ListDetail: pushed on a phone, an inspector column on md+. On a phone each
+// charge is a row that opens its own page; with room, charges show their
+// actions inline.
 export function PlanPage() {
   const [search, setSearch] = useSearchParams();
   const [, updateParams] = useUrlParams();
@@ -339,10 +316,8 @@ export function PlanPage() {
   const isPhone = useIsPhone();
   const navigate = useNavigate();
   const location = useLocation();
-  const drillState = useDrill(PLAN_DRILLS);
   // Window, page and phone calendar view live in the URL (replace-history)
-  // so returning from a detail panel restores them. Invalid values fall
-  // back to defaults.
+  // so returning from a detail restores them. Invalid values fall back.
   const daysParam = Number(search.get('days'));
   const days = [14, 30, 90].includes(daysParam) ? daysParam : 30;
   const offsetParam = Number(search.get('offset'));
@@ -355,9 +330,9 @@ export function PlanPage() {
   const selectedDate = search.get('date');
   const calendarMonth = search.get('month') || toDateStr(new Date()).slice(0, 7);
 
-  // The right-side detail panel: exactly one of these params is set at a
-  // time. Setting one clears the other three, so deep links (e.g. Explore's
-  // "review this subscription") always land on a single, unambiguous panel.
+  // The open detail: exactly one of these params is set at a time. Setting
+  // one clears the others, so deep links (e.g. Explore's "review this
+  // subscription") always land on a single, unambiguous detail.
   const panel: Panel | null = (() => {
     for (const type of PANEL_TYPES) {
       const id = Number(search.get(type));
@@ -372,8 +347,8 @@ export function PlanPage() {
     return params;
   }
   const panelHref = (type: Panel['type'], id: number) => `/plan?${withPanel(type, id).toString()}`;
-  // Opening a panel pushes history, so the back gesture closes it; closing
-  // a panel that was opened here pops that entry instead of pushing another.
+  // Opening a detail pushes history, so the back gesture closes it; closing
+  // one that was opened here pops that entry instead of pushing another.
   const openPanel = (type: Panel['type'], id: number) => setSearch(withPanel(type, id), { state: { panel: true } });
   function closePanel() {
     if ((location.state as { panel?: boolean } | null)?.panel) { navigate(-1); return; }
@@ -397,7 +372,7 @@ export function PlanPage() {
     document.getElementById('upcoming-agenda')?.focus();
   }, [report]);
   const grouped = useMemo(() => {
-    const groups: { date: string; items: UpcomingPlan['items'] }[] = [];
+    const groups: { date: string; items: UpcomingItem[] }[] = [];
     for (const item of report?.items ?? []) {
       const last = groups[groups.length - 1];
       if (last && last.date === item.date) last.items.push(item); else groups.push({ date: item.date, items: [item] });
@@ -416,238 +391,152 @@ export function PlanPage() {
   const selectedInAgenda = selectedIndex >= 0 && !cutBefore && !cutAfter;
 
   const { data: settings } = useSettings();
+  const anyManageEnabled = !!settings && (settings.budgets_enabled || settings.subscriptions_enabled || settings.recurring_enabled || settings.goals_enabled || settings.trips_enabled);
 
   const calendarPane = isDesktop ? (
     <MonthCalendar month={calendarMonth} onMonth={setCalendarMonth} selectedDate={selectedDate} onSelect={selectDate} />
   ) : (
-    <div className="mb-4">
+    <div>
       <WeekStrip selectedDate={selectedDate} onSelect={selectDate} />
-      <Button variant="ghost" size="sm" className="mt-2 text-teal" aria-expanded={showCalendarMobile} onClick={() => setShowCalendarMobile(!showCalendarMobile)}>
+      <Button variant="ghost" size="sm" className="mt-1 text-teal" aria-expanded={showCalendarMobile} onClick={() => setShowCalendarMobile(!showCalendarMobile)}>
         {showCalendarMobile ? 'Hide calendar' : 'View calendar'}
       </Button>
-      {showCalendarMobile && <div className="mt-3">
+      {showCalendarMobile && <div className="mt-2">
         <MonthCalendar month={calendarMonth} onMonth={setCalendarMonth} selectedDate={selectedDate} onSelect={selectDate} />
       </div>}
     </div>
   );
 
-  const anyManageEnabled = !!settings && (settings.budgets_enabled || settings.subscriptions_enabled || settings.recurring_enabled || settings.goals_enabled || settings.trips_enabled);
+  const chargeMeta = (item: UpcomingItem) => <>
+    <p className="text-muted"><time dateTime={item.date}>{item.date}</time> · {frequencyLabel(item.frequency)} · {item.date_basis === 'user' ? 'Date you set' : 'Scheduled estimate'}</p>
+    <p className="text-sm text-muted">{amountBasisLabels[item.amount_basis]}</p>
+    <p className="text-sm text-muted">{subscriptionConfirmationLabels[item.confirmation_source]}</p>
+    {item.schedule_status === 'possibly_cancelled' && <p className="text-warning">Schedule needs review: a previous charge may be overdue.</p>}
+  </>;
 
-  const detailPanel = (
-    <SlideOver show={!!panel} onClose={closePanel} className="md:z-40 md:w-[420px] md:shadow-none">
-      {panel && <>
-          {panel.type === 'subscription' && <SubscriptionDetail subId={panel.id} onClose={closePanel} />}
-          {panel.type === 'budget' && <BudgetDetail budgetId={panel.id} onClose={closePanel} />}
-          {panel.type === 'goal' && <GoalDetail goalId={panel.id} onClose={closePanel} />}
-          {panel.type === 'trip' && <TripDetail tripId={panel.id} onClose={closePanel} />}
-      </>}
-    </SlideOver>
-  );
-
-  let phoneView: React.ReactNode = null;
-  if (isPhone) {
-    const lensParam = search.get('lens') as PlanLens | null;
-    const { drill: drillParam, openDrill: openDrillRaw, closeDrill: closeDrillRaw } = drillState;
-    const chargeParam = search.get('charge');
-    const openDrill = (kind: PlanDrill, charge?: string) => openDrillRaw(kind, charge ? { charge } : {});
-    const closeDrill = () => closeDrillRaw(['charge']);
-    const chargeItem = drillParam === 'charge' ? report?.items.find((item) => String(item.id) === chargeParam) : undefined;
-    const lensAction = (label: string, onClick: () => void) => <LensAction label={label} onClick={onClick} />;
-    const soonPanel = <div className="flex h-full flex-col">
-      <div className="flex-1 px-4 pt-3">
-        <QueryState data={report} isError={query.isError} onRetry={() => void query.refetch()} skeleton={<Skeleton className="h-24 w-full" />} loadingLabel="Loading upcoming charges…">{(report) => !report.enabled ? <>
-            <p className="text-sm">Enable Subscriptions in Settings to see your recorded schedules here.</p>
-            <Link to="/settings" className="text-teal min-h-11 inline-flex items-center">Open Settings</Link>
-          </> : <>
-            <p className="text-sm"><span className="font-display text-lg font-bold tabular-nums">{formatMoney(report.known_total)}</span> <span className="text-muted">due in the next {days} days</span></p>
-            {!!report.unknown_count && <p className="text-xs text-warning">Plus {report.unknown_count} with no amount yet.</p>}
-            {report.items.slice(0, 4).map((item) => (
-              <SelectableRow key={item.id} onClick={() => openDrill('charge', String(item.id))} className="min-h-12 justify-between gap-4">
-                <span className="min-w-0 truncate">{item.label}<span className="block text-xs text-muted font-mono">{formatShortDate(item.date)}</span></span>
-                <span className="font-mono tabular-nums">{item.amount ? formatMoney(item.amount) : 'Unknown'}</span>
-              </SelectableRow>
-            ))}
-            {!report.items.length && <p className="mt-2 text-sm text-muted">No pending charges recorded in this window.</p>}
-          </>}</QueryState>
+  const timeline = (
+    <section aria-labelledby="plan-upcoming-heading" className="space-y-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-2 px-1">
+        <h2 id="plan-upcoming-heading" className="font-display text-lg font-bold tracking-[-0.01em]">Upcoming</h2>
       </div>
-      {report?.enabled && lensAction(`Timeline and calendar${report.total ? ` · ${report.total}` : ''}`, () => openDrill('timeline'))}
-    </div>;
-    const lenses: Lens<PlanLens>[] = [
-      { value: 'soon', label: 'Soon', panel: soonPanel },
-      ...(settings?.budgets_enabled ? [{ value: 'budgets' as const, label: 'Budgets', bare: true, panel: <LensGrow><BudgetsCard onSelect={(id) => openPanel('budget', id)} /></LensGrow> }] : []),
-      ...(settings?.goals_enabled ? [{ value: 'goals' as const, label: 'Goals', bare: true, panel: <><SavingsCard compact /><LensGrow><GoalsCard onSelect={(id) => openPanel('goal', id)} /></LensGrow></> }] : []),
-      ...(settings?.subscriptions_enabled || settings?.recurring_enabled ? [{ value: 'subs' as const, label: 'Subs', bare: true, panel: <>
-        {settings?.subscriptions_enabled && <LensGrow><SubscriptionsSection selectedSubId={panel?.type === 'subscription' ? panel.id : null} onSelectSub={(id) => openPanel('subscription', id)} /></LensGrow>}
-        <LensMore items={[
-          ...(settings?.recurring_enabled ? [{ label: 'Recurring transactions', onOpen: () => openDrill('recurring') }] : []),
-          ...(settings?.subscriptions_enabled ? [{ label: 'Price changes and renewals', onOpen: () => openDrill('changes') }] : []),
-        ]} />
-      </> }] : []),
-      ...(settings?.trips_enabled ? [{ value: 'trips' as const, label: 'Trips', bare: true, panel: <LensGrow><TripsCard onSelect={(id) => openPanel('trip', id)} /></LensGrow> }] : []),
-    ];
-    const lens: PlanLens = lensParam && lenses.some((l) => l.value === lensParam) ? lensParam : 'soon';
-    const setLens = (value: PlanLens) => updateParams({ lens: value === 'soon' ? null : value });
-    phoneView = (
-      <>
-        <h1 className="sr-only">Plan</h1>
-        {settings ? (
-          <PhoneScreen glance={<ProjectionGlance />} lenses={lenses} lens={lens} onLensChange={setLens} label="Plan views" />
-        ) : (
-          <div role="status" aria-label="Loading plan" className={cn(PHONE_SCREEN_HEIGHT, 'flex flex-col gap-2 px-3 pt-3 pb-2')}>
-            <ProjectionGlance />
-            <Skeleton className="flex-1 rounded-lg" />
-            <Skeleton className="h-[46px] rounded-sm" />
-          </div>
-        )}
-        <DrillSheet
-          open={drillParam === 'charge' && !!chargeItem}
-          onOpenChange={(open) => !open && closeDrill()}
-          backLabel="Plan"
-          title={chargeItem?.label ?? ''}
-          description={chargeItem && `${formatShortDate(chargeItem.date)} · ${frequencyLabel(chargeItem.frequency)}`}
-        >
-          {chargeItem && <div className="space-y-3">
-            {chargeItem.amount ? <HeroAmount value={chargeItem.amount} className="text-5xl" /> : <p className="font-display text-3xl font-bold">Amount unknown</p>}
-            <p className="text-sm text-muted">{chargeItem.date_basis === 'user' ? 'Date you set' : 'Scheduled estimate'} · {amountBasisLabels[chargeItem.amount_basis]}</p>
-            <p className="text-sm text-muted">{subscriptionConfirmationLabels[chargeItem.confirmation_source]}</p>
-            {chargeItem.schedule_status === 'possibly_cancelled' && <p className="text-warning">Schedule needs review: a previous charge may be overdue.</p>}
-            <ChargeActions item={chargeItem} onDismissed={closeDrill} />
-            {chargeItem.subscription_id != null && <Link to={panelHref('subscription', chargeItem.subscription_id)} className="text-teal min-h-11 inline-flex items-center">Review or match schedule</Link>}
-          </div>}
-        </DrillSheet>
-        <DrillSheet open={drillParam === 'recurring' || drillParam === 'changes'} onOpenChange={(open) => !open && closeDrill()} backLabel="Plan" title={drillParam === 'changes' ? 'Price changes and renewals' : 'Recurring transactions'}>
-          <div className="[&_h2]:sr-only">
-            {drillParam === 'recurring' && <RecurringCard />}
-            {drillParam === 'changes' && <RecurringCharges />}
-          </div>
-        </DrillSheet>
-        <DrillSheet open={drillParam === 'timeline'} onOpenChange={(open) => !open && closeDrill()} backLabel="Plan" title="Upcoming timeline">
-          {calendarPane}
-          <label className="flex items-center gap-3 text-sm">Show
-            <select className="select-field min-h-11" value={days} onChange={event => setDays(Number(event.target.value))}>
-              <option value={14}>Next 14 days</option><option value={30}>Next 30 days</option><option value={90}>Next 90 days</option>
-            </select>
-          </label>
-          {report && <>
-            <p className="mt-3 text-sm text-muted">{formatMoney(report.known_total)} {report.status === 'partial' ? 'known estimated subtotal' : 'in estimated charges'} · {formatShortDate(report.start)} to {formatShortDate(report.end)}</p>
-            <div id="upcoming-agenda" tabIndex={-1} aria-label="Upcoming charges" className="mt-2 focus-visible:outline-none">
-              {grouped.map(group => <div key={group.date} className={cn('rounded-md', selectedDate === group.date && '-mx-2 px-2 bg-card-hover/60')}>
-                <h3 className="text-2xs font-mono uppercase tracking-[0.1em] text-muted pt-4 pb-1">{formatShortDate(group.date)}</h3>
-                {group.items.map(item => (
-                  <SelectableRow key={item.id} onClick={() => openDrill('charge', String(item.id))} className="min-h-12 justify-between gap-4">
-                    <span className="min-w-0 truncate">{item.label}</span>
-                    <span className="font-mono tabular-nums">{item.amount ? formatMoney(item.amount) : 'Unknown'}</span>
-                  </SelectableRow>
-                ))}
+      <SegmentedChoice<PlanWindow>
+        name="plan-window"
+        aria-label="Window"
+        value={String(days) as PlanWindow}
+        onValueChange={(value) => setDays(Number(value))}
+        className="w-full"
+        options={[{ value: '14', label: 'Next 14 days' }, { value: '30', label: 'Next 30 days' }, { value: '90', label: 'Next 90 days' }]}
+      />
+      <div className="grid gap-4 lg:grid-cols-12 lg:items-start">
+        <div className="lg:col-span-5">{calendarPane}</div>
+        <div className="space-y-3 lg:col-span-7">
+          {query.isError && <div role="alert">{report ? <p className="text-warning">Couldn't refresh. This timeline may be out of date.</p> : null}<LoadFailed onRetry={() => void query.refetch()} /></div>}
+          {!report && !query.isError && <div role="status"><span className="sr-only">Loading upcoming charges…</span><Skeleton className="h-20 w-full rounded-group" /></div>}
+          {report && (!report.enabled ? <ListGroup title="Track upcoming charges">
+            <div className="p-4">
+              <p>Enable Subscriptions in Settings to see your recorded schedules here.</p>
+              <Link to="/settings" className="inline-flex min-h-11 items-center text-teal">Open Settings</Link>
+            </div>
+          </ListGroup> : <>
+            <div className="px-1">
+              <p className="font-mono text-3xl font-medium tabular-nums">{formatMoney(report.known_total)}</p>
+              <p className="text-muted">{report.status === 'partial' ? 'Known estimated subtotal' : 'Estimated charges'} · {report.start} to {report.end} · {report.timezone}</p>
+              {!!report.unknown_count && <p className="text-warning">{report.unknown_count} charges have unknown amounts and are excluded from this subtotal.</p>}
+              <p className="mt-1 text-sm text-muted">Dates and amounts are estimates, not confirmed charges. Only recorded pending schedules appear; this is not a complete forecast. Matched or dismissed charges are excluded.</p>
+            </div>
+            <div id="upcoming-agenda" tabIndex={-1} aria-label="Upcoming charges" className="rounded-group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+              {grouped.map(group => <div key={group.date} id={`agenda-date-${group.date}`} className="scroll-mt-24">
+                <h3 className={cn('px-1 pb-1.5 pt-4 text-xs font-semibold first:pt-0', selectedDate === group.date ? 'text-teal' : 'text-muted')}>{formatShortDate(group.date)}</h3>
+                <ol className={cn('overflow-hidden rounded-group bg-card', selectedDate === group.date && 'ring-2 ring-teal/40')}>
+                  {group.items.map(item => isPhone ? (
+                    <li key={item.id} className="separator-inset">
+                      <ListRow onClick={() => openPanel('charge', item.id)} title={item.label}
+                        subtitle={`${frequencyLabel(item.frequency)}${item.schedule_status === 'possibly_cancelled' ? ' · needs review' : ''}`}
+                        {...(item.amount ? { amount: formatMoney(item.amount) } : { value: 'Amount unknown' })} trailing="chevron" />
+                    </li>
+                  ) : (
+                    <li key={item.id} className="separator-inset space-y-1 p-4">
+                      <div className="flex justify-between gap-4"><p className="font-medium">{item.label}</p><p className="font-mono tabular-nums">{item.amount ? formatMoney(item.amount) : 'Amount unknown'}</p></div>
+                      {chargeMeta(item)}
+                      <ChargeActions item={item} onDismissed={() => { agendaFocusPending.current = true; }} />
+                      {item.subscription_id != null && <Link to={panelHref('subscription', item.subscription_id)} className="inline-flex min-h-11 items-center text-teal">Review or match schedule for {item.label}</Link>}
+                    </li>
+                  ))}
+                </ol>
               </div>)}
             </div>
-            <nav aria-label="Upcoming charge pages" className="mt-3 flex items-center justify-between gap-3">
-              <Button variant="outline" className="min-h-11" disabled={!offset} onClick={() => setOffset(Math.max(0, offset - 50))}>Previous</Button>
-              <span className="text-sm text-muted">{report.total} {report.total === 1 ? 'charge' : 'charges'}</span>
-              <Button variant="outline" className="min-h-11" disabled={query.isError || offset + 50 >= report.total} onClick={() => setOffset(offset + 50)}>Next</Button>
-            </nav>
-            {selectedDate && !selectedInAgenda && <div className="mt-3"><SelectedDayDetail date={selectedDate} /></div>}
-          </>}
-        </DrillSheet>
-      </>
-    );
-  }
-
-  // Both layouts render the detail at the same tree position, so an
-  // in-progress edit survives resizing across the phone breakpoint.
-  return (
-    <>
-      {phoneView ?? (
-        <div className="flex h-full">
-          <div className={cn('flex-1 min-w-0 overflow-y-auto p-4 md:p-6 space-y-4 md:space-y-5 max-w-[1600px]', panel && 'hidden md:block')}>
-            <header className="space-y-2">
-              <div className="text-xs uppercase tracking-[0.22em] text-muted font-mono font-semibold">Plan</div>
-              <h1 className="text-xl md:text-3xl font-bold leading-tight tracking-tight text-foreground font-display">See what's coming, and where it's going.</h1>
-              <p className="text-muted">Upcoming charges, budgets, goals, subscriptions and trips — all in one place.</p>
-            </header>
-
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
-              <ProjectionHero />
-              <SavedThisMonthStat />
-              <UpcomingThisWeekStat />
-            </div>
-
-            <div className="grid gap-4 md:gap-5 lg:grid-cols-12 lg:items-start">
-              <div className="lg:col-span-4">{calendarPane}</div>
-              <div className="lg:col-span-8 space-y-4">
-                <label className="flex items-center gap-3">Show
-                  <select className="select-field min-h-11" value={days} onChange={event => setDays(Number(event.target.value))}>
-                    <option value={14}>Next 14 days</option><option value={30}>Next 30 days</option><option value={90}>Next 90 days</option>
-                  </select>
-                </label>
-                {query.isError && <div role="alert">{report ? <p className="text-warning">Couldn't refresh. This timeline may be out of date.</p> : null}<LoadFailed onRetry={() => void query.refetch()} /></div>}
-                {!report && !query.isError && <div role="status"><span className="sr-only">Loading upcoming charges…</span><Skeleton className="h-20 w-full" /></div>}
-                {report && (!report.enabled ? <PageCard title="Track upcoming charges">
-                  <p>Enable Subscriptions in Settings to see your recorded schedules here.</p>
-                  <Link to="/settings" className="text-teal min-h-11 inline-flex items-center">Open Settings</Link>
-                </PageCard> : <>
-                  <PageCard title="Upcoming timeline">
-                    <p className="text-3xl font-semibold tabular-nums">{formatMoney(report.known_total)}</p>
-                    <p className="text-muted">{report.status === 'partial' ? 'Known estimated subtotal' : 'Estimated charges'} · {report.start} to {report.end} · {report.timezone}</p>
-                    {!!report.unknown_count && <p className="text-warning">{report.unknown_count} charges have unknown amounts and are excluded from this subtotal.</p>}
-                    <p className="text-sm text-muted mt-3">Dates and amounts are estimates, not confirmed charges. Only recorded pending schedules appear; this is not a complete forecast. Matched or dismissed charges are excluded.</p>
-                    <div id="upcoming-agenda" tabIndex={-1} aria-label="Upcoming charges" className="mt-4 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                      {grouped.map(group => <div key={group.date} id={`agenda-date-${group.date}`} className={cn('scroll-mt-24 rounded-md', selectedDate === group.date && '-mx-2 px-2 bg-card-hover/60')}>
-                        <h3 className="text-2xs font-mono uppercase tracking-[0.1em] text-muted pt-4 pb-1 first:pt-0">{formatShortDate(group.date)}</h3>
-                        <ol>
-                          {group.items.map(item => <li key={item.id} className="py-4 border-b border-border last:border-0 space-y-1">
-                            <div className="flex justify-between gap-4"><p className="font-medium">{item.label}</p><p className="tabular-nums">{item.amount ? formatMoney(item.amount) : 'Amount unknown'}</p></div>
-                            <p className="text-muted"><time dateTime={item.date}>{item.date}</time> · {frequencyLabel(item.frequency)} · {item.date_basis === 'user' ? 'Date you set' : 'Scheduled estimate'}</p>
-                            <p className="text-sm text-muted">{amountBasisLabels[item.amount_basis]}</p>
-                            <p className="text-sm text-muted">{subscriptionConfirmationLabels[item.confirmation_source]}</p>
-                            {item.schedule_status === 'possibly_cancelled' && <p className="text-warning">Schedule needs review: a previous charge may be overdue.</p>}
-                            <ChargeActions item={item} onDismissed={() => { agendaFocusPending.current = true; }} />
-                            {item.subscription_id != null && <Link to={panelHref('subscription', item.subscription_id)} className="text-teal min-h-11 inline-flex items-center">Review or match schedule for {item.label}</Link>}
-                          </li>)}
-                        </ol>
-                      </div>)}
-                    </div>
-                    {!report.items.length && <p className="py-4 text-muted">{report.total ? 'No charges on this page. Return to an earlier page.' : 'No pending charges recorded in this window. Add or review a subscription schedule to get started.'}</p>}
-                  </PageCard>
-                  <nav aria-label="Upcoming charge pages" className="flex items-center justify-between gap-3">
-                    <Button variant="outline" className="min-h-11" disabled={!offset} onClick={() => setOffset(Math.max(0, offset - 50))}>Previous charges</Button>
-                    <span>{report.total} recorded charges</span>
-                    <Button variant="outline" className="min-h-11" disabled={query.isError || offset + 50 >= report.total} onClick={() => setOffset(offset + 50)}>Next charges</Button>
-                  </nav>
-                  {selectedDate && !selectedInAgenda && <SelectedDayDetail date={selectedDate} />}
-                </>)}
-              </div>
-            </div>
-
-            {!settings ? null : !anyManageEnabled ? (
-              <div className="p-6 flex flex-col items-center justify-center min-h-48 text-center gap-3">
-                <p className="text-muted text-sm">Enable Budgets, Goals, Trips, Subscriptions, or Recurring in Settings to get started.</p>
-                <Link to="/settings" className="text-sm text-teal underline-offset-4 hover:underline min-h-11 inline-flex items-center">Go to Settings →</Link>
-              </div>
-            ) : (
-              <section className="space-y-4 pt-2">
-                <h2 className="text-lg font-semibold font-display">Budgets, goals, subscriptions &amp; trips</h2>
-                <div className="grid gap-4 md:gap-5 lg:grid-cols-2 items-start">
-                  <div className="space-y-4">
-                    {settings.budgets_enabled && <BudgetsCard onSelect={(id) => openPanel('budget', id)} />}
-                    {settings.subscriptions_enabled && <SubscriptionsSection selectedSubId={panel?.type === 'subscription' ? panel.id : null} onSelectSub={(id) => openPanel('subscription', id)} />}
-                    {settings.recurring_enabled && <RecurringCard />}
-                  </div>
-                  <div className="space-y-4">
-                    {settings.goals_enabled && <SavingsCard />}
-                    {settings.goals_enabled && <GoalsCard onSelect={(id) => openPanel('goal', id)} />}
-                    {settings.trips_enabled && <TripsCard onSelect={(id) => openPanel('trip', id)} />}
-                  </div>
-                </div>
-              </section>
-            )}
-          </div>
-
+            {!report.items.length && <p className="px-1 py-2 text-muted">{report.total ? 'No charges on this page. Return to an earlier page.' : 'No pending charges recorded in this window. Add or review a subscription schedule to get started.'}</p>}
+            {report.total > 50 && <nav aria-label="Upcoming charge pages" className="flex items-center justify-between gap-3">
+              <Button variant="ghost" className="min-h-11 text-teal" disabled={!offset} onClick={() => setOffset(Math.max(0, offset - 50))}>Previous charges</Button>
+              <span className="text-sm text-muted">{report.total} recorded charges</span>
+              <Button variant="ghost" className="min-h-11 text-teal" disabled={query.isError || offset + 50 >= report.total} onClick={() => setOffset(offset + 50)}>Next charges</Button>
+            </nav>}
+            {selectedDate && !selectedInAgenda && <SelectedDayDetail date={selectedDate} />}
+          </>)}
         </div>
-      )}
-      {detailPanel}
-    </>
+      </div>
+    </section>
   );
+
+  const manage = !settings ? null : !anyManageEnabled ? (
+    <div className="flex min-h-48 flex-col items-center justify-center gap-3 p-6 text-center">
+      <p className="text-sm text-muted">Enable Budgets, Goals, Trips, Subscriptions, or Recurring in Settings to get started.</p>
+      <Link to="/settings" className="inline-flex min-h-11 items-center text-sm text-teal">Go to Settings</Link>
+    </div>
+  ) : (
+    <section aria-labelledby="plan-manage-heading" className="space-y-4">
+      <h2 id="plan-manage-heading" className="px-1 font-display text-xl font-bold tracking-[-0.01em]">Budgets, goals, subscriptions &amp; trips</h2>
+      <div className="grid items-start gap-6 lg:grid-cols-2">
+        <div className="space-y-6">
+          {settings.budgets_enabled && <BudgetsCard onSelect={(id) => openPanel('budget', id)} />}
+          {settings.subscriptions_enabled && <SubscriptionsSection selectedSubId={panel?.type === 'subscription' ? panel.id : null} onSelectSub={(id) => openPanel('subscription', id)} />}
+          {settings.recurring_enabled && <RecurringCard />}
+        </div>
+        <div className="space-y-6">
+          {settings.goals_enabled && <SavingsCard />}
+          {settings.goals_enabled && <GoalsCard onSelect={(id) => openPanel('goal', id)} />}
+          {settings.trips_enabled && <TripsCard onSelect={(id) => openPanel('trip', id)} />}
+        </div>
+      </div>
+    </section>
+  );
+
+  const page = (
+    <div className="mx-auto max-w-[1200px] md:px-2">
+      <NavBar large title="Plan" trailing={isPhone ? <ProfileMenu /> : undefined} />
+      <div className="space-y-8 px-4 pb-8">
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)] lg:items-start">
+          <ProjectionMonth />
+          <ThisMonthGroup />
+        </div>
+        {timeline}
+        {manage}
+      </div>
+    </div>
+  );
+
+  const chargeItem = panel?.type === 'charge' ? report?.items.find((item) => item.id === panel.id) : undefined;
+  const detail = !panel ? null : (
+    <div className="flex h-full flex-col">
+      {panel.type === 'subscription' && <SubscriptionDetail subId={panel.id} onClose={closePanel} />}
+      {panel.type === 'budget' && <BudgetDetail budgetId={panel.id} onClose={closePanel} />}
+      {panel.type === 'goal' && <GoalDetail goalId={panel.id} onClose={closePanel} />}
+      {panel.type === 'trip' && <TripDetail tripId={panel.id} onClose={closePanel} />}
+      {panel.type === 'charge' && <>
+        <DetailHeader title={chargeItem?.label ?? 'Charge'} onClose={closePanel} />
+        <div className="space-y-3 p-4">
+          {!chargeItem ? <p className="text-muted">This charge isn't on the current page of the timeline.</p> : <>
+            <p className="pb-1 pt-2 text-center font-mono text-3xl font-medium tabular-nums">{chargeItem.amount ? formatMoney(chargeItem.amount) : 'Amount unknown'}</p>
+            {chargeMeta(chargeItem)}
+            <ChargeActions item={chargeItem} onDismissed={closePanel} />
+            {chargeItem.subscription_id != null && <Link to={panelHref('subscription', chargeItem.subscription_id)} className="inline-flex min-h-11 items-center text-teal">Review or match schedule</Link>}
+          </>}
+        </div>
+      </>}
+    </div>
+  );
+
+  return <ListDetail variant="inspector" listLabel="Plan" backLabel="Plan" list={page} detail={detail} onClose={closePanel} />;
 }
 
 function ChargeActions({ item, onDismissed }: { item: UpcomingPlan['items'][number]; onDismissed: () => void }) {

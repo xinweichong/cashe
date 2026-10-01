@@ -1,8 +1,9 @@
 import { subscriptionConfirmationLabels } from '@/lib/subscriptionConfirmation';
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Ban, Pencil, Trash2, X } from 'lucide-react';
+import { Ban, Pencil, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { DetailHeader } from '@/components/ui/detail-panel';
 import { api, type Subscription, type Transaction, type UpcomingTransaction } from '@/api/client';
 import { SubscriptionForm } from './SubscriptionForm';
 import { invalidateSpendingQueries } from '@/hooks/useTransactions';
@@ -173,31 +174,22 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
   return (
     <>
       <div className="flex flex-col h-full">
-        {/* Header — pinned */}
-        <div className="shrink-0 flex items-start justify-between p-4 border-b border-border">
-          <div>
-            <h2 className="text-lg font-bold font-display tracking-tight text-foreground">
-              {sub?.label ?? sub?.merchant ?? 'Subscription'}
-            </h2>
-            {sub && (
-              <div className="flex items-center gap-2 mt-0.5 text-xs text-muted">
-                <span>{FREQUENCY_LABELS[sub.frequency]}</span>
-                {sub.status === 'possibly_cancelled' && (
-                  <span className="text-warning">⚠ Possibly cancelled</span>
-                )}
-                {sub.status === 'cancelled' && <span>Cancelled</span>}
-                {sub.status === 'paused' && <span>Paused in Cashe</span>}
-              </div>
-            )}
-          </div>
-          <Button variant="ghost" size="icon" className="shrink-0" onClick={onClose} aria-label="Close">
-            <X className="w-4 h-4" />
-          </Button>
-        </div>
+        <DetailHeader
+          title={sub?.label ?? sub?.merchant ?? 'Subscription'}
+          onClose={onClose}
+          subtitle={sub && (
+            <div className="flex items-center gap-2 text-xs text-muted">
+              <span>{FREQUENCY_LABELS[sub.frequency]}</span>
+              {sub.status === 'possibly_cancelled' && <span className="text-warning">Possibly cancelled</span>}
+              {sub.status === 'cancelled' && <span>Cancelled</span>}
+              {sub.status === 'paused' && <span>Paused in Cashe</span>}
+            </div>
+          )}
+        />
 
         {/* Action bar — persistent chrome */}
         {sub && (
-          <div className="shrink-0 border-b border-border">
+          <div className="shrink-0 border-b-[0.5px] border-separator">
             {confirmCancel ? (
               <div className="flex items-center justify-between px-4 py-2 gap-3">
                 <span className="text-sm text-foreground">Cancel this subscription?</span>
