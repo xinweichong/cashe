@@ -181,7 +181,7 @@ body {
     background-size: 200% 100%;
     background-position: 0 0;
     transition: background-position 0.35s ease, opacity 0.15s;
-    box-shadow: 0 0 32px -10px rgba(251, 146, 60, 0.45);
+    /* No glow (Direction B retired the glow tiers); the gradient is the emphasis. */
   }
   .btn-gradient:hover {
     background-position: 100% 0;
