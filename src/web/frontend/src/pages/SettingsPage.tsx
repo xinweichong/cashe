@@ -10,7 +10,8 @@ import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
-import { Badge } from '@/components/ui/badge';
+import { ListGroup, ListRow } from '@/components/ui/list';
+import { TaskSheet } from '@/components/ui/task-sheet';
 import {
   Dialog,
   DialogContent,
@@ -30,10 +31,7 @@ import { useCurrentUser, useInvalidateCurrentUser } from '@/hooks/useCurrentUser
 import { useAuth } from '@/hooks/useAuthContext';
 import { api, type Category, type SessionInfo } from '@/api/client';
 import { getCategoryColor } from '@/lib/utils';
-import {
-  Pencil, Trash2, Plus, X, ChevronDown,
-  CheckCircle2, Wifi, WifiOff, AlertTriangle,
-} from 'lucide-react';
+import { Plus, CheckCircle2, Wifi, WifiOff, AlertTriangle } from 'lucide-react';
 import { TelegramStep, GmailStep, AppleWalletStep } from '@/components/onboarding/steps';
 import { useSettings } from '@/hooks/useSettings';
 
@@ -115,7 +113,6 @@ export function SettingsPage() {
 
   const [showAddCategory, setShowAddCategory] = useState(false);
   const [editingCategory, setEditingCategory] = useState<string | null>(null);
-  const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
   const [newCatName, setNewCatName] = useState('');
   const [newCatKeywords, setNewCatKeywords] = useState('');
   const [newCatIcon, setNewCatIcon] = useState('📌');
@@ -125,13 +122,14 @@ export function SettingsPage() {
   const [editColor, setEditColor] = useState('');
   const [catError, setCatError] = useState('');
 
+  const editingCat = categories?.find((c: Category) => c.name === editingCategory);
+
   const usedColors = (categories ?? [])
     .filter((c: Category) => c.color)
     .map((c: Category) => c.color!.toLowerCase());
 
   const startEdit = (cat: Category) => {
     setEditingCategory(cat.name);
-    setExpandedCategory(null);
     setEditKeywords(cat.keywords ?? '');
     setEditIcon(cat.icon ?? '📌');
     setEditColor(cat.color ?? '');
@@ -219,6 +217,7 @@ export function SettingsPage() {
   const [pwError, setPwError] = useState('');
   const [pwSuccess, setPwSuccess] = useState(false);
   const [pwLoading, setPwLoading] = useState(false);
+  const [pwOpen, setPwOpen] = useState(false);
 
   const handleChangePassword = async () => {
     setPwError('');
@@ -229,6 +228,7 @@ export function SettingsPage() {
     try {
       await api.changePassword(currentPw, newPw);
       setPwSuccess(true);
+      setPwOpen(false);
       setCurrentPw(''); setNewPw(''); setConfirmPw('');
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : '';
@@ -308,455 +308,272 @@ export function SettingsPage() {
     <div className="mx-auto max-w-[1200px] md:px-2">
       <NavBar large title="Settings" back={isPhone ? { label: 'Back', onClick: () => navigate(-1) } : undefined} />
       {/* A naturally scrolling page in two columns from lg (HIG alignment):
-          account and connections, then categories and preferences. */}
+          grouped rows like iOS Settings; editing opens a sheet. */}
       <div className="grid items-start gap-6 px-4 pb-8 lg:grid-cols-2">
 
-      {/* ── LEFT PANEL: Account + Connections ── */}
       <div className="min-w-0 space-y-6">
+        <ListGroup title="Account">
+          <ListRow title="Username" value={currentUser?.username ?? '—'} />
+          <ListRow title="Change password" trailing="chevron" onClick={() => { setPwOpen(true); setPwSuccess(false); setPwError(''); }} />
+        </ListGroup>
+        {pwSuccess && <p role="status" className="-mt-4 px-1 text-sm text-success">Password changed.</p>}
 
-        {/* Account */}
-        <PageCard title="Account">
-          <div className="space-y-5">
-            {/* Username display */}
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-muted">Username</span>
-              <span className="text-sm font-medium text-foreground">{currentUser?.username ?? '—'}</span>
-            </div>
+        <ListGroup
+          title="Signed-in devices"
+          footer={sessions && sessions.length > 1 ? undefined : 'Only this device is signed in.'}
+        >
+          {sessions && sessions.length > 0 ? sessions.map((s) => (
+            <ListRow
+              key={s.token}
+              title={s.user_agent ? parseUserAgent(s.user_agent) : 'Unknown device'}
+              subtitle={`Last used ${relativeTime(s.last_used_at)}`}
+              trailing={
+                <Button
+                  variant="ghost" size="sm" className="text-destructive"
+                  aria-label={`Sign out ${s.user_agent ? parseUserAgent(s.user_agent) : 'this device'}`}
+                  onClick={() => removeSession.mutate(s.token)}
+                  disabled={removeSession.isPending}
+                >
+                  Sign out
+                </Button>
+              }
+            />
+          )) : <ListRow title="No signed-in devices" />}
+          {sessions && sessions.length > 1 && (
+            <ListRow destructive title="Sign out all other devices" onClick={() => logoutAllOthers.mutate()} disabled={logoutAllOthers.isPending} />
+          )}
+        </ListGroup>
 
-            <Button
-              variant="outline"
-              size="sm"
-              className="w-full"
-              onClick={logout}
-            >
-              Sign out
-            </Button>
-
-            <Separator />
-
-            {/* Change password */}
-            <div className="space-y-3">
-              <p className="text-sm font-semibold text-foreground">Change Password</p>
-              <Input
-                type="password"
-                placeholder="Current password"
-                value={currentPw}
-                onChange={(e) => setCurrentPw(e.target.value)}
-                autoComplete="current-password"
-              />
-              <Input
-                type="password"
-                placeholder="New password"
-                value={newPw}
-                onChange={(e) => setNewPw(e.target.value)}
-                autoComplete="new-password"
-              />
-              <Input
-                type="password"
-                placeholder="Confirm new password"
-                value={confirmPw}
-                onChange={(e) => setConfirmPw(e.target.value)}
-                autoComplete="new-password"
-              />
-              {pwError && <p className="text-sm text-destructive">{pwError}</p>}
-              {pwSuccess && <p className="text-sm text-success">Password changed successfully.</p>}
-              <Button
-                size="sm"
-                onClick={handleChangePassword}
-                disabled={pwLoading || !currentPw || !newPw || !confirmPw}
-              >
-                {pwLoading ? 'Saving…' : 'Change Password'}
-              </Button>
-            </div>
-
-            <Separator />
-
-            {/* Active sessions */}
-            <div className="space-y-2">
-              <p className="text-sm font-semibold text-foreground">Active Sessions</p>
-              {sessions && sessions.length > 0 ? (
-                <>
-                  <div className="space-y-1">
-                    {sessions.map((s) => (
-                      <div key={s.token} className="flex items-center justify-between py-1.5">
-                        <div className="min-w-0">
-                          <p className="text-sm text-foreground truncate">
-                            {s.user_agent ? parseUserAgent(s.user_agent) : 'Unknown device'}
-                          </p>
-                          <p className="text-xs text-muted">{relativeTime(s.last_used_at)}</p>
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="text-destructive shrink-0"
-                          aria-label="Remove session"
-                          onClick={() => removeSession.mutate(s.token)}
-                          disabled={removeSession.isPending}
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                  {sessions.length > 1 && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-muted hover:text-foreground"
-                      onClick={() => logoutAllOthers.mutate()}
-                      disabled={logoutAllOthers.isPending}
-                    >
-                      Log out all other devices
-                    </Button>
-                  )}
-                </>
-              ) : (
-                <p className="text-sm text-muted">No active sessions</p>
-              )}
-            </div>
-          </div>
-        </PageCard>
-
-        {/* Connections */}
         {activeConnectionStep ? (
           <PageCard title="Connections">
-            {activeConnectionStep === 'telegram' && (
-              <TelegramStep onComplete={handleConnectionStepComplete} />
-            )}
-            {activeConnectionStep === 'gmail' && (
-              <GmailStep onComplete={handleConnectionStepComplete} />
-            )}
-            {activeConnectionStep === 'apple_wallet' && (
-              <AppleWalletStep onComplete={handleConnectionStepComplete} />
-            )}
+            {activeConnectionStep === 'telegram' && <TelegramStep onComplete={handleConnectionStepComplete} />}
+            {activeConnectionStep === 'gmail' && <GmailStep onComplete={handleConnectionStepComplete} />}
+            {activeConnectionStep === 'apple_wallet' && <AppleWalletStep onComplete={handleConnectionStepComplete} />}
             <Button variant="ghost" size="sm" className="mt-2 text-muted" onClick={() => setActiveConnectionStep(null)}>
               ← Back
             </Button>
           </PageCard>
         ) : (
-          <PageCard title="Connections">
-            <div className="divide-y divide-border">
-              {/* Gmail */}
-              <div className="flex items-center justify-between py-3">
-                <div className="flex items-center gap-2 min-w-0">
-                  {gmailAuthError ? (
-                    <AlertTriangle className="w-4 h-4 text-warning shrink-0" />
-                  ) : currentUser?.gmail_connected ? (
-                    <CheckCircle2 className="w-4 h-4 text-success shrink-0" />
-                  ) : (
-                    <WifiOff className="w-4 h-4 text-muted shrink-0" />
-                  )}
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-foreground">Gmail</p>
-                    <p className={gmailAuthError ? 'text-xs font-mono truncate text-warning' : 'text-xs text-muted font-mono'}>
-                      {gmailAuthError ? 'Auth error — reconnect required' : currentUser?.gmail_connected ? 'Connected' : 'Not connected'}
-                    </p>
-                  </div>
-                </div>
-                {gmailAuthError ? (
-                  <div className="flex items-center gap-2 shrink-0">
-                    <Button
-                      size="sm"
-                      className="shrink-0"
-                      onClick={() => setActiveConnectionStep('gmail')}
-                    >
-                      Reconnect
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="shrink-0 text-destructive"
-                      onClick={handleDisconnectGmail}
-                      disabled={disconnectingGmail}
-                    >
-                      Disconnect
-                    </Button>
-                  </div>
-                ) : currentUser?.gmail_connected ? (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="shrink-0"
-                    onClick={handleDisconnectGmail}
-                    disabled={disconnectingGmail}
-                  >
-                    Disconnect
-                  </Button>
-                ) : (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="shrink-0"
-                    onClick={() => setActiveConnectionStep('gmail')}
-                  >
-                    Connect
-                  </Button>
-                )}
-              </div>
-
-              {/* Telegram */}
-              <div className="flex items-center justify-between py-3">
-                <div className="flex items-center gap-2 min-w-0">
-                  {currentUser?.telegram_chat_id ? (
-                    <CheckCircle2 className="w-4 h-4 text-success shrink-0" />
-                  ) : (
-                    <WifiOff className="w-4 h-4 text-muted shrink-0" />
-                  )}
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-foreground">Telegram</p>
-                    <p className="text-xs text-muted font-mono">
-                      {currentUser?.telegram_chat_id ? 'Linked' : 'Not linked'}
-                    </p>
-                  </div>
-                </div>
-                {currentUser?.telegram_chat_id ? (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="shrink-0"
-                    onClick={handleDisconnectTelegram}
-                    disabled={disconnectingTelegram}
-                  >
-                    Unlink
-                  </Button>
-                ) : (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="shrink-0"
-                    onClick={() => setActiveConnectionStep('telegram')}
-                  >
-                    Link Telegram
-                  </Button>
-                )}
-              </div>
-
-              {/* Apple Wallet */}
-              <div className="flex items-center justify-between py-3">
-                <div className="flex items-center gap-2 min-w-0">
-                  <Wifi className="w-4 h-4 text-muted shrink-0" />
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-foreground">Apple Wallet</p>
-                    <p className="text-xs text-muted font-mono">Passive — via iOS Shortcut</p>
-                  </div>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="shrink-0"
-                  onClick={() => setActiveConnectionStep('apple_wallet')}
-                >
-                  Set up →
-                </Button>
-              </div>
-            </div>
-          </PageCard>
+          <ListGroup title="Connections">
+            <ListRow
+              leading={gmailAuthError
+                ? <AlertTriangle aria-hidden className="h-5 w-5 text-warning" />
+                : currentUser?.gmail_connected
+                  ? <CheckCircle2 aria-hidden className="h-5 w-5 text-success" />
+                  : <WifiOff aria-hidden className="h-5 w-5 text-muted" />}
+              title="Gmail"
+              subtitle={gmailAuthError ? 'Sign-in expired — reconnect to keep reading bank emails' : currentUser?.gmail_connected ? 'Connected' : 'Not connected'}
+              trailing={gmailAuthError ? (
+                <span className="flex gap-1">
+                  <Button variant="ghost" size="sm" className="text-teal" onClick={() => setActiveConnectionStep('gmail')}>Reconnect</Button>
+                  <Button variant="ghost" size="sm" className="text-destructive" onClick={handleDisconnectGmail} disabled={disconnectingGmail}>Disconnect</Button>
+                </span>
+              ) : currentUser?.gmail_connected ? (
+                <Button variant="ghost" size="sm" className="text-destructive" onClick={handleDisconnectGmail} disabled={disconnectingGmail}>Disconnect</Button>
+              ) : (
+                <Button variant="ghost" size="sm" className="text-teal" onClick={() => setActiveConnectionStep('gmail')}>Connect</Button>
+              )}
+            />
+            <ListRow
+              leading={currentUser?.telegram_chat_id
+                ? <CheckCircle2 aria-hidden className="h-5 w-5 text-success" />
+                : <WifiOff aria-hidden className="h-5 w-5 text-muted" />}
+              title="Telegram"
+              subtitle={currentUser?.telegram_chat_id ? 'Linked' : 'Not linked'}
+              trailing={currentUser?.telegram_chat_id ? (
+                <Button variant="ghost" size="sm" className="text-destructive" onClick={handleDisconnectTelegram} disabled={disconnectingTelegram}>Unlink</Button>
+              ) : (
+                <Button variant="ghost" size="sm" className="text-teal" onClick={() => setActiveConnectionStep('telegram')}>Link</Button>
+              )}
+            />
+            <ListRow
+              leading={<Wifi aria-hidden className="h-5 w-5 text-muted" />}
+              title="Apple Wallet"
+              subtitle="Sent by an iOS Shortcut when you pay"
+              trailing="chevron"
+              onClick={() => setActiveConnectionStep('apple_wallet')}
+            />
+          </ListGroup>
         )}
 
+        <ListGroup title="Account actions">
+          <ListRow destructive title="Sign out" onClick={logout} />
+        </ListGroup>
       </div>
 
-      {/* ── RIGHT PANEL: Categories + Preferences ── */}
       <div className="min-w-0 space-y-6">
-
-        {/* Categories */}
-        <PageCard
+        <ListGroup
           title="Categories"
-          contentClassName="p-0"
           action={
-            <Button size="sm" variant="ghost" onClick={() => { setShowAddCategory(true); setCatError(''); }}>
-              <Plus className="w-4 h-4 mr-1" />
+            <Button size="sm" variant="ghost" className="text-teal" onClick={() => { setShowAddCategory(true); setCatError(''); }}>
+              <Plus className="mr-1 h-4 w-4" aria-hidden />
               Add
             </Button>
           }
+          footer="Needs and wants feed the health score’s 50/30/20 rule: up to 50% of income on needs, 30% on wants, and 20% saved."
         >
-          {/* Rows render at rest (no stagger entrance); a removed category fades out. */}
-          <div className="divide-y divide-separator">
-            <AnimatePresence>
-              {categories?.map((cat: Category) => (
-                <motion.div
-                  key={cat.name}
-                  className="px-4 py-3"
-                  exit={{ opacity: 0, transition: { duration: 0.15 } }}
-                >
-                  {editingCategory === cat.name ? (
-                    <div className="space-y-3">
-                      <div className="shrink-0">
-                        <label className="text-xs text-muted block mb-1">Icon</label>
-                        <CategoryIconPicker value={editIcon} onChange={setEditIcon} />
-                      </div>
-                      <div>
-                        <label className="text-xs text-muted">Keywords (comma-separated)</label>
-                        <Input
-                          value={editKeywords}
-                          onChange={(e) => setEditKeywords(e.target.value)}
-                          placeholder="keyword1, keyword2"
-                          className="text-sm"
-                          autoFocus
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs text-muted">Color</label>
-                        <CategoryColorPicker
-                          value={editColor}
-                          onChange={setEditColor}
-                          taken={(c) => usedColors.includes(c.toLowerCase()) && cat.color?.toLowerCase() !== c.toLowerCase()}
-                        />
-                      </div>
-                      {catError && <p className="text-xs text-destructive">{catError}</p>}
-                      <div className="flex gap-2">
-                        <Button size="sm" onClick={() => handleUpdateCategory(cat.name)} disabled={updateCat.isPending}>Save</Button>
-                        <Button size="sm" variant="outline" onClick={() => { setEditingCategory(null); setCatError(''); }}>Cancel</Button>
-                      </div>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span
-                            className="inline-block w-3 h-3 rounded-full shrink-0"
-                            style={{ backgroundColor: cat.color || getCategoryColor(cat.name) }}
-                          />
-                          <span className="text-lg shrink-0">{cat.icon || '📌'}</span>
-                          <span className="text-sm font-medium truncate">{cat.name}</span>
-                        </div>
-                        <div className="flex gap-1">
-                          <Button variant="ghost" size="icon" aria-label={`Edit ${cat.name}`} onClick={() => startEdit(cat)}>
-                            <Pencil className="w-3.5 h-3.5" />
-                          </Button>
-                          <Button
-                            variant="ghost" size="icon" className="text-destructive"
-                            aria-label={`Delete ${cat.name}`}
-                            onClick={() => handleDeleteCategory(cat.name)}
-                            disabled={deleteCat.isPending}
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </Button>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 mt-1.5 ml-7">
-                        <label className="text-xs text-muted">Type</label>
-                        <select
-                          value={cat.type ?? 'neutral'}
-                          onChange={async (e) => {
-                            await api.updateCategory(cat.name, { type: e.target.value as 'needs' | 'wants' | 'neutral' });
-                            qc.invalidateQueries({ queryKey: ['categories'] });
-                          }}
-                          className="select-field text-xs py-0.5 h-7"
-                        >
-                          {CAT_TYPES.map((t) => (
-                            <option key={t.value} value={t.value}>{t.label}</option>
-                          ))}
-                        </select>
-                      </div>
-                      {cat.keywords?.trim() && (
-                        <div className="flex flex-wrap gap-1 mt-1.5 ml-7">
-                          {cat.keywords.split(',').map((kw) => (
-                            <Badge key={kw.trim()} variant="outline">
-                              {kw.trim()}
-                            </Badge>
-                          ))}
-                        </div>
-                      )}
-                      {(overridesByCategory.get(cat.name)?.length ?? 0) > 0 && (
-                        <div className="mt-1.5 ml-7">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="text-xs text-muted"
-                            aria-expanded={expandedCategory === cat.name}
-                            onClick={() => setExpandedCategory(expandedCategory === cat.name ? null : cat.name)}
-                          >
-                            <span>{overridesByCategory.get(cat.name)!.length} learned</span>
-                            <ChevronDown className={`w-3 h-3 transition-transform ${expandedCategory === cat.name ? 'rotate-180' : ''}`} />
-                          </Button>
-                          {expandedCategory === cat.name && (
-                            <div className="flex flex-wrap gap-1.5 mt-2">
-                              {overridesByCategory.get(cat.name)!.map((merchant) => (
-                                <span key={merchant} className="flex items-center gap-1 px-2 py-0.5 text-xs rounded-full border border-border bg-card">
-                                  {merchant}
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDeleteOverride(merchant)}
-                                    disabled={deleteOverride.isPending}
-                                    aria-label={`Remove learned override for ${merchant}`}
-                                    className="text-muted hover:text-destructive transition-colors"
-                                  >
-                                    <X className="w-2.5 h-2.5" />
-                                  </button>
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </>
-                  )}
-                </motion.div>
-              ))}
-            </AnimatePresence>
-            {(!categories || categories.length === 0) && (
-              <div className="p-6 text-center text-muted text-sm">No categories yet</div>
-            )}
-          </div>
-        </PageCard>
-
-        {/* Feature Toggles */}
-        <div id="feature-toggles">
-          <PageCard title="Feature Toggles">
-            <div className="divide-y divide-border">
-              {([
-                { key: 'budgets_enabled' as const, label: 'Budgets', desc: 'Set spending limits and track progress' },
-                { key: 'goals_enabled' as const, label: 'Goals', desc: 'Track savings targets and monthly progress' },
-                { key: 'trips_enabled' as const, label: 'Trips', desc: 'Group transactions by trip and track travel spend' },
-                { key: 'subscriptions_enabled' as const, label: 'Subscriptions', desc: 'Track recurring services and upcoming charges' },
-                { key: 'recurring_enabled' as const, label: 'Recurring Transactions', desc: 'Detect and surface repeating transaction patterns' },
-              ]).map(({ key, label, desc }) => (
-                <div key={key} className="flex items-center justify-between gap-4 py-4">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-foreground">{label}</p>
-                    <p className="text-xs text-muted">{desc}</p>
-                  </div>
-                  <Switch
-                    checked={!!settings?.[key]}
-                    onCheckedChange={(next) => toggleSetting(key, next)}
-                    aria-label={label}
+          <AnimatePresence>
+            {categories?.map((cat: Category) => {
+              const learned = overridesByCategory.get(cat.name)?.length ?? 0;
+              const keywordCount = cat.keywords?.split(',').filter((k) => k.trim()).length ?? 0;
+              return (
+                <motion.div key={cat.name} exit={{ opacity: 0, transition: { duration: 0.15 } }}>
+                  <ListRow
+                    leading={
+                      <span
+                        aria-hidden
+                        className="grid h-8 w-8 place-items-center rounded-full text-base"
+                        style={{ backgroundColor: `${cat.color || getCategoryColor(cat.name)}33` }}
+                      >
+                        {cat.icon || '📌'}
+                      </span>
+                    }
+                    title={cat.name}
+                    subtitle={[
+                      CAT_TYPES.find((t) => t.value === (cat.type ?? 'neutral'))?.label,
+                      keywordCount ? `${keywordCount} keyword${keywordCount === 1 ? '' : 's'}` : null,
+                      learned ? `${learned} learned merchant${learned === 1 ? '' : 's'}` : null,
+                    ].filter(Boolean).join(' · ')}
+                    trailing="chevron"
+                    onClick={() => startEdit(cat)}
+                    aria-label={`Edit ${cat.name}`}
                   />
-                </div>
-              ))}
-            </div>
-          </PageCard>
+                </motion.div>
+              );
+            })}
+          </AnimatePresence>
+          {(!categories || categories.length === 0) && <ListRow title="No categories yet" />}
+        </ListGroup>
+
+        <div id="feature-toggles">
+          <ListGroup title="Features" footer="Turning a feature off hides it; its data is kept.">
+            {([
+              { key: 'budgets_enabled' as const, label: 'Budgets', desc: 'Spending limits and progress' },
+              { key: 'goals_enabled' as const, label: 'Goals', desc: 'Savings targets' },
+              { key: 'trips_enabled' as const, label: 'Trips', desc: 'Group spending by trip' },
+              { key: 'subscriptions_enabled' as const, label: 'Subscriptions', desc: 'Recurring services and upcoming charges' },
+              { key: 'recurring_enabled' as const, label: 'Recurring payments', desc: 'Spot payments that repeat' },
+            ]).map(({ key, label, desc }) => (
+              <ListRow
+                key={key}
+                title={label}
+                subtitle={desc}
+                trailing={<Switch checked={!!settings?.[key]} onCheckedChange={(next) => toggleSetting(key, next)} aria-label={label} />}
+              />
+            ))}
+          </ListGroup>
         </div>
 
-        {/* Alert Thresholds */}
-        <PageCard title="Alert Thresholds">
-          <div className="space-y-4">
-            <div>
-              <label className="text-sm font-medium text-foreground">Anomaly Detection Multiplier</label>
-              <p className="text-xs text-muted mb-1">Flag transactions exceeding Nx the category average (1.0–10.0)</p>
+        <ListGroup
+          title="Alerts"
+          action={<Button type="button" variant="ghost" size="sm" className="text-teal" onClick={saveSettings}>Save</Button>}
+          footer={settingsError ? <span className="text-destructive">{settingsError}</span> : undefined}
+        >
+          <ListRow
+            title={<label htmlFor="anomaly-multiplier">Unusual purchase</label>}
+            subtitle="Flag a purchase this many times a merchant’s usual amount (1–10)"
+            trailing={
               <input
+                id="anomaly-multiplier"
                 type="number" step="0.1" min="1.0" max="10.0"
                 value={anomalyMultiplier}
                 onChange={(e) => setAnomalyMultiplier(e.target.value)}
-                className="input-field w-32"
+                className="input-field w-20 text-right"
               />
-            </div>
-            <div>
-              <label className="text-sm font-medium text-foreground">Velocity Alert Threshold (%)</label>
-              <p className="text-xs text-muted mb-1">Alert when monthly pace exceeds X% of last month (50–300)</p>
+            }
+          />
+          <ListRow
+            title={<label htmlFor="velocity-threshold">Spending pace (%)</label>}
+            subtitle="Alert when this month’s pace passes this share of last month (50–300)"
+            trailing={
               <input
+                id="velocity-threshold"
                 type="number" step="1" min="50" max="300"
                 value={velocityThreshold}
                 onChange={(e) => setVelocityThreshold(e.target.value)}
-                className="input-field w-32"
+                className="input-field w-20 text-right"
+              />
+            }
+          />
+        </ListGroup>
+      </div>
+
+      <TaskSheet
+        open={pwOpen}
+        onOpenChange={(open) => { setPwOpen(open); if (!open) { setCurrentPw(''); setNewPw(''); setConfirmPw(''); setPwError(''); } }}
+        title="Change password"
+        dirty={!!(currentPw || newPw || confirmPw)}
+        confirm={{ label: 'Save', onClick: () => void handleChangePassword(), pending: pwLoading, pendingLabel: 'Saving…', disabled: !currentPw || !newPw || !confirmPw }}
+      >
+        <div className="space-y-3 p-1">
+          <Input type="password" aria-label="Current password" placeholder="Current password" value={currentPw} onChange={(e) => setCurrentPw(e.target.value)} autoComplete="current-password" />
+          <Input type="password" aria-label="New password" placeholder="New password (at least 8 characters)" value={newPw} onChange={(e) => setNewPw(e.target.value)} autoComplete="new-password" />
+          <Input type="password" aria-label="Confirm new password" placeholder="Confirm new password" value={confirmPw} onChange={(e) => setConfirmPw(e.target.value)} autoComplete="new-password" />
+          {pwError && <p className="text-sm text-destructive">{pwError}</p>}
+        </div>
+      </TaskSheet>
+
+      <TaskSheet
+        open={!!editingCategory}
+        onOpenChange={(open) => { if (!open) { setEditingCategory(null); setCatError(''); } }}
+        title={editingCategory ?? ''}
+        initialDetent="large"
+        confirm={{ label: 'Save', onClick: () => editingCategory && handleUpdateCategory(editingCategory), pending: updateCat.isPending, pendingLabel: 'Saving…' }}
+      >
+        {editingCat && (
+          <div className="space-y-4 p-1">
+            <div>
+              <p className="mb-1 text-xs text-muted">Icon</p>
+              <CategoryIconPicker value={editIcon} onChange={setEditIcon} />
+            </div>
+            <div>
+              <label htmlFor="cat-type" className="mb-1 block text-xs text-muted">Type</label>
+              <select
+                id="cat-type"
+                value={editingCat.type ?? 'neutral'}
+                onChange={async (e) => {
+                  await api.updateCategory(editingCat.name, { type: e.target.value as 'needs' | 'wants' | 'neutral' });
+                  qc.invalidateQueries({ queryKey: ['categories'] });
+                }}
+                className="select-field w-full"
+              >
+                {CAT_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="cat-keywords" className="mb-1 block text-xs text-muted">Keywords, separated by commas</label>
+              <Input id="cat-keywords" value={editKeywords} onChange={(e) => setEditKeywords(e.target.value)} placeholder="keyword1, keyword2" />
+            </div>
+            <div>
+              <p className="mb-1 text-xs text-muted">Colour</p>
+              <CategoryColorPicker
+                value={editColor}
+                onChange={setEditColor}
+                taken={(c) => usedColors.includes(c.toLowerCase()) && editingCat.color?.toLowerCase() !== c.toLowerCase()}
               />
             </div>
-            <Button type="button" onClick={saveSettings}>Save</Button>
-            {settingsError && <p className="text-sm text-destructive mt-1">{settingsError}</p>}
+            {(overridesByCategory.get(editingCat.name)?.length ?? 0) > 0 && (
+              <ListGroup title="Learned merchants" footer="Remove one to let keywords decide its category again.">
+                {overridesByCategory.get(editingCat.name)!.map((merchant) => (
+                  <ListRow
+                    key={merchant}
+                    title={merchant}
+                    trailing={
+                      <Button variant="ghost" size="sm" className="text-destructive" aria-label={`Remove learned merchant ${merchant}`} onClick={() => handleDeleteOverride(merchant)} disabled={deleteOverride.isPending}>
+                        Remove
+                      </Button>
+                    }
+                  />
+                ))}
+              </ListGroup>
+            )}
+            {catError && <p className="text-sm text-destructive">{catError}</p>}
+            <ListGroup>
+              <ListRow destructive title="Delete category" onClick={() => { const name = editingCat.name; setEditingCategory(null); handleDeleteCategory(name); }} disabled={deleteCat.isPending} />
+            </ListGroup>
           </div>
-        </PageCard>
-
-      </div>
+        )}
+      </TaskSheet>
 
       {/* Add Category Dialog */}
       <Dialog open={showAddCategory} onOpenChange={(open) => { setShowAddCategory(open); if (!open) { setNewCatName(''); setNewCatKeywords(''); setNewCatIcon('📌'); setNewCatColor(''); setCatError(''); } }}>

@@ -93,10 +93,17 @@ for (const viewport of [{ width: 390, height: 844, size: '16px' }, { width: 1440
     await mockAuthenticatedSettings(page);
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
     await page.goto('/settings');
-    const wrapped = page.getByPlaceholder('Current password');
+    // The number field is on the page; the password field is in its sheet.
     const native = page.locator('input[type="number"]').first();
+    await native.scrollIntoViewIfNeeded();
+    await native.focus();
+    const n = await native.evaluate((el) => { const c = getComputedStyle(el); return { size: c.fontSize, radius: c.borderRadius }; });
+    expect(n.size).toBe(viewport.size);
+    expect(n.radius).toBe('10px');
+    await page.getByRole('button', { name: 'Change password' }).click();
+    const wrapped = page.getByPlaceholder('Current password');
     await expect(wrapped).toBeVisible();
-    for (const field of [wrapped, native]) {
+    for (const field of [wrapped]) {
       await field.scrollIntoViewIfNeeded();
       await field.focus();
       const s = await field.evaluate((el) => {
