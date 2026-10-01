@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, type RefObject } from 'react';
+import { useLayoutEffect, useRef, type RefObject } from 'react';
 
 // Mac list conventions for a split view's list column (P7): ↑/↓ move focus
 // between rows (selection follows only on ↩, the row's own activation),
@@ -15,7 +15,9 @@ export function useListKeyboard(
   const actions = useRef({ onDelete, onEscape });
   useLayoutEffect(() => { actions.current = { onDelete, onEscape }; });
 
-  useEffect(() => {
+  // Registered before paint, so a key pressed as soon as the detail appears
+  // is already handled.
+  useLayoutEffect(() => {
     const list = listRef.current;
     if (!enabled || !list) return;
 
