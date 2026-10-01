@@ -58,7 +58,7 @@ export function CasheIcon({ size = 32, className }: CasheIconProps) {
     background: B1_WASH,
     border: '1px solid var(--color-border)',
     borderRadius: '25.5%',
-    boxShadow: '0 18px 40px -30px rgba(0,212,170,.85)',
+    // No teal glow: Direction B retired glow halos (DESIGN.md).
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',

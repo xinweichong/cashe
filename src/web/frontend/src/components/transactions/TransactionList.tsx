@@ -58,7 +58,7 @@ function DayHeader({ dayKey, total, sticky }: { dayKey: string; total: DailyTota
   return (
     <div
       data-testid="tx-day-header"
-      className={`flex items-baseline justify-between px-1 pb-1.5 pt-4 first:pt-0${sticky ? ' sticky top-11 z-10 chrome-frosted' : ''}`}
+      className={`flex items-baseline justify-between px-1 pb-1.5${sticky ? ' sticky top-11 z-10 chrome-frosted' : ''}`}
     >
       <span className="text-xs font-semibold text-muted">
         {formatDayHeading(dayKey)}
@@ -185,7 +185,7 @@ export function TransactionList({
   return (
     <div>
       {days.map(({ day, txs }) => (
-        <section key={`day-${day}`} aria-label={formatDayHeading(day)}>
+        <section key={`day-${day}`} aria-label={formatDayHeading(day)} className="pt-5 first:pt-0">
           <DayHeader dayKey={day} total={dailyTotals?.get(day)} sticky={stickyDayHeaders} />
           <div className="@container overflow-hidden rounded-group bg-card">
             <AnimatePresence initial={false}>

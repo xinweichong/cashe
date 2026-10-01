@@ -171,7 +171,8 @@ export function TransactionDetail({
         </p>
       )}
 
-      <div className="space-y-6 p-4">
+      {/* Capped on wide screens so label/value pairs stay scannable. */}
+      <div className="mx-auto max-w-[36rem] space-y-6 p-4">
         {/* Identity and amount */}
         <div className="flex flex-col items-center gap-1 pb-2 pt-2 text-center">
           <CategoryAvatar category={tx.category} isIncome={isCreditType(tx.type)} size="detail" glyph={categoryIcon} className="mb-2 rounded-full" />
@@ -225,7 +226,7 @@ export function TransactionDetail({
             <TransactionSources txId={tx.id} />
             {/* Meta */}
             <div className="pt-2 border-t border-border space-y-2">
-              <DetailRow label="Ingested" value={formatDateTime(tx.ingested_at)} muted />
+              <DetailRow label="Added to cashe" value={formatDateTime(tx.ingested_at)} muted />
             </div>
             {isPhone && !confirmingDelete && (
               <ListGroup className="pt-2">
@@ -352,7 +353,8 @@ function QuickCategoryPicker({ tx, categories }: { tx: Transaction; categories: 
   const updateTx = useUpdateTransaction();
   if (categories.length === 0) return null;
   return (
-    <div className="overflow-x-auto -mx-1 px-1">
+    <div role="group" aria-labelledby={`quick-category-${tx.id}`} className="overflow-x-auto -mx-1 px-1">
+      <p id={`quick-category-${tx.id}`} className="mb-1.5 text-xs text-muted">Category</p>
       <div className="flex flex-wrap gap-1.5">
         {categories.map((cat) => {
           const catColor = getCategoryColor(cat.name);
@@ -487,11 +489,11 @@ function TransactionSources({ txId }: { txId: number }) {
   const labels = { apple_wallet: 'Apple Wallet', gmail: 'Gmail', manual: 'Manual entry', cash: 'Cash entry', other: 'Other source' };
 
   return (
-    <section aria-label="Capture sources" className="pt-3 border-t border-border space-y-2 text-sm">
-      <h3 className="font-medium">Capture sources</h3>
-      {isPending ? <p role="status" className="text-muted">Loading capture sources…</p> : isError ? (
+    <section aria-label="Where it came from" className="pt-3 border-t border-border space-y-2 text-sm">
+      <h3 className="font-medium">Where it came from</h3>
+      {isPending ? <p role="status" className="text-muted">Loading sources…</p> : isError ? (
         <div>
-          <p role="status" className="text-muted">Couldn’t load capture sources.</p>
+          <p role="status" className="text-muted">Couldn’t load where this came from.</p>
           <Button variant="outline" className="min-h-11 mt-2" disabled={isFetching} onClick={() => void refetch()}>Retry sources</Button>
         </div>
       ) : data && (
@@ -500,7 +502,7 @@ function TransactionSources({ txId }: { txId: number }) {
             {data.sources.map((source) => (
               <li key={source.channel}>
                 <span>{labels[source.channel]}</span>
-                <p className="text-xs text-muted">{source.evidence_recorded ? 'Capture evidence retained' : 'Recorded source only; no capture evidence retained'}</p>
+                <p className="text-xs text-muted">{source.evidence_recorded ? 'Original message kept' : 'Source noted; original message not kept'}</p>
               </li>
             ))}
           </ul>

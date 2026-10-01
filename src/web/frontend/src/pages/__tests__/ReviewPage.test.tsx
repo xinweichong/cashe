@@ -98,7 +98,7 @@ test('keeps one side of a duplicate pair and offers to undo the merge', async ()
   vi.mocked(briefingApi.mergeDuplicates).mockResolvedValue({ status: 'ok', merge_id: 42 });
   vi.mocked(briefingApi.undoDuplicateMerge).mockResolvedValue({ status: 'ok' });
   show();
-  expect(await screen.findByText('1 possible duplicates need review')).toBeTruthy();
+  expect(await screen.findByText('1 possible duplicate needs review')).toBeTruthy();
   fireEvent.click(screen.getAllByRole('button', { name: 'Keep this one' })[0]);
   await waitFor(() => expect(briefingApi.mergeDuplicates).toHaveBeenCalledWith(3, 5));
   expect(await screen.findByText('No possible duplicates to review.')).toBeTruthy();

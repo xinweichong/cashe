@@ -1,6 +1,5 @@
 import { useEffect, useId, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { SegmentedChoice } from '@/components/ui/segmented-choice';
 import { Input } from '@/components/ui/input';
@@ -11,7 +10,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Separator } from '@/components/ui/separator';
 import { useCreateTransaction } from '@/hooks/useTransactions';
 import { useToast } from '@/hooks/useToastContext';
 import { api, type Category } from '@/api/client';
@@ -108,8 +106,8 @@ export function TransactionForm({ categories, onClose }: TransactionFormProps) {
   };
 
   return (
-    <Card className="p-4">
-      <form onSubmit={handleSubmit} className="space-y-3">
+    // Lives in the Add sheet, whose header carries Cancel: no card of its own.
+    <form onSubmit={handleSubmit} className="space-y-3 p-1">
         <SegmentedChoice<TxType> name="transaction-type" aria-label="Transaction type" value={type} onValueChange={setType} options={TX_TYPES} />
 
         {/* Primary fields — amount and merchant are all it takes to capture something */}
@@ -241,17 +239,9 @@ export function TransactionForm({ categories, onClose }: TransactionFormProps) {
           </p>
         )}
 
-        <Separator />
-
-        <div className="flex gap-2 justify-end">
-          <Button type="button" variant="outline" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button type="submit" disabled={!amount || createTx.isPending}>
-            {createTx.isPending ? 'Saving...' : 'Save'}
-          </Button>
-        </div>
+        <Button type="submit" className="min-h-11 w-full" disabled={!amount || createTx.isPending}>
+          {createTx.isPending ? 'Saving…' : 'Save'}
+        </Button>
       </form>
-    </Card>
   );
 }
