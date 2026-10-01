@@ -42,7 +42,12 @@ export function PulseBand({ facts }: { facts: SpendingFacts | undefined }) {
       })
     : undefined;
 
-  const { previous, change } = facts;
+  const { previous } = facts;
+  // A change over a few days is noise, and a red-orange number on the 1st
+  // reads as an alarm; wait for a week of comparable days.
+  const comparableDays = Math.round((Date.parse(`${facts.comparison_current.end}T00:00:00Z`) - Date.parse(`${facts.comparison_current.start}T00:00:00Z`)) / 86_400_000) + 1;
+  const tooEarly = !!facts.change && comparableDays < 7;
+  const change = tooEarly ? null : facts.change;
   const changePercent = change && previous.spending.minor_units > 0
     ? (change.minor_units / previous.spending.minor_units) * 100
     : undefined;
@@ -52,9 +57,9 @@ export function PulseBand({ facts }: { facts: SpendingFacts | undefined }) {
     : `${current.transaction_count} ${current.transaction_count === 1 ? 'record' : 'records'}${current.status === 'indicative' ? ' · includes indicative FX' : ''}`;
 
   const netNote = current.recorded_net_flow
-    ? `Recorded net flow ${formatChange(current.recorded_net_flow)}`
+    ? `${formatChange(current.recorded_net_flow)} after spending`
     : current.income
-      ? 'Net flow hidden while records need review'
+      ? 'Hidden while records need review'
       : 'No income recorded this month';
 
   return (
@@ -69,13 +74,13 @@ export function PulseBand({ facts }: { facts: SpendingFacts | undefined }) {
       />
       <StatCard
         label="vs. last month"
-        value={change ? formatChange(change) : 'Unavailable'}
+        value={change ? formatChange(change) : tooEarly ? 'Too early' : 'Unavailable'}
         color={!change ? 'default' : change.minor_units > 0 ? 'coral' : 'mint'}
         delta={changePercent !== undefined ? { value: changePercent } : undefined}
         subtext={change
           ? `${formatRange(previous.start, previous.end)}: ${formatMoney(previous.spending)}`
-          : 'Resolve records needing review to compare'}
-        href={change ? '/explore?mode=by-category#explore-patterns' : '/review'}
+          : tooEarly ? 'Compare after the first week' : 'Resolve records needing review to compare'}
+        href={change ? '/explore?mode=by-category#explore-patterns' : tooEarly ? undefined : '/review'}
       />
       <StatCard
         label="Income"

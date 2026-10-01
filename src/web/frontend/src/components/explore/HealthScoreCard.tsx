@@ -14,6 +14,13 @@ import { useChartTheme } from '@/lib/chartTheme';
 import { formatRange } from './format';
 import { ProgressRing } from '@/components/ui/ProgressRing';
 
+/** Below this many days of the month the ratios swing too much to grade. */
+const MIN_SCORE_DAYS = 7;
+
+function daysInclusive(start: string, end: string): number {
+  return Math.round((Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / 86_400_000) + 1;
+}
+
 const PILLAR_ORDER = ['savings_rate', 'needs_ratio', 'wants_ratio', 'budget_adherence', 'anomaly_frequency'] as const;
 
 function pillarValue(key: (typeof PILLAR_ORDER)[number], value: number, benchmark?: number | null): string {
@@ -49,7 +56,8 @@ export function HealthSpectrum({ className }: { className?: string }) {
     return <PageCard title="Financial health" className={className}><div role="alert"><LoadFailed onRetry={() => void refetch()} /></div></PageCard>;
   }
   if (!data) return <SpectrumCardSkeleton className={className} />;
-  const score = data.has_income_data ? data.score ?? null : null;
+  const tooEarly = daysInclusive(data.start, data.end) < MIN_SCORE_DAYS;
+  const score = data.has_income_data && !tooEarly ? data.score ?? null : null;
   const label = score != null ? `Financial health ${score} out of 100, ${data.grade}. Open the full breakdown.` : 'Financial health: no score yet. Open for details.';
   return (
     <Link to="/explore/health" aria-label={label}
@@ -62,7 +70,7 @@ export function HealthSpectrum({ className }: { className?: string }) {
         valueSuffix={score != null ? data.grade : undefined}
         caption={score != null
           ? `${data.income ? `Spent ${formatMoney(data.spending)} of ${formatMoney(data.income)} income · ` : ''}50/30/20 rule${data.status === 'partial' ? ` · ${data.unresolved_count} left out` : ''}`
-          : 'No income recorded this month, so there is no score yet'}
+          : tooEarly ? 'Too early in the month for a score. Check back after the first week.' : 'No income recorded this month, so there is no score yet'}
         progress={score != null ? score / 100 : undefined}
         progressLabel="Health score"
         status={data.status === 'partial' ? 'partial' : 'complete'}
@@ -109,6 +117,7 @@ export function HealthScoreCard() {
             {data.income && <>Spent {formatMoney(data.spending)} of {formatMoney(data.income)} income</>}
           </p>
           <p className="text-xs text-muted mt-0.5">{formatRange(data.start, data.end)} · 50/30/20 rule</p>
+          {daysInclusive(data.start, data.end) < MIN_SCORE_DAYS && <p className="text-xs text-warning mt-0.5">Based on only {daysInclusive(data.start, data.end)} {daysInclusive(data.start, data.end) === 1 ? 'day' : 'days'}, so it will swing.</p>}
         </div>
       </div>
       <ul className="space-y-3">
@@ -122,9 +131,9 @@ export function HealthScoreCard() {
               <div className="flex items-baseline justify-between gap-3">
                 <p className="min-w-0 text-sm">
                   <span className="font-medium text-foreground">{pillar.label}</span>
-                  <span className="text-xs text-muted font-mono ml-2">{pillarValue(key, pillar.value, pillar.benchmark)}</span>
+                  <span className="text-xs text-muted tabular-nums ml-2">{pillarValue(key, pillar.value, pillar.benchmark)}</span>
                 </p>
-                <span className="text-sm font-semibold tabular-nums font-mono" style={{ color }}>{pillar.score}/{pillar.max}</span>
+                <span className="text-sm font-semibold tabular-nums" style={{ color }}>{pillar.score}/{pillar.max}</span>
               </div>
               <div className="h-1.5 rounded-full bg-foreground/10 overflow-hidden">
                 <motion.div
