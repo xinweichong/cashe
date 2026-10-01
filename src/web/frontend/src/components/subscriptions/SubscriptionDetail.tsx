@@ -390,7 +390,7 @@ function UpcomingRow({ upcoming, recentTxs, onMatch, onDismiss }: UpcomingRowPro
             Expected {upcoming.expected_date.slice(0, 10)}
           </span>
           {upcoming.expected_amount != null && (
-            <span className="text-xs text-muted">S${upcoming.expected_amount.toFixed(2)}</span>
+            <span className="text-xs text-muted">{formatCurrency(upcoming.expected_amount)}</span>
           )}
         </div>
         <Button type="button" variant="ghost" size="sm" onClick={onDismiss}>

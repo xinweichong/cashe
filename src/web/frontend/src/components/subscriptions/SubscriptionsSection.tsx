@@ -77,7 +77,7 @@ export function SubscriptionsSection({ selectedSubId, onSelectSub }: Subscriptio
           <div className="flex items-center gap-2">
             {summary && (
               <span className="text-sm font-semibold text-teal tabular-nums">
-                S${summary.total_monthly_sgd.toFixed(2)}/mo
+                {formatCurrency(summary.total_monthly_sgd)}/mo
               </span>
             )}
             <Button
