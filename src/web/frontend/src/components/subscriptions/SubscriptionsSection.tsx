@@ -3,10 +3,9 @@ import { Plus } from 'lucide-react';
 import { api } from '@/api/client';
 import { PageCard } from '@/components/ui/cards';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { SelectableRow } from '@/components/ui/selectable-row';
 import { StatusDot } from '@/components/ui/StatusDot';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, formatShortDate, minorToMajor } from '@/lib/utils';
 import { useState } from 'react';
 import { SubscriptionForm } from './SubscriptionForm';
 import { FREQUENCY_LABELS } from '@/lib/subscriptionFrequency';
@@ -37,7 +36,7 @@ export function SubscriptionsSection({ selectedSubId, onSelectSub }: Subscriptio
   return (
     <>
       {hasReviewItems && (
-        <PageCard title="Needs attention">
+        <PageCard title="Needs attention" contentClassName="p-0">
           <div className="space-y-3">
             {review!.price_changes.map((change) => (
               <SelectableRow
@@ -47,8 +46,8 @@ export function SubscriptionsSection({ selectedSubId, onSelectSub }: Subscriptio
               >
                 <p className="font-medium text-foreground">{change.label} price changed</p>
                 <p className="text-xs text-muted">
-                  {formatCurrency(change.old_amount.minor_units / 100, change.old_amount.currency)} →{' '}
-                  {formatCurrency(change.new_amount.minor_units / 100, change.new_amount.currency)}
+                  {formatCurrency(minorToMajor(change.old_amount.minor_units, change.old_amount.currency), change.old_amount.currency)} →{' '}
+                  {formatCurrency(minorToMajor(change.new_amount.minor_units, change.new_amount.currency), change.new_amount.currency)}
                   {' · '}
                   {change.annualized_impact.minor_units >= 0 ? '+' : '−'}
                   {formatCurrency(Math.abs(change.annualized_impact.minor_units) / 100, change.annualized_impact.currency)}/year
@@ -72,11 +71,12 @@ export function SubscriptionsSection({ selectedSubId, onSelectSub }: Subscriptio
       )}
       <PageCard
         title="Subscriptions"
+        contentClassName="p-0"
         action={
           <div className="flex items-center gap-2">
             {summary && (
               <span className="text-sm font-semibold text-teal tabular-nums">
-                S${summary.total_monthly_sgd.toFixed(2)}/mo
+                {formatCurrency(summary.total_monthly_sgd)}/mo
               </span>
             )}
             <Button
@@ -91,27 +91,29 @@ export function SubscriptionsSection({ selectedSubId, onSelectSub }: Subscriptio
         }
       >
         {summary && summary.possibly_cancelled_count > 0 && (
-          <p className="text-xs text-warning mb-3">
+          <p className="px-4 pt-3 pb-2 text-xs text-warning">
             ⚠ {summary.possibly_cancelled_count} subscription
             {summary.possibly_cancelled_count === 1 ? '' : 's'} may have been cancelled
           </p>
         )}
-        <div className="divide-y divide-border">
-          {subs.map((sub) => (
+        <div>
+          {subs.map((sub) => {
+            const selected = selectedSubId === sub.id;
+            // On the teal selection, secondary text follows on-teal.
+            const muted = selected ? 'text-on-teal/80' : 'text-muted';
+            return (
             <SelectableRow
               key={sub.id}
               onClick={() => onSelectSub(sub.id)}
-              selected={selectedSubId === sub.id}
-              className="justify-between rounded-none"
+              selected={selected}
+              className="justify-between"
             >
               <div className="flex flex-col gap-0.5 min-w-0">
-                <span className="text-sm font-medium text-foreground truncate">
+                <span className="text-sm font-medium truncate">
                   {sub.label ?? sub.merchant}
                 </span>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <Badge variant="outline" className="text-muted">
-                    {FREQUENCY_LABELS[sub.frequency]}
-                  </Badge>
+                <div className={`flex items-center gap-2 flex-wrap text-xs ${muted}`}>
+                  <span>{FREQUENCY_LABELS[sub.frequency]}</span>
                   {sub.status === 'possibly_cancelled' && (
                     <StatusDot
                       tone="active"
@@ -121,24 +123,21 @@ export function SubscriptionsSection({ selectedSubId, onSelectSub }: Subscriptio
                       })()}`}
                     />
                   )}
-                  {sub.status === 'paused' && <span className="text-xs text-muted">Paused in Cashe</span>}
-                  {sub.status === 'cancelled' && (
-                    <span className="text-xs text-muted">Cancelled</span>
-                  )}
+                  {sub.status === 'paused' && <span>· Tracking paused</span>}
+                  {sub.status === 'cancelled' && <span>· Cancelled</span>}
                   {sub.next_expected_date && (sub.status === 'active' || sub.status === 'possibly_cancelled') && (
-                    <span className="text-xs text-muted">
-                      Next {sub.next_expected_date.slice(0, 10)}
-                    </span>
+                    <span>· Next {formatShortDate(sub.next_expected_date)}</span>
                   )}
                 </div>
               </div>
-              <span className="text-sm tabular-nums text-foreground shrink-0 ml-2">
-                {sub.last_amount != null ? formatCurrency(sub.last_amount) : '—'}
-              </span>
+              {sub.last_amount != null
+                ? <span className="font-mono text-sm tabular-nums shrink-0 ml-2">{formatCurrency(sub.last_amount)}</span>
+                : <span className={`text-sm shrink-0 ml-2 ${muted}`}>No charge yet</span>}
             </SelectableRow>
-          ))}
+            );
+          })}
           {subs.length === 0 && (
-            <p className="text-sm text-muted py-4 text-center">No subscriptions yet</p>
+            <p className="px-4 py-4 text-center text-sm text-muted">No subscriptions yet</p>
           )}
         </div>
       </PageCard>

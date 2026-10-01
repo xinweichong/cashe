@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
+import { MemoryRouter } from 'react-router-dom';
 import { briefingApi, type HomeBriefing, type SpendingPeriod } from '@/api/briefing';
 import { api } from '@/api/client';
 import { HomePage } from '../HomePage';
@@ -24,340 +24,110 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
-test('Home keeps evidence periods and categories in links and omits missing income', async () => {
+test('Home counts what needs a look in plain words and links to the other tabs', async () => {
   vi.mocked(briefingApi.home).mockResolvedValue(home);
   show(<HomePage />);
-  expect(await screen.findByText(/^Through 2026-09-06/)).toBeTruthy();
-  const href = screen.getByRole('link', { name: 'Previous period' }).getAttribute('href')!;
-  const params = new URL(href, 'http://localhost').searchParams;
-  expect(params.get('start')).toBe('2026-08-01');
-  expect(params.get('end')).toBe('2026-08-06');
-  expect(params.get('category')).toBe('Food & Drink');
-  expect(screen.queryByText(/Recorded income/)).toBeNull();
-  expect(screen.getByText('3 capture or follow-up items')).toBeTruthy();
-  expect(screen.queryByText(/spending records need review/)).toBeNull();
-  expect(screen.queryByText(/recurring suggestions/)).toBeNull();
+  expect(await screen.findByText(/^As of 6 Sep/)).toBeTruthy();
+  expect(screen.getByText('3 captures to check')).toBeTruthy();
+  expect(screen.getByText('Connect Gmail')).toBeTruthy();
+  expect(screen.queryByText(/records?$/)).toBeNull();
+  expect(screen.getByRole('link', { name: /Coming up/ }).getAttribute('href')).toBe('/plan');
+  expect(screen.getByRole('link', { name: /Recent activity/ }).getAttribute('href')).toBe('/activity');
+  expect(screen.getByRole('link', { name: /Where it went/ }).getAttribute('href')).toBe('/explore');
 });
 
 test('Home surfaces all-history review and recurring suggestion counts', async () => {
-  vi.mocked(briefingApi.home).mockResolvedValue({ ...home, review_count: 4, recurring_suggestion_count: 2 });
+  vi.mocked(briefingApi.home).mockResolvedValue({ ...home, review_count: 4, recurring_suggestion_count: 1 });
   show(<HomePage />);
-  expect(await screen.findByText('4 spending records need review')).toBeTruthy();
-  expect(screen.getByText('2 recurring suggestions')).toBeTruthy();
+  expect(await screen.findByText('4 records to review')).toBeTruthy();
+  expect(screen.getByText('1 possible subscription')).toBeTruthy();
+});
+
+test('with nothing to check, Home says it is caught up instead of listing zeros', async () => {
+  vi.mocked(briefingApi.home).mockResolvedValue({ ...home, capture_issue_count: 0, followup_issue_count: 0, freshness: { ...home.freshness, gmail_connected: true } });
+  show(<HomePage />);
+  expect(await screen.findByText('All caught up')).toBeTruthy();
+  expect(screen.queryByText(/0 captures/)).toBeNull();
 });
 
 test('a failed briefing does not render a genuine zero', async () => {
   vi.mocked(briefingApi.home).mockRejectedValue(new Error('offline'));
   show(<HomePage />);
   expect(await screen.findByRole('alert')).toBeTruthy();
-  expect(screen.queryByText('Recorded spending this month')).toBeNull();
+  expect(screen.queryByText('Spending recorded this month')).toBeNull();
   expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
 });
 
 test('partial and undated amounts remain visible as uncertainty', async () => {
   vi.mocked(briefingApi.home).mockResolvedValue({ ...home, facts: { ...home.facts, current: { ...period, status: 'partial', unresolved_count: 1 }, undated_count: 1, change: null, category_changes: [] } });
   show(<HomePage />);
-  expect(await screen.findByText(/Known spending subtotal/)).toBeTruthy();
-  expect(screen.getByText(/Review 2 spending records/)).toBeTruthy();
-  expect(screen.getByText(/A comparison is unavailable/)).toBeTruthy();
+  expect(await screen.findByText(/Known spending so far/)).toBeTruthy();
+  expect(screen.getByText('2 records to review')).toBeTruthy();
+  expect(screen.getByText(/Can’t compare with last month/)).toBeTruthy();
 });
 
-test('Home shows category driver breakdown with an overlap note and its own evidence links', async () => {
-  const topCategoryDriver = {
-    category: 'Food & Drink', change: { minor_units: 500, currency: 'SGD' as const },
-    merchant_driver: { merchant: 'Fancy Bistro', change: { minor_units: 400, currency: 'SGD' as const } },
-    frequency_driver: { classification: 'size' as const, current_count: 3, previous_count: 3, current_avg: { minor_units: 1000, currency: 'SGD' as const }, previous_avg: { minor_units: 700, currency: 'SGD' as const } },
-    one_off_driver: null,
-    overlap_note: 'This breaks down the category change above.',
-  };
-  vi.mocked(briefingApi.home).mockResolvedValue({ ...home, facts: { ...home.facts, top_category_driver: topCategoryDriver } });
+test('early in the month Home holds back the month-on-month comparison', async () => {
+  vi.mocked(briefingApi.home).mockResolvedValue(home);
   show(<HomePage />);
-  fireEvent.click(await screen.findByRole('button', { name: 'More context' }));
-  expect(await screen.findByText('This breaks down the category change above.')).toBeTruthy();
-  const href = screen.getByRole('link', { name: 'Fancy Bistro' }).getAttribute('href')!;
-  const params = new URL(href, 'http://localhost').searchParams;
-  expect(params.get('merchant')).toBe('Fancy Bistro');
-  expect(params.get('category')).toBe('Food & Drink');
-  expect(screen.getByText(/Driven mostly by bigger purchases/)).toBeTruthy();
+  expect(await screen.findByText('Too early in the month to compare with last month.')).toBeTruthy();
+  expect(screen.queryByText(/more than by this date/)).toBeNull();
 });
 
-test('Home flags a one-off purchase driver with a direct transaction link', async () => {
-  const topCategoryDriver = {
-    category: 'Food & Drink', change: { minor_units: 500, currency: 'SGD' as const },
-    merchant_driver: null, frequency_driver: { classification: 'none' as const, current_count: 1, previous_count: 1, current_avg: { minor_units: 500, currency: 'SGD' as const }, previous_avg: { minor_units: 0, currency: 'SGD' as const } },
-    one_off_driver: { transaction_id: 42, merchant: 'Rare Splurge', amount: { minor_units: 500, currency: 'SGD' as const }, date: '2026-09-05' },
-    overlap_note: 'note',
-  };
-  vi.mocked(briefingApi.home).mockResolvedValue({ ...home, facts: { ...home.facts, top_category_driver: topCategoryDriver } });
+test('with a week or more to compare, Home states the change against last month', async () => {
+  const week = { ...period, start: '2026-09-01', end: '2026-09-10' };
+  vi.mocked(briefingApi.home).mockResolvedValue({ ...home, facts: { ...home.facts, as_of: '2026-09-10', current: week, comparison_current: week } });
   show(<HomePage />);
-  fireEvent.click(await screen.findByRole('button', { name: 'More context' }));
-  const link = await screen.findByRole('link', { name: 'Rare Splurge' });
-  const href = new URL(link.getAttribute('href')!, 'http://localhost');
-  expect(href.pathname).toBe('/transactions/42');
-  expect(href.searchParams.get('returnTo')).toBe('/');
-});
-
-test('Home shows trip-attributed spending as context, not additive to category totals', async () => {
-  const tripDriver = { trip_id: 7, name: 'Bali', current_total: { minor_units: 8000, currency: 'SGD' as const }, previous_total: { minor_units: 0, currency: 'SGD' as const }, change: { minor_units: 8000, currency: 'SGD' as const }, overlap_note: 'Trip spending is already included in the category totals above.' };
-  vi.mocked(briefingApi.home).mockResolvedValue({ ...home, facts: { ...home.facts, trip_drivers: [tripDriver] } });
-  show(<HomePage />);
-  fireEvent.click(await screen.findByRole('button', { name: 'More context' }));
-  expect(await screen.findByRole('link', { name: 'Bali' })).toBeTruthy();
-  expect(screen.getByText(/Trip spending is already included/)).toBeTruthy();
+  expect(await screen.findByText('$5.00 more than by this date in August.')).toBeTruthy();
 });
 
 test('Home surfaces a recently increased commitment', async () => {
   vi.mocked(briefingApi.home).mockResolvedValue({ ...home, increased_commitments: [{ subscription_id: 1, label: 'Netflix', old_amount: { minor_units: 1500, currency: 'SGD' }, new_amount: { minor_units: 2000, currency: 'SGD' }, change: { minor_units: 500, currency: 'SGD' }, annualized_impact: { minor_units: 6000, currency: 'SGD' }, old_date: '2026-08-05', new_date: '2026-09-05' }] });
   show(<HomePage />);
-  expect(await screen.findByText('Recently increased')).toBeTruthy();
-  expect(screen.getByText(/Netflix/)).toBeTruthy();
+  expect(await screen.findByText('Netflix went up')).toBeTruthy();
+  expect(screen.getByText(/\$60\.00 a year/)).toBeTruthy();
 });
 
-test('Home frames a negative net flow as an outflow warning', async () => {
+test('Home frames a negative net flow as spending more than earned', async () => {
   vi.mocked(briefingApi.home).mockResolvedValue({ ...home, facts: { ...home.facts, current: { ...period, income: { minor_units: 100, currency: 'SGD' }, recorded_net_flow: { minor_units: -300, currency: 'SGD' } } } });
   show(<HomePage />);
-  expect(await screen.findByText(/Recorded net outflow/)).toBeTruthy();
+  expect(await screen.findByText('Spent more than earned')).toBeTruthy();
+  expect(screen.getByText('$3.00')).toBeTruthy();
 });
 
-test('Home shows the last processed capture time', async () => {
+test('Home shows the last capture time in words', async () => {
   vi.mocked(briefingApi.home).mockResolvedValue({ ...home, freshness: { ...home.freshness, last_capture_processed_at: '2026-09-06T08:00:00' } });
   show(<HomePage />);
-  expect(await screen.findByText(/Last capture processed: 2026-09-06T08:00:00/)).toBeTruthy();
+  expect(await screen.findByText(/Last capture 6 Sep/)).toBeTruthy();
+  expect(screen.queryByText(/2026-09-06T08:00:00/)).toBeNull();
 });
 
-test('Home shows remaining spending against an overall target', async () => {
+test('Home shows remaining spending against an overall budget', async () => {
   vi.mocked(briefingApi.home).mockResolvedValue({ ...home, spending_target: { target: { minor_units: 100000, currency: 'SGD' }, remaining: { minor_units: 30000, currency: 'SGD' } } });
   show(<HomePage />);
-  expect(await screen.findByText(/\$300\.00 remaining of your \$1,000\.00 monthly target\./)).toBeTruthy();
+  expect(await screen.findByText('Budget left')).toBeTruthy();
+  expect(screen.getByText('Of $1,000.00 this month')).toBeTruthy();
 });
 
-test('Home frames an over-target spend as a warning, not a safe-to-spend figure', async () => {
+test('Home frames an over-budget spend as a warning, not a safe-to-spend figure', async () => {
   vi.mocked(briefingApi.home).mockResolvedValue({ ...home, spending_target: { target: { minor_units: 100000, currency: 'SGD' }, remaining: { minor_units: -5000, currency: 'SGD' } } });
   show(<HomePage />);
-  expect(await screen.findByText(/\$50\.00 over your \$1,000\.00 monthly target\./)).toBeTruthy();
+  expect(await screen.findByText('Over budget')).toBeTruthy();
+  expect(screen.getByText('$50.00 over budget')).toBeTruthy();
 });
 
-test('Home omits the target line entirely when no overall budget is set', async () => {
+test('without an overall budget, Home offers to set one in Plan', async () => {
   vi.mocked(briefingApi.home).mockResolvedValue({ ...home, spending_target: null });
   show(<HomePage />);
-  await screen.findByText(/^Through 2026-09-06/);
-  expect(screen.queryByText(/monthly target/)).toBeNull();
-});
-
-test('Home shows the category mix once the breakdown loads, ranked by amount', async () => {
-  vi.mocked(briefingApi.home).mockResolvedValue(home);
-  vi.mocked(api.getCategoryBreakdownV2).mockResolvedValue({
-    start: period.start, end: period.end,
-    by_category: { Food: { minor_units: 3000, currency: 'SGD' }, Transport: { minor_units: 1000, currency: 'SGD' } },
-    unresolved_count: 0, indicative_count: 0, status: 'complete',
-  });
-  show(<HomePage />);
-  expect(await screen.findByText('Food')).toBeTruthy();
-  expect(screen.getByText('Transport')).toBeTruthy();
-  expect(api.getCategoryBreakdownV2).toHaveBeenCalledWith(period.start, period.end);
-});
-
-test('a failed category breakdown shows a retry without losing the rest of the briefing', async () => {
-  vi.mocked(briefingApi.home).mockResolvedValue(home);
-  vi.mocked(api.getCategoryBreakdownV2).mockRejectedValue(new Error('offline'));
-  show(<HomePage />);
-  expect(await screen.findByText(/Couldn't load the category mix/)).toBeTruthy();
-  expect(screen.getByText('Where the dollars go.')).toBeTruthy();
-});
-
-test('selecting a category and viewing transactions navigates to its evidence', async () => {
-  vi.mocked(briefingApi.home).mockResolvedValue(home);
-  vi.mocked(api.getCategoryBreakdownV2).mockResolvedValue({
-    start: period.start, end: period.end,
-    by_category: { Food: { minor_units: 3000, currency: 'SGD' } },
-    unresolved_count: 0, indicative_count: 0, status: 'complete',
-  });
-  function Destination() { const location = useLocation(); return <output>{location.pathname}{location.search}</output>; }
-  render(
-    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-      <MemoryRouter initialEntries={['/home']}>
-        <Routes><Route path="/home" element={<HomePage />} /><Route path="/evidence" element={<Destination />} /></Routes>
-      </MemoryRouter>
-    </QueryClientProvider>
-  );
-  const legend = await screen.findByTestId('category-donut-legend');
-  fireEvent.click(within(legend).getByRole('button', { name: /^Food/ }));
-  fireEvent.click(screen.getByRole('button', { name: 'View transactions' }));
-  const destination = await screen.findByText((_, el) => el?.tagName === 'OUTPUT');
-  expect(destination.textContent).toContain('/evidence');
-  const params = new URLSearchParams(destination.textContent!.replace('/evidence', ''));
-  expect(params.get('category')).toBe('Food');
-  expect(params.get('start')).toBe(period.start);
-});
-
-test('selecting a category shows its main merchants and a scoped evidence link', async () => {
-  vi.mocked(briefingApi.home).mockResolvedValue(home);
-  vi.mocked(api.getCategoryBreakdownV2).mockResolvedValue({
-    start: period.start, end: period.end,
-    by_category: { Food: { minor_units: 3000, currency: 'SGD' } },
-    unresolved_count: 0, indicative_count: 0, status: 'complete',
-  });
-  vi.mocked(api.getMerchantRankingFactsV2).mockResolvedValue([
-    { merchant: 'FairPrice', visits: 3, total: { minor_units: 2000, currency: 'SGD' } },
-  ]);
-  show(<HomePage />);
-  const legend = await screen.findByTestId('category-donut-legend');
-  fireEvent.click(within(legend).getByRole('button', { name: /^Food/ }));
-  expect(await screen.findByText('FairPrice')).toBeTruthy();
-  expect(api.getMerchantRankingFactsV2).toHaveBeenCalledWith(period.start, period.end, 'Food', 5);
-  const href = screen.getByRole('link', { name: /View transactions/ }).getAttribute('href')!;
-  const params = new URL(href, 'http://localhost').searchParams;
-  expect(params.get('category')).toBe('Food');
-});
-
-test('category-change bars share the "This period"/"Previous period" evidence links', async () => {
-  vi.mocked(briefingApi.home).mockResolvedValue(home);
-  show(<HomePage />);
-  const bars = await screen.findByTestId('category-change-bars');
-  expect(within(bars).getByRole('button', { name: /Food & Drink/ })).toBeTruthy();
-  const href = screen.getByRole('link', { name: 'Previous period' }).getAttribute('href')!;
-  const params = new URL(href, 'http://localhost').searchParams;
-  expect(params.get('category')).toBe('Food & Drink');
-});
-
-test('the daily trend runs chronologically over the whole period, even though the API lists days newest-first', async () => {
-  vi.mocked(briefingApi.home).mockResolvedValue(home);
-  vi.mocked(api.getDailyTotalsV2).mockResolvedValue([
-    { date: '2026-09-05', spending: { minor_units: 500, currency: 'SGD' }, income: null, recorded_net_flow: null, transaction_count: 1, unresolved_count: 0, indicative_count: 0, status: 'complete' },
-    { date: '2026-09-04', spending: { minor_units: 200, currency: 'SGD' }, income: null, recorded_net_flow: null, transaction_count: 1, unresolved_count: 0, indicative_count: 0, status: 'complete' },
-  ]);
-  show(<HomePage />);
-  await screen.findByText(/^Through 2026-09-06/);
-  const readout = await screen.findByTestId('trend-day-readout');
-  expect(readout.textContent).toContain('$0.00'); // latest day of the period, no records
-  fireEvent.click(screen.getByLabelText('Previous day'));
-  await waitFor(() => expect(readout.textContent).toContain('$5.00'));
-  fireEvent.click(screen.getByLabelText('Previous day'));
-  const link = await screen.findByRole('link', { name: "View this day's records" });
-  await waitFor(() => expect(readout.textContent).toContain('$2.00'));
-  const params = new URL(link.getAttribute('href')!, 'http://localhost').searchParams;
-  expect(params.get('start')).toBe('2026-09-04');
-  expect(params.get('end')).toBe('2026-09-04');
+  expect(await screen.findByText('Not set')).toBeTruthy();
+  expect(screen.queryByText('Budget left')).toBeNull();
 });
 
 test('initial load shows the heading and a labelled skeleton, not a bare message', async () => {
   vi.mocked(briefingApi.home).mockReturnValue(new Promise(() => {}));
   show(<HomePage />);
-  expect(screen.getByRole('heading', { name: 'Where the dollars go.' })).toBeTruthy();
+  expect(screen.getByRole('heading', { level: 1, name: 'Home' })).toBeTruthy();
   expect(screen.getByRole('status', { name: 'Preparing your briefing' })).toBeTruthy();
-  expect(screen.queryByText('Recorded spending this month')).toBeNull();
-});
-
-test('Home does not reserve an empty selected-category card before selection', async () => {
-  vi.mocked(briefingApi.home).mockResolvedValue(home);
-  show(<HomePage />);
-  await screen.findByText(/^Through 2026-09-06/);
-  expect(screen.queryByText('Selected category')).toBeNull();
-  expect(screen.queryByText(/Select a category in/)).toBeNull();
-});
-
-test('a stale category mix keeps rendering while a background refresh fails', async () => {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  vi.mocked(briefingApi.home).mockResolvedValue(home);
-  vi.mocked(api.getCategoryBreakdownV2).mockResolvedValue({
-    start: period.start, end: period.end,
-    by_category: { Food: { minor_units: 3000, currency: 'SGD' } },
-    unresolved_count: 0, indicative_count: 0, status: 'complete',
-  });
-  render(<QueryClientProvider client={queryClient}><MemoryRouter><HomePage /></MemoryRouter></QueryClientProvider>);
-  expect(await screen.findByText('Food')).toBeTruthy();
-  vi.mocked(api.getCategoryBreakdownV2).mockRejectedValue(new Error('offline'));
-  await act(async () => {
-    await queryClient.refetchQueries({ queryKey: ['home-category-breakdown'] });
-  });
-  expect(await screen.findByText(/Couldn't refresh the category mix/)).toBeTruthy();
-  expect(screen.getByText('Food')).toBeTruthy();
-});
-
-test('a stale daily trend keeps rendering while a background refresh fails', async () => {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  vi.mocked(briefingApi.home).mockResolvedValue(home);
-  vi.mocked(api.getDailyTotalsV2).mockResolvedValue([
-    { date: '2026-09-04', spending: { minor_units: 200, currency: 'SGD' }, income: null, recorded_net_flow: null, transaction_count: 1, unresolved_count: 0, indicative_count: 0, status: 'complete' },
-  ]);
-  render(<QueryClientProvider client={queryClient}><MemoryRouter><HomePage /></MemoryRouter></QueryClientProvider>);
-  await screen.findByText(/^Through 2026-09-06/);
-  const chart = document.querySelector('.recharts-responsive-container') ?? document.querySelector('svg');
-  expect(chart).toBeTruthy();
-  vi.mocked(api.getDailyTotalsV2).mockRejectedValue(new Error('offline'));
-  await act(async () => {
-    await queryClient.refetchQueries({ queryKey: ['home-daily-totals'] });
-  });
-  expect(await screen.findByText(/Couldn't refresh the daily trend/)).toBeTruthy();
-  expect(document.querySelector('.recharts-responsive-container') ?? document.querySelector('svg')).toBeTruthy();
-});
-
-test('while Home queries settle after a correction, the briefing says it is updating', async () => {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  vi.mocked(briefingApi.home).mockResolvedValue(home);
-  render(<QueryClientProvider client={queryClient}><MemoryRouter><HomePage /></MemoryRouter></QueryClientProvider>);
-  await screen.findByText(/^Through 2026-09-06/);
-  await waitFor(() => expect(screen.queryByText(/Updating…/)).toBeNull());
-  let release!: (v: Awaited<ReturnType<typeof api.getCategoryBreakdownV2>>) => void;
-  vi.mocked(api.getCategoryBreakdownV2).mockReturnValue(new Promise((r) => { release = r; }));
-  await act(async () => { void queryClient.invalidateQueries({ queryKey: ['home-category-breakdown'] }); });
-  expect(await screen.findByText(/Updating…/)).toBeTruthy();
-  expect(screen.getByText('Recorded spending this month')).toBeTruthy();
-  await act(async () => { release({ start: period.start, end: period.end, by_category: {}, unresolved_count: 0, indicative_count: 0, status: 'complete' }); });
-  await waitFor(() => expect(screen.queryByText(/Updating…/)).toBeNull());
-});
-
-test('a category selection restores from the URL and its evidence link returns to it', async () => {
-  vi.mocked(briefingApi.home).mockResolvedValue(home);
-  vi.mocked(api.getCategoryBreakdownV2).mockResolvedValue({
-    start: period.start, end: period.end,
-    by_category: { Food: { minor_units: 3000, currency: 'SGD' } },
-    unresolved_count: 0, indicative_count: 0, status: 'complete',
-  });
-  render(
-    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-      <MemoryRouter initialEntries={['/home?category=Food']}><Routes><Route path="/home" element={<HomePage />} /></Routes></MemoryRouter>
-    </QueryClientProvider>
-  );
-  expect(await screen.findByRole('button', { name: 'Clear selection' })).toBeTruthy();
-  await waitFor(() => expect(api.getMerchantRankingFactsV2).toHaveBeenCalledWith(period.start, period.end, 'Food', 5));
-  const href = screen.getByRole('link', { name: /View transactions/ }).getAttribute('href')!;
-  const returnTo = new URL(href, 'http://localhost').searchParams.get('returnTo');
-  expect(returnTo).toBe('/home?category=Food');
-});
-
-test('a category no longer in the breakdown is not presented as selected', async () => {
-  vi.mocked(briefingApi.home).mockResolvedValue(home);
-  vi.mocked(api.getCategoryBreakdownV2).mockResolvedValue({
-    start: period.start, end: period.end,
-    by_category: { Food: { minor_units: 3000, currency: 'SGD' } },
-    unresolved_count: 0, indicative_count: 0, status: 'complete',
-  });
-  render(
-    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-      <MemoryRouter initialEntries={['/home?category=Travel']}><Routes><Route path="/home" element={<HomePage />} /></Routes></MemoryRouter>
-    </QueryClientProvider>
-  );
-  await screen.findByTestId('category-donut-legend');
-  expect(screen.queryByRole('button', { name: 'Clear selection' })).toBeNull();
-  expect(api.getMerchantRankingFactsV2).not.toHaveBeenCalled();
-});
-
-test('What changed leads with the strongest change and keeps the rest behind a disclosure', async () => {
-  const changes = [
-    { category: 'Food & Drink', change: { minor_units: 900, currency: 'SGD' as const } },
-    { category: 'Transport', change: { minor_units: -300, currency: 'SGD' as const } },
-  ];
-  vi.mocked(briefingApi.home).mockResolvedValue({ ...home, facts: { ...home.facts, category_changes: changes } });
-  show(<HomePage />);
-  const bars = await screen.findByTestId('category-change-bars');
-  expect(within(bars).getByRole('button', { name: /Food & Drink/ })).toBeTruthy();
-  expect(screen.queryByRole('button', { name: /Transport/ })).toBeNull();
-  const toggle = screen.getByRole('button', { name: 'More context' });
-  expect(toggle.getAttribute('aria-expanded')).toBe('false');
-  fireEvent.click(toggle);
-  expect(screen.getByRole('button', { name: 'Less context' }).getAttribute('aria-expanded')).toBe('true');
-  expect(screen.getByRole('button', { name: /Transport/ })).toBeTruthy();
+  expect(screen.queryByText('Spending recorded this month')).toBeNull();
 });
 
 test('capture review queues a deliberate retry and refreshes', async () => {
@@ -368,4 +138,20 @@ test('capture review queues a deliberate retry and refreshes', async () => {
   fireEvent.click(await screen.findByRole('button', { name: 'Retry' }));
   await waitFor(() => expect(briefingApi.retryCapture).toHaveBeenCalledWith(1));
   expect(await screen.findByText(/Retry queued/)).toBeTruthy();
+});
+
+test('Home leads with the month as its one spectrum card, with budget progress', async () => {
+  vi.mocked(briefingApi.home).mockResolvedValue({ ...home, spending_target: { target: { minor_units: 100000, currency: 'SGD' }, remaining: { minor_units: 98750, currency: 'SGD' } } });
+  const { container } = show(<HomePage />);
+  await screen.findByText(/^As of 6 Sep/);
+  expect(container.querySelectorAll('.spectrum-fill')).toHaveLength(1);
+  expect(screen.getByText('Budget $1,000.00')).toBeTruthy();
+  expect(screen.getByRole('progressbar', { name: 'Budget used' }).getAttribute('aria-valuenow')).toBe('1');
+});
+
+test('Coming up counts only the next 7 days and hands the timeline to Plan', async () => {
+  const charge = (id: number, date: string) => ({ id, label: `Charge ${id}`, date, amount: { minor_units: 1000, currency: 'SGD' as const }, subscription_id: id });
+  vi.mocked(briefingApi.home).mockResolvedValue({ ...home, upcoming: [charge(1, '2026-09-08'), charge(2, '2026-09-13'), charge(3, '2026-09-14')] });
+  show(<HomePage />);
+  expect(await screen.findByText('2 charges in the next 7 days')).toBeTruthy();
 });

@@ -52,15 +52,6 @@ const SetPasswordPage = lazy(() => import('@/pages/SetPasswordPage').then(m => (
 const DevPreviewPage = import.meta.env.DEV
   ? lazy(() => import('@/dev/DevPreviewPage').then(m => ({ default: m.DevPreviewPage })))
   : null;
-const HomePrototype = import.meta.env.DEV
-  ? lazy(() => import('@/dev/HomePrototype').then(m => ({ default: m.HomePrototype })))
-  : null;
-const ExploreLayoutStudy = import.meta.env.DEV
-  ? lazy(() => import('@/dev/ExploreLayoutStudy').then(m => ({ default: m.ExploreLayoutStudy })))
-  : null;
-const PlanLayoutStudy = import.meta.env.DEV
-  ? lazy(() => import('@/dev/PlanLayoutStudy').then(m => ({ default: m.PlanLayoutStudy })))
-  : null;
 
 // Start the current URL's route chunk alongside the auth requests rather
 // than after them.
@@ -179,9 +170,6 @@ export default function App() {
               <Route path="/admin/*" element={<AdminPage />} />
               {/* Dev-only, auth-free visual harness for shared primitives — never registered in a production build */}
               {DevPreviewPage && <Route path="/dev/preview" element={<DevPreviewPage />} />}
-              {HomePrototype && <Route path="/dev/preview/home" element={<HomePrototype />} />}
-              {ExploreLayoutStudy && <Route path="/dev/preview/explore" element={<ExploreLayoutStudy />} />}
-              {PlanLayoutStudy && <Route path="/dev/preview/plan" element={<PlanLayoutStudy />} />}
               <Route
                 path="*"
                 element={

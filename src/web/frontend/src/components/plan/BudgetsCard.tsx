@@ -7,7 +7,6 @@ import { Button } from '@/components/ui/button';
 import { SelectableRow } from '@/components/ui/selectable-row';
 import { ProgressBar } from '@/components/ui/ProgressBar';
 import { getBudgetTone, formatCurrency } from '@/lib/utils';
-import { staggerContainerVariants, staggerItemVariants } from '@/lib/motionPresets';
 import { useSettings } from '@/hooks/useSettings';
 import { useCategories } from '@/hooks/useCategories';
 
@@ -17,13 +16,13 @@ function BudgetSummaryRow({ b, onSelect }: { b: BudgetProgressV2; onSelect: () =
   const remaining = b.remaining.minor_units / 100;
   const { color, toneName } = getBudgetTone(b.percent);
   return (
-    <SelectableRow onClick={onSelect} className="flex-col items-stretch gap-1.5 rounded-none border-b border-border last:border-b-0 py-3">
+    <SelectableRow onClick={onSelect} className="flex-col items-stretch gap-1.5 py-3">
       <div className="flex items-center justify-between gap-2">
         <span className="text-sm font-medium text-foreground truncate">{b.label}</span>
-        <span className="text-xs text-muted font-mono capitalize shrink-0">{b.period}</span>
+        <span className="text-xs text-muted capitalize shrink-0">{b.period}</span>
       </div>
       <ProgressBar percent={b.percent} label={`${b.label} budget used`} tone={toneName === 'warn' ? 'warm' : toneName} />
-      <div className="flex justify-between text-xs text-muted font-mono">
+      <div className="flex justify-between text-xs text-muted tabular-nums">
         <span><span style={{ color }} className="font-medium">{formatCurrency(spent)}</span> of {formatCurrency(budgetAmount)}</span>
         <span>{b.status === 'over_budget' ? `${formatCurrency(spent - budgetAmount)} over` : `${formatCurrency(remaining)} left`}</span>
       </div>
@@ -89,24 +88,26 @@ export function BudgetsCard({ onSelect }: { onSelect: (id: number) => void }) {
   return (
     <PageCard
       title="Budgets"
-      action={<Button variant="ghost" size="sm" onClick={() => setShowAddForm(!showAddForm)}>{showAddForm ? 'Cancel' : '+ Add budget'}</Button>}
+      contentClassName="p-0"
+      action={<Button variant="ghost" size="sm" className="text-teal" onClick={() => setShowAddForm(!showAddForm)}>{showAddForm ? 'Cancel' : '+ Add budget'}</Button>}
     >
       {isLoading ? (
-        <p className="text-muted text-sm py-4 text-center">Catching up…</p>
+        <p className="px-4 py-4 text-center text-sm text-muted">Catching up…</p>
       ) : progress.length === 0 ? (
-        <p className="text-muted text-sm py-4 text-center">No budgets yet. Add one to start tracking.</p>
+        <p className="px-4 py-4 text-center text-sm text-muted">No budgets yet. Add one to start tracking.</p>
       ) : (
-        <motion.div variants={staggerContainerVariants} initial="initial" animate="animate">
+        <div>
+          {/* Rows render at rest (no stagger entrance); a removed row fades out. */}
           <AnimatePresence>
             {progress.map((b) => (
-              <motion.div key={b.id} variants={staggerItemVariants} exit={{ opacity: 0, transition: { duration: 0.15 } }}>
+              <motion.div key={b.id} exit={{ opacity: 0, transition: { duration: 0.15 } }}>
                 <BudgetSummaryRow b={b} onSelect={() => onSelect(b.id)} />
               </motion.div>
             ))}
           </AnimatePresence>
-        </motion.div>
+        </div>
       )}
-      {showAddForm && <AddBudgetForm onAdd={() => setShowAddForm(false)} />}
+      {showAddForm && <div className="px-4 pb-4"><AddBudgetForm onAdd={() => setShowAddForm(false)} /></div>}
     </PageCard>
   );
 }

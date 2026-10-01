@@ -8,8 +8,9 @@ import { test, expect } from '@playwright/test';
 // (search, trip select, six type chips, category chips, date range, four
 // quick-date chips, Export CSV) used to occupy the full first screen with no
 // transaction visible at all. On phone the filters now open in a sheet from
-// the thumb-band dock, with an active-filter-count badge; tablet/desktop keep
-// them always visible since there's room.
+// the search row, with an active-filter-count badge. Since the HIG alignment
+// (2026-10-01) every size uses the same Filters sheet: the list column on
+// tablet and desktop is too narrow for the inline chips.
 
 import { TRANSACTIONS, mockAuthenticatedActivity } from '../fixtures/mocks';
 
@@ -29,12 +30,13 @@ test('production Activity puts filters one tap away on phone, with an active-cou
   await expect(page.getByRole('dialog', { name: 'Filters' }).getByRole('button', { name: 'Expense', exact: true })).toBeVisible();
 });
 
-test('production Activity shows filters expanded by default on desktop, with no Filters toggle', async ({ page }) => {
+test('production Activity keeps filters one tap away on desktop too', async ({ page }) => {
   await mockAuthenticatedActivity(page);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/activity');
-  await expect(page.getByRole('button', { name: 'Expense', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: /Filters/ })).toBeHidden();
+  await expect(page.getByRole('button', { name: 'Expense', exact: true })).toBeHidden();
+  await page.getByRole('button', { name: /^Filters/ }).click();
+  await expect(page.getByRole('dialog', { name: 'Filters' }).getByRole('button', { name: 'Expense', exact: true })).toBeVisible();
 });
 
 test('closing a transaction detail returns focus to the row that opened it, keeping filters', async ({ page }) => {
@@ -48,7 +50,10 @@ test('closing a transaction detail returns focus to the row that opened it, keep
   await expect(row).toBeVisible();
   await row.click();
   await expect(page).toHaveURL(/\/activity\/2\?category=Food/);
-  await page.getByRole('button', { name: 'Close transaction' }).click();
+  // md+ closes the detail with Esc (Mac list convention; no close button),
+  // once the detail is showing (navigation renders in a transition).
+  await expect(page.getByRole('toolbar', { name: 'Transaction' })).toBeVisible();
+  await page.keyboard.press('Escape');
   await expect(page).toHaveURL(/\/activity\?category=Food$/);
   await expect(row).toBeFocused();
 });
@@ -59,9 +64,10 @@ for (const theme of ['light', 'dark'] as const) {
     await mockAuthenticatedActivity(page);
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/activity?category=Food');
-    const food = page.getByRole('button', { name: 'Food', pressed: true });
+    await page.getByRole('button', { name: /^Filters/ }).click();
+    const food = page.getByRole('dialog', { name: 'Filters' }).getByRole('button', { name: 'Food', pressed: true });
     await expect(food).toBeVisible();
-    await expect(page.getByRole('button', { name: 'All', exact: true, pressed: false })).toBeVisible();
+    await expect(page.getByRole('dialog', { name: 'Filters' }).getByRole('button', { name: 'All', exact: true, pressed: false }).last()).toBeVisible();
     await page.locator('#transaction-filter-controls').screenshot({ path: `e2e/screenshots/activity-chips-${theme}.png` });
   });
 }

@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useSettings } from '@/hooks/useSettings';
+import { formatCurrency, formatCurrencyWhole } from '@/lib/utils';
 
 export function ActiveTripCard({ showEndButton = false }: { showEndButton?: boolean }) {
   const qc = useQueryClient();
@@ -62,11 +63,10 @@ export function ActiveTripCard({ showEndButton = false }: { showEndButton?: bool
           </div>
           <div className="text-right shrink-0">
             <p className="text-xl font-bold text-foreground">
-              S${summary?.total_sgd.toFixed(2) ?? '—'}
+              {summary ? formatCurrency(summary.total_sgd) : '—'}
             </p>
             <p className="text-xs text-muted">
-              {summary?.transaction_count ?? 0} transactions · S$
-              {summary?.daily_average_sgd.toFixed(2) ?? '—'}/day
+              {summary?.transaction_count ?? 0} transactions · {summary ? formatCurrency(summary.daily_average_sgd) : '—'}/day
             </p>
             {showEndButton ? (
               <Button
@@ -94,7 +94,7 @@ export function ActiveTripCard({ showEndButton = false }: { showEndButton?: bool
             {summary.by_category.map((c) => (
               <span key={c.category} className="text-xs text-muted">
                 {c.category}:{' '}
-                <span className="text-foreground">S${c.amount_sgd.toFixed(0)}</span>
+                <span className="text-foreground">{formatCurrencyWhole(c.amount_sgd)}</span>
               </span>
             ))}
           </div>

@@ -9,7 +9,6 @@ import { useIconMap } from '@/hooks/useIconMap';
 import { Button } from '@/components/ui/button';
 import { ChoiceChip } from '@/components/ui/choice-chip';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
 import { CategoryAvatar } from '@/components/ui/CategoryAvatar';
 import { SelectableRow } from '@/components/ui/selectable-row';
 import {
@@ -19,7 +18,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { X, Pencil, Trash2, Check, ExternalLink } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
+import { NavBar } from '@/components/ui/nav-bar';
+import { ListGroup, ListRow } from '@/components/ui/list';
+import { Toolbar, ToolbarAction } from '@/components/ui/toolbar';
+import { useIsPhone } from '@/hooks/useIsPhone';
+import { useStackBack } from '@/components/layout/stackContext';
 import { SOURCE_DISPLAY_LABELS } from '@/lib/sourceLabels';
 import { useSettings } from '@/hooks/useSettings';
 import { useTrips } from '@/components/plan/planHooks';
@@ -33,6 +37,8 @@ export function TransactionDetail({
   onClose: () => void;
 }) {
   const navigate = useNavigate();
+  const isPhone = useIsPhone();
+  const stackBack = useStackBack();
   const [editing, setEditing] = useState(false);
   const [merchant, setMerchant] = useState(tx.merchant ?? '');
   const [rememberCategory, setRememberCategory] = useState(false);
@@ -125,120 +131,69 @@ export function TransactionDetail({
     ? tx.description
     : (SOURCE_DISPLAY_LABELS[tx.source ?? ''] ?? tx.source ?? '');
 
+  const typeLabel = ({ expense: 'Spending', income: 'Income', refund: 'Refund', transfer: 'Transfer' } as Record<string, string>)[tx.type ?? 'expense'] ?? 'Needs classification';
+  const cancelEdit = () => { setEditing(false); setSaveError(null); resetFields(); };
+  // Persistent chrome (P3/P12): the actions stay pinned while the body
+  // scrolls. A phone gets the pushed page's nav bar with its back button;
+  // md+ gets the split view's toolbar.
+  const actions = editing ? <>
+    <ToolbarAction onClick={cancelEdit} disabled={updateTx.isPending}>Cancel</ToolbarAction>
+    <ToolbarAction tone="strong" onClick={handleSave} pending={updateTx.isPending} pendingLabel="Saving…">Save</ToolbarAction>
+  </> : confirmingDelete ? <>
+    <ToolbarAction onClick={() => setConfirmingDelete(false)} disabled={deleteTx.isPending}>Cancel</ToolbarAction>
+    <ToolbarAction tone="destructive" onClick={handleDeleteConfirm} pending={deleteTx.isPending} pendingLabel="Deleting…">Delete</ToolbarAction>
+  </> : <>
+    <ToolbarAction onClick={handleEdit}>Edit</ToolbarAction>
+    <ToolbarAction tone="destructive" aria-label="Delete transaction" onClick={handleDelete} disabled={deleteTx.isPending}>Delete</ToolbarAction>
+  </>;
+
+  // A phone's bar has room for one side each: Cancel takes the back
+  // button's place while editing or confirming, and Delete moves to a
+  // destructive row at the foot of the page (iOS detail pattern).
+  const busy = editing || confirmingDelete;
+  const phoneTrailing = editing
+    ? <ToolbarAction tone="strong" onClick={handleSave} pending={updateTx.isPending} pendingLabel="Saving…">Save</ToolbarAction>
+    : confirmingDelete
+      ? <ToolbarAction tone="destructive" onClick={handleDeleteConfirm} pending={deleteTx.isPending} pendingLabel="Deleting…">Delete</ToolbarAction>
+      : <ToolbarAction onClick={handleEdit}>Edit</ToolbarAction>;
+  const phoneBack = busy
+    ? { label: 'Cancel', onClick: editing ? cancelEdit : () => setConfirmingDelete(false) }
+    : { label: 'Activity', onClick: stackBack };
+
   return (
-    <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="flex items-start justify-between p-4 border-b border-border">
-        <div className="flex items-center gap-3 min-w-0">
-          <CategoryAvatar category={tx.category} isIncome={isCreditType(tx.type)} size="detail" glyph={categoryIcon} />
-          <div className="min-w-0">
-            <p className="text-base font-semibold truncate">
-              {tx.merchant || tx.description || 'Transaction'}
-            </p>
-            {tx.category && (
-              <Badge variant="outline" className="mt-0.5">
-                {tx.category}
-              </Badge>
-            )}
-          </div>
-        </div>
-        <Button variant="ghost" size="icon" aria-label="Close transaction" className="h-11 w-11 shrink-0" onClick={onClose}>
-          <X className="h-4 w-4" />
-        </Button>
-      </div>
+    <div>
+      {isPhone
+        ? <NavBar title="Transaction" back={phoneBack} trailing={phoneTrailing} />
+        : <Toolbar title="Transaction" trailing={actions} />}
+      {(saveError || confirmingDelete) && (
+        <p role="alert" className="border-b-[0.5px] border-separator px-4 py-2 text-sm text-destructive">
+          {saveError ?? "Delete this? It's gone for good."}
+        </p>
+      )}
 
-      {/* Action bar — always visible below header */}
-      <div className="shrink-0 border-b border-border">
-        {editing ? (
-          <div className="flex flex-col gap-1 px-4 py-2">
-            {saveError && (
-              <p className="text-sm text-destructive">{saveError}</p>
-            )}
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                className="flex-1"
-                onClick={() => {
-                  setEditing(false);
-                  setSaveError(null);
-                  resetFields();
-                }}
-                disabled={updateTx.isPending}
-              >
-                <X className="w-4 h-4 mr-1" />
-                Cancel
-              </Button>
-              <Button
-                className="flex-1"
-                onClick={handleSave}
-                disabled={updateTx.isPending}
-              >
-                <Check className="w-4 h-4 mr-1" />
-                {updateTx.isPending ? 'Saving…' : 'Save'}
-              </Button>
-            </div>
-          </div>
-        ) : confirmingDelete ? (
-          <div className="flex flex-col gap-1 px-4 py-2">
-            <p className="text-sm text-destructive">Delete this? It's gone for good.</p>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                className="flex-1"
-                onClick={() => setConfirmingDelete(false)}
-                disabled={deleteTx.isPending}
-              >
-                Cancel
-              </Button>
-              <Button
-                variant="destructive"
-                className="flex-1"
-                onClick={handleDeleteConfirm}
-                disabled={deleteTx.isPending}
-              >
-                {deleteTx.isPending ? 'Deleting…' : 'Delete'}
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <div className="flex gap-2 px-4 py-2">
-            <Button variant="ghost" size="icon" aria-label="Edit" className="h-11 w-11" onClick={handleEdit}>
-              <Pencil className="w-4 h-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="Delete transaction"
-              className="h-11 w-11 text-destructive"
-              onClick={handleDelete}
-              disabled={deleteTx.isPending}
-            >
-              <Trash2 className="w-4 h-4" />
-            </Button>
-          </div>
-        )}
-      </div>
-
-      {/* Scrollable body */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-6">
-        {/* Amount */}
-        <div>
-          <p className={`text-3xl font-bold ${isCreditType(tx.type) ? 'text-success' : ''}`}>
+      {/* Capped on wide screens so label/value pairs stay scannable. */}
+      <div className="mx-auto max-w-[36rem] space-y-6 p-4">
+        {/* Identity and amount */}
+        <div className="flex flex-col items-center gap-1 pb-2 pt-2 text-center">
+          <CategoryAvatar category={tx.category} isIncome={isCreditType(tx.type)} size="detail" glyph={categoryIcon} className="mb-2 rounded-full" />
+          <p className={`font-mono text-3xl font-medium tabular-nums ${isCreditType(tx.type) ? 'text-success' : ''}`}>
             {isCreditType(tx.type) ? '+' : '-'}{/^[A-Z]{3}$/.test(tx.currency ?? '') ? formatCurrency(tx.amount, tx.currency) : `${tx.amount} · Currency unknown`}
           </p>
+          <p className="text-sm text-muted">{[tx.merchant || tx.description || 'Transaction', tx.category, typeLabel].filter(Boolean).join(' · ')}</p>
           {tx.currency !== 'SGD' && tx.exchange_rate != null && Number.isFinite(tx.exchange_rate) && tx.exchange_rate > 0 && tx.exchange_rate !== 1 && Number.isFinite(tx.amount) && tx.amount >= 0 ? (
-            <p className="text-sm text-muted mt-1">
+            <p className="text-sm text-muted">
               ≈ {formatCurrency(tx.amount * tx.exchange_rate)} SGD · Indicative conversion
             </p>
-          ) : tx.currency !== 'SGD' && <p className="text-sm text-warning mt-1">SGD conversion unresolved</p>}
+          ) : tx.currency !== 'SGD' && <p className="text-sm text-warning">SGD conversion unresolved</p>}
         </div>
 
         {/* View mode: all fields */}
         {!editing && (
           <div className="space-y-3">
-            <QuickCategoryPicker tx={tx} categories={categories ?? []} />
+            {/* Spending categories don't apply to income. */}
+            {tx.type !== 'income' && <QuickCategoryPicker tx={tx} categories={categories ?? []} />}
             <DetailRow label="Date" value={formatDateTime(tx.transaction_date)} />
-            <DetailRow label="Type" value={({ expense: 'Spending', income: 'Income', refund: 'Refund', transfer: 'Transfer' } as Record<string, string>)[tx.type ?? 'expense'] ?? 'Needs classification'} />
+            <DetailRow label="Type" value={typeLabel} />
             <DetailRow label="Source" value={sourceLabel} />
             {tx.description && !isAppleWallet && (
               <DetailRow label="Description" value={tx.description} />
@@ -263,7 +218,7 @@ export function TransactionDetail({
                   onClick={() => navigate(`/merchants/${encodeURIComponent(tx.merchant!)}`)}
                 >
                   View merchant profile
-                  <ExternalLink className="w-3 h-3" />
+                  <ChevronRight aria-hidden className="w-3 h-3" />
                 </Button>
               </div>
             )}
@@ -272,8 +227,13 @@ export function TransactionDetail({
             <TransactionSources txId={tx.id} />
             {/* Meta */}
             <div className="pt-2 border-t border-border space-y-2">
-              <DetailRow label="Ingested" value={formatDateTime(tx.ingested_at)} muted />
+              <DetailRow label="Added to cashe" value={formatDateTime(tx.ingested_at)} muted />
             </div>
+            {isPhone && !confirmingDelete && (
+              <ListGroup className="pt-2">
+                <ListRow onClick={handleDelete} destructive disabled={deleteTx.isPending} title="Delete transaction" />
+              </ListGroup>
+            )}
           </div>
         )}
 
@@ -394,7 +354,8 @@ function QuickCategoryPicker({ tx, categories }: { tx: Transaction; categories: 
   const updateTx = useUpdateTransaction();
   if (categories.length === 0) return null;
   return (
-    <div className="overflow-x-auto -mx-1 px-1">
+    <div role="group" aria-labelledby={`quick-category-${tx.id}`} className="overflow-x-auto -mx-1 px-1">
+      <p id={`quick-category-${tx.id}`} className="mb-1.5 text-xs text-muted">Category</p>
       <div className="flex flex-wrap gap-1.5">
         {categories.map((cat) => {
           const catColor = getCategoryColor(cat.name);
@@ -529,11 +490,11 @@ function TransactionSources({ txId }: { txId: number }) {
   const labels = { apple_wallet: 'Apple Wallet', gmail: 'Gmail', manual: 'Manual entry', cash: 'Cash entry', other: 'Other source' };
 
   return (
-    <section aria-label="Capture sources" className="pt-3 border-t border-border space-y-2 text-sm">
-      <h3 className="font-medium">Capture sources</h3>
-      {isPending ? <p role="status" className="text-muted">Loading capture sources…</p> : isError ? (
+    <section aria-label="Where it came from" className="pt-3 border-t border-border space-y-2 text-sm">
+      <h3 className="font-medium">Where it came from</h3>
+      {isPending ? <p role="status" className="text-muted">Loading sources…</p> : isError ? (
         <div>
-          <p role="status" className="text-muted">Couldn’t load capture sources.</p>
+          <p role="status" className="text-muted">Couldn’t load where this came from.</p>
           <Button variant="outline" className="min-h-11 mt-2" disabled={isFetching} onClick={() => void refetch()}>Retry sources</Button>
         </div>
       ) : data && (
@@ -542,7 +503,7 @@ function TransactionSources({ txId }: { txId: number }) {
             {data.sources.map((source) => (
               <li key={source.channel}>
                 <span>{labels[source.channel]}</span>
-                <p className="text-xs text-muted">{source.evidence_recorded ? 'Capture evidence retained' : 'Recorded source only; no capture evidence retained'}</p>
+                <p className="text-xs text-muted">{source.evidence_recorded ? 'Original message kept' : 'Source noted; original message not kept'}</p>
               </li>
             ))}
           </ul>

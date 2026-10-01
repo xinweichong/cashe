@@ -6,7 +6,14 @@ import { CircleUserRound, Settings, ListChecks } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuRadioGroup, DropdownMenuRadioItem } from '@/components/ui/dropdown-menu';
 
-export function ProfileMenu() {
+interface ProfileMenuProps {
+  /** Settings and Review links. The sidebar lists those itself on md+. */
+  showDestinations?: boolean;
+  /** Visibility of the "Profile" label, matching the sidebar rail. */
+  labelClassName?: string;
+}
+
+export function ProfileMenu({ showDestinations = true, labelClassName = 'hidden lg:inline' }: ProfileMenuProps) {
   const { preference, setPreference } = useTheme();
   const [textSize, setTextSize] = useState<TextSize>(readTextSize);
   // Non-modal: a modal menu locks page scroll while open, and on iOS that
@@ -16,10 +23,11 @@ export function ProfileMenu() {
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" aria-label="Profile menu" className="min-h-11 min-w-11 px-2 lg:px-3 [&_svg]:size-5">
           <CircleUserRound />
-          <span className="hidden lg:inline">Profile</span>
+          <span className={labelClassName}>Profile</span>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" collisionPadding={{ top: 8, bottom: 72 }}>
+        {showDestinations && (<>
         <DropdownMenuItem asChild className="min-h-11">
           <Link to="/settings"><Settings />Settings</Link>
         </DropdownMenuItem>
@@ -27,6 +35,7 @@ export function ProfileMenu() {
           <Link to="/review"><ListChecks />Capture review</Link>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
+        </>)}
         <DropdownMenuLabel>Appearance</DropdownMenuLabel>
         <DropdownMenuRadioGroup value={preference} onValueChange={value => {
           if (value === 'system' || value === 'light' || value === 'dark') setPreference(value);

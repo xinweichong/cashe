@@ -3,7 +3,6 @@ import { api } from '@/api/client';
 import { evidenceLink, formatMoney, type SpendingFacts } from '@/api/briefing';
 import { StatCard } from '@/components/ui/StatCard';
 import { StatusDot } from '@/components/ui/StatusDot';
-import { HeroAmount } from '@/components/ui/HeroAmount';
 import { Skeleton } from '@/components/ui/skeleton';
 import { datesInRange, getCategoryColor } from '@/lib/utils';
 import { formatChange, formatRange } from './format';
@@ -24,11 +23,12 @@ export function PulseBand({ facts }: { facts: SpendingFacts | undefined }) {
 
   if (!facts || !current) {
     return (
-      <div role="status" className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+      <div role="status" className="grid grid-cols-2 gap-3 md:gap-4">
         <span className="sr-only">Loading…</span>
-        <Skeleton className="col-span-2 h-[132px] rounded-lg" />
-        <Skeleton className="h-[132px] rounded-lg" />
-        <Skeleton className="h-[132px] rounded-lg" />
+        <Skeleton className="h-[112px] rounded-group" />
+        <Skeleton className="h-[112px] rounded-group" />
+        <Skeleton className="h-[112px] rounded-group" />
+        <Skeleton className="h-[112px] rounded-group" />
       </div>
     );
   }
@@ -42,7 +42,12 @@ export function PulseBand({ facts }: { facts: SpendingFacts | undefined }) {
       })
     : undefined;
 
-  const { previous, change } = facts;
+  const { previous } = facts;
+  // A change over a few days is noise, and a red-orange number on the 1st
+  // reads as an alarm; wait for a week of comparable days.
+  const comparableDays = Math.round((Date.parse(`${facts.comparison_current.end}T00:00:00Z`) - Date.parse(`${facts.comparison_current.start}T00:00:00Z`)) / 86_400_000) + 1;
+  const tooEarly = !!facts.change && comparableDays < 7;
+  const change = tooEarly ? null : facts.change;
   const changePercent = change && previous.spending.minor_units > 0
     ? (change.minor_units / previous.spending.minor_units) * 100
     : undefined;
@@ -52,33 +57,30 @@ export function PulseBand({ facts }: { facts: SpendingFacts | undefined }) {
     : `${current.transaction_count} ${current.transaction_count === 1 ? 'record' : 'records'}${current.status === 'indicative' ? ' · includes indicative FX' : ''}`;
 
   const netNote = current.recorded_net_flow
-    ? `Recorded net flow ${formatChange(current.recorded_net_flow)}`
+    ? `${formatChange(current.recorded_net_flow)} after spending`
     : current.income
-      ? 'Net flow hidden while records need review'
+      ? 'Left after spending shows once records are reviewed'
       : 'No income recorded this month';
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+    <div className="grid grid-cols-2 gap-3 md:gap-4">
       <StatCard
-        className="col-span-2"
-        hero
-        color="warm"
         label="Spent this month"
-        value={<HeroAmount value={current.spending} className="text-3xl lg:text-5xl" />}
+        value={formatMoney(current.spending)}
         subtext={`${formatRange(current.start, current.end)} · ${spentNote}`}
         sparklineData={cumulative}
-        sparklineSize={{ width: 100, height: 40 }}
+        sparklineSize={{ width: 80, height: 28 }}
         href={evidenceLink(current)}
       />
       <StatCard
         label="vs. last month"
-        value={change ? formatChange(change) : 'Unavailable'}
+        value={change ? formatChange(change) : tooEarly ? 'Too early' : 'Unavailable'}
         color={!change ? 'default' : change.minor_units > 0 ? 'coral' : 'mint'}
         delta={changePercent !== undefined ? { value: changePercent } : undefined}
         subtext={change
           ? `${formatRange(previous.start, previous.end)}: ${formatMoney(previous.spending)}`
-          : 'Resolve records needing review to compare'}
-        href={change ? '/explore?mode=by-category#explore-patterns' : '/review'}
+          : tooEarly ? 'Compare after the first week' : 'Resolve records needing review to compare'}
+        href={change ? '/explore?mode=by-category#explore-patterns' : tooEarly ? undefined : '/review'}
       />
       <StatCard
         label="Income"
@@ -87,6 +89,7 @@ export function PulseBand({ facts }: { facts: SpendingFacts | undefined }) {
         subtext={netNote}
         href={evidenceLink(current, undefined, 'income')}
       />
+      <BiggestMoverTile facts={facts} />
     </div>
   );
 }

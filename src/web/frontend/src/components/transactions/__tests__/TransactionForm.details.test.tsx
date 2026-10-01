@@ -32,12 +32,12 @@ it('shows only amount and merchant until "More details" is opened', async () => 
   expect(screen.getByPlaceholderText('0.00')).toBeInTheDocument();
   expect(screen.getByPlaceholderText('e.g. Coffee Shop')).toBeInTheDocument();
   expect(screen.queryByText('Category')).not.toBeInTheDocument();
-  expect(screen.queryByText('Date & Time')).not.toBeInTheDocument();
+  expect(screen.queryByText('Date and time')).not.toBeInTheDocument();
 
   fireEvent.click(screen.getByRole('button', { name: /Currency, date, category, notes/ }));
 
   expect(await screen.findByText('Category')).toBeInTheDocument();
-  expect(screen.getByText('Date & Time')).toBeInTheDocument();
+  expect(screen.getByText('Date and time')).toBeInTheDocument();
 });
 
 it('pre-selects the active trip and enlists the new transaction on save', async () => {

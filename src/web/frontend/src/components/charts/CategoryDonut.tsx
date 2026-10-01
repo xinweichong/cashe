@@ -27,9 +27,9 @@ interface CategoryDonutProps {
   /** 'row' sets the legend beside the chart from `sm` up (stacked below it on phones). */
   layout?: 'stacked' | 'row';
   /**
-   * 'compact' is the phone glance: a 112px ring always beside a top-3 legend,
+   * 'compact' is the phone size: a 112px ring always beside a top-3 legend,
    * no remaining-group expansion and no inline "View transactions" (the
-   * caller opens a DrillSheet from onSelect instead).
+   * caller handles a selection through onSelect).
    */
   size?: 'default' | 'compact';
 }
@@ -115,10 +115,10 @@ export function CategoryDonut({ data, selected, onSelect, onViewTransactions, sh
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
           <div className={cn('text-center', compact ? 'px-2' : 'px-4')}>
             {compact ? (
-              <p className="text-2xs font-mono uppercase tracking-[0.18em] text-muted truncate max-w-[72px]">{selectedDatum ? `${total > 0 ? Math.round((selectedDatum.total / total) * 100) : 0}%` : 'Mix'}</p>
+              <p className="text-xs text-muted truncate max-w-[72px]">{selectedDatum ? `${total > 0 ? Math.round((selectedDatum.total / total) * 100) : 0}%` : 'Mix'}</p>
             ) : selectedDatum ? (
               <>
-                <p className="text-2xs font-mono uppercase tracking-[0.22em] text-muted truncate max-w-[140px]">{selectedDatum.category}</p>
+                <p className="text-xs text-muted truncate max-w-[140px]">{selectedDatum.category}</p>
                 <p className="text-xl font-bold font-display">{formatCurrency(selectedDatum.total)}</p>
                 <p className="text-2xs text-muted">{total > 0 ? Math.round((selectedDatum.total / total) * 100) : 0}% of spending</p>
               </>

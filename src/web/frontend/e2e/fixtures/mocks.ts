@@ -275,4 +275,9 @@ export async function mockAuthenticatedActivity(page: Page) {
   } }));
   await page.route('**/api/v2/transactions**', (route) => route.fulfill({ json: TRANSACTIONS }));
   await page.route('**/api/v2/transactions/daily-totals**', (route) => route.fulfill({ json: [] }));
+  // Registered last so it wins over the broad transactions route above:
+  // the detail's capture-sources section reads this shape.
+  await page.route('**/api/v2/transactions/*/provenance', (route) => route.fulfill({ json: {
+    transaction_id: Number(route.request().url().split('/').at(-2)), sources: [{ channel: 'manual', evidence_recorded: true }],
+  } }));
 }

@@ -8,7 +8,6 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { SelectableRow } from '@/components/ui/selectable-row';
 import { getGoalTone, formatCurrencyWhole } from '@/lib/utils';
-import { staggerContainerVariants, staggerItemVariants } from '@/lib/motionPresets';
 import { useGoals } from './planHooks';
 import { ProgressRing } from '@/components/ui/ProgressRing';
 
@@ -16,16 +15,16 @@ function GoalSummaryRow({ g, onSelect }: { g: GoalProgress; onSelect: () => void
   const { color } = getGoalTone(g.percent);
   const isComplete = g.status === 'completed' || g.percent >= 100;
   return (
-    <SelectableRow onClick={onSelect} className="rounded-none border-b border-border last:border-b-0 py-3">
+    <SelectableRow onClick={onSelect} className="py-3">
       <ProgressRing percent={g.percent} color={color} size={36} radius={15} strokeWidth={4} />
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <span className="text-sm font-semibold text-foreground truncate">{g.name}</span>
           {isComplete && <Badge tone="saved" className="shrink-0">Complete</Badge>}
         </div>
-        <p className="text-xs text-muted font-mono">{formatCurrencyWhole(g.saved_amount)} of {formatCurrencyWhole(g.target_amount)}</p>
+        <p className="text-xs text-muted tabular-nums">{formatCurrencyWhole(g.saved_amount)} of {formatCurrencyWhole(g.target_amount)}</p>
       </div>
-      <span className="text-sm font-mono tabular-nums text-muted shrink-0">{g.percent.toFixed(0)}%</span>
+      <span className="text-sm tabular-nums text-muted shrink-0">{g.percent.toFixed(0)}%</span>
     </SelectableRow>
   );
 }
@@ -70,24 +69,26 @@ export function GoalsCard({ onSelect }: { onSelect: (id: number) => void }) {
   return (
     <PageCard
       title="Goals"
-      action={<Button variant="ghost" size="sm" onClick={() => setShowAddForm(!showAddForm)}>{showAddForm ? 'Cancel' : '+ Add goal'}</Button>}
+      contentClassName="p-0"
+      action={<Button variant="ghost" size="sm" className="text-teal" onClick={() => setShowAddForm(!showAddForm)}>{showAddForm ? 'Cancel' : '+ Add goal'}</Button>}
     >
       {isLoading ? (
-        <p className="text-muted text-sm py-4 text-center">Catching up…</p>
+        <p className="px-4 py-4 text-center text-sm text-muted">Catching up…</p>
       ) : goals.length === 0 ? (
-        <p className="text-muted text-sm py-4 text-center">No goals yet. Add one to start tracking your savings.</p>
+        <p className="px-4 py-4 text-center text-sm text-muted">No goals yet. Add one to start tracking your savings.</p>
       ) : (
-        <motion.div variants={staggerContainerVariants} initial="initial" animate="animate">
+        <div>
+          {/* Rows render at rest (no stagger entrance); a removed row fades out. */}
           <AnimatePresence>
             {goals.map((g) => (
-              <motion.div key={g.id} variants={staggerItemVariants} exit={{ opacity: 0, transition: { duration: 0.15 } }}>
+              <motion.div key={g.id} exit={{ opacity: 0, transition: { duration: 0.15 } }}>
                 <GoalSummaryRow g={g} onSelect={() => onSelect(g.id)} />
               </motion.div>
             ))}
           </AnimatePresence>
-        </motion.div>
+        </div>
       )}
-      {showAddForm && <AddGoalForm onAdd={() => setShowAddForm(false)} />}
+      {showAddForm && <div className="px-4 pb-4"><AddGoalForm onAdd={() => setShowAddForm(false)} /></div>}
     </PageCard>
   );
 }

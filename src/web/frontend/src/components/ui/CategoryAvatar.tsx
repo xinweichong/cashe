@@ -26,9 +26,11 @@ export function CategoryAvatar({ category, isIncome = false, size = 'row', glyph
         size === 'detail' ? 'w-10 h-10 text-lg' : 'w-8 h-8 text-sm',
         className,
       )}
-      style={{ background: `${color}33`, color }}
+      // The raw category hue on its own 20% tint is too faint in light mode
+      // (as low as 1.6:1); pulling it toward the text colour reads in both themes.
+      style={{ background: `${color}33`, color: `color-mix(in srgb, ${color} 45%, var(--color-foreground))` }}
     >
-      {isIncome ? '+' : glyph ?? category?.charAt(0) ?? '·'}
+      {isIncome ? '+' : glyph ?? (category || 'Other').charAt(0)}
     </div>
   );
 }

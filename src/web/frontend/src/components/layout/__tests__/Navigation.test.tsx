@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BottomTabs } from '../BottomTabs';
 import { LegacyRedirect } from '../LegacyRedirect';
 
@@ -11,7 +12,8 @@ function LocationProbe() {
 
 describe('navigation', () => {
   it('shows four destinations with the detail parent active', () => {
-    render(<MemoryRouter initialEntries={['/activity/42']}><BottomTabs /></MemoryRouter>);
+    // BottomTabs reads the briefing for its "to check" badge.
+    render(<QueryClientProvider client={new QueryClient()}><MemoryRouter initialEntries={['/activity/42']}><BottomTabs /></MemoryRouter></QueryClientProvider>);
     expect(screen.getAllByRole('link').map(link => link.textContent)).toEqual(['Home', 'Activity', 'Plan', 'Explore']);
     expect(screen.getByRole('link', { name: 'Activity' }).getAttribute('aria-current')).toBe('page');
     expect(screen.queryByRole('link', { name: 'Settings' })).toBeNull();

@@ -5,6 +5,48 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.0] - 2026-10-01
+
+A visual and interaction redesign of the web dashboard, following Apple's Human Interface Guidelines for structure and behaviour in cashe's own look ("Direction B"). No data, API or Telegram changes. Plan: `docs/plans/2026-09-30-hig-alignment.md`.
+
+### Added
+
+- **iOS/iPadOS/Mac navigation** — a floating frosted tab bar on phone; a collapsible, frosted inset sidebar on iPad and desktop (icon rail at `md`, ⌘⌥S to toggle), which now also holds Review and Settings; large titles that collapse into a frosted bar as you scroll
+- **List and detail everywhere** — `ListDetail`: a detail is a pushed page on a phone (Back, browser Back, or an edge swipe in the home-screen app), a split view on iPad/desktop (Activity, Merchants, Admin) or an inspector column (Plan). The detail stays mounted across breakpoints, so rotating an iPad never discards an in-progress edit
+- **Mac list conventions** — ↑/↓ moves through a list, ⌫ asks to delete the selected item, Esc closes the detail, ⌘F focuses search; rows are 36pt with a mouse and 44pt with touch
+- **Task sheets** — Add, Filters, category/type changes, confirmations, and admin create/reset/delete open as sheets with medium and large heights; Back closes them, and an unsaved form asks before discarding
+- **Row actions** — swipe a transaction right for Category or left for Delete (confirmed in the row), long-press or right-click for Open, Change category, Add to trip and Delete
+- **Spectrum card** — one per screen at the top of Home (month spending against budget), Plan (the month's projection) and Explore (health score), replacing the glow hero cards
+- **Explore on phone** — a summary list in the style of Apple Health: the health score, Worth a look, and Patterns rows with small previews, each opening its own page
+- **Grouped lists** — `ListGroup`/`ListRow`, a segmented-control look for tabs and form choices, a pinned toolbar for detail actions, and filled 44pt text fields
+
+### Changed
+
+- Home, Activity, Plan, Explore, Evidence, Review, Settings, sign-in, set-password, onboarding and the admin panel rebuilt on the components above; every page now scrolls naturally (the fixed-height phone "lens" screens and viewport grids are gone)
+- Type: Plus Jakarta Sans for titles, Inter for everything else, JetBrains Mono for money only — no mono eyebrow labels
+- Home is "now" only: the month's spectrum card, Needs a look (only what actually does, or "All caught up") and This month, with one row each linking to Plan, Activity and Explore; the category, trend and change detail lives on Explore
+- Settings and the subscription detail use grouped rows: password changes and category edits open sheets, sessions and connections use text actions, and a subscription's actions are labelled rows (Pause tracking, Mark as cancelled, Delete) instead of icons
+- Plan shows savings once beside the projection, folds its estimate explanations into disclosures, and offers to add a subscription when the timeline is empty; Review folds each group's explanation into "About this"
+- The Add sheet saves from its header, labels every field, opens a decimal keypad, and takes an optional SGD rate for foreign currencies; Review shows only groups with items, or All clear
+- Plainer wording throughout: dates in words, correct singular/plural counts, and "Added to cashe" / "Where it came from" in place of capture jargon
+- Activity's filters live in one Filters sheet at every size; Plan details open beside the page on iPad/desktop; Merchants is a list with profiles
+
+### Removed
+
+- `PhoneScreen`, `DrillSheet`, `SlideOver`, `useDrill`, `EdgeGrip`, `useDragDismiss`, `BulkActionBar`, and the `page-grid-*` / `area-*` / `grid-scroll-panel` layout utilities (no remaining callers)
+
+### Fixed
+
+- Amounts in zero-decimal currencies (JPY, KRW, VND) showed 100× too small in Activity (¥45 as ¥0.45), and Review flagged the correct records; also present in 3.0.0
+- On the first days of a month the health score read "100 Excellent" and month comparisons flagged a jump against a single day; both now wait for a week of data
+- Category initials were hard to read in light mode; trips and subscriptions used their own "S$" format instead of the shared one
+- Screens disagreed: the health page graded a month the card called too early, Plan showed savings Home hid, and one record needing review was counted twice; income needing a category was called a purchase
+- Phone details could leave their Delete row under the tab bar; small buttons were under 44pt on touch screens; pressing Esc straight after opening a detail on desktop could be missed
+- Budget, goal and category rows could stay invisible behind a stalled stagger animation; rows now render at rest
+- Opening a dialog from a context-menu item no longer fights the menu for focus
+- Set-password and admin form labels are tied to their fields; onboarding checkboxes use teal rather than the foreground-coloured accent token
+- The desktop sidebar wordmark no longer shows in the icon rail
+
 ## [3.0.0] - 2026-09-27
 
 The next-level rewrite. Every financial number in the app is now computed from one canonical, integer-minor-unit money representation and one shared spending-facts engine — reused identically by the web dashboard, the Telegram bot, CSV export, and scheduled reports, closing a long tail of currency-conversion and double-counting bugs. Capture is now durable and replay-safe end to end. The dashboard's classic/new-experience toggle is gone — Home, Activity, Plan, and Explore are the only navigation. Optional Gemini-backed AI intelligence gained a fail-closed policy gate and now writes period narratives, not just anomaly one-liners.

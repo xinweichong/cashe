@@ -41,14 +41,14 @@ function show() {
 
 test('pause and resume explain provider limits and refresh predictions', async () => {
   const isInvalidated = show();
-  fireEvent.click(await screen.findByRole('button', { name: 'Pause in Cashe' }));
-  expect(await screen.findByRole('button', { name: 'Resume in Cashe' })).toBeTruthy();
-  expect(screen.getByText(/does not pause billing with your provider/)).toBeTruthy();
+  fireEvent.click(await screen.findByRole('button', { name: 'Pause tracking' }));
+  expect(await screen.findByRole('button', { name: 'Resume tracking' })).toBeTruthy();
+  expect(screen.getByText(/Your provider still bills you/)).toBeTruthy();
   expect(screen.queryByRole('button', { name: 'Match' })).toBeNull();
   expect(api.updateSubscription).toHaveBeenCalledWith(1, { status: 'paused' });
   for (const key of DEPENDENT_KEYS) expect(isInvalidated(key)).toBe(true);
-  fireEvent.click(screen.getByRole('button', { name: 'Resume in Cashe' }));
-  expect(await screen.findByRole('button', { name: 'Pause in Cashe' })).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: 'Resume tracking' }));
+  expect(await screen.findByRole('button', { name: 'Pause tracking' })).toBeTruthy();
   await waitFor(() => expect(screen.getByRole('button', { name: 'Match' })).toBeTruthy());
   expect(api.updateSubscription).toHaveBeenCalledWith(1, { status: 'active' });
 });
@@ -56,10 +56,10 @@ test('pause and resume explain provider limits and refresh predictions', async (
 test('failed pause retains schedule and allows retry', async () => {
   vi.mocked(api.updateSubscription).mockRejectedValueOnce(new Error('Could not save'));
   show();
-  fireEvent.click(await screen.findByRole('button', { name: 'Pause in Cashe' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Pause tracking' }));
   expect((await screen.findByRole('alert')).textContent).toBe('Could not save');
-  fireEvent.click(screen.getByRole('button', { name: 'Pause in Cashe' }));
-  expect(await screen.findByRole('button', { name: 'Resume in Cashe' })).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: 'Pause tracking' }));
+  expect(await screen.findByRole('button', { name: 'Resume tracking' })).toBeTruthy();
 });
 
 
@@ -72,7 +72,7 @@ test('explicit confirmation preserves paused status and labels estimates', async
   fireEvent.click(await screen.findByRole('button', { name: 'Confirm this schedule' }));
   expect(await screen.findByText(/Schedule confirmed by you/)).toBeTruthy();
   expect(screen.getByText(/Future dates and amounts remain estimates/)).toBeTruthy();
-  expect(screen.getByRole('button', { name: 'Resume in Cashe' })).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Resume tracking' })).toBeTruthy();
   expect(api.confirmSubscription).toHaveBeenCalledWith(1);
   expect(isInvalidated('plan-upcoming')).toBe(true);
   expect(screen.queryByRole('button', { name: 'Confirm this schedule' })).toBeNull();

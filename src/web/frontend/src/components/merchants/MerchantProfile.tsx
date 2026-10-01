@@ -3,14 +3,12 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { api } from '@/api/client';
 import type { Transaction } from '@/api/client';
-import { Badge } from '@/components/ui/badge';
 import { ChoiceChip } from '@/components/ui/choice-chip';
 import { Button } from '@/components/ui/button';
-import { X } from 'lucide-react';
 import { formatCurrency, isCreditType } from '@/lib/utils';
 import { ALL_TAGS } from '@/lib/merchants';
 import { MiniBarChart } from '@/components/charts/MiniBarChart';
-import { SectionLabel, StatTiles } from '@/components/ui/detail-panel';
+import { DetailHeader, SectionLabel, StatTiles } from '@/components/ui/detail-panel';
 
 export function MerchantProfile({
   merchant,
@@ -133,21 +131,17 @@ export function MerchantProfile({
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header — pinned above scroll area */}
-      <div className="shrink-0 flex items-start justify-between p-4 border-b border-border">
-        <div>
-          <h2 className="text-lg font-bold font-display tracking-tight text-foreground">{profile.display_name}</h2>
-          {profile.display_name !== profile.merchant && (
-            <p className="text-xs text-muted mt-0.5">Recorded as “{profile.merchant}”</p>
-          )}
-          {profile.category && (
-            <Badge variant="outline" className="mt-1">{profile.category}</Badge>
-          )}
-        </div>
-        <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close">
-          <X className="w-4 h-4" />
-        </Button>
-      </div>
+      <DetailHeader
+        title={profile.display_name}
+        onClose={onClose}
+        subtitle={(profile.display_name !== profile.merchant || profile.category) && (
+          <p className="flex flex-wrap gap-x-1.5 text-xs text-muted">
+            {profile.display_name !== profile.merchant && <span>Recorded as “{profile.merchant}”</span>}
+            {profile.display_name !== profile.merchant && profile.category && <span aria-hidden>·</span>}
+            {profile.category && <span>{profile.category}</span>}
+          </p>
+        )}
+      />
 
       {/* Scrollable body */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">

@@ -5,6 +5,16 @@
 
 A standalone reference for everyone designing, building, or extending Cashe. This document is the source of truth for tokens, components, and brand. Application of the language to specific pages is covered in [`docs/superpowers/specs/2026-05-11-cashe-application-redesign.md`](superpowers/specs/2026-05-11-cashe-application-redesign.md).
 
+> **Direction B: HIG alignment (in progress, v3.1.0).** Cashe now follows Apple's Human Interface Guidelines for structure and behaviour, in the approved Direction B ("Wallet") look. The plan is [`docs/plans/2026-09-30-hig-alignment.md`](plans/2026-09-30-hig-alignment.md), and the approved components are P1–P12. Sections marked **Direction B** below override the older text next to them. During migration the older tokens still exist, marked deprecated, until their last caller moves over.
+>
+> In short:
+> - **Spectrum card:** at most one per screen, only at the top of a tab.
+> - **Glow and wash:** glows are retired; a faint radial wash shows only through frosted chrome.
+> - **Lists:** grouped lists with square rows inside an 18pt group. On iPad and desktop, the selected row is a 12pt inset pill.
+> - **Fonts:** Plus Jakarta Sans for titles, Inter for everything else, JetBrains Mono only for money. No eyebrow labels.
+> - **Interaction:** a pressed state on every tappable element, 44pt rows with touch and 36pt with a fine pointer.
+> - **Text size:** rem sizes, verified at 200%.
+
 ---
 
 ## 1 · Brand
@@ -195,6 +205,18 @@ The five anchor colours of the brand, ordered cool → warm. Each anchor has a s
 
 **Note:** Previous semantic tokens (`#30D158` success, `#FFD60A` warning, `#64D2FF` info, `#FF453A` destructive) are partially retired. Semantic warnings now use spectrum colours. The only retained generic semantic colour is `--color-destructive` because "delete / stop" needs a colour that doesn't appear in normal spending semantics.
 
+**Direction B system tokens** (`index.css`; light values in brackets):
+
+| Token | Dark | Role |
+|---|---|---|
+| `--color-separator` | foreground 10% | Hairlines between rows in a group |
+| `--color-fill-press` | foreground 8% | Pressed rows and controls (`pressable`) |
+| `--color-fill-hover` | foreground 5% | Hover with a fine pointer only |
+| `--color-on-teal` | `#0B0B14` (`#FFFFFF`) | Text on a teal selection fill |
+| `--color-scrim` | black 50% (ink 28%) | Behind sheets and context menus |
+| `--color-chrome` | card 66% (white 72%) | Frosted chrome fill, used with blur |
+| `--color-chrome-solid` | card | Chrome when blur is unavailable or reduced transparency is on |
+
 ### 2.3 Gradients
 
 Three signature gradients. Use them deliberately — gradients carry brand weight; they lose meaning when overused.
@@ -246,6 +268,11 @@ background: linear-gradient(135deg,
 ```
 
 B2 is exported from `Brand.tsx` as `B2_WASH` and applied to the `AppShell` root `div` in `AppShell.tsx`. Sidebar, mobile header, and bottom tabs use `bg-card/80 backdrop-blur-sm` so B2 bleeds through the chrome.
+
+**Direction B (supersedes the B2 wash and hero-numeric gradient text).**
+- **`.chrome-wash`:** two faint radial pools, teal at top-left and tangerine at bottom-right. They sit on the page background and are visible only through frosted chrome. Dark mixes teal 10% and tangerine 8%; light mixes 6% and 5%. `AppShell` switches from `.shell-wash` to it in plan step 3.
+- **`.spectrum-fill`:** the Full Spectrum as a *surface* for the spectrum hero card (P11), with `--color-on-brand` text. The gradient is the same in both themes. It appears on at most one card per screen, only at the top of a tab (Home, Plan, Explore).
+- **Gradient text is retired.** Hero numerics drop the soft-gradient text fill. Emphasis comes from size and weight. The wordmark's "$" is the only remaining gradient text, as a brand asset.
 
 ### 2.4 Category palette
 
@@ -313,6 +340,12 @@ Three families chosen for clear functional separation:
 - **Mono Eyebrow (Tier A — full):** `font-mono text-xs font-semibold uppercase tracking-[0.22em] text-muted`. For page kicker lines, `HeroCard`/`HighlightCard` titles, `StatCard` labels, and standalone KPI stat labels (INCOME · SPENT · SAVED, SAVED · TOWARD GOALS · UNALLOCATED, CONTRIBUTION HISTORY, etc.).
 - **Mono Eyebrow (Tier B — inline):** `font-mono text-xs text-muted`. For inline data descriptors that annotate a value without heading authority — budget period, goal deadline, velocity sub-stat, connection status, feature toggle descriptions.
 
+**Direction B type roles (supersede the eyebrow rules above):**
+- **Plus Jakarta Sans** names things: the large title (`text-large-title`, 2rem, 800), group headings above lists (`text-lg`, 700, title case), hero numbers, and the wordmark.
+- **Inter** does everything else: body, rows, controls, and the inline nav/sheet title (`text-headline`, 1.0625rem, 600). Former eyebrow labels become Inter captions (`text-xs`, muted, sentence case) or are removed. The heading carries its own weight.
+- **JetBrains Mono** is **money only**: amounts in rows, detail views and hero cards, with `tabular-nums`. IDs, timestamps, stat labels and kickers move to Inter.
+- **All font sizes are rem.** No px-locked labels. The in-app Larger text setting and browser zoom must both reach 200% without clipping. List rows stack (title, then details, then amount) at large sizes. Tab bar labels stay fixed, as on iOS.
+
 ### 3.4 Weights
 
 | Family | Available weights |
@@ -354,6 +387,15 @@ A 4px base scale, named explicitly. No usage change from Tailwind defaults — t
 | `radius-2xl` | 24 | Hero cards (Overview top card), large modals, splash containers |
 | `radius-pill` | 999 | Badges, status pills, period chips, progress bars |
 
+**Direction B roles** (px, since radii don't scale with text):
+
+| Token | px | Role |
+|---|---|---|
+| `radius-inset` | 12 | The selected row pill in split-view lists and the sidebar (iPad/desktop). Phone rows stay square |
+| `radius-group` | 18 | Grouped list (inset group). Rows inside are square, and only the group's outer corners round |
+| `radius-hero` | 22 | Spectrum hero card, sheet top corners |
+| `radius-capsule` | 26 | Floating tab bar |
+
 The icon container (`.cache-icon`) uses `border-radius: 22%` — a percentage-based radius so it scales with the icon's size (16px through 1024px).
 
 ---
@@ -371,6 +413,18 @@ Five tiers. Most surfaces use `elev-none` (a single 1px border on `--color-backg
 | `elev-glow-warm` | `0 0 0 1px rgba(251,146,60,.14), 0 0 48px -10px rgba(251,146,60,.34)` | Hero card on Overview, splash container |
 
 **The brand glow rule:** at most one warm glow and one teal glow visible on screen at a time. If a page would have two warm-glow cards (e.g., a hero + a "biggest spend" callout), demote one to `elev-none` and let the hero be the sole warm moment.
+
+**Direction B (supersedes the glow tiers, which are deprecated along with `.hero-glow-*`).** Content surfaces are flat. Depth comes from material and real offset shadows, never colored halos.
+
+| Token | Use |
+|---|---|
+| `chrome-frosted` (utility) | Tab bar, sidebar, nav bar, toolbar. Blur 20px with 1.6 saturation over `--color-chrome`. Falls back to `--color-chrome-solid` under `@supports not (backdrop-filter)` or `prefers-reduced-transparency: reduce`. Use it only where content scrolls beneath, never as decoration |
+| `--shadow-float` | Floating tab bar capsule |
+| `--shadow-sheet` | Sheet (P5) |
+| `--shadow-lift` | Row lifted by a context menu (P9) |
+| `--shadow-elev-md` | Dialogs, menus, toasts (unchanged) |
+
+The rule becomes **one spectrum card per screen**, replacing the rationed glow.
 
 ---
 
@@ -391,7 +445,7 @@ Current registry (paths relative to `src/web/frontend/src/`):
 | Panel switching | `components/ui/tabs.tsx` | Use actual tabs with matching panel semantics; do not substitute tabs for form values, multi-select filters or navigation links. Route-level selectors (e.g. Explore's NavLinks) keep link semantics and reuse `routeTabClassName`, keyed on `aria-current`. |
 | Category-coloured transaction row/avatar | `components/ui/ActivityRowShell.tsx`, `CategoryAvatar.tsx` | Caller owns money formatting and navigation; shared component owns presentation. |
 | Standard card / chart surface / hero / positive highlight | `components/ui/cards.tsx` | Use the matching role. Raw `Card` is for established structural exceptions, not a new visual system. |
-| Compact KPI / new-experience hero amount | `components/ui/StatCard.tsx`, `HeroAmount.tsx` | Use their actual APIs; retain money precision and quality labels. |
+| Compact KPI | `components/ui/StatCard.tsx` | Use their actual APIs; retain money precision and quality labels. |
 | Text fields | `.input-field` in `index.css`; `components/ui/input.tsx` wrapper | Consolidate the wrapper onto the utility contract; do not create another style string. |
 | Native / custom select | `.select-field`; `components/ui/select.tsx` | Different interaction mechanisms, same theme/geometry intent. Keep native semantics where suitable. |
 | Dialog, sheet, dropdown, select | Existing `components/ui/` Radix wrappers | They own surface (`card-elev`, `border-border`, `elev-md`), backdrop and §14 enter/exit motion (`.pop-motion`, `.overlay-motion`, `.sheet-motion-*` in `index.css`), and the close control is `Button` via `Close asChild`. Do not override surfaces in callers. Interrupting confirmations compose `Dialog` (no separate ConfirmDialog API). |
@@ -423,8 +477,24 @@ Current registry (paths relative to `src/web/frontend/src/`):
 | Circular progress | `components/ui/ProgressRing.tsx` | Goal detail/list rings and the health score ring; caller supplies size, radius, stroke and any centred `<text>`. |
 | Trend day stepper | `components/charts/DayStepper.tsx` (`NoTrendData`) | Previous/next-day controls under `TrendLine` and `CategoryTrendLine`; each chart keeps its own stepping rule. |
 | Detail-panel mini chart | `components/charts/MiniBarChart.tsx` | Single-series SGD bars in a `ChartCard` (merchant months, subscription charges). |
-| Lens footer action | `LensAction` in `components/layout/PhoneScreen.tsx` | The full-width "go deeper" row at the foot of a phone lens panel. |
-| Drag-to-dismiss | `hooks/useDragDismiss.ts`, `components/layout/EdgeGrip.tsx` | `SlideOver` and `DrillSheet`: drag right to close, off under reduced motion; the grip is the visual cue. |
+
+**Direction B owners (approved 2026-10-01, proposals P1–P12 on the component approval page).** Surfaces migrate to these in plan steps 4–10. Once a surface migrates, it uses them instead of the older owners they replace.
+
+| Role | Owner | Use |
+|---|---|---|
+| Grouped list and row (P4) | `components/ui/list.tsx`: `ListGroup`, `ListRow` | An inset group (`rounded-group`) with a Plus Jakarta heading and an optional action and footer. Rows are square, with hairlines inset to the text start (3.5rem with a leading avatar). A row is a `Link` (`to`), a `button` (`onClick`), or static. Selection is a teal fill with `aria-current`, which becomes a `rounded-inset` pill on md+. Rows stack below an 18rem container width (Larger text, 200% zoom). Money is passed pre-formatted and set in mono. This replaces `SelectableRow` and card lists. `ActivityRowShell` renders through it when Activity migrates. |
+| Segmented control look (P10) | `tabs.tsx`, `segmented-choice.tsx` | One recessed track (`segmentTrackClassName`) with a raised thumb (`segmentThumbClassName`) that slides via a shared `layoutId`. Semantics are unchanged (tablist vs radios). Route selectors take the thumb fill through `routeTabClassName`, without the slide. |
+| Spectrum hero card (P11) | `components/ui/SpectrumCard.tsx`: `SpectrumCard`, `SpectrumCardSkeleton` | Home, Plan and Explore roots only, one per screen. Statuses are `complete`, `partial` (label and dashed bar) and `estimated` (label, no bar). The progress bar is labelled and clamped. A failed load renders `LoadFailed` in its place. Replaces `HeroCard`, `HighlightCard` and `HeroAmount`. |
+| Navigation bar (P3) | `components/ui/nav-bar.tsx`: `NavBar` | Tab roots use `large`: the large title is the h1, and the bar turns frosted with an inline title once the large title scrolls under it. Pushed pages use `back={{ label, to \| onClick }}` with an inline h1. The trailing slot holds page actions (and a phone detail's toolbar actions). |
+| Toolbar (P12) | `components/ui/toolbar.tsx`: `Toolbar`, `ToolbarAction` | Pinned frosted action bar above a detail column. Actions are teal text with 44px targets. `tone="strong"` confirms, `tone="destructive"` deletes, and `pending`/`pendingLabel` blocks repeats. View, edit and select modes are composed by the caller. Replaces `DetailHeader` and the per-panel action bars. |
+| Task sheet (P5) | `components/ui/task-sheet.tsx`: `TaskSheet` | Add, Filters, Edit and confirmations. On a phone it's a bottom sheet with medium/large detents, dragged only from the grabber or header. On md+ it's a centred dialog. Header is Cancel, title, then the confirming `ToolbarAction`. With `dirty`, every dismissal asks "Discard changes?". Browser-history integration arrives with the navigation stack (step 3). Details are pages, not sheets. |
+| Row context menu (P9) | `components/ui/row-menu.tsx`: `RowMenu` | Radix ContextMenu: long-press, right-click, or the keyboard menu key. The row lifts over a scrim. Items take a lucide icon, `destructive` and `hidden` (for disabled features). Delete opens the caller's confirmation and never deletes directly. |
+| Swipe actions (P8) | `components/ui/swipe-row.tsx`: `SwipeRow` | Touch only (`pointer: coarse`); with a fine pointer it renders the row untouched. Trailing actions (swipe left) and leading actions (swipe right). A full swipe runs the outermost action, and `confirm` turns a destructive action into an in-row confirmation. One row is open at a time, and scrolling or tapping outside closes it. The left 24px belongs to the edge-swipe back gesture. Every action must also appear in `RowMenu` and on the detail page. |
+
+| Phone tab bar (P1) | `components/layout/BottomTabs.tsx`, `TAB_BAR_CLEARANCE` | Floating frosted capsule. The selected tab sits on a neutral fill that slides between tabs. Home shows the `useAttentionCount` badge. Labels stay 11px at every text size. |
+| Sidebar (P2) | `components/layout/Sidebar.tsx` | Frosted inset panel: a rail at md, expanded at lg, or the viewer's choice (toggle button, ⌘⌥S). Rail icons are centred. Review and Settings sit under "You" on md+. The selected item is teal with `text-on-teal`, and hover is a neutral fill. |
+| Navigation stack and split view (P6, P7) | `components/layout/ListDetail.tsx`, `stackContext.ts` (`useStackBack`), `hooks/useListKeyboard.ts` | One component for every list with details, where the detail is a route. On a phone the detail is pushed over the inert, still-mounted list (which shifts −30% and dims). Back comes from `useStackBack`, the browser, or an edge swipe in the home-screen app. On md+ the list and detail are side-by-side regions with Mac list keys. Replaced `SlideOver`, `DrillSheet`, `PhoneScreen`, `useDrill`, `EdgeGrip` and `useDragDismiss`, all removed in step 7 once the four tabs had migrated. |
+| Overlay history | `hooks/useHistoryEntry.ts` | Used by `TaskSheet`: Back closes the overlay, and a refused close (an unsaved form) restores the entry. |
 
 Still not shared: a common category label (ActivityRowShell and Finance keep their own), and a public calendar date-cell primitive (Plan keeps one in-file recipe). Existing examples are references, not permission to clone them.
 
@@ -503,10 +573,9 @@ Five shared surface roles:
 | `<PageCard>` | Content, tables, lists, SVG visuals | `radius-md`, `elev-none` |
 | `<ChartCard>` | Recharts charts (edge-to-edge content) | `radius-md`, `elev-none` |
 | `<StatCard>` | Compact KPI display | Target `radius-lg`, `elev-none`; actual API uses `color`, not an expense/income `variant` |
-| `<HeroCard>` | Hero numeric surface | `radius-2xl`, warm glow, radial tint and gradient hairline |
-| `<HighlightCard>` | Supported positive-outcome callout | `radius-lg`, teal glow and left-edge wash |
+| `<SpectrumCard>` | The one spectrum card per screen (Direction B) | `rounded-hero`, `.spectrum-fill`, on-brand text; replaced `HeroCard`/`HighlightCard` (removed 2026-10-01) |
 
-`PageCard`, `ChartCard`, `HeroCard` and `HighlightCard` accept `title`, optional `action`, and `children`. `StatCard` accepts `label`, `value`, `color`, optional `delta`, `sparklineData`, `hero`, `subtext` and `className`. Class overrides are for placement, not new surface designs. Current Card resting elevation, StatCard radius and hardcoded highlight treatments differ from the targets; fix them centrally as tracked in the surface audit. Do not paper over those differences in callers.
+`PageCard` and `ChartCard` accept `title`, optional `action`, and `children`. `StatCard` accepts `label`, `value`, `color`, optional `delta`, `sparklineData`, `hero`, `subtext` and `className`. Class overrides are for placement, not new surface designs. Current Card resting elevation, StatCard radius and hardcoded highlight treatments differ from the targets; fix them centrally as tracked in the surface audit. Do not paper over those differences in callers.
 
 ### 7.6 Chart conventions
 
@@ -762,8 +831,6 @@ Source of truth for presets: [`src/lib/animations.tsx`](../src/web/frontend/src/
 | `springs.bouncy` | 400 / 20 | Celebration only (goal completed). ≤1 place per page |
 | `pageVariants` | gentle in, 0.12s ease-in out | Route transitions (AppShell) |
 | `fadeUpVariants` | gentle in, 0.12s ease-in out | Form expands, card entrances |
-| `slideInRightVariants` | snappy in, 0.15s ease-in out | Right-side detail panels |
-| `pushInRightVariants` | 0.3s expo in, 0.2s ease-in out | SlideOver on a phone (full-width push) |
 | `fadeVariants` | 0.15s in, 0.1s out | Reduced-motion stand-in for slides |
 | `staggerContainer/ItemVariants` | 0.04s children | Lists — cap staggering at 10 items (`STAGGER_LIMIT`) |
 | `AnimatedCurrency` | 0.7s ease-out count-up | Hero numerics only — one count-up per page |
@@ -774,13 +841,30 @@ Source of truth for presets: [`src/lib/animations.tsx`](../src/web/frontend/src/
 - Entrances spring; exits are fast fades (0.1–0.2s ease-in). Leaving must always be quicker than arriving.
 - **Reduced motion:** every page-level or repeating animation gates on `useReducedMotion` — the pattern in `AppShell.tsx` is canonical. New animated surfaces must do the same.
 
+### 14.3 Direction B presets and interaction
+
+The source of truth is `src/lib/motionPresets.ts`. The table above is historical: its old link to `animations.tsx` no longer exists, and `springs.bouncy` has no approved use.
+
+| Export / token | Timing | Use |
+|---|---|---|
+| `EASE_IOS` / `--ease-ios` | `cubic-bezier(0.32, 0.72, 0, 1)` | Push/pop, sheet settle |
+| `ListDetail` push (P6) | 0.35s ease-ios | The pushed page travels the full width; the page beneath tracks it from −30% and 70% brightness. Pixel offsets so a drag can drive both |
+| `sheetSpring` | 420 / 40, mass 0.9 | Sheet detent snaps (P5), no visible bounce |
+| `thumbSpring` | 500 / 38 | Segmented control thumb (P10), tab indicator |
+| `--dur-push` | 350ms | CSS counterpart to push/pop |
+| `pressable` (utility) | `--dur-fast` | Press fill on every tappable surface. Hover fill only with a fine pointer |
+| `pressable-scale` (utility) | `--dur-fast` | 0.97 scale while held, for discrete controls (buttons, tabs, segments). Off under reduced motion |
+
+Under reduced motion, pushes and sheets swap to `fadeVariants`, springs become instant, and the thumb jumps. Haptics (`lib/haptics.ts`) stay a no-op on iOS, so the visible pressed state must carry the feedback on its own.
+
 ---
 
 ## 15 · Accessibility
 
 - **Contrast:** `--color-foreground` on `--color-background` is ~15:1. `--color-muted` (`#7A7488`) on background is ~4.5:1 — the AA floor. Rules: never introduce text colour dimmer than `muted`; `muted` body copy is 12px (`text-xs`) minimum. The 11px mono eyebrows compensate with uppercase, tracking, and weight, and must label — not carry — primary information.
 - **Focus:** every interactive element shows `focus-visible:ring-2 ring-ring` (teal). Never `outline-none` without a focus-visible replacement. (The Button CVA already complies — match it.)
-- **Touch targets:** ≥36px effective target on touch viewports. Bump with responsive padding (`py-2 md:py-1`), never by changing the desktop design.
+- **Touch targets:** ≥36px effective target on touch viewports. Bump with responsive padding (`py-2 md:py-1`), never by changing the desktop design. **Direction B:** at least 44pt with touch. Rows use `min-h-row` (`--row-min`: 2.75rem, dropping to 2.25rem only under `pointer: fine`).
+- **Direction B checks per surface:** a Reduce Motion pass, a 200% text pass, a reduced-transparency/no-blur pass, a desktop keyboard pass (↑/↓ ↩ ⌫ Esc ⌘F ⌘K), and a phone gesture pass. Every swipe action is also reachable from the context menu and the detail page.
 - **Icon-only buttons** always carry `title` and `aria-label`.
 - **Reduced motion:** see §14.2.
 

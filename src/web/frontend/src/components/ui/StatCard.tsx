@@ -69,7 +69,7 @@ export function StatCard({
       <Card className={cn(glowClass, 'h-full rounded-lg shadow-none')}>
         {glowClass && <div className="hero-glow-clip" aria-hidden><div className="hero-hairline" /></div>}
         <CardHeader className={cn('pb-1', href && 'pr-10')}>
-          <CardTitle className="text-xs font-semibold font-mono uppercase tracking-[0.22em] text-muted">
+          <CardTitle className="text-sm font-medium text-muted">
             {label}
           </CardTitle>
         </CardHeader>

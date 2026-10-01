@@ -1,59 +1,40 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/api/client';
-import { Card } from '@/components/ui/card';
-import { HeroCard } from '@/components/ui/cards';
-import { formatCurrencyWhole } from '@/lib/utils';
+import { formatMoney } from '@/api/briefing';
+import { ListGroup, ListRow } from '@/components/ui/list';
+import { formatCurrency, minorToMajor } from '@/lib/utils';
+import { useHomeBriefing } from '@/hooks/useBriefing';
 
-export function SavingsCard({ compact = false }: { compact?: boolean }) {
+// This month's savings as a grouped list (Direction B, 2026-10-01): Plan's
+// one spectrum card is the month's projection, so savings stay plain rows.
+// "Saved" is the shared month facts' net flow, the figure Home shows, so it
+// is hidden on both screens while records need review.
+export function SavingsCard() {
+  const { data: briefing } = useHomeBriefing();
   const { data: overview } = useQuery({
     queryKey: ['savings-overview'],
     queryFn: () => api.getSavingsOverview(),
     staleTime: 30_000,
   });
 
-  if (!overview) return null;
+  if (!briefing || !overview) return null;
 
-  const monthLabel = new Date(overview.month + '-01').toLocaleString('en', { month: 'long', year: 'numeric' });
-
-  // The phone's Goals lens: the same three figures as one flat strip, so
-  // the goals list below keeps the room (and the lens keeps its one glow).
-  if (compact) {
-    const figures = [
-      { label: 'Saved', value: overview.savings, className: 'text-success' },
-      { label: 'To goals', value: overview.allocated_to_goals, className: 'text-teal' },
-      { label: 'Free', value: overview.unallocated, className: 'text-foreground' },
-    ];
-    return (
-      <Card aria-label={`Savings, ${monthLabel}`} className="grid grid-cols-3 divide-x divide-border py-3">
-        {figures.map((f) => (
-          <div key={f.label} className="px-3">
-            <p className="text-2xs font-semibold font-mono uppercase tracking-[0.18em] text-muted">{f.label}</p>
-            <p className={`text-base font-semibold tabular-nums ${f.className}`}>{formatCurrencyWhole(f.value)}</p>
-          </div>
-        ))}
-      </Card>
-    );
-  }
-
+  const current = briefing.facts.current;
+  const saved = current.recorded_net_flow;
+  const monthLabel = new Date(`${current.start}T00:00:00Z`).toLocaleString('en-SG', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+  const notYetToGoals = saved ? minorToMajor(saved.minor_units, saved.currency) - overview.allocated_to_goals : null;
   return (
-    <HeroCard title={`Savings — ${monthLabel}`} glowColor="teal">
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 py-1">
-        <div>
-          <p className="text-xs font-semibold font-mono uppercase tracking-[0.22em] text-muted mb-0.5">Saved</p>
-          <p className="text-lg font-semibold text-success">{formatCurrencyWhole(overview.savings)}</p>
-          <p className="text-xs text-muted font-mono">income − expenses</p>
-        </div>
-        <div>
-          <p className="text-xs font-semibold font-mono uppercase tracking-[0.22em] text-muted mb-0.5">Toward Goals</p>
-          <p className="text-lg font-semibold text-teal">{formatCurrencyWhole(overview.allocated_to_goals)}</p>
-          <p className="text-xs text-muted font-mono">manually added</p>
-        </div>
-        <div>
-          <p className="text-xs font-semibold font-mono uppercase tracking-[0.22em] text-muted mb-0.5">Unallocated</p>
-          <p className="text-lg font-semibold text-foreground">{formatCurrencyWhole(overview.unallocated)}</p>
-          <p className="text-xs text-muted font-mono">free to allocate</p>
-        </div>
-      </div>
-    </HeroCard>
+    <ListGroup title={`Savings, ${monthLabel}`} footer="Saved is this month’s income minus spending; toward goals is what you’ve set aside for them.">
+      <ListRow
+        title="Saved"
+        {...(saved
+          ? { amount: <span className={saved.minor_units < 0 ? undefined : 'text-success'}>{formatMoney(saved)}</span> }
+          : { value: current.income ? 'Shows once records are reviewed' : 'No income recorded yet' })}
+      />
+      <ListRow title="Toward goals" amount={formatCurrency(overview.allocated_to_goals)} />
+      {notYetToGoals != null && notYetToGoals > 0 && (
+        <ListRow title="Not yet toward a goal" amount={formatCurrency(notYetToGoals)} />
+      )}
+    </ListGroup>
   );
 }

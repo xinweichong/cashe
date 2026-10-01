@@ -1,8 +1,7 @@
-import type { CSSProperties, ReactNode } from 'react';
+import { useId, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Card, CardContent } from '@/components/ui/card';
 
 // ── PageCard ──────────────────────────────────────────────────────────────────
 interface PageCardProps {
@@ -15,14 +14,21 @@ interface PageCardProps {
 }
 
 export function PageCard({ title, action, children, className, contentClassName, headerClassName }: PageCardProps) {
+  // Direction B (P4, 2026-10-01): a titled group. The heading sits above a
+  // borderless 18px group surface, matching ListGroup, so a page reads as
+  // one system whether a section holds rows or free content. Layout classes
+  // apply to the whole section; the surface stretches to fill a grid cell.
+  const headingId = useId();
   return (
-    <Card className={cn(className)}>
-      <div className={cn('flex flex-row items-center justify-between p-4 gap-2', headerClassName)}>
-        <h2 className="min-w-0 text-base font-semibold text-foreground font-display">{title}</h2>
-        {action && <div className="shrink-0 ml-2">{action}</div>}
+    <section aria-labelledby={headingId} className={cn('flex min-w-0 flex-col', className)}>
+      <div className={cn('mb-1.5 flex items-baseline justify-between gap-2 px-1', headerClassName)}>
+        <h2 id={headingId} className="min-w-0 font-display text-lg font-bold tracking-[-0.01em] text-foreground">{title}</h2>
+        {action && <div className="ml-2 shrink-0 text-sm">{action}</div>}
       </div>
-      <CardContent className={cn('p-4 pt-0', contentClassName)}>{children}</CardContent>
-    </Card>
+      <div className="@container flex-1 overflow-hidden rounded-group bg-card text-foreground">
+        <div className={cn('p-4', contentClassName)}>{children}</div>
+      </div>
+    </section>
   );
 }
 
@@ -30,72 +36,6 @@ export function PageCard({ title, action, children, className, contentClassName,
 // A PageCard whose content runs edge to edge (charts size themselves).
 export function ChartCard(props: Omit<PageCardProps, 'contentClassName'>) {
   return <PageCard {...props} contentClassName="p-0" />;
-}
-
-// ── HeroCard ─────────────────────────────────────────────────────────────────
-export type GlowColor = 'warm' | 'teal' | 'coral';
-
-const GLOW_CLASS: Record<GlowColor, string> = {
-  warm:  'hero-glow-warm',
-  teal:  'hero-glow-teal',
-  coral: 'hero-glow-coral',
-};
-
-interface HeroCardProps {
-  title: string;
-  action?: ReactNode;
-  children: ReactNode;
-  className?: string;
-  glowColor?: GlowColor;
-}
-
-export function HeroCard({ title, action, children, className, glowColor = 'warm' }: HeroCardProps) {
-  return (
-    <div className={cn('rounded-2xl p-8', GLOW_CLASS[glowColor], className)}>
-      <div className="hero-glow-clip" aria-hidden>
-        <div className="hero-hairline" />
-      </div>
-      <div className="flex flex-row items-center justify-between gap-2 mb-3">
-        <h2 className="text-xs uppercase tracking-[0.22em] text-muted font-semibold font-mono">
-          {title}
-        </h2>
-        {action && <div className="shrink-0">{action}</div>}
-      </div>
-      {children}
-    </div>
-  );
-}
-
-// ── HighlightCard ─────────────────────────────────────────────────────────────
-interface HighlightCardProps {
-  title: string;
-  action?: ReactNode;
-  children: ReactNode;
-  className?: string;
-}
-
-const HIGHLIGHT_CARD_STYLE: CSSProperties = {
-  border: '1px solid color-mix(in srgb, var(--color-teal) 25%, transparent)',
-  background:
-    'radial-gradient(120% 100% at 0% 0%, color-mix(in srgb, var(--color-teal) 8%, transparent) 0%, transparent 50%), var(--color-card)',
-  boxShadow:
-    '0 0 0 1px color-mix(in srgb, var(--color-teal) 18%, transparent), 0 0 36px -8px color-mix(in srgb, var(--color-teal) 28%, transparent)',
-  borderRadius: 'var(--radius-lg)',
-  padding: '20px',
-};
-
-export function HighlightCard({ title, action, children, className }: HighlightCardProps) {
-  return (
-    <div style={HIGHLIGHT_CARD_STYLE} className={cn(className)}>
-      <div className="flex flex-row items-center justify-between gap-2 mb-3">
-        <h2 className="text-xs uppercase tracking-[0.22em] font-semibold font-mono" style={{ color: 'var(--color-teal)' }}>
-          {title}
-        </h2>
-        {action && <div className="shrink-0">{action}</div>}
-      </div>
-      {children}
-    </div>
-  );
 }
 
 // ── CardLink ──────────────────────────────────────────────────────────────────

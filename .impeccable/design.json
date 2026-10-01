@@ -1,145 +1,250 @@
 {
-  "schemaVersion": 2,
-  "generatedAt": "2026-09-25T03:49:00Z",
-  "title": "Design System: cashe",
-  "extensions": {
-    "colorMeta": {
-      "teal": { "role": "primary", "displayName": "Teal", "canonical": "#00D4AA" },
-      "mint": { "role": "spectrum", "displayName": "Mint", "canonical": "#34D399" },
-      "honey": { "role": "spectrum", "displayName": "Honey", "canonical": "#FBBF24" },
-      "tangerine": { "role": "spectrum", "displayName": "Tangerine", "canonical": "#FB923C" },
-      "coral": { "role": "spectrum", "displayName": "Coral", "canonical": "#FF6B6B" },
-      "background": { "role": "neutral", "displayName": "Deep Ink", "canonical": "#0B0B14" },
-      "card": { "role": "neutral", "displayName": "Card Surface", "canonical": "#161624" },
-      "card-elev": { "role": "neutral", "displayName": "Elevated Card", "canonical": "#1B1B2C" },
-      "border": { "role": "neutral", "displayName": "Hairline Border", "canonical": "#2A2A3F" },
-      "foreground": { "role": "neutral", "displayName": "Primary Text", "canonical": "#EEEAF5" },
-      "muted": { "role": "neutral", "displayName": "Muted Text", "canonical": "#A8A1B5" },
-      "destructive": { "role": "destructive", "displayName": "Destructive Red", "canonical": "#FF453A" }
-    },
-    "typographyMeta": {
-      "display": { "displayName": "Display / Hero Numerics", "purpose": "Wordmark, hero numerics with spending-gradient text-clip. One per page." },
-      "headline": { "displayName": "Page Headline", "purpose": "Top-level page H1." },
-      "title": { "displayName": "Card Title", "purpose": "PageCard/ChartCard title spans, section sub-headings." },
-      "body": { "displayName": "Body", "purpose": "Paragraphs, form fields, button labels." },
-      "label": { "displayName": "Mono Eyebrow", "purpose": "Uppercase data labels, KPI captions, kickers." }
-    },
-    "shadows": [
-      { "name": "elev-none", "value": "0 0 0 1px var(--color-border)", "purpose": "Default card — flat, border only." },
-      { "name": "elev-xs", "value": "0 0 0 1px var(--color-border), 0 2px 6px rgba(0,0,0,.3)", "purpose": "Hover on interactive cards." },
-      { "name": "elev-md", "value": "0 0 0 1px var(--color-border), 0 8px 24px rgba(0,0,0,.5)", "purpose": "Dialogs, dropdowns, popovers, toasts." },
-      { "name": "elev-glow-teal", "value": "0 0 0 1px rgba(0,212,170,.18), 0 0 36px -8px rgba(0,212,170,.28)", "purpose": "On-track health cards, completed goal cards." },
-      { "name": "elev-glow-warm", "value": "0 0 0 1px rgba(251,146,60,.14), 0 0 48px -10px rgba(251,146,60,.34)", "purpose": "Overview hero card, splash container." }
-    ],
-    "motion": [
-      { "name": "spring-gentle", "value": "stiffness 200 / damping 25", "purpose": "Default — page entrances, list items, card reveals." },
-      { "name": "spring-snappy", "value": "stiffness 350 / damping 30", "purpose": "Spatial chrome — detail panels, drawers, sheets." },
-      { "name": "spring-bouncy", "value": "stiffness 400 / damping 20", "purpose": "Celebration only (goal completed); at most one per page." },
-      { "name": "ease-out-expo", "value": "cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "Overlay/pop/sheet entrances." },
-      { "name": "ease-fast-exit", "value": "150ms ease-in", "purpose": "All exits — always faster than the matching entrance." }
-    ],
-    "breakpoints": [
-      { "name": "md", "value": "768px" }
-    ]
+ "schemaVersion": 2,
+ "generatedAt": "2026-10-01T00:00:00Z",
+ "title": "Design System: cashe",
+ "extensions": {
+  "colorMeta": {
+   "teal": {
+    "role": "primary",
+    "displayName": "Teal",
+    "canonical": "#00D4AA",
+    "light": "#007A63"
+   },
+   "mint": {
+    "role": "spectrum",
+    "displayName": "Mint",
+    "canonical": "#34D399"
+   },
+   "honey": {
+    "role": "spectrum",
+    "displayName": "Honey",
+    "canonical": "#FBBF24"
+   },
+   "tangerine": {
+    "role": "spectrum",
+    "displayName": "Tangerine",
+    "canonical": "#FB923C"
+   },
+   "coral": {
+    "role": "spectrum",
+    "displayName": "Coral",
+    "canonical": "#FF6B6B"
+   },
+   "background": {
+    "role": "neutral",
+    "displayName": "Deep Ink",
+    "canonical": "#0B0B14",
+    "light": "#F6F5F8"
+   },
+   "card": {
+    "role": "neutral",
+    "displayName": "Group Surface",
+    "canonical": "#161624",
+    "light": "#FFFFFF"
+   },
+   "card-elev": {
+    "role": "neutral",
+    "displayName": "Sheet & Menu Surface",
+    "canonical": "#1B1B2C"
+   },
+   "foreground": {
+    "role": "neutral",
+    "displayName": "Primary Text",
+    "canonical": "#EEEAF5",
+    "light": "#201C2C"
+   },
+   "muted": {
+    "role": "neutral",
+    "displayName": "Secondary Text",
+    "canonical": "#A8A1B5",
+    "light": "#625C70"
+   },
+   "separator": {
+    "role": "neutral",
+    "displayName": "Row Hairline",
+    "purpose": "foreground at 10%, inset from the text start"
+   },
+   "fill-press": {
+    "role": "state",
+    "displayName": "Pressed Fill",
+    "purpose": "pressed rows and filled text fields"
+   },
+   "fill-hover": {
+    "role": "state",
+    "displayName": "Pointer Hover Fill",
+    "purpose": "hover under a fine pointer only"
+   },
+   "chrome": {
+    "role": "material",
+    "displayName": "Frosted Chrome",
+    "purpose": "tab bar, sidebar, collapsed nav bar, toolbar; solid fallback without backdrop-filter or with prefers-reduced-transparency"
+   },
+   "destructive": {
+    "role": "destructive",
+    "displayName": "Destructive Red",
+    "canonical": "#FF453A"
+   }
   },
-  "components": [
-    {
-      "name": "Primary Button",
-      "kind": "button",
-      "refersTo": "button-primary",
-      "description": "Full-spectrum gradient CTA. Reserved for the single main command on a screen.",
-      "html": "<button class=\"ds-btn ds-btn-primary\">Add Transaction</button>",
-      "css": ".ds-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 40px; padding: 0 16px; border-radius: 6px; font-family: Inter, sans-serif; font-size: 14px; font-weight: 500; border: none; cursor: pointer; transition: all 0.2s; } .ds-btn:active { transform: scale(0.97); } .ds-btn-primary { background: linear-gradient(135deg, #00D4AA 0%, #34D399 25%, #FBBF24 50%, #FB923C 75%, #FF6B6B 100%); background-size: 200% 100%; background-position: 0 0; color: #0B0B14; font-weight: 700; box-shadow: 0 0 32px -10px rgba(251, 146, 60, 0.45); transition: background-position 0.35s ease; } .ds-btn-primary:hover { background-position: 100% 0; } .ds-btn-primary:focus-visible { outline: none; box-shadow: 0 0 0 2px #00D4AA, 0 0 0 4px #0B0B14; }"
-    },
-    {
-      "name": "Outline Button",
-      "kind": "button",
-      "refersTo": "button-outline",
-      "description": "Secondary/cancel action.",
-      "html": "<button class=\"ds-btn ds-btn-outline\">Cancel</button>",
-      "css": ".ds-btn-outline { background: #0B0B14; color: #EEEAF5; border: 1px solid #2A2A3F; } .ds-btn-outline:hover { background: rgba(238,234,245,0.05); }"
-    },
-    {
-      "name": "Ghost Button",
-      "kind": "button",
-      "refersTo": "button-ghost",
-      "description": "Low-emphasis action, dropdown trigger. Never hovers to teal.",
-      "html": "<button class=\"ds-btn ds-btn-ghost\">View all</button>",
-      "css": ".ds-btn-ghost { background: transparent; color: #A8A1B5; } .ds-btn-ghost:hover { background: rgba(238,234,245,0.05); color: #EEEAF5; }"
-    },
-    {
-      "name": "Text Input",
-      "kind": "input",
-      "refersTo": "input-field",
-      "description": "Shared text-field contract. 16px on phones avoids iOS Safari zoom-on-focus.",
-      "html": "<input class=\"ds-input\" type=\"text\" placeholder=\"Merchant name\" />",
-      "css": ".ds-input { padding: 6px 12px; font-size: 16px; background: #0B0B14; border: 1px solid #2A2A3F; border-radius: 6px; color: #EEEAF5; } .ds-input::placeholder { color: #A8A1B5; } .ds-input:focus-visible { outline: none; box-shadow: 0 0 0 2px #00D4AA, 0 0 0 4px #0B0B14; } @media (min-width: 768px) { .ds-input { font-size: 14px; } }"
-    },
-    {
-      "name": "Badge — Spectrum Tone",
-      "kind": "chip",
-      "refersTo": "badge-tone",
-      "description": "Non-interactive status label using a spectrum tone tint. Tone precedence over structural variant.",
-      "html": "<span class=\"ds-badge ds-badge-saved\">On track</span>",
-      "css": ".ds-badge { display: inline-flex; align-items: center; padding: 2px 10px; border-radius: 9999px; font-size: 12px; font-weight: 500; border: 1px solid transparent; } .ds-badge-saved { background: rgba(0,212,170,0.13); color: #00D4AA; border-color: rgba(0,212,170,0.25); } .ds-badge-warm { background: rgba(255,107,107,0.13); color: #FF6B6B; border-color: rgba(255,107,107,0.25); }"
-    },
-    {
-      "name": "PageCard",
-      "kind": "card",
-      "refersTo": "card-page",
-      "description": "General content/table/list surface. Flat by default — border only, no shadow.",
-      "html": "<div class=\"ds-card\"><div class=\"ds-card-header\"><span class=\"ds-card-title\">Recent Activity</span></div><div class=\"ds-card-body\">…</div></div>",
-      "css": ".ds-card { background: #161624; border: 1px solid #2A2A3F; border-radius: 8px; } .ds-card-header { display: flex; align-items: center; justify-content: space-between; padding: 16px; gap: 8px; } .ds-card-title { font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 700; font-size: 16px; color: #EEEAF5; } .ds-card-body { padding: 0 16px 16px; }"
-    },
-    {
-      "name": "HeroCard",
-      "kind": "card",
-      "refersTo": "card-hero",
-      "description": "The single hero numeric surface per page — warm glow, gradient hairline. At most one per screen.",
-      "html": "<div class=\"ds-hero-card\"><span class=\"ds-hero-eyebrow\">This Month</span><div class=\"ds-hero-value\">$2,481.09</div></div>",
-      "css": ".ds-hero-card { border-radius: 24px; padding: 32px; background: #161624; box-shadow: 0 0 0 1px rgba(251,146,60,.14), 0 0 48px -10px rgba(251,146,60,.34); } .ds-hero-eyebrow { font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 600; letter-spacing: 0.22em; text-transform: uppercase; color: #A8A1B5; } .ds-hero-value { font-family: 'Plus Jakarta Sans', sans-serif; font-weight: 800; font-size: 61px; line-height: 0.92; letter-spacing: -0.045em; background: linear-gradient(135deg, #FBBF24 0%, #FB923C 50%, #FF6B6B 100%); -webkit-background-clip: text; background-clip: text; color: transparent; margin-top: 12px; }"
-    },
-    {
-      "name": "Status Dot",
-      "kind": "custom",
-      "refersTo": "status-dot",
-      "description": "Quieter status pattern than a full badge — for repeated/stacked status rows.",
-      "html": "<span class=\"ds-status\"><span class=\"ds-dot ds-dot-teal\"></span>On track</span>",
-      "css": ".ds-status { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; color: #EEEAF5; } .ds-dot { width: 6px; height: 6px; border-radius: 9999px; } .ds-dot-teal { background: #00D4AA; } .ds-dot-coral { background: #FF6B6B; }"
-    }
-  ],
-  "narrative": {
-    "northStar": "The Spectrum Instrument",
-    "overview": "cashe reads as a precise, dark-mode financial instrument, not a cheerful budgeting app. The whole system runs on one governing idea: a five-stop cool-to-warm spectrum (teal → mint → honey → tangerine → coral) that encodes financial temperature everywhere a value needs meaning — teal-side means \"good news, on track, saved\"; coral-side means \"this is where the money is going, over pace, alert.\" It is deliberately never a stoplight binary. Position along the spectrum, not a fixed palette of red/yellow/green, is the semantic unit.\n\nThe base surface is near-black ink (#0B0B14) with a very faint cool tilt, kept almost entirely flat — most cards carry no shadow at all, just a 1px border. Brand warmth is rationed: gradient fills and glow elevation appear in three to five places per screen at most, so when they do appear (hero numerics, the primary CTA, an \"on track\" health card) they read as genuinely special rather than decorative wallpaper. Three type families do three distinct jobs — Plus Jakarta Sans carries personality wherever something is being named (headings, card titles, the wordmark), Inter carries plain-legibility body and interactive chrome, and JetBrains Mono flags \"this is data\" (eyebrow labels, stat labels, timestamps, IDs). The voice is matter-of-fact and lightly warm — \"Captured.\" not \"Successfully added!\" — because this is a private financial instrument for a small, trusted circle of people, not a consumer app performing enthusiasm at a stranger.",
-    "keyCharacteristics": [
-      "A five-color semantic spectrum (never a red/green binary) drives every status, badge, chart, and category color in the system.",
-      "Near-black flat surfaces at rest; glow elevation and gradient fills are rationed to a handful of moments per screen so they stay meaningful.",
-      "Three typefaces, three jobs: Plus Jakarta (naming/personality), Inter (body/clarity), JetBrains Mono (data/precision).",
-      "Matter-of-fact, unexclamatory voice — periods, not exclamation marks; \"Captured.\" not \"Success!\""
-    ],
-    "rules": [
-      { "name": "The Spectrum-Not-Stoplight Rule", "body": "Status is never red/yellow/green. It is a position on the five-stop teal→coral spectrum, because spending health is a gradient, not a pass/fail.", "section": "colors" },
-      { "name": "The Rationed Glow Rule", "body": "At most one warm glow and one teal glow visible on screen at a time. If a page would produce two warm-glow cards, demote one to flat (elev-none) and let a single hero carry the warmth.", "section": "elevation" },
-      { "name": "The Named-Thing Rule", "body": "Plus Jakarta is reserved for anything that names a page, card, or section. Inter never carries a heading; Plus Jakarta never carries a paragraph.", "section": "typography" },
-      { "name": "The Role-Bound Radius Rule", "body": "A radius value signals what kind of surface it is (control vs. card vs. hero vs. pill) — never mix radii within a role for visual variety.", "section": "shapes" },
-      { "name": "The One Visual Owner Rule", "body": "One visual role and interaction contract has exactly one shared component owner. A new page composes existing owners; a parallel implementation of an existing role requires explicit approval first.", "section": "components" },
-      { "name": "The Persistent Action Rule", "body": "Edit/delete icon buttons are always visible — never hidden behind opacity-0 group-hover:opacity-100. Discoverability beats minimalism here.", "section": "components" }
-    ],
-    "dos": [
-      "Do encode status as a position on the teal→coral spectrum, never a red/yellow/green stoplight.",
-      "Do keep cards flat (elev-none, border only) by default; reserve real shadow and glow for dialogs/toasts and the 3-5 rationed brand-glow moments per screen.",
-      "Do route every monetary value through the shared currency formatter (never toFixed + string-concatenated \"$\"); expenses stay unsigned, income takes a + prefix in text-success.",
-      "Do write copy in the established voice — matter-of-fact, past-tense confirmations (\"Captured.\", \"Saved.\"), periods not exclamation marks.",
-      "Do gate every page-level or repeating animation on useReducedMotion.",
-      "Do reuse the shared component owner for a visual role rather than composing new classes on a one-off element."
-    ],
-    "donts": [
-      "Don't invent a new button, pill, field, or card variant by restyling an existing component's classes.",
-      "Don't use text-accent for destructive intent, or hover a destructive icon back to muted.",
-      "Don't show more than one warm-glow and one teal-glow surface on screen at once.",
-      "Don't use exclamation marks, greetings, or \"Successfully X'd\" phrasing anywhere in product copy.",
-      "Don't stack toasts — a new toast always replaces the current one.",
-      "Don't introduce text color dimmer than muted, and never drop muted body copy below 12px."
-    ]
+  "typographyMeta": {
+   "large-title": {
+    "displayName": "Large Title",
+    "purpose": "Tab-root title; collapses into the frosted nav bar on scroll."
+   },
+   "title": {
+    "displayName": "Group Heading",
+    "purpose": "Title-case heading above each grouped list."
+   },
+   "headline": {
+    "displayName": "Headline",
+    "purpose": "Inline nav bar, toolbar and sheet titles."
+   },
+   "body": {
+    "displayName": "Body",
+    "purpose": "Rows, paragraphs and controls."
+   },
+   "caption": {
+    "displayName": "Caption",
+    "purpose": "Row subtitles and group footers, muted."
+   },
+   "money": {
+    "displayName": "Money",
+    "purpose": "Amounts only, tabular figures."
+   }
+  },
+  "shadows": {
+   "float": "0 10px 30px -10px rgba(0,0,0,0.45)",
+   "sheet": "0 -8px 32px -12px rgba(0,0,0,0.5)",
+   "lift": "0 12px 28px -8px rgba(0,0,0,0.4)"
+  },
+  "materials": {
+   "chrome-blur": "saturate(180%) blur(20px)",
+   "fallbacks": [
+    "@supports not (backdrop-filter)",
+    "@media (prefers-reduced-transparency: reduce)"
+   ]
+  },
+  "motion": {
+   "ease-ios": "cubic-bezier(0.32, 0.72, 0, 1)",
+   "push": "350ms",
+   "sheet-spring": {
+    "type": "spring",
+    "stiffness": 380,
+    "damping": 38
+   },
+   "thumb-spring": {
+    "type": "spring",
+    "stiffness": 500,
+    "damping": 40
+   },
+   "reduced": "Pushes and sheets cross-fade; thumbs jump; nothing loops."
+  },
+  "breakpoints": {
+   "sm": "640px",
+   "md": "768px (sidebar rail, split view)",
+   "lg": "1024px (expanded sidebar)"
   }
+ },
+ "components": [
+  {
+   "name": "List Group",
+   "kind": "list",
+   "refersTo": "list-group",
+   "description": "Grouped inset list: square rows with inset hairlines inside an 18px group.",
+   "html": "<section class=\"ds-wrap\"><h3 class=\"ds-gh\">This week</h3><div class=\"ds-group\"><div class=\"ds-row\"><span class=\"ds-av\" style=\"background:#FB923C33\">🍜</span><span class=\"ds-t\">Hawker Centre<small>Food · 12:30</small></span><span class=\"ds-m\">$6.50</span></div><div class=\"ds-row\"><span class=\"ds-av\" style=\"background:#34D39933\">🚇</span><span class=\"ds-t\">SimplyGo<small>Transport · 08:42</small></span><span class=\"ds-m\">$1.89</span></div></div></section>",
+   "css": ".ds-wrap{font-family: Inter, system-ui, sans-serif; color:#EEEAF5;background:#0B0B14;padding:16px;width:320px}.ds-gh{font:700 18px 'Plus Jakarta Sans',sans-serif;margin:0 4px 6px}.ds-group{background:#161624;border-radius:18px;overflow:hidden}.ds-row{display:flex;align-items:center;gap:12px;min-height:44px;padding:8px 12px;position:relative}.ds-row+.ds-row:before{content:'';position:absolute;top:0;left:56px;right:0;height:1px;background:rgba(238,234,245,.1)}.ds-av{width:32px;height:32px;border-radius:50%;display:grid;place-items:center}.ds-t{flex:1;font-size:14px;display:flex;flex-direction:column}.ds-t small{color:#A8A1B5;font-size:12px}.ds-m{font:500 14px 'JetBrains Mono',monospace}"
+  },
+  {
+   "name": "Selected Row (md+)",
+   "kind": "list",
+   "refersTo": "list-row-selected",
+   "description": "Selection in a split-view list: a 12px teal inset pill.",
+   "html": "<div class=\"ds-wrap\"><div class=\"ds-group\"><div class=\"ds-row ds-sel\"><span class=\"ds-t\">Hawker Centre</span><span class=\"ds-m\">$6.50</span></div><div class=\"ds-row\"><span class=\"ds-t\">SimplyGo</span><span class=\"ds-m\">$1.89</span></div></div></div>",
+   "css": ".ds-wrap{font-family: Inter, system-ui, sans-serif; color:#EEEAF5;background:#0B0B14;padding:16px;width:300px}.ds-group{background:#161624;border-radius:18px;padding:6px}.ds-row{display:flex;align-items:center;min-height:36px;padding:6px 10px;font-size:14px}.ds-t{flex:1}.ds-m{font:500 14px 'JetBrains Mono',monospace}.ds-sel{background:#00D4AA;color:#0B0B14;border-radius:12px}"
+  },
+  {
+   "name": "Spectrum Card",
+   "kind": "card",
+   "refersTo": "spectrum-card",
+   "description": "The one spectrum card per screen, top of Home/Plan/Explore only.",
+   "html": "<div class=\"ds-wrap\"><div class=\"ds-sc\"><div class=\"ds-top\"><span>October</span><span>Budget $1,500</span></div><div class=\"ds-v\">$642.18</div><div class=\"ds-c\">$857.82 left</div><div class=\"ds-bar\" role=\"progressbar\" aria-label=\"Budget used\" aria-valuenow=\"43\"><i style=\"width:43%\"></i></div></div></div>",
+   "css": ".ds-wrap{background:#0B0B14;padding:16px;width:340px}.ds-sc{background:linear-gradient(135deg, #00D4AA 0%, #34D399 25%, #FBBF24 50%, #FB923C 75%, #FF6B6B 100%);color:#0B0B14;border-radius:22px;padding:14px 16px;font-family:Inter,sans-serif}.ds-top{display:flex;justify-content:space-between;font-size:13px;font-weight:600}.ds-v{font:800 40px 'Plus Jakarta Sans',sans-serif;margin:8px 0 2px}.ds-c{font-size:13px;font-weight:500}.ds-bar{height:6px;border-radius:9999px;background:rgba(11,11,20,.18);margin-top:12px;overflow:hidden}.ds-bar i{display:block;height:100%;background:#0B0B14}"
+  },
+  {
+   "name": "Nav Bar (large title)",
+   "kind": "navigation",
+   "refersTo": "nav-bar",
+   "description": "Large title with trailing teal actions; collapses into frosted chrome on scroll.",
+   "html": "<div class=\"ds-wrap\"><div class=\"ds-bar\"><span class=\"ds-a\">Select</span><span class=\"ds-a\">＋</span></div><h1 class=\"ds-lt\">Activity</h1></div>",
+   "css": ".ds-wrap{font-family: Inter, system-ui, sans-serif; color:#EEEAF5;background:#0B0B14;padding:8px 16px 16px;width:320px}.ds-bar{display:flex;justify-content:space-between;height:44px;align-items:center}.ds-a{color:#00D4AA;font-size:17px}.ds-lt{font:800 32px 'Plus Jakarta Sans',sans-serif;letter-spacing:-.02em;margin:4px 0 0}"
+  },
+  {
+   "name": "Tab Bar",
+   "kind": "navigation",
+   "refersTo": "tab-bar",
+   "description": "Floating frosted capsule on phone; fixed px so four tabs always fit 320px.",
+   "html": "<div class=\"ds-wrap\"><nav class=\"ds-tb\"><a class=\"on\">⌂<span>Home</span></a><a>☰<span>Activity</span></a><a>▣<span>Plan</span></a><a>↗<span>Explore</span></a></nav></div>",
+   "css": ".ds-wrap{background:linear-gradient(#1a1a2a,#0B0B14);padding:24px 12px;width:340px}.ds-tb{display:flex;justify-content:space-around;padding:6px;border-radius:26px;background:rgba(22,22,36,.66);backdrop-filter:saturate(180%) blur(20px);-webkit-backdrop-filter:saturate(180%) blur(20px);border:.5px solid rgba(238,234,245,.1);box-shadow:0 10px 30px -10px rgba(0,0,0,.45)}.ds-tb a{display:flex;flex-direction:column;align-items:center;min-width:56px;min-height:44px;justify-content:center;color:#A8A1B5;font:500 11px Inter,sans-serif;border-radius:18px}.ds-tb a.on{color:#EEEAF5;background:rgba(238,234,245,.08)}"
+  },
+  {
+   "name": "Toolbar",
+   "kind": "toolbar",
+   "refersTo": "toolbar-action",
+   "description": "Pinned detail toolbar with teal text actions; strong for confirm, red for delete.",
+   "html": "<div class=\"ds-wrap\"><div class=\"ds-tool\" role=\"toolbar\"><span class=\"ds-x\">Delete</span><span class=\"ds-h\">Transaction</span><span class=\"ds-s\">Save</span></div></div>",
+   "css": ".ds-wrap{font-family: Inter, system-ui, sans-serif; color:#EEEAF5;background:#0B0B14;padding:16px;width:340px}.ds-tool{display:flex;align-items:center;justify-content:space-between;height:44px;padding:0 12px;background:rgba(22,22,36,.66);border-bottom:.5px solid rgba(238,234,245,.1)}.ds-h{font-weight:600;font-size:17px}.ds-s{color:#00D4AA;font-weight:600}.ds-x{color:#FF453A}"
+  },
+  {
+   "name": "Segmented Control",
+   "kind": "control",
+   "refersTo": "segmented",
+   "description": "Tabs and SegmentedChoice: recessed track with a sliding raised thumb.",
+   "html": "<div class=\"ds-wrap\"><div class=\"ds-seg\"><span>14 days</span><span class=\"on\">30 days</span><span>90 days</span></div></div>",
+   "css": ".ds-wrap{font-family: Inter, system-ui, sans-serif; color:#EEEAF5;background:#0B0B14;padding:16px;width:320px}.ds-seg{display:flex;padding:2px;border-radius:10px;background:rgba(238,234,245,.08)}.ds-seg span{flex:1;text-align:center;padding:6px 0;font-size:13px;color:#A8A1B5;border-radius:8px}.ds-seg .on{background:#1B1B2C;color:#EEEAF5;font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.3)}"
+  },
+  {
+   "name": "Filled Field",
+   "kind": "input",
+   "refersTo": "input-field",
+   "description": "Filled 44pt field, 10px radius; border only on error.",
+   "html": "<div class=\"ds-wrap\"><input class=\"ds-in\" placeholder=\"Merchant\"><input class=\"ds-in ds-err\" value=\"abc\" aria-invalid=\"true\"><p class=\"ds-e\">Enter an amount</p></div>",
+   "css": ".ds-wrap{font-family: Inter, system-ui, sans-serif; color:#EEEAF5;background:#0B0B14;padding:16px;width:300px;display:flex;flex-direction:column;gap:8px}.ds-in{min-height:44px;padding:8px 12px;border-radius:10px;border:1px solid transparent;background:rgba(238,234,245,.08);color:#EEEAF5;font:14px Inter,sans-serif}.ds-err{border-color:#FF453A}.ds-e{color:#FF453A;font-size:14px;margin:0}"
+  },
+  {
+   "name": "Primary Button",
+   "kind": "button",
+   "refersTo": "button-primary",
+   "description": "Spectrum gradient, no glow; reserved for a form's single main command.",
+   "html": "<div class=\"ds-wrap\"><button class=\"ds-btn\">Add transaction</button></div>",
+   "css": ".ds-wrap{background:#0B0B14;padding:16px}.ds-btn{height:40px;padding:0 16px;border:none;border-radius:6px;background:linear-gradient(135deg, #00D4AA 0%, #34D399 25%, #FBBF24 50%, #FB923C 75%, #FF6B6B 100%);color:#0B0B14;font:700 14px Inter,sans-serif}"
+  }
+ ],
+ "narrative": {
+  "northStar": "The Spectrum Wallet",
+  "overview": "Calm, native and exact: an iOS-feeling money app where grouped lists carry the facts and colour is rationed to one spectrum card and the data itself. Structure and behaviour follow Apple's HIG; the look is cashe's own.",
+  "keyCharacteristics": [
+   "One spectrum card per screen, top of Home/Plan/Explore only",
+   "Square rows inside 18px groups; 12px teal inset selection on md+",
+   "Frosted chrome with solid fallbacks",
+   "Plus Jakarta names, Inter speaks, JetBrains Mono counts money",
+   "44pt touch rows, 36pt pointer rows, a pressed state on everything tappable"
+  ],
+  "rules": [
+   "The One Spectrum Card Rule",
+   "The Spectrum-Not-Stoplight Rule",
+   "The No-Eyebrow Rule",
+   "The Material-Has-A-Reason Rule"
+  ],
+  "dos": [
+   "Compose ListGroup/ListRow, PageCard, NavBar, Toolbar, TaskSheet and ListDetail",
+   "Route every amount through the money formatter",
+   "Verify at 200% text, Reduce Motion and both themes"
+  ],
+  "donts": [
+   "Glow shadows, gradient text or a second spectrum card",
+   "Mono uppercase eyebrows above headings",
+   "Bordered or nested cards where a grouped list fits",
+   "Swipe-only actions",
+   "Blur where nothing scrolls beneath"
+  ]
+ }
 }

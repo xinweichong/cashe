@@ -409,10 +409,9 @@ Three tiers — use the highest applicable tier, not the lower primitives direct
 | `PageCard` | Content, tables, lists, SVG-based visuals | `CardContent` retains `p-4` padding |
 | `ChartCard` | Recharts chart components | `CardContent className="p-0"` — charts render edge-to-edge |
 | `StatCard` | Compact numeric KPI display | Actual props: `label`, `value`, `color`, optional `delta`, `sparklineData`, `hero`, `subtext` |
-| `HeroCard` | Large prominent stat with gradient wash | Used for savings overview, health score hero |
-| `HighlightCard` | Supported positive-outcome highlight | Teal emphasis, subject to the per-viewport glow budget; not mandatory pairing |
+| `SpectrumCard` (`ui/SpectrumCard.tsx`) | The one spectrum card per screen | Home, Plan and Explore tab roots only; replaced `HeroCard`/`HighlightCard`/`HeroAmount` (removed 2026-10-01) |
 
-`PageCard`, `ChartCard`, `HeroCard` and `HighlightCard` accept `title`, `children` and optional `action`. `StatCard` uses its own API above. `className` permits layout placement, not an unapproved new surface style.
+`PageCard` and `ChartCard` accept `title`, `children` and optional `action`. `StatCard` uses its own API above. `className` permits layout placement, not an unapproved new surface style.
 
 **Tier 3 — Bespoke (use raw `Card`):**
 - Alert card in Analytics — `border-warning/30` semantics, intentionally not abstracted
@@ -428,17 +427,19 @@ Utility classes defined in `src/web/frontend/src/index.css` under `@layer compon
 - **`.btn-action`** — removed. All callers migrated to `Button` with the appropriate variant; do not reintroduce it or another primary-button path.
 - **`.btn-gradient`** — gradient background for the `default` Button variant. Do not apply manually; the CVA default variant uses it.
 - **`.select-field`** — use on all native `<select>` elements. Includes the white SVG chevron via `background-image`. Never use `.input-field` on a `<select>`.
-- **`.grid-scroll-panel`** — use on grid-area children that may contain long content: `overflow-y: auto; min-height: 0`. The `min-height: 0` is critical and must not be removed.
 - **`.toggle-on`** — the switch fill, owned by `components/ui/switch.tsx`. Use `Switch`; never apply the class directly.
-- **`.area-title`**, **`.area-left`**, **`.area-right`** — `grid-area` assignments for named CSS Grid template areas. No-ops outside a grid parent (safe on mobile).
-- **`.page-grid-settings`** — the remaining per-page grid template definition with responsive `@media` overrides. Mobile: single-column stack. Desktop (`md+`): multi-column viewport-filling grid.
 - **Radix `<SelectTrigger>` chevron** — always `opacity-50` (`<ChevronDown className="h-4 w-4 opacity-50" />`). Do not change to `text-foreground` or any explicit color. The 50% opacity is intentional and must be preserved across all usages.
 
 ### Navigation Pattern
 
-Sidebar (`hidden md:flex`, `w-14` md / `w-56` lg, `sticky top-0 h-screen`, `bg-card border-r border-border`) + bottom tabs (`md:hidden`, `bg-card border-t border-border`, `BottomTabs.tsx`). Main content has `pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0` for bottom-tab and Home-indicator clearance.
+**HIG alignment (Direction B, step 3, 2026-10-01; plan `docs/plans/2026-09-30-hig-alignment.md`).**
+- **Sidebar (P2, `Sidebar.tsx`):** a frosted panel inset 0.5rem from the window edge (`chrome-frosted rounded-group`). It's an icon rail at `md` and expanded at `lg`. The toggle button or ⌘⌥S overrides that, remembered per device (`cashe-sidebar`). Review (with the "to check" count) and Settings are sidebar items on md+, and `ProfileMenu showDestinations={false}` drops them from the menu there.
+- **Phone tab bar (P1, `BottomTabs.tsx`):** a floating frosted capsule. Home carries the count from `useAttentionCount`. `main` pads by `TAB_BAR_CLEARANCE` (`pb-20 md:pb-0`; `body` already pads the safe area). `main` is `overflow-x-clip`, not `overflow-hidden`, so `NavBar`/`Toolbar` can stick.
+- **Shell background:** `chrome-wash` replaces `shell-wash`. The phone top bar stays (frosted) until each tab root carries its own `NavBar` (steps 4–10).
+- **List and detail (P6/P7, `ListDetail.tsx`):** pages with details use this; the detail is a route. On a phone the detail is pushed over the mounted, inert list: `useStackBack()` (`stackContext.ts`) animates our own pops, and pops Safari already animated are not re-animated. The edge swipe back exists only in the home-screen app. On md+ the list and detail are side-by-side scrolling regions with `useListKeyboard` (↑/↓ focus `[data-list-row]`, ⌫ delete, Esc close, ⌘F `[data-list-search]`).
+- **`TaskSheet`:** gets a history entry from `useHistoryEntry`, so Back closes it through the discard check.
 
-Nav item states: active `bg-foreground/10 text-foreground font-medium`, inactive `text-muted hover:text-foreground hover:bg-foreground/5`. All nav targets have a 44px minimum hit area.
+Nav item states: the selected sidebar item is a teal fill with `text-on-teal`. The selected tab is a neutral `bg-fill-press` fill that slides between tabs. All nav targets have a 44px minimum hit area.
 
 **Single navigation mode (2026-09-25):** four destinations — Home `/`, Activity `/activity`, Plan `/plan` (+ `/plan/manage` for the existing subscriptions/budgets/goals tools), Explore `/explore` (nested: the dashboard index, `signals`, `health` and `merchants`; `/explore/insights` redirects to `/explore`). Settings and Review move behind the profile menu; Review also links from Home/Activity. `/overview` redirects to Home; the legacy `OverviewPage` is archived at `archive/legacy-overview-2026-09-26/`.
 
@@ -446,83 +447,15 @@ Old classic URLs (`/transactions`, `/analytics`, `/merchants`, `/finance`) redir
 
 ### Dashboard Layout Principles
 
-Four rules that govern how dashboard pages are structured on desktop. Originally introduced to eliminate page-level scrolling everywhere; **revised** — Home and Explore now scroll naturally like a normal page, while Activity (`/activity`, `/transactions`) and the Plan management view (`/plan/manage`) keep the viewport-filling, non-scrolling split layout so their list/detail panels and persistent action bars stay independently scrollable and always visible. Apply rules 1–4 below only to that latter group (and to the legacy classic-nav grid pages, which are unchanged); Home/Explore/Plan's timeline are plain stacked content with normal browser scroll and do not use `page-grid-*`/`grid-scroll-panel` at all.
+HIG alignment (Direction B, 2026-10-01; plan `docs/plans/2026-09-30-hig-alignment.md`) replaced the viewport-filling grid pages. The `page-grid-*`, `area-*` and `grid-scroll-panel` utilities were removed.
 
-#### 1. Viewport-Native Grid Layout
-
-On `md+` screens, dashboard pages fill the viewport with CSS Grid — no page-level scrollbar. Each page defines its own `grid-template-areas`. On mobile, pages revert to single-column stacking with normal browser scroll.
-
-**CSS implementation:**
-- Page container: `p-4 space-y-4 md:h-full md:overflow-hidden md:grid md:gap-4 md:p-6 md:space-y-0 page-grid-<name>`
-- Content panels: `area-<name> grid-scroll-panel space-y-4` (for panels with multiple cards)
-- The `.grid-scroll-panel` utility (`overflow-y: auto; min-height: 0`) is required on every grid-area child that may contain long content. `min-height: 0` is critical — it prevents grid children from overflowing their row constraint.
-- On mobile, `area-*` classes are no-ops (no grid parent), children stack via `space-y-4` on the outer container.
-
-**Per-page grid areas (defined in `index.css`):**
-
-| Page | CSS class | Areas | Columns (md+) | Rows (md+) |
-|---|---|---|---|---|
-| Settings | `.page-grid-settings` | `"title title" / "left right"` | `1fr 1fr` | `auto 1fr` |
-
-**Panel assignments:**
-- **Overview** — Left: stats + health score + budget/goals summaries + charts. Right: transactions (paginated, 20/page).
-- **Analytics** — Left: health score breakdown + alerts. Right: comparison chart + velocity + top merchants + income/expense bar.
-- **Finance** — Top strip: savings overview. Left: budgets. Right: goals. Trips integrated below.
-- **Settings** — Left: categories + merchant overrides. Right: feature toggles + alert thresholds.
-- **Merchants** — Full-width two-panel list/detail view (no grid template, uses flex layout).
-- **Transactions** — Full-width two-panel list/detail view.
-
-#### 2. Persistent Chrome Rule
-
-Interactive controls that modify content (edit, delete, save, cancel) must always be visible when the content they control is on screen. **Never place action buttons in a footer that can scroll off-screen.**
-
-**Correct pattern for `flex flex-col h-full` panel components:**
-```
-[Header: identity info + close button]              ← shrink-0, outside scroll
-[Action bar: edit/delete  OR  cancel/save]          ← shrink-0, outside scroll
-[Scrollable body: detail fields / content]          ← flex-1 overflow-y-auto
-```
-
-Action bar classes: `shrink-0 border-b border-border` with inner `flex gap-2 px-4 py-2`
-
-**Existing components that implement this pattern:** `TransactionDetail`, `MerchantProfile`.
-
-#### 3. Two-Panel Interaction Pattern
-
-Detail/profile panels follow a split-panel layout: list on left, detail on right. Already established in `TransactionsPage` and `MerchantsPage` — apply to any future list-detail view.
-
-- Left panel: `flex-1 overflow-y-auto`
-- Right panel: `w-full md:w-96 shrink-0 border-l border-border bg-card overflow-hidden`
-- On mobile: right panel takes full screen (left panel `hidden md:block`)
-
-#### 4. Paginated Summary Lists
-
-Summary/overview pages show paginated lists (page size 20), not infinite scroll dumps. Infinite scroll is only for dedicated list pages (e.g. `TransactionsPage`).
-
-Pagination controls go in the `PageCard` header `action` slot. Reset page to 1 whenever the date/period changes.
-
-```tsx
-const PAGE_SIZE = 20;
-const [page, setPage] = useState(1);
-useEffect(() => { setPage(1); }, [start, end]);
-const totalPages = Math.ceil((items?.length ?? 0) / PAGE_SIZE);
-const pageItems = (items ?? []).slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-```
-
-Pagination control (only rendered when `totalPages > 1`):
-```tsx
-<div className="flex items-center gap-1">
-  <Button variant="ghost" size="icon" className="min-h-11 min-w-11" aria-label="Previous page"
-    onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>
-    <ChevronLeft className="h-4 w-4" />
-  </Button>
-  <span className="text-xs text-muted">{page}/{totalPages}</span>
-  <Button variant="ghost" size="icon" className="min-h-11 min-w-11" aria-label="Next page"
-    onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}>
-    <ChevronRight className="h-4 w-4" />
-  </Button>
-</div>
-```
+1. **Pages scroll naturally.** Every page starts with a `NavBar`. Tab roots (Home, Activity, Plan, Explore, Settings, Review) use the large title; pushed pages (Evidence, Explore signals/health/merchants, details) use an inline title with a back button named for the parent. Content sits in `px-4`, so it shares an edge with the large title. `AppShell` hides its phone bar on routes that bring their own `NavBar` (`ownNavBar` in `AppShell.tsx`).
+2. **Lists with details use `ListDetail`.** The detail is a route or URL param, so Back, reload and deep links work.
+   - **Phone:** the detail is pushed over the still-mounted list.
+   - **md+ `split` (Activity, Merchants):** a 22–24rem list column beside the detail, each scrolling on its own, with Mac list keys.
+   - **md+ `inspector` (Plan):** the page stays full width and the detail opens as a 26rem column on the right.
+3. **Persistent chrome.** A detail's actions sit in its `NavBar` on a phone or its sticky `Toolbar` on md+ (`DetailHeader` does this for Plan/Explore details). They are never in a footer that scrolls away. Destructive actions on a phone detail may be a destructive row at the foot of the page (iOS pattern), with the bar keeping Edit.
+4. **Sections are groups.** Use `ListGroup`/`ListRow` for rows and `PageCard` (now a titled group) for free content. At most one `SpectrumCard` per screen, only at the top of Home, Plan or Explore.
 
 ### Common UI Patterns
 
@@ -631,7 +564,7 @@ Test files: `test_storage.py`, `test_categorizer.py`, `test_parsers.py`, `test_t
 - **Adding a category color:** Add the color to `getCategoryColor()` defaults and the 20-color `PALETTE` array in `src/web/frontend/src/lib/utils.ts`
 - **Adding a new chart component:** Create in `src/components/charts/`. Import all Recharts config from `src/lib/chartTheme.ts`. Wrap in `ChartCard` from `src/components/ui/cards.tsx` if the component owns its card.
 - **Adding a new page section:** Use `PageCard` (content/tables/lists) or `ChartCard` (Recharts charts) from `src/components/ui/cards.tsx`. Avoid bare `Card/CardHeader/CardContent` for standard layouts.
-- **Adding a new full-page view:** Use `p-4 space-y-4 md:h-full md:overflow-hidden md:grid md:gap-4 md:p-6 md:space-y-0` on the outer container. Define a `.page-grid-<name>` template in `index.css` with mobile single-column and `md` two-column variants. Apply `.grid-scroll-panel` to every grid-area child. Panel components inside the grid must follow the Persistent Chrome Rule (header + action bar outside scroll area).
+- **Adding a new full-page view:** Start with `NavBar` (large title for a tab root, `back` for a pushed page), put content in `px-4`, compose `ListGroup`/`ListRow`/`PageCard`, and use `ListDetail` when items open a detail. Add the route to `ownNavBar` in `AppShell.tsx` so the phone shell bar steps aside. See "Dashboard Layout Principles".
 - **Deploying to Oracle Cloud:** `git pull` on the OCI instance, then `docker-compose down && docker-compose build --no-cache && docker-compose up -d`. The `data/` volume persists across rebuilds. Cloudflare Tunnel reconnects automatically.
 
 ## Agent skills

@@ -12,6 +12,10 @@ import { CategoryAvatar } from '@/components/ui/CategoryAvatar';
 import { CategoryColorPicker, CategoryIconPicker } from '@/components/categories/CategoryPickers';
 import { PALETTE } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { ListGroup, ListRow } from '@/components/ui/list';
+import { SpectrumCard } from '@/components/ui/SpectrumCard';
+import { Toolbar, ToolbarAction } from '@/components/ui/toolbar';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 // Dev-only visual harness for shared primitives — mounted at /dev/preview only
 // when import.meta.env.DEV (see App.tsx), so it never ships in a production
@@ -135,10 +139,44 @@ export function DevPreviewPage() {
 
       <ControlsSheet />
 
-      <section data-testid="section-wash">
-        <h2 className="font-display text-lg font-semibold mb-4">Shell wash</h2>
-        <div className="experience-next shell-wash rounded-md border border-border h-40 w-full max-w-xl" data-testid="shell-wash-sample" />
-      </section>
+      <DirectionBSheet />
     </div>
+  );
+}
+
+// Direction B owners (HIG alignment, 2026-10-01; P3–P12) in their main states,
+// so Playwright can capture them in both themes without app data.
+function DirectionBSheet() {
+  const [tab, setTab] = useState('month');
+  return (
+    <section data-testid="section-direction-b" className="space-y-6">
+      <h2 className="font-display text-lg font-semibold">Direction B owners</h2>
+      <div className="chrome-wash h-24 w-full max-w-xl rounded-group" data-testid="chrome-wash-sample" />
+      <div className="grid max-w-3xl gap-4 md:grid-cols-3">
+        <SpectrumCard label="September" meta="Budget S$3,000" value="S$2,184.30" caption="S$815.70 left" progress={0.72} progressLabel="Budget used" />
+        <SpectrumCard label="Next 30 days" value="S$184.20" caption="9 charges · 2 unpriced" status="estimated" />
+        <SpectrumCard label="September" value="S$2,184.30" caption="3 foreign amounts not converted yet" progress={0.72} status="partial" />
+      </div>
+      <div className="max-w-md" data-testid="list-sample">
+        <ListGroup title="Grouped list" footer="Rows: navigation, value, selected, disabled, destructive.">
+          <ListRow onClick={() => {}} title="Navigation row" value="Food" trailing="chevron" />
+          <ListRow title="Value row" subtitle="With a subtitle" amount="S$4.50" />
+          <ListRow onClick={() => {}} selected title="Selected row" subtitle="Teal fill; inset pill on md+" />
+          <ListRow onClick={() => {}} disabled title="Disabled row" />
+          <ListRow onClick={() => {}} destructive title="Delete transaction" />
+        </ListGroup>
+      </div>
+      <div className="max-w-md overflow-hidden rounded-group bg-card" data-testid="toolbar-sample">
+        <Toolbar title="Transaction" trailing={<><ToolbarAction>Edit</ToolbarAction><ToolbarAction tone="destructive">Delete</ToolbarAction></>} />
+        <Toolbar leading={<ToolbarAction>Cancel</ToolbarAction>} title="Edit" trailing={<ToolbarAction tone="strong" pending pendingLabel="Saving…">Save</ToolbarAction>} />
+      </div>
+      <Tabs value={tab} onValueChange={setTab}>
+        <TabsList aria-label="Segmented sample">
+          <TabsTrigger value="month">Month</TabsTrigger>
+          <TabsTrigger value="quarter">3 months</TabsTrigger>
+          <TabsTrigger value="year">Year</TabsTrigger>
+        </TabsList>
+      </Tabs>
+    </section>
   );
 }
