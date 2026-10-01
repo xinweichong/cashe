@@ -6,6 +6,7 @@ import pytest
 
 from src.spending_facts import month_periods
 from src.storage import Storage
+from src.config import local_now
 
 
 @pytest.fixture
@@ -510,7 +511,9 @@ def test_home_briefing_has_no_spending_target_when_no_overall_budget_exists(ledg
 def test_home_briefing_computes_spending_target_from_the_overall_budget_and_shared_facts(ledger):
     storage, add = ledger
     storage.create_budget(category=None, amount=1000.0, period='monthly')
-    add(300, '2026-09-05T12:00:00')
+    # Dated today: the briefing covers the current local month (local_now),
+    # so a fixed date would fall outside it once that month has passed.
+    add(300, f'{local_now().date().isoformat()}T00:00:00')
     briefing = storage.get_home_briefing()
     assert briefing['spending_target'] == {
         'target': {'minor_units': 100000, 'currency': 'SGD'},
@@ -525,7 +528,9 @@ def test_home_briefing_computes_spending_target_from_the_overall_budget_and_shar
 def test_home_briefing_spending_target_can_go_negative_when_over_budget(ledger):
     storage, add = ledger
     storage.create_budget(category=None, amount=100.0, period='monthly')
-    add(300, '2026-09-05T12:00:00')
+    # Dated today: the briefing covers the current local month (local_now),
+    # so a fixed date would fall outside it once that month has passed.
+    add(300, f'{local_now().date().isoformat()}T00:00:00')
     briefing = storage.get_home_briefing()
     assert briefing['spending_target']['remaining'] == {'minor_units': -20000, 'currency': 'SGD'}
 
