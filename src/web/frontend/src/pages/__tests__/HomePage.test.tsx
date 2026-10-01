@@ -39,7 +39,7 @@ test('Home counts what needs a look in plain words and links to the other tabs',
 test('Home surfaces all-history review and recurring suggestion counts', async () => {
   vi.mocked(briefingApi.home).mockResolvedValue({ ...home, review_count: 4, recurring_suggestion_count: 1 });
   show(<HomePage />);
-  expect(await screen.findByText('4 records')).toBeTruthy();
+  expect(await screen.findByText('4 purchases to review')).toBeTruthy();
   expect(screen.getByText('1 possible subscription')).toBeTruthy();
 });
 
@@ -62,7 +62,7 @@ test('partial and undated amounts remain visible as uncertainty', async () => {
   vi.mocked(briefingApi.home).mockResolvedValue({ ...home, facts: { ...home.facts, current: { ...period, status: 'partial', unresolved_count: 1 }, undated_count: 1, change: null, category_changes: [] } });
   show(<HomePage />);
   expect(await screen.findByText(/Known spending so far/)).toBeTruthy();
-  expect(screen.getByText('2 purchases')).toBeTruthy();
+  expect(screen.getByText('2 purchases to review')).toBeTruthy();
   expect(screen.getByText(/Can’t compare with last month/)).toBeTruthy();
 });
 

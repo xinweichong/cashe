@@ -32,7 +32,7 @@ test('the signals page lists every signal, each opening its transaction with a w
 
 test('the health page shows the full breakdown and the left-out records', async () => {
   vi.mocked(briefingApi.healthScore).mockResolvedValue({
-    score: 64, grade: 'Good', has_income_data: true, period: '2026-09', start: '2026-09-01', end: '2026-09-06',
+    score: 64, grade: 'Good', has_income_data: true, period: '2026-09', start: '2026-09-01', end: '2026-09-10',
     status: 'partial', unresolved_count: 2, income: { minor_units: 300000, currency: 'SGD' }, spending: { minor_units: 1250, currency: 'SGD' },
     components: { savings_rate: { score: 40, max: 40, value: 0.99, benchmark: 0.2, label: 'Savings Rate', description: 'Income left after all spending' } },
   });

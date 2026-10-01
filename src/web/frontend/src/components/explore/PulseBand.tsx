@@ -59,7 +59,7 @@ export function PulseBand({ facts }: { facts: SpendingFacts | undefined }) {
   const netNote = current.recorded_net_flow
     ? `${formatChange(current.recorded_net_flow)} after spending`
     : current.income
-      ? 'Hidden while records need review'
+      ? 'Left after spending shows once records are reviewed'
       : 'No income recorded this month';
 
   return (

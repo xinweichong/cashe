@@ -38,6 +38,7 @@ const PAGE_SIZE = 20;
 // toolbar; each row has swipe actions (touch) and a context menu, both also
 // reachable from the detail page.
 
+const ADD_FORM_ID = 'add-transaction-form';
 type ActivityLens = 'all' | 'review' | 'income' | 'refund';
 type TxType = 'expense' | 'income' | 'refund' | 'transfer';
 const TYPE_LABELS: Record<TxType, string> = { expense: 'Spending', income: 'Income', refund: 'Refund', transfer: 'Transfer' };
@@ -88,6 +89,7 @@ export function TransactionsPage() {
   const [tripId, setTripId] = useState(() => searchParams.get('trip') ?? '');
   const [needsReview, setNeedsReview] = useState(() => searchParams.get('review') === '1');
   const [showForm, setShowForm] = useState(false);
+  const [addPending, setAddPending] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   // One row action at a time: a category pick or a delete confirmation.
   const [categoryFor, setCategoryFor] = useState<Transaction | 'selection' | null>(null);
@@ -541,8 +543,14 @@ export function TransactionsPage() {
         <TransactionFilters variant="sheet" {...filterProps} />
       </TaskSheet>
 
-      <TaskSheet open={showForm} onOpenChange={setShowForm} title="Add a transaction" initialDetent="large">
-        <TransactionForm categories={categoryList} onClose={() => setShowForm(false)} />
+      <TaskSheet
+        open={showForm}
+        onOpenChange={setShowForm}
+        title="Add a transaction"
+        initialDetent="large"
+        confirm={{ label: 'Save', onClick: () => (document.getElementById(ADD_FORM_ID) as HTMLFormElement | null)?.requestSubmit(), pending: addPending, pendingLabel: 'Saving…' }}
+      >
+        <TransactionForm categories={categoryList} onClose={() => setShowForm(false)} formId={ADD_FORM_ID} onPendingChange={setAddPending} />
       </TaskSheet>
 
       <TaskSheet

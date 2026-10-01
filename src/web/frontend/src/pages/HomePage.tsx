@@ -104,6 +104,7 @@ export function HomePage() {
   const sourcesNeedCare = freshness.gmail_needs_reconnection || !freshness.gmail_connected;
   const amountOrUnknown = (money: Money | null | undefined, unknown: string) => money ? { amount: formatMoney(money) } : { value: unknown };
   const captureItems = capture_issue_count + followup_issue_count;
+  const toReview = Math.max(unresolved, review_count);
   const comparable = !!facts.change && daysInclusive(facts.comparison_current.start, facts.comparison_current.end) >= MIN_COMPARE_DAYS;
   const changeText = facts.change && `${formatMoneyAbs(facts.change)} ${facts.change.minor_units >= 0 ? 'more' : 'less'} than by this date in ${monthName(facts.previous.start)}`;
 
@@ -136,8 +137,15 @@ export function HomePage() {
       footer={<>{freshness.last_capture_processed_at ? `Last capture ${formatWhen(freshness.last_capture_processed_at)}.` : 'Nothing captured yet.'} A recent check can’t prove every purchase was caught.</>}
     >
       {!!captureItems && <ListRow to="/review" leading={dot(<StatusDot tone="notable" />)} title={`${plural(captureItems, 'capture')} to check`} trailing="chevron" />}
-      {!!unresolved && <ListRow to={withReturn(evidenceLink(facts.current, undefined, 'unresolved'))} leading={dot(<StatusDot tone="warm" />)} title={plural(unresolved, 'purchase')} subtitle="Missing an amount, currency rate or date" trailing="chevron" />}
-      {!!review_count && <ListRow to="/review" leading={dot(<StatusDot tone="notable" />)} title={plural(review_count, 'record')} subtitle="Need review" trailing="chevron" />}
+      {/* This month's unresolved records are part of the all-history review
+          count: one row, so one record is never listed twice. */}
+      {!!toReview && <ListRow
+        to={review_count >= unresolved ? '/review' : withReturn(evidenceLink(facts.current, undefined, 'unresolved'))}
+        leading={dot(<StatusDot tone="warm" />)}
+        title={`${plural(toReview, 'purchase')} to review`}
+        subtitle="Missing an amount, currency rate or date"
+        trailing="chevron"
+      />}
       {!!recurring_suggestion_count && <ListRow to="/review" leading={dot(<StatusDot tone="calm" />)} title={plural(recurring_suggestion_count, 'possible subscription')} subtitle="Confirm or dismiss" trailing="chevron" />}
       {increased_commitments.map((change) => (
         <ListRow
@@ -158,7 +166,7 @@ export function HomePage() {
           trailing="chevron"
         />
       )}
-      {!captureItems && !unresolved && !review_count && !recurring_suggestion_count && !increased_commitments.length && !sourcesNeedCare && (
+      {!captureItems && !toReview && !recurring_suggestion_count && !increased_commitments.length && !sourcesNeedCare && (
         <ListRow leading={dot(<StatusDot tone="calm" />)} title="All caught up" subtitle={freshness.gmail_last_checked ? `Gmail checked ${formatWhen(freshness.gmail_last_checked)}` : undefined} />
       )}
     </ListGroup>

@@ -7,6 +7,8 @@ import { useHomeBriefing } from './useBriefing';
 export function useAttentionCount(): number | undefined {
   const { data } = useHomeBriefing();
   if (!data) return undefined;
+  // This month's unresolved records are also in the all-history review
+  // count, so take the larger rather than counting one record twice.
   const unresolved = data.facts.current.unresolved_count + data.facts.undated_count;
-  return data.capture_issue_count + data.followup_issue_count + unresolved + data.review_count + data.recurring_suggestion_count;
+  return data.capture_issue_count + data.followup_issue_count + Math.max(unresolved, data.review_count) + data.recurring_suggestion_count;
 }

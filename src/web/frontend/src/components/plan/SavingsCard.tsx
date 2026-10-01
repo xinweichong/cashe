@@ -1,25 +1,41 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/api/client';
+import { formatMoney } from '@/api/briefing';
 import { ListGroup, ListRow } from '@/components/ui/list';
-import { formatCurrencyWhole } from '@/lib/utils';
+import { formatCurrency, minorToMajor } from '@/lib/utils';
+import { useHomeBriefing } from '@/hooks/useBriefing';
 
 // This month's savings as a grouped list (Direction B, 2026-10-01): Plan's
 // one spectrum card is the month's projection, so savings stay plain rows.
+// "Saved" is the shared month facts' net flow, the figure Home shows, so it
+// is hidden on both screens while records need review.
 export function SavingsCard() {
+  const { data: briefing } = useHomeBriefing();
   const { data: overview } = useQuery({
     queryKey: ['savings-overview'],
     queryFn: () => api.getSavingsOverview(),
     staleTime: 30_000,
   });
 
-  if (!overview) return null;
+  if (!briefing || !overview) return null;
 
-  const monthLabel = new Date(overview.month + '-01').toLocaleString('en', { month: 'long', year: 'numeric' });
+  const current = briefing.facts.current;
+  const saved = current.recorded_net_flow;
+  const monthLabel = new Date(`${current.start}T00:00:00Z`).toLocaleString('en-SG', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+  const notYetToGoals = saved ? minorToMajor(saved.minor_units, saved.currency) - overview.allocated_to_goals : null;
   return (
     <ListGroup title={`Savings, ${monthLabel}`}>
-      <ListRow title="Saved" subtitle="Income minus expenses" amount={<span className="text-success">{formatCurrencyWhole(overview.savings)}</span>} />
-      <ListRow title="Toward goals" subtitle="Added by you" amount={formatCurrencyWhole(overview.allocated_to_goals)} />
-      <ListRow title="Unallocated" subtitle="Free to allocate" amount={formatCurrencyWhole(overview.unallocated)} />
+      <ListRow
+        title="Saved"
+        subtitle="Income minus spending"
+        {...(saved
+          ? { amount: <span className={saved.minor_units < 0 ? undefined : 'text-success'}>{formatMoney(saved)}</span> }
+          : { value: current.income ? 'Shows once records are reviewed' : 'No income recorded yet' })}
+      />
+      <ListRow title="Toward goals" subtitle="Added by you" amount={formatCurrency(overview.allocated_to_goals)} />
+      {notYetToGoals != null && notYetToGoals > 0 && (
+        <ListRow title="Not yet toward a goal" amount={formatCurrency(notYetToGoals)} />
+      )}
     </ListGroup>
   );
 }

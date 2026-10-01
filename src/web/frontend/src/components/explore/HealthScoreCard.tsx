@@ -102,6 +102,12 @@ export function HealthScoreCard() {
     <div role="alert"><LoadFailed onRetry={() => void refetch()} /></div>
   ) : isLoading || !data ? (
     <div role="status"><span className="sr-only">Loading…</span><Skeleton className="h-64" /></div>
+  ) : daysInclusive(data.start, data.end) < MIN_SCORE_DAYS ? (
+    // Same rule as the Explore card, so the two never disagree.
+    <div className="py-6 space-y-1">
+      <p className="text-sm text-foreground">Too early in the month for a score.</p>
+      <p className="text-sm text-muted">{formatRange(data.start, data.end)} is only {daysInclusive(data.start, data.end)} {daysInclusive(data.start, data.end) === 1 ? 'day' : 'days'}. Check back after the first week, or choose Last 3 months.</p>
+    </div>
   ) : !data.has_income_data ? (
     <div className="py-6 space-y-1">
       <p className="text-sm text-foreground">No income recorded for {formatRange(data.start, data.end)}.</p>
@@ -117,7 +123,6 @@ export function HealthScoreCard() {
             {data.income && <>Spent {formatMoney(data.spending)} of {formatMoney(data.income)} income</>}
           </p>
           <p className="text-xs text-muted mt-0.5">{formatRange(data.start, data.end)} · 50/30/20 rule</p>
-          {daysInclusive(data.start, data.end) < MIN_SCORE_DAYS && <p className="text-xs text-warning mt-0.5">Based on only {daysInclusive(data.start, data.end)} {daysInclusive(data.start, data.end) === 1 ? 'day' : 'days'}, so it will swing.</p>}
         </div>
       </div>
       <ul className="space-y-3">

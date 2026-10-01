@@ -122,7 +122,9 @@ export function ListDetail({ list, detail, onClose, emptyDetail, onDeleteSelecte
               key="detail"
               aria-label={detailLabel}
               className={isPhone
-                ? 'fixed inset-0 z-40 overflow-y-auto overscroll-contain bg-background pt-[env(safe-area-inset-top)] shadow-[-12px_0_30px_rgb(0_0_0/0.35)]'
+                // Clears the floating tab bar (z-50) like main does; a fixed layer
+                // doesn't inherit body's safe-area padding, so add it here.
+                ? 'fixed inset-0 z-40 overflow-y-auto overscroll-contain bg-background pt-[env(safe-area-inset-top)] pb-[calc(80px+env(safe-area-inset-bottom))] shadow-[-12px_0_30px_rgb(0_0_0/0.35)]'
                 : inspector
                   ? cn('sticky top-[env(safe-area-inset-top)] w-[26rem] shrink-0 overflow-y-auto overscroll-contain border-l-[0.5px] border-separator bg-background', viewportHeight)
                   : 'min-w-0 flex-1 overflow-y-auto overscroll-contain'}

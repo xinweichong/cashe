@@ -30,15 +30,20 @@ const CURRENCIES = ['SGD', 'USD', 'THB', 'MYR', 'JPY', 'EUR', 'GBP'] as const;
 interface TransactionFormProps {
   categories: Category[];
   onClose: () => void;
+  /** Set when a sheet's header Save submits the form; hides the form's own button. */
+  formId?: string;
+  onPendingChange?: (pending: boolean) => void;
 }
 
-export function TransactionForm({ categories, onClose }: TransactionFormProps) {
+export function TransactionForm({ categories, onClose, formId, onPendingChange }: TransactionFormProps) {
   const [type, setType] = useState<TxType>('expense');
   const [amount, setAmount] = useState('');
   const [merchant, setMerchant] = useState('');
   const [category, setCategory] = useState('');
   const [description, setDescription] = useState('');
   const [currency, setCurrency] = useState('SGD');
+  const [rate, setRate] = useState('');
+  const fieldId = useId();
   const [tripId, setTripId] = useState('');
   const [tripTouched, setTripTouched] = useState(false);
   // Currency/date/category/notes/trip are secondary — amount and merchant
@@ -70,6 +75,7 @@ export function TransactionForm({ categories, onClose }: TransactionFormProps) {
 
   const [requestKey] = useState(() => crypto.randomUUID());
   const createTx = useCreateTransaction();
+  useEffect(() => { onPendingChange?.(createTx.isPending); }, [createTx.isPending, onPendingChange]);
   const toast = useToast();
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -86,6 +92,7 @@ export function TransactionForm({ categories, onClose }: TransactionFormProps) {
           category: category || undefined,
           description: description || undefined,
           currency,
+          exchange_rate: currency !== 'SGD' && Number(rate) > 0 ? Number(rate) : undefined,
           source: type === 'cash' ? 'cash' : 'manual',
           transaction_date: datetime ? datetime + ':00' : undefined,
         },
@@ -107,17 +114,18 @@ export function TransactionForm({ categories, onClose }: TransactionFormProps) {
 
   return (
     // Lives in the Add sheet, whose header carries Cancel: no card of its own.
-    <form onSubmit={handleSubmit} className="space-y-3 p-1">
+    <form id={formId} onSubmit={handleSubmit} className="space-y-3 p-1">
         <SegmentedChoice<TxType> name="transaction-type" aria-label="Transaction type" value={type} onValueChange={setType} options={TX_TYPES} />
 
         {/* Primary fields — amount and merchant are all it takes to capture something */}
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="text-xs text-muted">Amount</label>
+            <label htmlFor={`${fieldId}-amount`} className="text-xs text-muted">Amount</label>
             <Input
-              type="number"
-              step="0.01"
-              min="0"
+              id={`${fieldId}-amount`}
+              type="text"
+              inputMode="decimal"
+              pattern="[0-9]*[.]?[0-9]*"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               placeholder="0.00"
@@ -127,8 +135,9 @@ export function TransactionForm({ categories, onClose }: TransactionFormProps) {
             />
           </div>
           <div>
-            <label className="text-xs text-muted">Merchant</label>
+            <label htmlFor={`${fieldId}-merchant`} className="text-xs text-muted">Merchant</label>
             <Input
+              id={`${fieldId}-merchant`}
               value={merchant}
               onChange={(e) => setMerchant(e.target.value)}
               placeholder="e.g. Coffee Shop"
@@ -152,9 +161,9 @@ export function TransactionForm({ categories, onClose }: TransactionFormProps) {
         {showMore && (
           <div id={moreId} className="space-y-3">
             <div>
-              <label className="text-xs text-muted">Currency</label>
+              <label htmlFor={`${fieldId}-currency`} className="text-xs text-muted">Currency</label>
               <Select value={currency} onValueChange={setCurrency}>
-                <SelectTrigger>
+                <SelectTrigger id={`${fieldId}-currency`}>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -165,10 +174,18 @@ export function TransactionForm({ categories, onClose }: TransactionFormProps) {
               </Select>
             </div>
 
+            {currency !== 'SGD' && (
+              <div>
+                <label htmlFor={`${fieldId}-rate`} className="text-xs text-muted">SGD per 1 {currency} (optional)</label>
+                <Input id={`${fieldId}-rate`} type="text" inputMode="decimal" pattern="[0-9]*[.]?[0-9]*" value={rate} onChange={(e) => setRate(e.target.value)} placeholder="e.g. 0.0089" />
+                <p className="mt-1 text-xs text-muted">Leave it blank if you don’t know it. The purchase is saved, and waits in Review until a rate is added.</p>
+              </div>
+            )}
+
             <div>
-              <label className="text-xs text-muted">Category</label>
+              <label htmlFor={`${fieldId}-category`} className="text-xs text-muted">Category</label>
               <Select value={category} onValueChange={setCategory}>
-                <SelectTrigger>
+                <SelectTrigger id={`${fieldId}-category`}>
                   <SelectValue placeholder="Select category" />
                 </SelectTrigger>
                 <SelectContent>
@@ -180,8 +197,9 @@ export function TransactionForm({ categories, onClose }: TransactionFormProps) {
             </div>
 
             <div>
-              <label className="text-xs text-muted">Date & Time</label>
+              <label htmlFor={`${fieldId}-date`} className="text-xs text-muted">Date and time</label>
               <Input
+                id={`${fieldId}-date`}
                 type="datetime-local"
                 value={datetime}
                 onChange={(e) => setDatetime(e.target.value)}
@@ -189,8 +207,9 @@ export function TransactionForm({ categories, onClose }: TransactionFormProps) {
             </div>
 
             <div>
-              <label className="text-xs text-muted">Description (optional)</label>
+              <label htmlFor={`${fieldId}-notes`} className="text-xs text-muted">Notes (optional)</label>
               <Input
+                id={`${fieldId}-notes`}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="Notes..."
@@ -199,7 +218,7 @@ export function TransactionForm({ categories, onClose }: TransactionFormProps) {
 
             {tripsEnabled && trips.length > 0 && (
               <div>
-                <label className="text-xs text-muted">Trip</label>
+                <label htmlFor={`${fieldId}-trip`} className="text-xs text-muted">Trip</label>
                 <Select
                   value={tripId || 'none'}
                   onValueChange={(v) => {
@@ -216,7 +235,7 @@ export function TransactionForm({ categories, onClose }: TransactionFormProps) {
                     setTripTouched(true);
                   }}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger id={`${fieldId}-trip`}>
                     <SelectValue placeholder="No trip" />
                   </SelectTrigger>
                   <SelectContent>
@@ -239,9 +258,12 @@ export function TransactionForm({ categories, onClose }: TransactionFormProps) {
           </p>
         )}
 
-        <Button type="submit" className="min-h-11 w-full" disabled={!amount || createTx.isPending}>
-          {createTx.isPending ? 'Saving…' : 'Save'}
-        </Button>
+        {/* In the Add sheet the header's Save submits this form (formId). */}
+        {!formId && (
+          <Button type="submit" className="min-h-11 w-full" disabled={!amount || createTx.isPending}>
+            {createTx.isPending ? 'Saving…' : 'Save'}
+          </Button>
+        )}
       </form>
   );
 }
