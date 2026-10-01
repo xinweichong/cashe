@@ -175,7 +175,7 @@ export function LensMore({ items }: { items: readonly { label: string; hint?: Re
   return (
     <Card className="divide-y divide-border overflow-hidden">
       {items.map((item) => (
-        <SelectableRow key={item.label} onClick={item.onOpen} className="min-h-12 gap-3 rounded-none px-4">
+        <SelectableRow key={item.label} onClick={item.onOpen} className="min-h-12 gap-3 px-4">
           <span className="flex-1 text-sm font-medium">{item.label}</span>
           {item.hint && <span className="text-xs text-muted">{item.hint}</span>}
           <ChevronRight size={16} className="text-muted" aria-hidden />

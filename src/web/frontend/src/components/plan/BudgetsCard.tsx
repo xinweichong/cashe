@@ -17,7 +17,7 @@ function BudgetSummaryRow({ b, onSelect }: { b: BudgetProgressV2; onSelect: () =
   const remaining = b.remaining.minor_units / 100;
   const { color, toneName } = getBudgetTone(b.percent);
   return (
-    <SelectableRow onClick={onSelect} className="flex-col items-stretch gap-1.5 rounded-none border-b border-border last:border-b-0 py-3">
+    <SelectableRow onClick={onSelect} className="flex-col items-stretch gap-1.5 py-3">
       <div className="flex items-center justify-between gap-2">
         <span className="text-sm font-medium text-foreground truncate">{b.label}</span>
         <span className="text-xs text-muted font-mono capitalize shrink-0">{b.period}</span>

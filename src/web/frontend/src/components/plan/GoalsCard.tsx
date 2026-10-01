@@ -16,7 +16,7 @@ function GoalSummaryRow({ g, onSelect }: { g: GoalProgress; onSelect: () => void
   const { color } = getGoalTone(g.percent);
   const isComplete = g.status === 'completed' || g.percent >= 100;
   return (
-    <SelectableRow onClick={onSelect} className="rounded-none border-b border-border last:border-b-0 py-3">
+    <SelectableRow onClick={onSelect} className="py-3">
       <ProgressRing percent={g.percent} color={color} size={36} radius={15} strokeWidth={4} />
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">

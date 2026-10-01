@@ -1,8 +1,7 @@
-import type { CSSProperties, ReactNode } from 'react';
+import { useId, type CSSProperties, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { Card, CardContent } from '@/components/ui/card';
 
 // ── PageCard ──────────────────────────────────────────────────────────────────
 interface PageCardProps {
@@ -15,14 +14,21 @@ interface PageCardProps {
 }
 
 export function PageCard({ title, action, children, className, contentClassName, headerClassName }: PageCardProps) {
+  // Direction B (P4, 2026-10-01): a titled group. The heading sits above a
+  // borderless 18px group surface, matching ListGroup, so a page reads as
+  // one system whether a section holds rows or free content. Layout classes
+  // apply to the whole section; the surface stretches to fill a grid cell.
+  const headingId = useId();
   return (
-    <Card className={cn(className)}>
-      <div className={cn('flex flex-row items-center justify-between p-4 gap-2', headerClassName)}>
-        <h2 className="min-w-0 text-base font-semibold text-foreground font-display">{title}</h2>
-        {action && <div className="shrink-0 ml-2">{action}</div>}
+    <section aria-labelledby={headingId} className={cn('flex min-w-0 flex-col', className)}>
+      <div className={cn('mb-1.5 flex items-baseline justify-between gap-2 px-1', headerClassName)}>
+        <h2 id={headingId} className="min-w-0 font-display text-lg font-bold tracking-[-0.01em] text-foreground">{title}</h2>
+        {action && <div className="ml-2 shrink-0 text-sm">{action}</div>}
       </div>
-      <CardContent className={cn('p-4 pt-0', contentClassName)}>{children}</CardContent>
-    </Card>
+      <div className="@container flex-1 overflow-hidden rounded-group bg-card text-foreground">
+        <div className={cn('p-4', contentClassName)}>{children}</div>
+      </div>
+    </section>
   );
 }
 

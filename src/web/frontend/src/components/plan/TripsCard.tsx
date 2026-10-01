@@ -12,7 +12,7 @@ import { useTrips } from './planHooks';
 function TripSummaryRow({ trip, onSelect }: { trip: Trip; onSelect: () => void }) {
   const dateLabel = trip.end_date ? `${trip.start_date} → ${trip.end_date}` : trip.start_date;
   return (
-    <SelectableRow onClick={onSelect} className="rounded-none border-b border-border last:border-b-0 py-3">
+    <SelectableRow onClick={onSelect} className="py-3">
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <span className="text-sm font-semibold text-foreground truncate">{trip.name}</span>

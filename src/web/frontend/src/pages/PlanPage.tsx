@@ -462,7 +462,7 @@ export function PlanPage() {
             <p className="text-sm"><span className="font-display text-lg font-bold tabular-nums">{formatMoney(report.known_total)}</span> <span className="text-muted">due in the next {days} days</span></p>
             {!!report.unknown_count && <p className="text-xs text-warning">Plus {report.unknown_count} with no amount yet.</p>}
             {report.items.slice(0, 4).map((item) => (
-              <SelectableRow key={item.id} onClick={() => openDrill('charge', String(item.id))} className="min-h-12 justify-between gap-4 rounded-none border-b border-border px-0 last:border-0">
+              <SelectableRow key={item.id} onClick={() => openDrill('charge', String(item.id))} className="min-h-12 justify-between gap-4">
                 <span className="min-w-0 truncate">{item.label}<span className="block text-xs text-muted font-mono">{formatShortDate(item.date)}</span></span>
                 <span className="font-mono tabular-nums">{item.amount ? formatMoney(item.amount) : 'Unknown'}</span>
               </SelectableRow>
@@ -534,7 +534,7 @@ export function PlanPage() {
               {grouped.map(group => <div key={group.date} className={cn('rounded-md', selectedDate === group.date && '-mx-2 px-2 bg-card-hover/60')}>
                 <h3 className="text-2xs font-mono uppercase tracking-[0.1em] text-muted pt-4 pb-1">{formatShortDate(group.date)}</h3>
                 {group.items.map(item => (
-                  <SelectableRow key={item.id} onClick={() => openDrill('charge', String(item.id))} className="min-h-12 justify-between gap-4 rounded-none border-b border-border px-0 last:border-0">
+                  <SelectableRow key={item.id} onClick={() => openDrill('charge', String(item.id))} className="min-h-12 justify-between gap-4">
                     <span className="min-w-0 truncate">{item.label}</span>
                     <span className="font-mono tabular-nums">{item.amount ? formatMoney(item.amount) : 'Unknown'}</span>
                   </SelectableRow>

@@ -158,7 +158,7 @@ test('most visited ranks merchants by visit count', async () => {
   show();
   await selectMode('By merchant');
   expect(await screen.findByText('9 visits · $18.00')).toBeTruthy();
-  const card = screen.getByText('Most visited').closest('.rounded-md')! as HTMLElement;
+  const card = screen.getByRole('region', { name: 'Most visited' });
   const names = within(card).getAllByRole('link').map(link => link.textContent);
   expect(names.slice(0, 2)).toEqual(['Daily Kopi', 'Big Once']);
 });
