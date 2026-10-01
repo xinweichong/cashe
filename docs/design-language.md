@@ -477,8 +477,6 @@ Current registry (paths relative to `src/web/frontend/src/`):
 | Circular progress | `components/ui/ProgressRing.tsx` | Goal detail/list rings and the health score ring; caller supplies size, radius, stroke and any centred `<text>`. |
 | Trend day stepper | `components/charts/DayStepper.tsx` (`NoTrendData`) | Previous/next-day controls under `TrendLine` and `CategoryTrendLine`; each chart keeps its own stepping rule. |
 | Detail-panel mini chart | `components/charts/MiniBarChart.tsx` | Single-series SGD bars in a `ChartCard` (merchant months, subscription charges). |
-| Lens footer action | `LensAction` in `components/layout/PhoneScreen.tsx` | The full-width "go deeper" row at the foot of a phone lens panel. |
-| Drag-to-dismiss | `hooks/useDragDismiss.ts`, `components/layout/EdgeGrip.tsx` | `SlideOver` and `DrillSheet`: drag right to close, off under reduced motion; the grip is the visual cue. |
 
 **Direction B owners (approved 2026-10-01, proposals P1–P12 on the component approval page).** Surfaces migrate to these in plan steps 4–10. Once a surface migrates, it uses them instead of the older owners they replace.
 
@@ -495,7 +493,7 @@ Current registry (paths relative to `src/web/frontend/src/`):
 
 | Phone tab bar (P1) | `components/layout/BottomTabs.tsx`, `TAB_BAR_CLEARANCE` | Floating frosted capsule. The selected tab sits on a neutral fill that slides between tabs. Home shows the `useAttentionCount` badge. Labels stay 11px at every text size. |
 | Sidebar (P2) | `components/layout/Sidebar.tsx` | Frosted inset panel: a rail at md, expanded at lg, or the viewer's choice (toggle button, ⌘⌥S). Rail icons are centred. Review and Settings sit under "You" on md+. The selected item is teal with `text-on-teal`, and hover is a neutral fill. |
-| Navigation stack and split view (P6, P7) | `components/layout/ListDetail.tsx`, `stackContext.ts` (`useStackBack`), `hooks/useListKeyboard.ts` | One component for every list with details, where the detail is a route. On a phone the detail is pushed over the inert, still-mounted list (which shifts −30% and dims). Back comes from `useStackBack`, the browser, or an edge swipe in the home-screen app. On md+ the list and detail are side-by-side regions with Mac list keys. Replaces `SlideOver`, `DrillSheet` (for details) and `useDrill` as surfaces migrate. |
+| Navigation stack and split view (P6, P7) | `components/layout/ListDetail.tsx`, `stackContext.ts` (`useStackBack`), `hooks/useListKeyboard.ts` | One component for every list with details, where the detail is a route. On a phone the detail is pushed over the inert, still-mounted list (which shifts −30% and dims). Back comes from `useStackBack`, the browser, or an edge swipe in the home-screen app. On md+ the list and detail are side-by-side regions with Mac list keys. Replaced `SlideOver`, `DrillSheet`, `PhoneScreen`, `useDrill`, `EdgeGrip` and `useDragDismiss`, all removed in step 7 once the four tabs had migrated. |
 | Overlay history | `hooks/useHistoryEntry.ts` | Used by `TaskSheet`: Back closes the overlay, and a refused close (an unsaved form) restores the entry. |
 
 Still not shared: a common category label (ActivityRowShell and Finance keep their own), and a public calendar date-cell primitive (Plan keeps one in-file recipe). Existing examples are references, not permission to clone them.
@@ -834,8 +832,6 @@ Source of truth for presets: [`src/lib/animations.tsx`](../src/web/frontend/src/
 | `springs.bouncy` | 400 / 20 | Celebration only (goal completed). ≤1 place per page |
 | `pageVariants` | gentle in, 0.12s ease-in out | Route transitions (AppShell) |
 | `fadeUpVariants` | gentle in, 0.12s ease-in out | Form expands, card entrances |
-| `slideInRightVariants` | snappy in, 0.15s ease-in out | Right-side detail panels |
-| `pushInRightVariants` | 0.3s expo in, 0.2s ease-in out | SlideOver on a phone (full-width push) |
 | `fadeVariants` | 0.15s in, 0.1s out | Reduced-motion stand-in for slides |
 | `staggerContainer/ItemVariants` | 0.04s children | Lists — cap staggering at 10 items (`STAGGER_LIMIT`) |
 | `AnimatedCurrency` | 0.7s ease-out count-up | Hero numerics only — one count-up per page |

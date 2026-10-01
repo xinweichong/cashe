@@ -27,9 +27,9 @@ interface CategoryDonutProps {
   /** 'row' sets the legend beside the chart from `sm` up (stacked below it on phones). */
   layout?: 'stacked' | 'row';
   /**
-   * 'compact' is the phone glance: a 112px ring always beside a top-3 legend,
+   * 'compact' is the phone size: a 112px ring always beside a top-3 legend,
    * no remaining-group expansion and no inline "View transactions" (the
-   * caller opens a DrillSheet from onSelect instead).
+   * caller handles a selection through onSelect).
    */
   size?: 'default' | 'compact';
 }

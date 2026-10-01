@@ -32,22 +32,6 @@ export const fadeUpVariants: Variants = {
   exit:    { opacity: 0, y: 8,  transition: { duration: 0.12, ease: 'easeIn' as const } },
 }
 
-// ─── Slide in from right (detail panels) ─────────────────────────────────────
-export const slideInRightVariants: Variants = {
-  initial: { opacity: 0, x: 32 },
-  animate: { opacity: 1, x: 0, transition: springs.snappy },
-  exit:    { opacity: 0, x: 32, transition: { duration: 0.15, ease: 'easeIn' as const } },
-}
-
-// ─── Full-width push (SlideOver on a phone) ──────────────────────────────────
-// Travels the full width like a native push, on a fixed ease-out curve (a
-// spring's settle read as lag).
-export const pushInRightVariants: Variants = {
-  initial: { x: '100%' },
-  animate: { x: 0, transition: { duration: 0.3, ease: EASE_OUT_EXPO } },
-  exit:    { x: '100%', transition: { duration: 0.2, ease: 'easeIn' as const } },
-}
-
 // ─── Sheet detents (P5) and segmented thumb (P10) ────────────────────────────
 // Critically damped enough to settle without a visible bounce.
 export const sheetSpring = { type: 'spring' as const, stiffness: 420, damping: 40, mass: 0.9 }

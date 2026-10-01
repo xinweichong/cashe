@@ -27,7 +27,7 @@ export function readTextSize(): TextSize {
 export function applyTextSize(size: TextSize): void {
   const percent = TEXT_SIZES.find((s) => s.value === size)?.percent ?? 100;
   document.documentElement.style.fontSize = percent === 100 ? '' : `${percent}%`;
-  // Lets layouts respond to the size itself (PhoneScreen scrolls at Larger).
+  // Lets layouts respond to the size itself.
   document.documentElement.dataset.textSize = size;
 }
 

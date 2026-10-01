@@ -70,7 +70,7 @@ export function TransactionFilters({
   onNeedsReviewChange,
   variant = 'default',
 }: TransactionFiltersProps) {
-  // 'sheet' is the phone's Filters DrillSheet: search already lives in the
+  // 'sheet' is Activity's Filters task sheet: search already lives in the
   // thumb dock, so the sheet shows every control, expanded, without it.
   const inSheet = variant === 'sheet';
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
