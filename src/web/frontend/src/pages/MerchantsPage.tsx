@@ -1,20 +1,19 @@
 import { useState } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { AnimatePresence, motion } from 'framer-motion';
 import { api, type MerchantSummaryV2 } from '@/api/client';
-import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { ChoiceChip } from '@/components/ui/choice-chip';
 import { Skeleton } from '@/components/ui/skeleton';
-import { StatCard } from '@/components/ui/StatCard';
+import { Input } from '@/components/ui/input';
+import { NavBar } from '@/components/ui/nav-bar';
+import { ListGroup, ListRow } from '@/components/ui/list';
+import { ListDetail } from '@/components/layout/ListDetail';
 import { MerchantProfile } from '@/components/merchants/MerchantProfile';
-import { slideInRightVariants } from '@/lib/motionPresets';
 import { Search } from 'lucide-react';
 import { LoadFailed } from '@/components/ui/LoadFailed';
 import { ALL_TAGS } from '@/lib/merchants';
 import { SPECTRUM_PALETTE } from '@/lib/chartTheme';
-import { getCategoryColor, formatCurrency } from '@/lib/utils';
+import { formatCurrency } from '@/lib/utils';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
 
 function merchantInitialColor(name: string): string {
@@ -66,199 +65,70 @@ export function MerchantsPage() {
     }
   };
 
-  return (
-    <div className="flex h-full overflow-hidden">
-      {/* Merchant list */}
-      <div
-        className={`flex-1 overflow-y-auto p-4 md:p-6 space-y-4 ${
-          selectedMerchant ? 'hidden md:block' : ''
-        }`}
-      >
-        <div className="flex flex-col gap-1 pb-5 border-b border-border">
-          <div className="text-xs uppercase tracking-[0.22em] text-muted font-mono font-semibold">
-            Merchants
-          </div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground font-display">
-            {merchants.length} tracked.
-          </h1>
+  // Merchants is a list with details (P6/P7): pushed pages on a phone, a
+  // split view on md+. The table's columns become grouped rows that fit a
+  // list column; category and tags live in the merchant's profile.
+  const totalSpent = merchants.reduce((sum, m) => sum + m.total.minor_units / 100, 0);
+  const list = (
+    <div>
+      <NavBar title="Merchants" back={{ label: 'Explore', to: '/explore' }} />
+      <div className="space-y-3 px-4 pb-8 pt-3">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" aria-hidden />
+          <Input
+            type="search"
+            data-list-search=""
+            aria-label="Search merchants"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search merchants"
+            className="h-11 rounded-[10px] border-0 bg-fill-press pl-9"
+          />
         </div>
-
-        {/* Summary cards */}
-        {!isLoading && merchants.length > 0 && (
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-            <StatCard
-              label="Merchants"
-              value={merchants.length}
-              color="default"
-            />
-            <StatCard
-              label="Total Spend"
-              value={formatCurrency(merchants.reduce((sum, m) => sum + m.total.minor_units / 100, 0))}
-              color="warm"
-            />
-            {merchants.length > 0 && (
-              <StatCard
-                label="Top Merchant"
-                value={merchants[0].display_name}
-                subtext={formatCurrency(merchants[0].total.minor_units / 100)}
-              />
-            )}
-          </div>
-        )}
-
-        {/* Filters */}
-        <div className="space-y-2">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted" />
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search merchants…"
-              className="input-field w-full pl-9"
-            />
-          </div>
-
-          <div className="flex flex-wrap gap-2 items-center">
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value)}
-              className="select-field text-xs"
-            >
-              {SORT_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </select>
-
-            {ALL_TAGS.map((tag) => (
-              <ChoiceChip key={tag} selected={tagFilter === tag} onClick={() => setTagFilter(tagFilter === tag ? '' : tag)}>
-                {tag}
-              </ChoiceChip>
-            ))}
-          </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <select aria-label="Sort merchants" value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="select-field text-xs">
+            {SORT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+          {ALL_TAGS.map((tag) => (
+            <ChoiceChip key={tag} selected={tagFilter === tag} onClick={() => setTagFilter(tagFilter === tag ? '' : tag)}>{tag}</ChoiceChip>
+          ))}
         </div>
-
-        {/* Merchants table — Tier 3 bespoke card (bare Card + CardContent p-0) intentional:
-             table headers/rows own their px-4 spacing and render edge-to-edge, consistent with
-             TransactionsPage which also uses a bare <Card className="overflow-hidden">.
-             Do NOT wrap in PageCard — its mandatory p-4 CardContent padding would break the layout. */}
         {isError ? (
           <LoadFailed onRetry={() => refetch()} />
         ) : isLoading ? (
-          <div className="space-y-2 py-2">
-            {Array.from({ length: 8 }).map((_, i) => (
-              <Skeleton key={i} className="h-10" />
-            ))}
-          </div>
+          <Skeleton className="h-64 rounded-group" />
         ) : merchants.length === 0 ? (
-          <div className="text-muted text-sm py-8 text-center">Nothing captured yet.</div>
+          <p className="py-8 text-center text-sm text-muted">Nothing captured yet.</p>
         ) : (
-          <div className="overflow-x-auto">
-          <Card>
-            <CardContent className="p-0">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border text-xs text-muted">
-                    <th className="pl-3 pr-1 py-3" />
-                    <th className="text-left px-4 py-3 font-medium">Merchant</th>
-                    <th className="text-left px-4 py-3 font-medium hidden sm:table-cell">Category</th>
-                    <th className="text-left px-4 py-3 font-medium hidden md:table-cell">Tags</th>
-                    <th className="text-right px-4 py-3 font-medium">Total</th>
-                    <th className="text-right px-4 py-3 font-medium hidden sm:table-cell">Txns</th>
-                    <th className="text-right px-4 py-3 font-medium hidden lg:table-cell">Last Seen</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {merchants.map((m) => (
-                    <tr
-                      key={m.merchant}
-                      onClick={() => handleRowClick(m)}
-                      className={`border-b border-border cursor-pointer hover:bg-foreground/5 transition-colors last:border-b-0 ${
-                        selectedMerchant === m.merchant ? 'bg-foreground/10' : ''
-                      }`}
-                    >
-                      <td className="py-2.5 pl-3 pr-1">
-                        <div
-                          className="w-8 h-8 rounded-md flex items-center justify-center text-xs font-bold font-mono"
-                          style={{
-                            background: `${merchantInitialColor(m.merchant)}22`,
-                            color: merchantInitialColor(m.merchant),
-                          }}
-                        >
-                          {m.display_name.charAt(0).toUpperCase()}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="font-medium text-foreground truncate max-w-[180px]">{m.display_name}</div>
-                        <div className="font-mono text-2xs text-muted uppercase tracking-[0.06em] mt-0.5 sm:hidden">
-                          {m.transaction_count} txns · {m.last_seen ?? '—'}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 hidden sm:table-cell">
-                        {m.category ? (
-                          <span
-                            style={{
-                              color: getCategoryColor(m.category),
-                              background: `${getCategoryColor(m.category)}1F`,
-                              padding: '2px 8px',
-                              borderRadius: '9999px',
-                              fontSize: '11px',
-                              fontWeight: 600,
-                              fontFamily: 'monospace',
-                              display: 'inline-block',
-                            }}
-                          >
-                            {m.category}
-                          </span>
-                        ) : (
-                          <span className="text-muted">—</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 hidden md:table-cell">
-                        <div className="flex flex-wrap gap-1">
-                          {(m.tags ?? []).map((tag) => (
-                            <Badge key={tag} variant="outline" className="text-muted">
-                              {tag}
-                            </Badge>
-                          ))}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-right font-display font-bold text-foreground">
-                        {formatCurrency(m.total.minor_units / 100)}
-                      </td>
-                      <td className="px-4 py-3 text-right text-muted hidden sm:table-cell">
-                        {m.transaction_count}
-                      </td>
-                      <td className="px-4 py-3 text-right text-muted hidden lg:table-cell">
-                        {m.last_seen ?? '—'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </CardContent>
-          </Card>
-          </div>
+          <ListGroup title={`${merchants.length} merchants`} footer={`${formatCurrency(totalSpent)} across all of them.`}>
+            {merchants.map((m) => (
+              <ListRow
+                key={m.merchant}
+                onClick={() => handleRowClick(m)}
+                selected={selectedMerchant === m.merchant}
+                leading={<span aria-hidden className="flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold"
+                  style={{ background: `${merchantInitialColor(m.merchant)}22`, color: merchantInitialColor(m.merchant) }}>
+                  {m.display_name.charAt(0).toUpperCase()}
+                </span>}
+                title={m.display_name}
+                subtitle={`${m.transaction_count} ${m.transaction_count === 1 ? 'visit' : 'visits'} · ${m.last_seen ?? 'not seen yet'}${m.category ? ` · ${m.category}` : ''}`}
+                amount={formatCurrency(m.total.minor_units / 100)}
+              />
+            ))}
+          </ListGroup>
         )}
       </div>
-
-      {/* Profile panel — slide-over on desktop, full-screen on mobile */}
-      <AnimatePresence>
-        {selectedMerchant && (
-          <motion.div
-            className="w-full md:w-96 border-l border-border bg-card flex-shrink-0 overflow-hidden"
-            variants={slideInRightVariants}
-            initial="initial"
-            animate="animate"
-            exit="exit"
-          >
-            <MerchantProfile
-              merchant={selectedMerchant}
-              onClose={handleCloseProfile}
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
+  );
+
+  return (
+    <ListDetail
+      listLabel="Merchants"
+      backLabel="Merchants"
+      list={list}
+      detail={selectedMerchant && <MerchantProfile key={selectedMerchant} merchant={selectedMerchant} onClose={handleCloseProfile} />}
+      onClose={handleCloseProfile}
+      emptyDetail={<p className="flex h-full items-center justify-center p-8 text-center text-sm text-muted">Choose a merchant to see its profile.</p>}
+    />
   );
 }

@@ -13,7 +13,7 @@ function setup() {
       <TransactionForm categories={[]} onClose={close} />
     </QueryClientProvider>,
   );
-  fireEvent.change(screen.getByRole('spinbutton'), { target: { value: '12.50' } });
+  fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '12.50' } });
   return { ...view, close };
 }
 
@@ -65,7 +65,7 @@ test('edits after uncertain save keep the key and explain conflicts; a new form 
   const view = setup();
   fireEvent.click(screen.getByRole('button', { name: 'Save' }));
   await screen.findByRole('alert');
-  fireEvent.change(screen.getByRole('spinbutton'), { target: { value: '20' } });
+  fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '20' } });
   fireEvent.click(screen.getByRole('button', { name: 'Save' }));
   await waitFor(() => expect(screen.getByRole('alert').textContent).toContain('Check Activity'));
   expect(view.close).not.toHaveBeenCalled();

@@ -1,15 +1,17 @@
 import { subscriptionConfirmationLabels } from '@/lib/subscriptionConfirmation';
 import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Ban, Pencil, Trash2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { DetailHeader } from '@/components/ui/detail-panel';
 import { api, type Subscription, type Transaction, type UpcomingTransaction } from '@/api/client';
 import { SubscriptionForm } from './SubscriptionForm';
 import { invalidateSpendingQueries } from '@/hooks/useTransactions';
-import { toDateStr, formatCurrency } from '@/lib/utils';
+import { toDateStr, formatCurrency, formatDate } from '@/lib/utils';
 import { FREQUENCY_LABELS } from '@/lib/subscriptionFrequency';
 import { MiniBarChart } from '@/components/charts/MiniBarChart';
-import { ConfirmDestructive, SectionLabel, StatTiles } from '@/components/ui/detail-panel';
+import { ConfirmDestructive, SectionLabel } from '@/components/ui/detail-panel';
+import { ListGroup, ListRow } from '@/components/ui/list';
+import { ToolbarAction } from '@/components/ui/toolbar';
 
 interface SubscriptionDetailProps {
   subId: number;
@@ -173,110 +175,45 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
   return (
     <>
       <div className="flex flex-col h-full">
-        {/* Header — pinned */}
-        <div className="shrink-0 flex items-start justify-between p-4 border-b border-border">
-          <div>
-            <h2 className="text-lg font-bold font-display tracking-tight text-foreground">
-              {sub?.label ?? sub?.merchant ?? 'Subscription'}
-            </h2>
-            {sub && (
-              <div className="flex items-center gap-2 mt-0.5 text-xs text-muted">
-                <span>{FREQUENCY_LABELS[sub.frequency]}</span>
-                {sub.status === 'possibly_cancelled' && (
-                  <span className="text-warning">⚠ Possibly cancelled</span>
-                )}
-                {sub.status === 'cancelled' && <span>Cancelled</span>}
-                {sub.status === 'paused' && <span>Paused in Cashe</span>}
-              </div>
-            )}
-          </div>
-          <Button variant="ghost" size="icon" className="shrink-0" onClick={onClose} aria-label="Close">
-            <X className="w-4 h-4" />
-          </Button>
-        </div>
-
-        {/* Action bar — persistent chrome */}
-        {sub && (
-          <div className="shrink-0 border-b border-border">
-            {confirmCancel ? (
-              <div className="flex items-center justify-between px-4 py-2 gap-3">
-                <span className="text-sm text-foreground">Cancel this subscription?</span>
-                <div className="flex gap-2 shrink-0">
-                  <Button type="button" size="sm" variant="ghost" onClick={() => setConfirmCancel(false)}>
-                    Back
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="bg-warning text-background hover:bg-warning/90"
-                    onClick={() => cancelMutation.mutate()}
-                    disabled={cancelMutation.isPending}
-                  >
-                    {cancelMutation.isPending ? 'Cancelling…' : 'Confirm'}
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <div className="flex flex-wrap gap-2 px-4 py-2">
-                {sub.status !== 'cancelled' && (
-                  <Button variant="outline" className="min-h-11" disabled={pauseMutation.isPending}
-                    onClick={() => pauseMutation.mutate(sub.status === 'paused' ? 'active' : 'paused')}>
-                    {pauseMutation.isPending ? 'Saving…' : sub.status === 'paused' ? 'Resume in Cashe' : 'Pause in Cashe'}
-                  </Button>
-                )}
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setShowEdit(true)}
-                  aria-label="Edit"
-                >
-                  <Pencil className="w-3.5 h-3.5" />
-                </Button>
-                {sub.status !== 'cancelled' && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="text-warning"
-                    onClick={() => setConfirmCancel(true)}
-                    aria-label="Cancel subscription"
-                  >
-                    <Ban className="w-3.5 h-3.5" />
-                  </Button>
-                )}
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="text-destructive"
-                  onClick={() => setConfirmDelete(true)}
-                  aria-label="Delete"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </Button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Scrollable body */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {sub && sub.status !== 'cancelled' && (
-            <p className="text-xs text-muted">
-              {sub.status === 'paused'
-                ? 'Predictions are hidden and automatic matching is paused. Resuming restores retained dates, including overdue predictions.'
-                : 'Pausing hides predictions and stops automatic matching in Cashe.'}
-              {' '}This does not pause billing with your provider.
-            </p>
+        <DetailHeader
+          title={sub?.label ?? sub?.merchant ?? 'Subscription'}
+          onClose={onClose}
+          actions={sub && <ToolbarAction onClick={() => setShowEdit(true)}>Edit</ToolbarAction>}
+          subtitle={sub && (
+            <div className="flex items-center gap-2 text-xs text-muted">
+              <span>{FREQUENCY_LABELS[sub.frequency]}</span>
+              {sub.status === 'possibly_cancelled' && <span className="text-warning">Possibly cancelled</span>}
+              {sub.status === 'cancelled' && <span>Cancelled</span>}
+              {sub.status === 'paused' && <span>Tracking paused</span>}
+            </div>
           )}
+        />
+
+        <div className="flex-1 space-y-5 overflow-y-auto p-4">
           {!sub && <p className="text-sm text-muted">Catching up…</p>}
 
           {sub && (
             <>
-              {/* Stats grid */}
-              <StatTiles items={[
-                  { label: 'Monthly', value: monthlyCost != null ? formatCurrency(monthlyCost) : '—' },
-                  { label: 'Last charge', value: sub.last_amount != null ? formatCurrency(sub.last_amount) : '—' },
-                  { label: 'Next charge', value: sub.next_expected_date ? sub.next_expected_date.slice(0, 10) : '—' },
-                  { label: 'History', value: `${history.length} linked` },]} />
+              <ListGroup>
+                <ListRow title="Per month" amount={monthlyCost != null ? formatCurrency(monthlyCost) : undefined} value={monthlyCost == null ? 'Not known yet' : undefined} />
+                <ListRow title="Last charge" amount={sub.last_amount != null ? formatCurrency(sub.last_amount) : undefined} value={sub.last_amount == null ? 'None yet' : undefined} />
+                <ListRow title="Next charge (estimate)" value={sub.next_expected_date ? formatDate(sub.next_expected_date) : 'Not scheduled'} />
+                <ListRow title="Linked charges" value={String(history.length)} />
+              </ListGroup>
+
+              {sub.status !== 'cancelled' && (
+                <ListGroup
+                  footer={sub.status === 'paused'
+                    ? 'Predictions are hidden and automatic matching is paused. Resuming brings back retained dates, including overdue ones. Your provider still bills you.'
+                    : 'Pausing hides predictions and stops automatic matching in cashe. Your provider still bills you.'}
+                >
+                  <ListRow
+                    title={<span className="text-teal">{pauseMutation.isPending ? 'Saving…' : sub.status === 'paused' ? 'Resume tracking' : 'Pause tracking'}</span>}
+                    onClick={() => pauseMutation.mutate(sub.status === 'paused' ? 'active' : 'paused')}
+                    disabled={pauseMutation.isPending}
+                  />
+                </ListGroup>
+              )}
 
               {adoptPrompt && (
                 <div className="flex items-center justify-between p-3 rounded-md bg-warning/10 border border-warning/30 text-xs">
@@ -300,10 +237,13 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
 
               <p className="text-sm text-muted">{subscriptionConfirmationLabels[sub.confirmation_source]}. Future dates and amounts remain estimates.</p>
               {sub.confirmation_source === 'unknown' && (
-                <Button variant="outline" className="min-h-11" disabled={confirmationMutation.isPending}
-                  onClick={() => confirmationMutation.mutate()}>
-                  {confirmationMutation.isPending ? 'Saving…' : 'Confirm this schedule'}
-                </Button>
+                <ListGroup>
+                  <ListRow
+                    title={<span className="text-teal">{confirmationMutation.isPending ? 'Saving…' : 'Confirm this schedule'}</span>}
+                    onClick={() => confirmationMutation.mutate()}
+                    disabled={confirmationMutation.isPending}
+                  />
+                </ListGroup>
               )}
 
               {[confirmationMutation.error, pauseMutation.error, matchMutation.error, dismissMutation.error, linkMutation.error].filter(Boolean).map((error, index) => (
@@ -337,6 +277,7 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
                     type="button"
                     variant="ghost"
                     size="sm"
+                    className="text-teal"
                     aria-expanded={showLinkPicker}
                     onClick={() => setShowLinkPicker((v) => !v)}
                   >
@@ -383,29 +324,34 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
                 {history.length === 0 ? (
                   <p className="text-sm text-muted py-2">No matched transactions yet.</p>
                 ) : (
-                  <div className="space-y-0.5">
+                  <ListGroup>
                     {history.map((tx: Transaction) => (
-                      <div
-                        key={tx.id}
-                        className="flex items-center justify-between py-2 px-2 rounded-md hover:bg-foreground/5 transition-colors"
-                      >
-                        <span className="text-xs text-muted">{tx.transaction_date.slice(0, 10)}</span>
-                        <span className="text-xs font-medium text-foreground tabular-nums">
-                          {sgdEquivalent(tx)}
-                        </span>
-                      </div>
+                      <ListRow key={tx.id} title={formatDate(tx.transaction_date)} amount={sgdEquivalent(tx)} />
                     ))}
-                  </div>
+                  </ListGroup>
                 )}
               </section>
 
-              {confirmDelete && (
+              {confirmCancel ? (
+                <ConfirmDestructive
+                  message="Mark this subscription as cancelled? Its future charges stop being predicted. This doesn't cancel it with your provider."
+                  confirmLabel="Mark cancelled"
+                  pending={cancelMutation.isPending}
+                  onConfirm={() => cancelMutation.mutate()}
+                  onCancel={() => setConfirmCancel(false)}
+                />
+              ) : confirmDelete ? (
                 <ConfirmDestructive
                   message="Delete this subscription permanently? Matched transactions are not deleted."
                   pending={deleteMutation.isPending}
                   onConfirm={() => deleteMutation.mutate()}
                   onCancel={() => setConfirmDelete(false)}
                 />
+              ) : (
+                <ListGroup>
+                  {sub.status !== 'cancelled' && <ListRow destructive title="Mark as cancelled" onClick={() => setConfirmCancel(true)} />}
+                  <ListRow destructive title="Delete subscription" onClick={() => setConfirmDelete(true)} />
+                </ListGroup>
               )}
             </>
           )}
@@ -445,7 +391,7 @@ function UpcomingRow({ upcoming, recentTxs, onMatch, onDismiss }: UpcomingRowPro
             Expected {upcoming.expected_date.slice(0, 10)}
           </span>
           {upcoming.expected_amount != null && (
-            <span className="text-xs text-muted">S${upcoming.expected_amount.toFixed(2)}</span>
+            <span className="text-xs text-muted">{formatCurrency(upcoming.expected_amount)}</span>
           )}
         </div>
         <Button type="button" variant="ghost" size="sm" onClick={onDismiss}>

@@ -3,7 +3,9 @@ import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useQuery } from '@tanstack/react-query';
 import { briefingApi, formatMoney } from '@/api/briefing';
-import { CardLink, HighlightCard, PageCard } from '@/components/ui/cards';
+import { PageCard } from '@/components/ui/cards';
+import { SpectrumCard, SpectrumCardSkeleton } from '@/components/ui/SpectrumCard';
+import { cn } from '@/lib/utils';
 import { LoadFailed } from '@/components/ui/LoadFailed';
 import { Skeleton } from '@/components/ui/skeleton';
 import { getGoalTone } from '@/lib/utils';
@@ -11,6 +13,13 @@ import { springs } from '@/lib/motionPresets';
 import { useChartTheme } from '@/lib/chartTheme';
 import { formatRange } from './format';
 import { ProgressRing } from '@/components/ui/ProgressRing';
+
+/** Below this many days of the month the ratios swing too much to grade. */
+const MIN_SCORE_DAYS = 7;
+
+function daysInclusive(start: string, end: string): number {
+  return Math.round((Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / 86_400_000) + 1;
+}
 
 const PILLAR_ORDER = ['savings_rate', 'needs_ratio', 'wants_ratio', 'budget_adherence', 'anomaly_frequency'] as const;
 
@@ -34,10 +43,10 @@ function ScoreRing({ score }: { score: number | null }) {
 }
 
 /**
- * Dashboard summary: this month's score and grade only; the whole card
- * opens the full breakdown at /explore/health.
+ * Explore's one spectrum card (P11, 2026-10-01): this month's score and
+ * grade; the whole card opens the full breakdown at /explore/health.
  */
-export function HealthScoreSummary({ className }: { className?: string }) {
+export function HealthSpectrum({ className }: { className?: string }) {
   const { data, isError, refetch } = useQuery({
     queryKey: ['health-score-v2', 1],
     queryFn: () => briefingApi.healthScore(1),
@@ -46,31 +55,27 @@ export function HealthScoreSummary({ className }: { className?: string }) {
   if (isError && !data) {
     return <PageCard title="Financial health" className={className}><div role="alert"><LoadFailed onRetry={() => void refetch()} /></div></PageCard>;
   }
-  if (!data) {
-    return <PageCard title="Financial health" className={className}><div role="status"><span className="sr-only">Loading…</span><Skeleton className="h-24" /></div></PageCard>;
-  }
-  const score = data.score ?? null;
-  const body = !data.has_income_data ? (
-    <p className="text-sm text-muted">No income recorded this month, so there is no score yet. Open for what the score needs.</p>
-  ) : (
-    <div className="flex items-center gap-5">
-      <ScoreRing score={score} />
-      <div className="min-w-0">
-        <p className="text-2xl font-bold text-foreground font-display">{data.grade}</p>
-        {data.income && <p className="text-sm text-muted mt-1">Spent {formatMoney(data.spending)} of {formatMoney(data.income)} income</p>}
-        <p className="text-xs text-muted mt-0.5">
-          50/30/20 rule{data.status === 'partial' ? ` · ${data.unresolved_count} left out` : ''} · See the breakdown
-        </p>
-      </div>
-    </div>
-  );
-  const label = data.has_income_data ? `Financial health ${score} out of 100, ${data.grade}. Open the full breakdown.` : 'Financial health: no score yet. Open for details.';
+  if (!data) return <SpectrumCardSkeleton className={className} />;
+  const tooEarly = daysInclusive(data.start, data.end) < MIN_SCORE_DAYS;
+  const score = data.has_income_data && !tooEarly ? data.score ?? null : null;
+  const label = score != null ? `Financial health ${score} out of 100, ${data.grade}. Open the full breakdown.` : 'Financial health: no score yet. Open for details.';
   return (
-    <CardLink to="/explore/health" className={className} aria-label={label}>
-      {score != null && score >= 70
-        ? <HighlightCard title="Financial health" className="h-full flex flex-col"><div className="flex-1 flex items-center">{body}</div></HighlightCard>
-        : <PageCard title="Financial health" className="h-full rounded-lg flex flex-col" contentClassName="flex-1 flex items-center">{body}</PageCard>}
-    </CardLink>
+    <Link to="/explore/health" aria-label={label}
+      className={cn('block rounded-hero pressable-scale focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ring-offset-background', className)}>
+      <SpectrumCard
+        className="h-full"
+        label="Health score"
+        meta="out of 100"
+        value={score ?? '—'}
+        valueSuffix={score != null ? data.grade : undefined}
+        caption={score != null
+          ? `${data.income ? `Spent ${formatMoney(data.spending)} of ${formatMoney(data.income)} income · ` : ''}50/30/20 rule${data.status === 'partial' ? ` · ${data.unresolved_count} left out` : ''}`
+          : tooEarly ? 'Too early in the month for a score. Check back after the first week.' : 'No income recorded this month, so there is no score yet'}
+        progress={score != null ? score / 100 : undefined}
+        progressLabel="Health score"
+        status={data.status === 'partial' ? 'partial' : 'complete'}
+      />
+    </Link>
   );
 }
 
@@ -97,6 +102,12 @@ export function HealthScoreCard() {
     <div role="alert"><LoadFailed onRetry={() => void refetch()} /></div>
   ) : isLoading || !data ? (
     <div role="status"><span className="sr-only">Loading…</span><Skeleton className="h-64" /></div>
+  ) : daysInclusive(data.start, data.end) < MIN_SCORE_DAYS ? (
+    // Same rule as the Explore card, so the two never disagree.
+    <div className="py-6 space-y-1">
+      <p className="text-sm text-foreground">Too early in the month for a score.</p>
+      <p className="text-sm text-muted">{formatRange(data.start, data.end)} is only {daysInclusive(data.start, data.end)} {daysInclusive(data.start, data.end) === 1 ? 'day' : 'days'}. Check back after the first week, or choose Last 3 months.</p>
+    </div>
   ) : !data.has_income_data ? (
     <div className="py-6 space-y-1">
       <p className="text-sm text-foreground">No income recorded for {formatRange(data.start, data.end)}.</p>
@@ -125,9 +136,9 @@ export function HealthScoreCard() {
               <div className="flex items-baseline justify-between gap-3">
                 <p className="min-w-0 text-sm">
                   <span className="font-medium text-foreground">{pillar.label}</span>
-                  <span className="text-xs text-muted font-mono ml-2">{pillarValue(key, pillar.value, pillar.benchmark)}</span>
+                  <span className="text-xs text-muted tabular-nums ml-2">{pillarValue(key, pillar.value, pillar.benchmark)}</span>
                 </p>
-                <span className="text-sm font-semibold tabular-nums font-mono" style={{ color }}>{pillar.score}/{pillar.max}</span>
+                <span className="text-sm font-semibold tabular-nums" style={{ color }}>{pillar.score}/{pillar.max}</span>
               </div>
               <div className="h-1.5 rounded-full bg-foreground/10 overflow-hidden">
                 <motion.div
@@ -152,7 +163,7 @@ export function HealthScoreCard() {
   );
 
   return score != null && score >= 70 ? (
-    <HighlightCard title="Financial health" action={monthSelect}>{content}</HighlightCard>
+    <PageCard title="Financial health" action={monthSelect}>{content}</PageCard>
   ) : (
     <PageCard title="Financial health" action={monthSelect}>{content}</PageCard>
   );

@@ -41,8 +41,7 @@ test('production Plan keeps a week strip with an explicit calendar toggle in the
   await page.setViewportSize({ width: 390, height: 844 });
   await mockAuthenticatedPlan(page);
   await page.goto('/plan');
-  // On phone the calendar lives in the Timeline drill-in, not the glance.
-  await page.getByRole('button', { name: /^Timeline and calendar/ }).click();
+  // On phone the week strip sits inline in Upcoming (HIG alignment, no drill-in).
   await expect(page.getByTestId('week-strip')).toBeVisible();
   await expect(page.getByTestId('month-calendar')).toHaveCount(0);
   await page.getByRole('button', { name: 'View calendar' }).click();

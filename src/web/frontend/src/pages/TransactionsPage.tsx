@@ -1,50 +1,47 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
-import { useInfiniteQuery, useQuery, keepPreviousData } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { AnimatePresence, motion } from 'framer-motion';
-import { Card } from '@/components/ui/card';
+import { Check, Pencil, Plane, Plus, Search, SlidersHorizontal, Tag, Trash2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { NavBar } from '@/components/ui/nav-bar';
+import { Toolbar, ToolbarAction } from '@/components/ui/toolbar';
+import { TaskSheet } from '@/components/ui/task-sheet';
+import { ListGroup, ListRow } from '@/components/ui/list';
+import { SegmentedChoice } from '@/components/ui/segmented-choice';
+import { RowMenu } from '@/components/ui/row-menu';
+import { SwipeRow } from '@/components/ui/swipe-row';
+import { LoadFailed } from '@/components/ui/LoadFailed';
+import { ListDetail } from '@/components/layout/ListDetail';
+import { ProfileMenu } from '@/components/layout/ProfileMenu';
 import { TransactionList } from '@/components/transactions/TransactionList';
 import { TransactionFilters } from '@/components/transactions/TransactionFilters';
 import { TransactionDetail } from '@/components/transactions/TransactionDetail';
 import { TransactionForm } from '@/components/transactions/TransactionForm';
-import { BulkActionBar } from '@/components/transactions/BulkActionBar';
 import { useCategories } from '@/hooks/useCategories';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
-import { useBulkCorrectTransactions, useBulkUndoTransactions } from '@/hooks/useTransactions';
+import { useBulkCorrectTransactions, useBulkUndoTransactions, useDeleteTransaction, useUpdateTransaction } from '@/hooks/useTransactions';
 import { useToast } from '@/hooks/useToastContext';
-import { api, type Transaction, type TransactionV2, type DailyTotalV2, type BulkTransactionResultItemV2 } from '@/api/client';
-import { formatMoney } from '@/api/briefing';
-import { fadeUpVariants } from '@/lib/motionPresets';
-import { localDayKey, toDateStr } from '@/lib/utils';
-import { CheckSquare, Plus, Search, SlidersHorizontal, X } from 'lucide-react';
-import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-import { HeroCard } from '@/components/ui/cards';
-import { HeroAmount } from '@/components/ui/HeroAmount';
-import { PhoneScreen, type Lens } from '@/components/layout/PhoneScreen';
-import { DrillSheet } from '@/components/layout/DrillSheet';
 import { useIsPhone } from '@/hooks/useIsPhone';
-import { useDrill } from '@/hooks/useDrill';
-import { SlideOver } from '@/components/layout/SlideOver';
-import { LoadFailed } from '@/components/ui/LoadFailed';
-import { Skeleton } from '@/components/ui/skeleton';
 import { useSettings } from '@/hooks/useSettings';
 import { useTrips } from '@/components/plan/planHooks';
 import { useHomeBriefing } from '@/hooks/useBriefing';
+import { api, type Transaction, type TransactionV2, type DailyTotalV2, type BulkTransactionResultItemV2 } from '@/api/client';
+import { formatCurrency, isCreditType, localDayKey, minorToMajor } from '@/lib/utils';
 
 const PAGE_SIZE = 20;
 
-type ActivityLens = 'all' | 'review' | 'income' | 'refund';
-type ActivitySheet = 'filters' | 'add';
-const ACTIVITY_SHEETS: readonly ActivitySheet[] = ['filters', 'add'];
+// Activity is "the past" (HIG alignment, 2026-10-01): every recorded
+// transaction, newest first, grouped by day. ListDetail pushes a
+// transaction's page over the list on a phone and shows it beside the list
+// on md+. Filters and Add are task sheets; multi-select actions sit in a
+// toolbar; each row has swipe actions (touch) and a context menu, both also
+// reachable from the detail page.
 
-// Monday of the current local week through today, as YYYY-MM-DD.
-function currentWeek(): { start: string; end: string } {
-  const today = new Date();
-  const monday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - ((today.getDay() + 6) % 7));
-  return { start: toDateStr(monday), end: toDateStr(today) };
-}
+const ADD_FORM_ID = 'add-transaction-form';
+type ActivityLens = 'all' | 'review' | 'income' | 'refund';
+type TxType = 'expense' | 'income' | 'refund' | 'transfer';
+const TYPE_LABELS: Record<TxType, string> = { expense: 'Spending', income: 'Income', refund: 'Refund', transfer: 'Transfer' };
 
 // v2 transactions carry canonical Money instead of flat amount/currency
 // fields — convert at this page boundary so TransactionList/TransactionRow/
@@ -55,7 +52,7 @@ function transactionV2ToLegacy(tx: TransactionV2): Transaction {
     id: tx.id,
     source: tx.source,
     source_id: '',
-    amount: (tx.original.minor_units ?? 0) / 100,
+    amount: minorToMajor(tx.original.minor_units ?? 0, tx.original.currency),
     currency: tx.original.currency,
     exchange_rate: tx.conversion.rate !== null ? Number(tx.conversion.rate) : null,
     merchant: tx.merchant,
@@ -67,9 +64,13 @@ function transactionV2ToLegacy(tx: TransactionV2): Transaction {
   };
 }
 
+const signedAmount = (tx: Transaction) => `${isCreditType(tx.type) ? '+' : '-'}${formatCurrency(tx.amount, tx.currency)}`;
+const txName = (tx: Transaction) => tx.merchant || tx.description || 'Transaction';
+
 export function TransactionsPage() {
   const navigate = useNavigate();
   const location = useLocation();
+  const isPhone = useIsPhone();
   const activityPath = location.pathname.startsWith('/activity') ? '/activity' : '/transactions';
   const { transactionId } = useParams<{ transactionId?: string }>();
   const parsed = transactionId ? parseInt(transactionId, 10) : NaN;
@@ -88,18 +89,29 @@ export function TransactionsPage() {
   const [tripId, setTripId] = useState(() => searchParams.get('trip') ?? '');
   const [needsReview, setNeedsReview] = useState(() => searchParams.get('review') === '1');
   const [showForm, setShowForm] = useState(false);
-  const isPhone = useIsPhone();
-  const sheets = useDrill(ACTIVITY_SHEETS, 'sheet');
-  const [week] = useState(currentWeek);
-  const weekTotals = useQuery({
-    queryKey: ['activity-week-totals', week.start, week.end],
-    queryFn: () => api.getDailyTotalsV2(week.start, week.end),
-    enabled: isPhone,
-  });
+  const [addPending, setAddPending] = useState(false);
+  const [showFilters, setShowFilters] = useState(false);
+  // One row action at a time: a category pick or a delete confirmation.
+  const [categoryFor, setCategoryFor] = useState<Transaction | 'selection' | null>(null);
+  const [typeForSelection, setTypeForSelection] = useState(false);
+  const [deleting, setDeleting] = useState<Transaction | null>(null);
+  const [tripFor, setTripFor] = useState<Transaction | null>(null);
   const { data: categories } = useCategories();
   const briefing = useHomeBriefing();
   const { data: settings } = useSettings();
   const { data: trips = [] } = useTrips({ enabled: settings?.trips_enabled === true });
+  const updateTx = useUpdateTransaction();
+  const deleteTx = useDeleteTransaction();
+  const qc = useQueryClient();
+  // Same invalidation as the detail page's trip membership toggle.
+  const enlist = useMutation({
+    mutationFn: ({ tripId, txId }: { tripId: number; txId: number }) => api.enlistTransaction(tripId, txId),
+    onSuccess: (_data, { tripId, txId }) => {
+      qc.invalidateQueries({ queryKey: ['transaction-trips', txId] });
+      qc.invalidateQueries({ queryKey: ['trip-transactions', tripId] });
+      qc.invalidateQueries({ queryKey: ['trip-summary', tripId] });
+    },
+  });
 
   const returnTo = searchParams.get('returnTo');
   const listRef = useRef<HTMLDivElement>(null);
@@ -233,37 +245,31 @@ export function TransactionsPage() {
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   // Restore a scroll anchor after a full remount (browser back/forward, or
-  // navigating away and returning) — R09. The scrollable list container
-  // never unmounts across opening/closing the detail panel on the same
-  // page, so scroll position already survives that case for free; this
-  // covers the case a fresh TransactionsPage instance mounts with an empty
-  // list and no scroll history. Tracks the topmost visible row's id
-  // (not a raw pixel offset), so it's independent of how many pages
-  // happen to be loaded when the anchor was saved vs. restored.
-  const scrollRef = useRef<HTMLDivElement>(null);
+  // navigating away and returning) — R09. Tracks the topmost visible row's
+  // id (not a raw pixel offset), so it's independent of how many pages
+  // happen to be loaded when the anchor was saved vs. restored. The list
+  // scrolls with the page on a phone and in its own column on md+, so
+  // listen for scrolls anywhere (capture) and measure rows against the
+  // viewport, below the 44px bar.
   const restoredRef = useRef(false);
-
   useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
     let raf = 0;
     const onScroll = () => {
       if (raf) return;
       raf = requestAnimationFrame(() => {
         raf = 0;
-        const containerTop = el.getBoundingClientRect().top;
-        const rows = el.querySelectorAll<HTMLElement>('[data-tx-row-id]');
+        const rows = listRef.current?.querySelectorAll<HTMLElement>('[data-tx-row-id]') ?? [];
         for (const row of rows) {
-          if (row.getBoundingClientRect().top - containerTop >= -4) {
+          if (row.getBoundingClientRect().top >= 40) {
             sessionStorage.setItem('activity-scroll-anchor', row.dataset.txRowId ?? '');
             break;
           }
         }
       });
     };
-    el.addEventListener('scroll', onScroll, { passive: true });
+    document.addEventListener('scroll', onScroll, { capture: true, passive: true });
     return () => {
-      el.removeEventListener('scroll', onScroll);
+      document.removeEventListener('scroll', onScroll, { capture: true });
       if (raf) cancelAnimationFrame(raf);
     };
   }, []);
@@ -274,7 +280,7 @@ export function TransactionsPage() {
     if (!anchorId) { restoredRef.current = true; return; }
     if (isLoading) return; // wait for the first page before deciding anything
     if (txs.some((tx) => String(tx.id) === anchorId)) {
-      scrollRef.current
+      listRef.current
         ?.querySelector(`[data-tx-row-id="${anchorId}"]`)
         ?.scrollIntoView({ block: 'start' });
       restoredRef.current = true;
@@ -343,7 +349,7 @@ export function TransactionsPage() {
     );
   }, [selectedIds, bulkCorrect, expectedRevisionsFor, handleBulkResult]);
 
-  const handleBulkSetType = useCallback((newType: 'expense' | 'income' | 'refund' | 'transfer') => {
+  const handleBulkSetType = useCallback((newType: TxType) => {
     const ids = Array.from(selectedIds);
     bulkCorrect.mutate(
       { transaction_ids: ids, type: newType, expected_revisions: expectedRevisionsFor(ids) },
@@ -365,7 +371,7 @@ export function TransactionsPage() {
     );
   }, [lastBulkUndo, bulkUndo, toast]);
 
-  // Toggle: clicking the active row navigates back to /transactions (closes panel)
+  // Toggle: clicking the open row closes its detail.
   const handleTransactionClick = useCallback(
     (tx: Transaction) => {
       if (selectedId === tx.id) {
@@ -377,35 +383,44 @@ export function TransactionsPage() {
     [selectedId, navigate, activityPath, location.search],
   );
 
-  const detailOverlay = (
-    <>
-      {/* Mobile backdrop — closes panel when tapped */}
-      <AnimatePresence>
-        {selectedTransaction && (
-          <motion.div
-            className="fixed inset-0 bg-black/30 z-40 md:hidden"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={closeDetail}
-          />
-        )}
-      </AnimatePresence>
+  // ── Row actions (swipe, context menu, ⌫ on md+) ────────────────────────────
+  const tripsAvailable = settings?.trips_enabled === true && trips.length > 0;
+  const applyCategory = (name: string) => {
+    if (categoryFor === 'selection') handleBulkCategorize(name);
+    else if (categoryFor) updateTx.mutate({ id: categoryFor.id, data: { category: name } }, { onSuccess: () => toast('Category changed.') });
+    setCategoryFor(null);
+  };
+  const confirmDelete = () => {
+    if (!deleting) return;
+    const tx = deleting;
+    deleteTx.mutate(tx.id, { onSuccess: () => { toast('Deleted.'); if (tx.id === selectedId) closeDetail(); } });
+    setDeleting(null);
+  };
+  const renderRow = useCallback((tx: Transaction, row: React.ReactNode) => (
+    <SwipeRow
+      leadingActions={[{ label: 'Category', tone: 'warm', onAction: () => setCategoryFor(tx) }]}
+      trailingActions={[{ label: 'Delete', tone: 'destructive', confirm: `Delete ${signedAmount(tx)}?`, onAction: () => deleteTx.mutate(tx.id) }]}
+    >
+      <RowMenu items={[
+        { label: 'Open', icon: Pencil, onSelect: () => navigate(`${activityPath}/${tx.id}${location.search}`) },
+        { label: 'Change category', icon: Tag, onSelect: () => setCategoryFor(tx) },
+        { label: 'Add to trip', icon: Plane, onSelect: () => setTripFor(tx), hidden: !tripsAvailable },
+        { separator: true },
+        { label: 'Delete', icon: Trash2, destructive: true, onSelect: () => setDeleting(tx) },
+      ]}>
+        <div>{row}</div>
+      </RowMenu>
+    </SwipeRow>
+  ), [activityPath, location.search, navigate, deleteTx, tripsAvailable]);
 
-      {/* Right: transaction detail panel — fixed overlay; a drag-back drill-in on phone */}
-      <SlideOver show={!!selectedTransaction} onClose={closeDetail} className="md:w-96 shadow-xl">
-        {selectedTransaction && (
-          <TransactionDetail
-            key={selectedTransaction.id}
-            transaction={selectedTransaction}
-            onClose={closeDetail}
-          />
-        )}
-      </SlideOver>
-    </>
-  );
-
-  // Shared by the phone and desktop layouts.
+  // ── Header: quick views, search, filters ───────────────────────────────────
+  const lens: ActivityLens = needsReview ? 'review' : type === 'income' ? 'income' : type === 'refund' ? 'refund' : 'all';
+  const setLens = (next: ActivityLens) => {
+    setNeedsReview(next === 'review');
+    setType(next === 'income' || next === 'refund' ? next : 'all');
+  };
+  const reviewCount = briefing.data?.review_count ?? 0;
+  const otherFilterCount = [category !== 'all', !!startDate, !!endDate, !!tripId, type !== 'all' && type !== 'income' && type !== 'refund'].filter(Boolean).length;
   const filterProps = {
     search, onSearchChange: handleSearchChange,
     category, onCategoryChange: handleCategoryChange, categories: categories ?? [],
@@ -414,41 +429,82 @@ export function TransactionsPage() {
     trips: settings?.trips_enabled ? trips : [], tripId, onTripChange: setTripId,
     needsReview, onNeedsReviewChange: setNeedsReview,
   };
-  const bulkActionBar = (
-    <BulkActionBar
-      count={selectedIds.size}
-      categories={categories ?? []}
-      onCategorize={handleBulkCategorize}
-      onSetType={handleBulkSetType}
-      onCancel={toggleSelectionMode}
-      pending={bulkCorrect.isPending}
+
+  const navBar = (
+    <NavBar
+      large
+      title={activityPath === '/activity' ? 'Activity' : 'Transactions'}
+      trailing={selectionMode ? null : <>
+        <ToolbarAction onClick={toggleSelectionMode}>Select</ToolbarAction>
+        <Button type="button" variant="ghost" size={isPhone ? 'icon' : 'sm'} className="min-h-11 min-w-11 gap-1.5 text-teal" aria-label={isPhone ? 'Add a transaction' : undefined} onClick={() => setShowForm(true)}>
+          <Plus aria-hidden className="h-5 w-5" />{!isPhone && 'Add'}
+        </Button>
+        {isPhone && <ProfileMenu />}
+      </>}
     />
   );
-  const bulkUndoStatus = (className: string) => lastBulkUndo && (
-    <p role="status" className={className}>
-      Updated {lastBulkUndo.ids.length}.{' '}
-      <Button type="button" variant="link" size="sm" className="h-auto min-h-11 p-0 align-baseline" disabled={bulkUndo.isPending} onClick={handleBulkUndo}>
-        {bulkUndo.isPending ? 'Undoing…' : 'Undo'}
-      </Button>
-    </p>
-  );
 
-  let phoneView: React.ReactNode = null;
-  if (isPhone) {
-    // Lenses are the four most-used type views; they write the same filter
-    // state (and URL params) as the desktop chips, so a lens survives a
-    // rotate to tablet and back.
-    const lens: ActivityLens = needsReview ? 'review' : type === 'income' ? 'income' : type === 'refund' ? 'refund' : 'all';
-    const setLens = (next: ActivityLens) => {
-      setNeedsReview(next === 'review');
-      setType(next === 'income' || next === 'refund' ? next : 'all');
-    };
-    const otherFilterCount = [category !== 'all', !!startDate, !!endDate, !!tripId, type !== 'all' && type !== 'income' && type !== 'refund'].filter(Boolean).length;
-    const reviewCount = briefing.data?.review_count ?? 0;
-    const weekSpend = weekTotals.data?.reduce((sum, d) => sum + d.spending.minor_units, 0);
-    const weekCount = weekTotals.data?.reduce((sum, d) => sum + d.transaction_count, 0);
-    const list = (
-      <div ref={listRef} tabIndex={-1} aria-label="Transactions" className="focus-visible:outline-none">
+  const list = (
+    <div ref={listRef} tabIndex={-1} aria-label="Transactions" className="focus-visible:outline-none">
+      {navBar}
+      {selectionMode && (
+        <Toolbar
+          title={`${selectedIds.size} selected`}
+          trailing={<>
+            <ToolbarAction disabled={!selectedIds.size || bulkCorrect.isPending} onClick={() => setCategoryFor('selection')}>Category</ToolbarAction>
+            <ToolbarAction disabled={!selectedIds.size || bulkCorrect.isPending} onClick={() => setTypeForSelection(true)}>Type</ToolbarAction>
+            <ToolbarAction tone="strong" onClick={toggleSelectionMode} disabled={bulkCorrect.isPending}>Done</ToolbarAction>
+          </>}
+        />
+      )}
+      <div className="space-y-3 px-4 pb-8 pt-1">
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" aria-hidden />
+            <Input
+              type="search"
+              data-list-search=""
+              aria-label="Search transactions"
+              placeholder="Search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="h-11 rounded-[10px] border-0 bg-fill-press pl-9 pr-9"
+            />
+            {search && (
+              <Button type="button" variant="ghost" size="icon" aria-label="Clear search" onClick={() => setSearch('')} className="absolute right-0 top-0 text-muted">
+                <X size={16} aria-hidden />
+              </Button>
+            )}
+          </div>
+          <Button type="button" variant="ghost" className="relative h-11 w-11 shrink-0 p-0 text-teal" aria-label={otherFilterCount ? `Filters, ${otherFilterCount} active` : 'Filters'} onClick={() => setShowFilters(true)}>
+            <SlidersHorizontal size={18} aria-hidden />
+            {!!otherFilterCount && <span className="absolute right-0.5 top-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-pill bg-teal px-1 text-[10px] font-bold text-on-teal">{otherFilterCount}</span>}
+          </Button>
+        </div>
+        <SegmentedChoice
+          name="activity-view"
+          aria-label="Activity view"
+          value={lens}
+          onValueChange={setLens}
+          className="w-full"
+          options={[
+            { value: 'all', label: 'All' },
+            { value: 'review', label: reviewCount ? `Review ${reviewCount}` : 'Review' },
+            { value: 'income', label: 'Income' },
+            { value: 'refund', label: 'Refunds' },
+          ]}
+        />
+        {lastBulkUndo && (
+          <p role="status" className="px-1 text-sm text-muted">
+            Updated {lastBulkUndo.ids.length}.{' '}
+            <Button type="button" variant="link" size="sm" className="h-auto min-h-11 p-0 align-baseline" disabled={bulkUndo.isPending} onClick={handleBulkUndo}>
+              {bulkUndo.isPending ? 'Undoing…' : 'Undo'}
+            </Button>
+          </p>
+        )}
+        {reviewCount > 0 && lens !== 'review' && (
+          <p className="px-1 text-sm"><Link to="/review" className="inline-flex min-h-11 items-center text-teal">{reviewCount} waiting in Review</Link></p>
+        )}
         {isError ? <LoadFailed onRetry={() => refetch()} /> : (
           <TransactionList
             transactions={txs}
@@ -461,193 +517,85 @@ export function TransactionsPage() {
             selectionMode={selectionMode}
             selectedIds={selectedIds}
             onToggleSelect={toggleSelect}
-            stickyDayHeaders={false}
             compactRows
+            renderRow={renderRow}
           />
         )}
       </div>
-    );
-    const lenses: Lens<ActivityLens>[] = [
-      { value: 'all', label: 'All', panel: list },
-      { value: 'review', label: reviewCount ? `Review ${reviewCount}` : 'Review', panel: list },
-      { value: 'income', label: 'Income', panel: list },
-      { value: 'refund', label: 'Refunds', panel: list },
-    ];
-    // The glance follows the lens: the week's spend, the week's income, or
-    // the review queue, so the figure always describes the list beneath it.
-    const weekIncome = weekTotals.data?.reduce((sum, d) => sum + (d.income?.minor_units ?? 0), 0);
-    const currency = weekTotals.data?.[0]?.spending.currency ?? 'SGD';
-    const short = '[@media(max-height:700px)]:text-3xl';
-    const glanceTitle = lens === 'review' ? 'To review' : lens === 'income' ? 'Income this week' : 'Spent this week';
-    const glance = (
-      <HeroCard
-        title={glanceTitle}
-        className="p-4"
-        action={<div className="flex items-center gap-1">
-          <Button type="button" variant={selectionMode ? 'default' : 'ghost'} size="sm" className="min-h-11 gap-1.5 px-2" aria-pressed={selectionMode} onClick={toggleSelectionMode}>
-            <CheckSquare size={16} aria-hidden />{selectionMode ? 'Done' : 'Select'}
-          </Button>
-          <Button type="button" variant="outline" size="icon" aria-label="Add a transaction" onClick={() => sheets.openDrill('add')} disabled={selectionMode}>
-            <Plus size={16} aria-hidden />
-          </Button>
-        </div>}
-      >
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          {lens === 'review'
-            ? <p className={`font-display text-4xl font-bold tracking-tight tabular-nums ${short}`}>{reviewCount} {reviewCount === 1 ? 'purchase' : 'purchases'}</p>
-            : weekSpend === undefined ? <Skeleton className="h-10 w-36" />
-            : lens === 'income'
-              ? <p className={`font-display text-4xl font-bold tracking-tight tabular-nums text-teal ${short}`}>{formatMoney({ minor_units: weekIncome ?? 0, currency })}</p>
-              : <HeroAmount value={{ minor_units: weekSpend, currency }} className={`text-4xl ${short}`} />}
-          {!!reviewCount && lens !== 'review' && (
-            <Button type="button" variant="ghost" size="sm" className="h-auto min-h-11 px-0 hover:bg-transparent" onClick={() => setLens('review')}>
-              <Badge tone="warm" className="font-mono">{reviewCount} to review</Badge>
-            </Button>
-          )}
-        </div>
-        <p className="mt-1 text-xs text-muted [@media(max-height:700px)]:hidden">{lens === 'review'
-          ? 'Waiting for a category or a check. Newest first below.'
-          : weekCount !== undefined ? `${weekCount} ${weekCount === 1 ? 'record' : 'records'} since Monday · every date below` : '\u00a0'}</p>
-      </HeroCard>
-    );
-    const dock = selectionMode ? bulkActionBar : (
-      <div className="flex flex-col gap-1.5">
-        {bulkUndoStatus('px-1 text-sm text-muted')}
-        <div className="flex gap-2">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted" aria-hidden />
-            <Input
-              type="search"
-              aria-label="Search transactions"
-              placeholder="Search"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="h-12 pl-9 pr-9"
-            />
-            {search && (
-              <Button type="button" variant="ghost" size="icon" aria-label="Clear search" onClick={() => setSearch('')} className="absolute right-0.5 top-0.5 text-muted">
-                <X size={16} aria-hidden />
-              </Button>
-            )}
-          </div>
-          <Button type="button" variant="outline" className="relative h-12 w-12 shrink-0 p-0" aria-label={otherFilterCount ? `Filters, ${otherFilterCount} active` : 'Filters'} onClick={() => sheets.openDrill('filters')}>
-            <SlidersHorizontal size={18} aria-hidden />
-            {!!otherFilterCount && <span className="absolute -right-1 -top-1 inline-flex h-5 min-w-5 items-center justify-center rounded-pill bg-teal px-1 text-2xs font-mono font-semibold text-background">{otherFilterCount}</span>}
-          </Button>
-        </div>
-      </div>
-    );
-    phoneView = (
-      <>
-        <h1 className="sr-only">Activity</h1>
-        <PhoneScreen glance={glance} lenses={lenses} lens={lens} onLensChange={setLens} label="Activity views" dock={dock} />
-        <DrillSheet
-          open={sheets.drill === 'filters'}
-          onOpenChange={(open) => !open && sheets.closeDrill()}
-          backLabel="Activity"
-          title="Filters"
-          footer={<div className="flex gap-2">
-            <Button type="button" variant="outline" className="min-h-12 flex-1" disabled={!search && !otherFilterCount && lens === 'all'} onClick={() => { setSearch(''); setCategory('all'); setStartDate(''); setEndDate(''); setType('all'); setTripId(''); setNeedsReview(false); }}>Clear all</Button>
-            <Button type="button" className="min-h-12 flex-[2]" onClick={() => sheets.closeDrill()}>Show results</Button>
-          </div>}
-        >
-          <TransactionFilters variant="sheet" {...filterProps} />
-        </DrillSheet>
-        <DrillSheet open={showForm || sheets.drill === 'add'} onOpenChange={(open) => { if (open) return; setShowForm(false); if (sheets.drill === 'add') sheets.closeDrill(); }} backLabel="Activity" title="Add a transaction">
-          <TransactionForm categories={categories ?? []} onClose={() => { setShowForm(false); if (sheets.drill === 'add') sheets.closeDrill(); }} />
-        </DrillSheet>
-      </>
-    );
-  }
+    </div>
+  );
 
-  // Both layouts render the detail at the same tree position, so an
-  // in-progress edit survives resizing across the phone breakpoint.
+  const categoryList = categories ?? [];
+  const currentCategory = categoryFor && categoryFor !== 'selection' ? categoryFor.category : null;
+
   return (
     <>
-      {phoneView ?? (
-        <div className="flex h-full overflow-hidden">
-          {/* Left: transaction list */}
-          <div
-            ref={scrollRef}
-            className={`flex-1 overflow-y-auto p-4 md:p-6 space-y-4 transition-[margin-right] duration-300 ease-out${selectedTransaction ? ' hidden md:block md:mr-96' : ''}`}
-          >
-            <div className="flex items-start justify-between pb-4 border-b border-border">
-              <div className="flex flex-col gap-1">
-                <div className="text-xs uppercase tracking-[0.22em] text-muted font-mono font-semibold">
-                  {activityPath === '/activity' ? 'Activity' : 'Transactions'}
-                </div>
-                <h1 className="text-xl font-bold leading-tight tracking-tight text-foreground font-display">
-                  Every dollar tracked.
-                </h1>
-              </div>
-              <div className="flex items-center gap-2">
-              <Link to="/review" className="min-h-11 inline-flex items-center px-2 text-sm text-teal">Review{!!briefing.data?.review_count && ` (${briefing.data.review_count})`}</Link>
-              <Button
-                className="min-h-11"
-                size="sm"
-                variant={selectionMode ? 'default' : 'outline'}
-                onClick={toggleSelectionMode}
-              >
-                <CheckSquare className="w-4 h-4 mr-1" />
-                {selectionMode ? 'Done' : 'Select'}
-              </Button>
-              <Button className="min-h-11" size="sm" onClick={() => setShowForm(!showForm)} disabled={selectionMode}>
-                <Plus className="w-4 h-4 mr-1" />
-                Add
-              </Button>
-              </div>
-            </div>
+      <ListDetail
+        listLabel="Transactions"
+        list={list}
+        detail={selectedTransaction && <TransactionDetail key={selectedTransaction.id} transaction={selectedTransaction} onClose={closeDetail} />}
+        onClose={closeDetail}
+        onDeleteSelected={() => selectedTransaction && setDeleting(selectedTransaction)}
+        emptyDetail={<p className="flex h-full items-center justify-center p-8 text-center text-sm text-muted">Choose a transaction to see its details.</p>}
+      />
 
-            {selectionMode && bulkActionBar}
+      <TaskSheet open={showFilters} onOpenChange={setShowFilters} title="Filters" confirm={{ label: 'Done', onClick: () => setShowFilters(false) }}>
+        <TransactionFilters variant="sheet" {...filterProps} />
+      </TaskSheet>
 
-            {bulkUndoStatus('text-sm text-muted')}
+      <TaskSheet
+        open={showForm}
+        onOpenChange={setShowForm}
+        title="Add a transaction"
+        initialDetent="large"
+        confirm={{ label: 'Save', onClick: () => (document.getElementById(ADD_FORM_ID) as HTMLFormElement | null)?.requestSubmit(), pending: addPending, pendingLabel: 'Saving…' }}
+      >
+        <TransactionForm categories={categoryList} onClose={() => setShowForm(false)} formId={ADD_FORM_ID} onPendingChange={setAddPending} />
+      </TaskSheet>
 
-            <TransactionFilters {...filterProps} />
+      <TaskSheet
+        open={categoryFor !== null}
+        onOpenChange={(open) => !open && setCategoryFor(null)}
+        title={categoryFor === 'selection' ? `Category for ${selectedIds.size}` : 'Category'}
+        description={categoryFor && categoryFor !== 'selection' ? `${txName(categoryFor)} · this transaction only` : undefined}
+      >
+        <ListGroup>
+          {categoryList.map((c) => (
+            <ListRow key={c.name} onClick={() => applyCategory(c.name)} title={c.name}
+              trailing={c.name === currentCategory ? <Check aria-hidden className="h-4 w-4 text-teal" /> : undefined} />
+          ))}
+        </ListGroup>
+      </TaskSheet>
 
-            {showForm && (
-              <AnimatePresence>
-                <motion.div
-                  variants={fadeUpVariants}
-                  initial="initial"
-                  animate="animate"
-                  exit="exit"
-                >
-                  <TransactionForm
-                    categories={categories ?? []}
-                    onClose={() => setShowForm(false)}
-                  />
-                </motion.div>
-              </AnimatePresence>
-            )}
+      <TaskSheet open={typeForSelection} onOpenChange={setTypeForSelection} title={`Type for ${selectedIds.size}`}>
+        <ListGroup>
+          {(Object.keys(TYPE_LABELS) as TxType[]).map((t) => (
+            <ListRow key={t} onClick={() => { setTypeForSelection(false); handleBulkSetType(t); }} title={TYPE_LABELS[t]} />
+          ))}
+        </ListGroup>
+      </TaskSheet>
 
-            <Card
-              ref={listRef}
-              tabIndex={-1}
-              aria-label="Transactions"
-              className="overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              {isError ? (
-                <LoadFailed onRetry={() => refetch()} />
-              ) : (
-                <TransactionList
-                  transactions={txs}
-                  onLoadMore={loadMore}
-                  hasMore={!!hasNextPage}
-                  isLoading={isLoading || isFetchingNextPage}
-                  onTransactionClick={handleTransactionClick}
-                  selectedTransactionId={selectedId}
-                  dailyTotals={dailyTotals}
-                  selectionMode={selectionMode}
-                  selectedIds={selectedIds}
-                  onToggleSelect={toggleSelect}
-                />
-              )}
-            </Card>
-          </div>
+      <TaskSheet open={tripFor !== null} onOpenChange={(open) => !open && setTripFor(null)} title="Add to trip"
+        description={tripFor ? `${txName(tripFor)}, ${signedAmount(tripFor)}` : undefined}>
+        <ListGroup>
+          {trips.map((trip) => (
+            <ListRow key={trip.id} title={trip.name} subtitle={trip.destination ?? undefined} disabled={enlist.isPending}
+              onClick={() => {
+                if (!tripFor) return;
+                const tx = tripFor;
+                enlist.mutate({ tripId: trip.id, txId: tx.id }, { onSuccess: () => toast(`Added to ${trip.name}.`), onError: () => toast("Couldn't add to the trip.") });
+                setTripFor(null);
+              }} />
+          ))}
+        </ListGroup>
+      </TaskSheet>
 
-        </div>
-      )}
-      {detailOverlay}
+      <TaskSheet open={deleting !== null} onOpenChange={(open) => !open && setDeleting(null)} title="Delete transaction?">
+        {deleting && <div className="space-y-4 p-1">
+          <p className="text-sm">{txName(deleting)}, {signedAmount(deleting)}. This can’t be undone.</p>
+          <Button type="button" variant="destructive" className="min-h-11 w-full" onClick={confirmDelete}>Delete</Button>
+        </div>}
+      </TaskSheet>
     </>
   );
 }

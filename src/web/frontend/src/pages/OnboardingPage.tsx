@@ -100,10 +100,7 @@ export function OnboardingPage() {
   const showProgress = stepIndex > 0;
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center px-4">
-      <div className="fixed inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[700px] h-[400px] rounded-full bg-teal/5 blur-3xl" />
-      </div>
+    <div className="chrome-wash flex min-h-dvh items-center justify-center px-4">
 
       <div className="relative w-full max-w-md space-y-6">
         {/* Branding header */}
@@ -120,7 +117,7 @@ export function OnboardingPage() {
                 className={`h-1.5 rounded-full transition-all ${
                   i + 1 <= stepIndex
                     ? 'bg-teal w-4'
-                    : 'bg-border w-1.5'
+                    : 'bg-fill-press w-1.5'
                 }`}
               />
             ))}
@@ -128,7 +125,7 @@ export function OnboardingPage() {
         )}
 
         {/* Step card */}
-        <div className="bg-card border border-border rounded-xl p-6">
+        <div className="rounded-hero bg-card p-6">
           <AnimatePresence mode="wait">
             <motion.div
               key={currentStep}

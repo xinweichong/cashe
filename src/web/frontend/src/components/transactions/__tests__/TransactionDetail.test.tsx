@@ -178,7 +178,7 @@ it('rejects invalid amounts locally and allows unknown currencies to be repaired
 it('shows linked Wallet and Gmail evidence without internal source IDs', async () => {
   provenance.mockResolvedValue({ transaction_id: 1, sources: [{ channel: 'apple_wallet', evidence_recorded: true }, { channel: 'gmail', evidence_recorded: true }] });
   render(detail());
-  const section = within(screen.getByRole('region', { name: 'Capture sources' }));
+  const section = within(screen.getByRole('region', { name: 'Where it came from' }));
   expect(await section.findByText('Apple Wallet')).toBeInTheDocument();
   expect(section.getByText('Gmail')).toBeInTheDocument();
   expect(section.getByText(/linked to one transaction and counted once/)).toBeInTheDocument();
@@ -187,16 +187,16 @@ it('shows linked Wallet and Gmail evidence without internal source IDs', async (
 
 it('distinguishes a recorded source from retained evidence', async () => {
   render(detail());
-  expect(await screen.findByText('Recorded source only; no capture evidence retained')).toBeInTheDocument();
+  expect(await screen.findByText('Source noted; original message not kept')).toBeInTheDocument();
   expect(screen.queryByText(/counted once/)).not.toBeInTheDocument();
 });
 
 it('shows loading and supports retry after unavailable provenance', async () => {
   provenance.mockRejectedValueOnce(new Error('offline'));
   render(detail());
-  expect(screen.getByText('Loading capture sources…')).toBeInTheDocument();
+  expect(screen.getByText('Loading sources…')).toBeInTheDocument();
   fireEvent.click(await screen.findByRole('button', { name: 'Retry sources' }));
-  expect(await screen.findByText('Recorded source only; no capture evidence retained')).toBeInTheDocument();
+  expect(await screen.findByText('Source noted; original message not kept')).toBeInTheDocument();
 });
 
 it('does not show the previous transaction’s evidence when selection changes', async () => {
@@ -205,7 +205,7 @@ it('does not show the previous transaction’s evidence when selection changes',
   const { rerender } = render(detail(transaction, client));
   expect(await screen.findByText('Gmail')).toBeInTheDocument();
   rerender(detail({ ...transaction, id: 2 }, client));
-  expect(await screen.findByText('Recorded source only; no capture evidence retained')).toBeInTheDocument();
+  expect(await screen.findByText('Source noted; original message not kept')).toBeInTheDocument();
   expect(screen.queryByText('Gmail')).not.toBeInTheDocument();
   expect(provenance).toHaveBeenLastCalledWith(2);
 });

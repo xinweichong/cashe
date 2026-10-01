@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/api/client';
 import { briefingApi, evidenceLink, formatMoney, type Money, type SpendingFacts } from '@/api/briefing';
@@ -15,25 +15,21 @@ import { CategoryChangeBars } from '@/components/charts/CategoryChangeBars';
 import { CategoryDonut } from '@/components/charts/CategoryDonut';
 import { CategoryTrendLine } from '@/components/charts/CategoryTrendLine';
 import { IncomeExpenseBar } from '@/components/charts/IncomeExpenseBar';
-import { BiggestMoverTile, PulseBand } from '@/components/explore/PulseBand';
+import { PulseBand } from '@/components/explore/PulseBand';
 import { DailyReadCard } from '@/components/explore/DailyReadCard';
 import { WorthALookSummary } from '@/components/explore/WorthALookCard';
-import { HealthScoreSummary } from '@/components/explore/HealthScoreCard';
+import { HealthSpectrum } from '@/components/explore/HealthScoreCard';
+import { ListGroup, ListRow } from '@/components/ui/list';
+import { DetailHeader } from '@/components/ui/detail-panel';
+import { ListDetail } from '@/components/layout/ListDetail';
 import { formatChange, formatRange } from '@/components/explore/format';
 import { QuestionCard, RankedBar, RecurringCharges } from '@/components/explore/RecurringCharges';
 import { datesInRange, formatShortDate, getCategoryColor } from '@/lib/utils';
 import { ChevronRight } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
-import { HeroCard } from '@/components/ui/cards';
-import { HeroAmount } from '@/components/ui/HeroAmount';
-import { LensGrow, LensMore, PhoneScreen, type Lens } from '@/components/layout/PhoneScreen';
-import { DrillSheet } from '@/components/layout/DrillSheet';
-import { useDrill } from '@/hooks/useDrill';
 import { useIsPhone } from '@/hooks/useIsPhone';
 import { useTrips } from '@/components/plan/planHooks';
 import { useCategories } from '@/hooks/useCategories';
 import { useUrlParams } from '@/hooks/useUrlParams';
-import { SignedChange } from '@/components/ui/SignedChange';
 import { QueryState } from '@/components/ui/QueryState';
 
 const WEEKDAY_LABELS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -168,6 +164,23 @@ function SpendingOverTime({ compactChips = false }: { compactChips?: boolean }) 
   const { data: monthFacts } = useQuery({ queryKey: ['explore-month-facts'], queryFn: () => briefingApi.month() });
   const [selected, setSelected] = useState<string[]>([]);
   const initialized = useRef(false);
+  // Early in a month there are no movers yet; fall back to the month's
+  // biggest categories so the chart isn't empty until a chip is picked.
+  const { data: breakdown } = useQuery({
+    queryKey: ['explore-breakdown', monthFacts?.current.start, monthFacts?.current.end],
+    queryFn: () => api.getCategoryBreakdownV2(monthFacts!.current.start, monthFacts!.current.end),
+    enabled: !!monthFacts && !monthFacts.category_changes.length,
+  });
+  useEffect(() => {
+    if (!initialized.current && monthFacts && !monthFacts.category_changes.length && breakdown) {
+      const top = Object.entries(breakdown.by_category).sort((a, b) => b[1].minor_units - a[1].minor_units).slice(0, 3).map(([c]) => c);
+      if (top.length) {
+        initialized.current = true;
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setSelected(top);
+      }
+    }
+  }, [monthFacts, breakdown]);
   useEffect(() => {
     // Default to at most three selectable categories (the top movers this
     // period), once — later toggles are the user's own choice, not reset
@@ -440,67 +453,88 @@ function TripImpact({ trips }: { trips: { id: number; name: string; end_date: st
   );
 }
 
-// Explore is past patterns. Recurring costs live with subscriptions in
-// Plan on the phone; a desktop recurring link lands on the Time lens.
-type ExploreLens = 'time' | 'category' | 'merchant' | 'week';
-const EXPLORE_LENSES: readonly ExploreLens[] = ['time', 'category', 'merchant', 'week'];
-const LENS_FOR_MODE: Record<Mode, ExploreLens> = { 'over-time': 'time', 'by-category': 'category', 'by-merchant': 'merchant', recurring: 'time' };
-type ExploreDrill = 'read' | 'income' | 'changed' | 'drove' | 'visited' | 'trip';
-const EXPLORE_DRILLS: readonly ExploreDrill[] = ['read', 'income', 'changed', 'drove', 'visited', 'trip'];
-const DRILL_TITLES: Record<ExploreDrill, string> = {
-  read: "Today's read", income: 'Income and spending', changed: 'What changed', drove: 'What drove it', visited: 'Most visited', trip: 'Trip impact',
+// Explore is patterns (HIG alignment, 2026-10-01). On a phone the index is a
+// summary list in the Health app's style: the health score is the screen's
+// one spectrum card, and each section is a row with a small preview that
+// opens as its own pushed page (?section=). With room, the full dashboard
+// shows everything at once.
+type ExploreSection = 'read' | 'time' | 'category' | 'merchant' | 'recurring' | 'trip';
+const EXPLORE_SECTIONS: readonly ExploreSection[] = ['read', 'time', 'category', 'merchant', 'recurring', 'trip'];
+const SECTION_TITLES: Record<ExploreSection, string> = {
+  read: "Today's read", time: 'Over time', category: 'By category', merchant: 'By merchant', recurring: 'Recurring', trip: 'Trip impact',
 };
 
-// The phone glance: month-to-date spend against last month, with the two
-// summaries the desktop band shows (signals, health) as one-tap links.
-function ExploreGlance({ facts }: { facts: SpendingFacts | undefined }) {
-  const health = useQuery({ queryKey: ['health-score-v2', 1], queryFn: () => briefingApi.healthScore(1), staleTime: 60_000 });
-  const signals = useQuery({ queryKey: ['explore-signals'], queryFn: () => briefingApi.signals() });
-  const signalCount = signals.data ? signals.data.unusual.length + signals.data.new_merchants.length : undefined;
-  const change = facts?.change;
-  const month = facts ? new Date(`${facts.current.start}T00:00:00`).toLocaleDateString('en-SG', { month: 'short' }) : '';
-  const link = 'flex min-h-12 flex-1 items-center gap-2 px-1 text-sm active:bg-foreground/5 rounded-md transition-colors';
+// The last six months of spending as a line, for the Over time row.
+function MonthsSparkline() {
+  const { data } = useQuery({ queryKey: ['explore-monthly-preview'], queryFn: () => briefingApi.monthly(6), staleTime: 5 * 60_000 });
+  const values = (data ?? []).map((m) => m.spending?.minor_units ?? 0);
+  if (values.length < 2) return null;
+  const max = Math.max(...values, 1);
+  const points = values.map((v, i) => `${(i / (values.length - 1)) * 64},${20 - (v / max) * 18}`).join(' ');
   return (
-    <HeroCard title={facts ? `Spent · ${month}` : 'Spent'} className="p-4">
-      {!facts ? <Skeleton className="h-10 w-40" /> : <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-        <HeroAmount value={facts.current.spending} className="text-4xl" />
-        {change && <Badge tone={change.minor_units >= 0 ? 'warm' : 'calm'} className="font-mono gap-1">
-          <SignedChange change={change} /> vs last month
-        </Badge>}
-      </div>}
-      <div className="mt-3 flex divide-x divide-border border-t border-border pt-1">
-        <Link to="/explore/signals" className={link}>
-          <StatusDot tone={signalCount ? 'notable' : 'calm'} />
-          <span className="flex-1">Worth a look</span>
-          <span className="font-mono tabular-nums">{signalCount ?? '–'}</span>
-          <ChevronRight size={16} className="text-muted" aria-hidden />
-        </Link>
-        <Link to="/explore/health" className={`${link} pl-3`}>
-          {(() => {
-            const score = health.data?.has_income_data ? health.data.score ?? null : null;
-            return <>
-              {score != null && <StatusDot tone={score >= 70 ? 'saved' : score >= 50 ? 'active' : 'warm'} />}
-              <span className="flex-1">Health</span>
-              <span className="tabular-nums"><span className="font-display font-bold">{health.data ? (score ?? '—') : '–'}</span>{score != null && <span className="text-xs text-muted">/100</span>}</span>
-            </>;
-          })()}
-          <ChevronRight size={16} className="text-muted" aria-hidden />
-        </Link>
-      </div>
-    </HeroCard>
+    <svg aria-hidden viewBox="0 0 64 22" className="h-[22px] w-16 shrink-0">
+      <polyline points={points} fill="none" stroke="var(--color-teal)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+// This month's category mix as one thin bar, for the By category row.
+function CategoryMixBar({ facts }: { facts: SpendingFacts | undefined }) {
+  const { data } = useQuery({
+    queryKey: ['home-category-breakdown', facts?.current.start, facts?.current.end],
+    queryFn: () => api.getCategoryBreakdownV2(facts!.current.start, facts!.current.end),
+    enabled: !!facts,
+  });
+  const entries = Object.entries(data?.by_category ?? {}).sort((a, b) => b[1].minor_units - a[1].minor_units).slice(0, 5);
+  if (!entries.length) return null;
+  return (
+    <span aria-hidden className="flex h-1.5 w-16 shrink-0 gap-px overflow-hidden rounded-pill">
+      {entries.map(([name, amount]) => <span key={name} style={{ flex: amount.minor_units, background: getCategoryColor(name) }} />)}
+    </span>
+  );
+}
+
+function ExploreSummary({ facts, onOpen, hasTrips }: { facts: SpendingFacts | undefined; onOpen: (s: ExploreSection) => void; hasTrips: boolean }) {
+  const dailyRead = useQuery({ queryKey: ['analytics-insight', 'daily'], queryFn: () => api.getAnalyticsInsight(), staleTime: 60 * 60 * 1000 });
+  const signals = useQuery({ queryKey: ['explore-signals'], queryFn: () => briefingApi.signals() });
+  const unusual = signals.data?.unusual.length ?? 0;
+  const newMerchants = signals.data?.new_merchants.length ?? 0;
+  const mover = facts?.category_changes[0];
+  return (
+    <div className="space-y-6">
+      <HealthSpectrum />
+      {dailyRead.data?.content && (
+        <ListGroup>
+          <ListRow onClick={() => onOpen('read')} title="Daily read" subtitle={dailyRead.data.content.narrative} value="AI" trailing="chevron" />
+        </ListGroup>
+      )}
+      <ListGroup title="Worth a look">
+        <ListRow to="/explore/signals" title={signals.data ? `${unusual} unusual ${unusual === 1 ? 'purchase' : 'purchases'}` : 'Unusual purchases'}
+          subtitle={signals.data ? `${newMerchants} new ${newMerchants === 1 ? 'merchant' : 'merchants'} this month` : undefined} trailing="chevron" />
+        <ListRow onClick={() => onOpen('category')} title="Biggest mover"
+          subtitle={mover ? `${mover.category}, ${formatChange(mover.change)} vs the same days last month` : 'No category changed against last month'} trailing="chevron" />
+      </ListGroup>
+      <ListGroup title="Patterns">
+        <ListRow onClick={() => onOpen('time')} title="Over time" subtitle="Daily, weekly and monthly spending" trailing={<><MonthsSparkline /><ChevronRight aria-hidden className="h-4 w-4 text-muted opacity-60" /></>} />
+        <ListRow onClick={() => onOpen('category')} title="By category" subtitle="Where it went and what changed" trailing={<><CategoryMixBar facts={facts} /><ChevronRight aria-hidden className="h-4 w-4 text-muted opacity-60" /></>} />
+        <ListRow onClick={() => onOpen('merchant')} title="By merchant" subtitle="Top merchants and most visited" trailing="chevron" />
+        <ListRow onClick={() => onOpen('recurring')} title="Recurring" subtitle="Repeat charges and price changes" trailing="chevron" />
+        {hasTrips && <ListRow onClick={() => onOpen('trip')} title="Trip impact" subtitle="How a trip affected the month" trailing="chevron" />}
+      </ListGroup>
+    </div>
   );
 }
 
 export function ExplorePatternsPage() {
   const [search, updateParams] = useUrlParams();
+  const [, setSearch] = useSearchParams();
+  const navigate = useNavigate();
   const modeParam = search.get('mode');
   const mode: Mode = MODES.some(m => m.value === modeParam) ? (modeParam as Mode) : 'over-time';
   const setMode = (next: Mode) => updateParams({ mode: next === 'over-time' ? null : next });
   const { data: facts } = useMonthFacts();
   const { data: trips } = useTrips();
   const isPhone = useIsPhone();
-  const { drill, openDrill, closeDrill } = useDrill(EXPLORE_DRILLS);
-  const dailyRead = useQuery({ queryKey: ['analytics-insight', 'daily'], queryFn: () => api.getAnalyticsInsight(), staleTime: 60 * 60 * 1000, enabled: isPhone });
   const location = useLocation();
   const patternsRef = useRef<HTMLElement>(null);
   useEffect(() => {
@@ -509,67 +543,64 @@ export function ExplorePatternsPage() {
   }, [location.hash, location.search]);
 
   if (isPhone) {
-    // A desktop mode link (e.g. "vs. last month" → by-category) lands on the
-    // matching lens; the phone's own choice is held separately in ?lens=.
-    const lensParam = search.get('lens') as ExploreLens | null;
-    const lens: ExploreLens = lensParam && EXPLORE_LENSES.includes(lensParam) ? lensParam : modeParam ? LENS_FOR_MODE[mode] : 'time';
-    const setLens = (next: ExploreLens) => updateParams({ mode: null, lens: next === 'time' ? null : next });
-    const more = (items: { label: string; drill: ExploreDrill; show?: boolean }[]) => (
-      <LensMore items={items.filter((i) => i.show !== false).map((i) => ({ label: i.label, onOpen: () => openDrill(i.drill) }))} />
-    );
-    const lenses: Lens<ExploreLens>[] = [
-      { value: 'time', label: 'Time', bare: true, panel: <>
-        <LensGrow><SpendingOverTime compactChips /></LensGrow>
-        {more([{ label: "Today's read", drill: 'read', show: !!dailyRead.data?.content }, { label: 'Income and spending', drill: 'income' }])}
-      </> },
-      { value: 'category', label: 'Category', bare: true, panel: <>
-        <LensGrow><WhereItWent facts={facts} /></LensGrow>
-        {more([{ label: 'What changed', drill: 'changed' }, { label: 'What drove it', drill: 'drove' }])}
-      </> },
-      { value: 'merchant', label: 'Merchant', bare: true, panel: <>
-        <LensGrow><MerchantRanking facts={facts} /></LensGrow>
-        {more([{ label: 'Most visited', drill: 'visited' }])}
-      </> },
-      { value: 'week', label: 'Week', bare: true, panel: <>
-        <LensGrow><WhatDoesANormalWeekLookLike /></LensGrow>
-        {more([{ label: 'Trip impact', drill: 'trip', show: !!trips?.length }])}
-      </> },
-    ];
-    return <>
-      <PhoneScreen glance={<ExploreGlance facts={facts} />} lenses={lenses} lens={lens} onLensChange={setLens} label="Explore views" />
-      <DrillSheet open={!!drill} onOpenChange={(open) => !open && closeDrill()} backLabel="Explore" title={drill ? DRILL_TITLES[drill] : ''}>
-        <div className="space-y-3 [&_h2]:sr-only">
-          {drill === 'read' && <DailyReadCard />}
-          {drill === 'income' && <IncomeExpenseBar />}
-          {drill === 'changed' && <WhatChanged />}
-          {drill === 'drove' && <WhatDroveIt />}
-          {drill === 'visited' && <MostVisited facts={facts} />}
-          {drill === 'trip' && !!trips?.length && <TripImpact trips={trips} />}
+    const sectionParam = search.get('section') as ExploreSection | null;
+    const section = sectionParam && EXPLORE_SECTIONS.includes(sectionParam) ? sectionParam : null;
+    // Opening pushes history so the back gesture closes it; closing a
+    // section opened here pops that entry instead of pushing another.
+    const open = (next: ExploreSection) => {
+      const params = new URLSearchParams(search);
+      params.set('section', next);
+      setSearch(params, { state: { section: true } });
+    };
+    const close = () => {
+      if ((location.state as { section?: boolean } | null)?.section) { navigate(-1); return; }
+      updateParams({ section: null });
+    };
+    const detail = section && (
+      <div className="flex h-full flex-col">
+        <DetailHeader title={SECTION_TITLES[section]} onClose={close} />
+        <div className="space-y-6 p-4">
+          {section === 'read' && <DailyReadCard />}
+          {section === 'time' && <><SpendingOverTime compactChips /><IncomeExpenseBar /><WhatDoesANormalWeekLookLike /></>}
+          {section === 'category' && <><WhereItWent facts={facts} /><WhatChanged /><WhatDroveIt /></>}
+          {section === 'merchant' && <>
+            <MerchantRanking facts={facts} />
+            <MostVisited facts={facts} />
+            <ListGroup><ListRow to="/explore/merchants" title="All merchants" trailing="chevron" /></ListGroup>
+          </>}
+          {section === 'recurring' && <RecurringCharges />}
+          {section === 'trip' && !!trips?.length && <TripImpact trips={trips} />}
         </div>
-      </DrillSheet>
-    </>;
-
+      </div>
+    );
+    return (
+      <ListDetail
+        listLabel="Explore"
+        backLabel="Explore"
+        list={<div className="px-4 pb-8"><ExploreSummary facts={facts} onOpen={open} hasTrips={!!trips?.length} /></div>}
+        detail={detail}
+        onClose={close}
+      />
+    );
   }
 
   return (
-    <div className="p-4 md:p-6 space-y-4 md:space-y-5 max-w-[1600px]">
-      <PulseBand facts={facts} />
-
-      {/* Both columns stretch to the taller one, so the pair reads as one band. */}
-      <div className="grid gap-4 md:gap-5 lg:grid-cols-12 lg:items-stretch">
-        <div className="lg:col-span-7 flex flex-col gap-4 md:gap-5">
-          <DailyReadCard />
-          <WorthALookSummary className="flex-1" />
-        </div>
-        <div className="lg:col-span-5 flex flex-col gap-4 md:gap-5">
-          <BiggestMoverTile facts={facts} />
-          <HealthScoreSummary className="flex-1" />
-        </div>
+    <div className="mx-auto max-w-[1200px] space-y-8 px-4 pb-8 md:px-6">
+      {/* The health score is the one spectrum card; the month's pulse sits beside it. */}
+      <div className="grid gap-4 md:gap-5 lg:grid-cols-12 lg:items-start">
+        <HealthSpectrum className="lg:col-span-5" />
+        <div className="lg:col-span-7"><PulseBand facts={facts} /></div>
       </div>
 
-      <section id="explore-patterns" ref={patternsRef} aria-labelledby="explore-patterns-heading" className="space-y-4 pt-2 scroll-mt-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 id="explore-patterns-heading" className="text-lg font-semibold font-display">Patterns</h2>
+      {/* Flex, not a fixed grid: with no daily read (no AI, or nothing yet), Worth a look takes the row. */}
+      <div className="flex flex-col gap-4 md:gap-5 lg:flex-row lg:items-stretch lg:*:min-w-0 lg:*:flex-1">
+        <DailyReadCard />
+        <WorthALookSummary />
+      </div>
+
+      <section id="explore-patterns" ref={patternsRef} aria-labelledby="explore-patterns-heading" className="scroll-mt-4 space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 px-1">
+          <h2 id="explore-patterns-heading" className="font-display text-xl font-bold tracking-[-0.01em]">Patterns</h2>
           <Tabs value={mode} onValueChange={(v) => setMode(v as Mode)} className="max-w-full">
             <TabsList aria-label="Explore patterns">
               {MODES.map((m) => (
@@ -580,21 +611,21 @@ export function ExplorePatternsPage() {
         </div>
 
         {mode === 'over-time' && (
-          <div className="grid gap-4 md:gap-6 lg:grid-cols-12 items-start">
-            <div className="lg:col-span-8 space-y-4 md:space-y-6"><SpendingOverTime /><IncomeExpenseBar /></div>
+          <div className="grid items-start gap-4 md:gap-6 lg:grid-cols-12">
+            <div className="space-y-4 md:space-y-6 lg:col-span-8"><SpendingOverTime /><IncomeExpenseBar /></div>
             <div className="lg:col-span-4"><WhatDoesANormalWeekLookLike /></div>
           </div>
         )}
         {mode === 'by-category' && (
           // The selection detail opens beneath the chart, inside its column,
           // so the chart never resizes when a bar is selected.
-          <div className="grid gap-4 md:gap-6 lg:grid-cols-12 items-start">
-            <div className="lg:col-span-7 space-y-4 md:space-y-6"><WhatChanged /><WhatDroveIt /></div>
+          <div className="grid items-start gap-4 md:gap-6 lg:grid-cols-12">
+            <div className="space-y-4 md:space-y-6 lg:col-span-7"><WhatChanged /><WhatDroveIt /></div>
             <div className="lg:col-span-5"><WhereItWent facts={facts} /></div>
           </div>
         )}
         {mode === 'by-merchant' && (
-          <div className="grid gap-4 md:gap-6 lg:grid-cols-12 items-start">
+          <div className="grid items-start gap-4 md:gap-6 lg:grid-cols-12">
             <div className="lg:col-span-7"><MerchantRanking facts={facts} /></div>
             <div className="lg:col-span-5"><MostVisited facts={facts} /></div>
           </div>

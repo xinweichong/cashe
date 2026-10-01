@@ -12,6 +12,19 @@ export function isCreditType(type: string | null | undefined): boolean {
   return type === 'income' || type === 'refund';
 }
 
+// Decimal places per currency, mirroring the reviewed CURRENCY_EXPONENTS in
+// src/money.py: the API's Money minor_units use these, so ¥45 arrives as 45,
+// not 4500. Unlisted codes fall back to 2, as the backend's are unsupported.
+const CURRENCY_EXPONENTS: Record<string, number> = {
+  JPY: 0, KRW: 0, VND: 0,
+  BHD: 3, KWD: 3, OMR: 3, JOD: 3, TND: 3,
+};
+
+/** Converts Money minor units to a decimal amount in that currency. */
+export function minorToMajor(minor: number, currency: string): number {
+  return minor / 10 ** (CURRENCY_EXPONENTS[currency.toUpperCase()] ?? 2);
+}
+
 // Building an Intl.NumberFormat is the expensive part, and long transaction
 // lists format on every row; keep one per currency and precision.
 const currencyFormats = new Map<string, Intl.NumberFormat>();
@@ -21,7 +34,7 @@ function currencyFormat(currency: string, whole: boolean): Intl.NumberFormat {
   if (!format) {
     format = new Intl.NumberFormat('en-SG', whole
       ? { style: 'currency', currency, minimumFractionDigits: 0, maximumFractionDigits: 0 }
-      : { style: 'currency', currency, minimumFractionDigits: 2 });
+      : { style: 'currency', currency, minimumFractionDigits: CURRENCY_EXPONENTS[currency.toUpperCase()] ?? 2 });
     currencyFormats.set(key, format);
   }
   return format;

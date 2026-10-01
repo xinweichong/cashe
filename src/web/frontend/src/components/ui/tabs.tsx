@@ -1,49 +1,81 @@
 import * as React from "react"
 import * as TabsPrimitive from "@radix-ui/react-tabs"
+import { motion } from "framer-motion"
 
 import { cn } from "@/lib/utils"
+import { thumbSpring } from "@/lib/motionPresets"
 
-const Tabs = TabsPrimitive.Root
+// Segmented-control look (P10, HIG alignment 2026-10-01): a recessed track
+// with one raised thumb that slides to the active trigger. Radix keeps the
+// tablist semantics; the wrapper only tracks the active value so every
+// trigger in one list shares a layoutId. MotionConfig's reducedMotion="user"
+// (App.tsx) makes the thumb jump instead of slide.
+
+const TabsThumbContext = React.createContext<{ value?: string; id: string } | null>(null)
+
+const Tabs = React.forwardRef<
+  React.ElementRef<typeof TabsPrimitive.Root>,
+  React.ComponentPropsWithoutRef<typeof TabsPrimitive.Root>
+>(({ value, defaultValue, onValueChange, ...props }, ref) => {
+  const id = React.useId()
+  const [uncontrolled, setUncontrolled] = React.useState(defaultValue)
+  const current = value ?? uncontrolled
+  return (
+    <TabsThumbContext.Provider value={{ value: current, id }}>
+      <TabsPrimitive.Root
+        ref={ref}
+        value={value}
+        defaultValue={defaultValue}
+        onValueChange={(next) => { setUncontrolled(next); onValueChange?.(next) }}
+        {...props}
+      />
+    </TabsThumbContext.Provider>
+  )
+})
+Tabs.displayName = TabsPrimitive.Root.displayName
+
+// Shared by TabsList and SegmentedChoice so the two never drift.
+const segmentTrackClassName =
+  "inline-flex h-11 max-w-full items-center gap-0.5 overflow-x-auto scroll-strip rounded-[10px] bg-fill-press p-0.5 text-muted"
+const segmentThumbClassName =
+  "absolute inset-0 -z-10 rounded-[8px] bg-card shadow-[0_1px_4px_rgb(0_0_0/0.18),0_0_0_0.5px_var(--color-separator)]"
 
 const TabsList = React.forwardRef<
   React.ElementRef<typeof TabsPrimitive.List>,
   React.ComponentPropsWithoutRef<typeof TabsPrimitive.List>
 >(({ className, ...props }, ref) => (
-  <TabsPrimitive.List
-    ref={ref}
-    className={cn(
-      "inline-flex h-11 max-w-full items-center justify-start gap-1 overflow-x-auto scroll-strip rounded-sm bg-card-hover border border-border p-1 text-muted",
-      className
-    )}
-    {...props}
-  />
+  <TabsPrimitive.List ref={ref} className={cn(segmentTrackClassName, "isolate", className)} {...props} />
 ))
 TabsList.displayName = TabsPrimitive.List.displayName
 
 const tabTriggerBase =
-  "inline-flex items-center justify-center shrink-0 whitespace-nowrap rounded-sm border border-transparent px-3 py-1.5 min-h-9 text-sm font-medium text-muted ring-offset-background transition-all hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50"
+  "relative inline-flex min-h-10 shrink-0 items-center justify-center whitespace-nowrap rounded-[8px] px-3 text-sm font-medium text-muted pressable-scale transition-[color,transform] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
 
-// Same visual recipe for route-level selectors (NavLink sets aria-current),
-// so navigation keeps link/history semantics without cloning the trigger.
+// Route-level selectors (NavLink sets aria-current) keep link/history
+// semantics; the active route gets the thumb fill without the slide.
 const routeTabClassName = cn(
   tabTriggerBase,
-  "aria-[current=page]:border-teal/25 aria-[current=page]:bg-teal/13 aria-[current=page]:text-teal aria-[current=page]:font-semibold"
+  "aria-[current=page]:bg-card aria-[current=page]:font-semibold aria-[current=page]:text-foreground aria-[current=page]:shadow-[0_1px_4px_rgb(0_0_0/0.18),0_0_0_0.5px_var(--color-separator)]"
 )
 
 const TabsTrigger = React.forwardRef<
   React.ElementRef<typeof TabsPrimitive.Trigger>,
   React.ComponentPropsWithoutRef<typeof TabsPrimitive.Trigger>
->(({ className, ...props }, ref) => (
-  <TabsPrimitive.Trigger
-    ref={ref}
-    className={cn(
-      tabTriggerBase,
-      "data-[state=active]:border-teal/25 data-[state=active]:bg-teal/13 data-[state=active]:text-teal data-[state=active]:font-semibold",
-      className
-    )}
-    {...props}
-  />
-))
+>(({ className, children, value, ...props }, ref) => {
+  const thumb = React.useContext(TabsThumbContext)
+  const active = thumb?.value === value
+  return (
+    <TabsPrimitive.Trigger
+      ref={ref}
+      value={value}
+      className={cn(tabTriggerBase, "data-[state=active]:font-semibold data-[state=active]:text-foreground", className)}
+      {...props}
+    >
+      {active && <motion.span aria-hidden layoutId={`${thumb.id}-thumb`} transition={thumbSpring} className={segmentThumbClassName} />}
+      {children}
+    </TabsPrimitive.Trigger>
+  )
+})
 TabsTrigger.displayName = TabsPrimitive.Trigger.displayName
 
 const TabsContent = React.forwardRef<
@@ -62,4 +94,4 @@ const TabsContent = React.forwardRef<
 TabsContent.displayName = TabsPrimitive.Content.displayName
 
 // eslint-disable-next-line react-refresh/only-export-components
-export { Tabs, TabsList, TabsTrigger, TabsContent, routeTabClassName }
+export { Tabs, TabsList, TabsTrigger, TabsContent, routeTabClassName, segmentTrackClassName, segmentThumbClassName }

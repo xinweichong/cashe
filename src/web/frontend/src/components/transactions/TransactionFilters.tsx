@@ -70,7 +70,7 @@ export function TransactionFilters({
   onNeedsReviewChange,
   variant = 'default',
 }: TransactionFiltersProps) {
-  // 'sheet' is the phone's Filters DrillSheet: search already lives in the
+  // 'sheet' is Activity's Filters task sheet: search already lives in the
   // thumb dock, so the sheet shows every control, expanded, without it.
   const inSheet = variant === 'sheet';
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
@@ -164,7 +164,7 @@ export function TransactionFilters({
       </div>
 
       <div id="transaction-filter-controls" className={cn(mobileFiltersOpen || inSheet ? 'flex' : 'hidden', 'md:flex flex-col gap-2')}>
-        {inSheet && <h3 className="mt-3 text-2xs uppercase tracking-[0.22em] text-muted font-mono font-semibold">Type</h3>}
+        {inSheet && <h3 className="mt-4 font-display text-base font-bold">Type</h3>}
         <div className="overflow-x-auto">
           <div className="flex flex-wrap gap-1.5">
             {TYPE_OPTIONS.map((opt) => (
@@ -178,7 +178,7 @@ export function TransactionFilters({
           </div>
         </div>
 
-        {inSheet && <h3 className="mt-3 text-2xs uppercase tracking-[0.22em] text-muted font-mono font-semibold">Category</h3>}
+        {inSheet && <h3 className="mt-4 font-display text-base font-bold">Category</h3>}
         <div className="overflow-x-auto">
           <div className="flex flex-wrap gap-1.5">
             <ChoiceChip selected={category === 'all'} onClick={() => onCategoryChange('all')}>
@@ -201,7 +201,7 @@ export function TransactionFilters({
           </div>
         </div>
 
-        {inSheet && <h3 className="mt-3 text-2xs uppercase tracking-[0.22em] text-muted font-mono font-semibold">Dates</h3>}
+        {inSheet && <h3 className="mt-4 font-display text-base font-bold">Dates</h3>}
         {inSheet ? <>
         <div className="flex flex-wrap gap-1.5">
           {quickSelects.map((q) => {

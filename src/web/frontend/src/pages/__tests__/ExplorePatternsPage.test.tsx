@@ -158,7 +158,7 @@ test('most visited ranks merchants by visit count', async () => {
   show();
   await selectMode('By merchant');
   expect(await screen.findByText('9 visits · $18.00')).toBeTruthy();
-  const card = screen.getByText('Most visited').closest('.rounded-md')! as HTMLElement;
+  const card = screen.getByRole('region', { name: 'Most visited' });
   const names = within(card).getAllByRole('link').map(link => link.textContent);
   expect(names.slice(0, 2)).toEqual(['Daily Kopi', 'Big Once']);
 });
@@ -269,14 +269,16 @@ test('the dashboard opens with the month pulse, worth-a-look signals and financi
     new_merchants: [{ merchant: 'Bookshop', first_date: '2026-09-04', category: 'Shopping', amount: { minor_units: 2500, currency: 'SGD' }, transaction_id: 8 }],
   });
   vi.mocked(briefingApi.healthScore).mockResolvedValue({
-    score: 64, grade: 'Good', has_income_data: true, period: '2026-09', start: '2026-09-01', end: '2026-09-06',
+    score: 64, grade: 'Good', has_income_data: true, period: '2026-09', start: '2026-09-01', end: '2026-09-10',
     status: 'partial', unresolved_count: 2, income: { minor_units: 300000, currency: 'SGD' }, spending: { minor_units: 1250, currency: 'SGD' },
     components: { savings_rate: { score: 40, max: 40, value: 0.99, benchmark: 0.2, label: 'Savings Rate', description: 'Share of income left after all spending' } },
   });
   show();
   expect(await screen.findByText('Spent this month')).toBeTruthy();
   expect(screen.getAllByText('$12.50').length).toBeGreaterThan(0);
-  expect(await screen.findByText('+$5.00')).toBeTruthy();
+  // Six comparable days is too few: the pulse holds the change back.
+  expect(await screen.findByText('Too early')).toBeTruthy();
+  expect(screen.getByText('Compare after the first week')).toBeTruthy();
   // Worth a look is a summary card: rows are not separate links; the card opens the full list.
   const signals = await screen.findByRole('link', { name: /Worth a look: 2 items/ });
   expect(signals.getAttribute('href')).toBe('/explore/signals');
@@ -343,4 +345,15 @@ test('a day outside the period is not presented as selected', async () => {
   await screen.findByText('Spending over time');
   expect(screen.queryByRole('region', { name: /All spending on/ })).toBeNull();
   expect(api.getCategoryBreakdownV2).not.toHaveBeenCalled();
+});
+
+test('the health score waits for the first week of the month', async () => {
+  vi.mocked(briefingApi.healthScore).mockResolvedValue({
+    score: 100, grade: 'Excellent', has_income_data: true, period: '2026-10', start: '2026-10-01', end: '2026-10-01',
+    status: 'complete', unresolved_count: 0, income: { minor_units: 300000, currency: 'SGD' }, spending: { minor_units: 1250, currency: 'SGD' },
+    components: {},
+  });
+  show();
+  expect(await screen.findByText('Too early in the month for a score. Check back after the first week.')).toBeTruthy();
+  expect(screen.queryByText('Excellent')).toBeNull();
 });

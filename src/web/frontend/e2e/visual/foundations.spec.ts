@@ -33,10 +33,12 @@ for (const theme of ['dark', 'light'] as const) {
       }
     });
 
-    test(`ordinary Card uses 8px radius and border-only elevation (${theme})`, async ({ page }) => {
+    test(`ordinary Card is a borderless 18px group surface (${theme})`, async ({ page }) => {
+      // HIG alignment (Direction B, 2026-10-01): cards are grouped-list surfaces.
       const card = page.getByTestId('ordinary-card');
       const radius = await card.evaluate((n) => getComputedStyle(n).borderRadius);
-      expect(radius).toBe('8px');
+      expect(radius).toBe('18px');
+      expect(await card.evaluate((n) => getComputedStyle(n).borderTopWidth)).toBe('0px');
       const shadow = await card.evaluate((n) => getComputedStyle(n).boxShadow);
       expect(shadow).toBe('none');
     });
