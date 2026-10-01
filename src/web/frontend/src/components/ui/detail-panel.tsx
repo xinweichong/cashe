@@ -10,7 +10,8 @@ import { useStackBack, useStackLabel } from '@/components/layout/stackContext';
 
 // Direction B (P3/P12, 2026-10-01): a detail's persistent chrome. A pushed
 // page on a phone gets the nav bar with a back button named for its parent;
-// an md+ inspector gets the toolbar with Done. Extra actions sit beside them.
+// an md+ inspector gets the toolbar with Done, its title the pane's heading.
+// Extra actions sit beside them.
 export function DetailHeader({ title, subtitle, onClose, actions }: { title: ReactNode; subtitle?: ReactNode; onClose: () => void; actions?: ReactNode }) {
   const isPhone = useIsPhone();
   const stackBack = useStackBack();
@@ -19,7 +20,7 @@ export function DetailHeader({ title, subtitle, onClose, actions }: { title: Rea
     <div className="shrink-0">
       {isPhone
         ? <NavBar title={title} back={{ label: backLabel, onClick: stackBack }} trailing={actions} />
-        : <Toolbar title={title} trailing={<>{actions}<ToolbarAction tone="strong" onClick={onClose}>Done</ToolbarAction></>} />}
+        : <Toolbar title={<h2 className="truncate">{title}</h2>} trailing={<>{actions}<ToolbarAction tone="strong" onClick={onClose}>Done</ToolbarAction></>} />}
       {subtitle && <div className="px-4 pt-3">{subtitle}</div>}
     </div>
   );

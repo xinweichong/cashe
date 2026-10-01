@@ -27,7 +27,7 @@ test('the signals page lists every signal, each opening its transaction with a w
   const unusual = await screen.findByRole('link', { name: /Grocer/ });
   expect(unusual.getAttribute('href')).toBe('/activity/7?returnTo=%2Fexplore%2Fsignals');
   expect(screen.getByRole('link', { name: /Place 5/ })).toBeTruthy();
-  expect(screen.getByRole('link', { name: 'Back to Explore' }).getAttribute('href')).toBe('/explore');
+  // The pushed page's way back is the Explore nav bar (ExplorePage), tested there.
 });
 
 test('the health page shows the full breakdown and the left-out records', async () => {

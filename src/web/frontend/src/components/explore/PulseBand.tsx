@@ -3,7 +3,6 @@ import { api } from '@/api/client';
 import { evidenceLink, formatMoney, type SpendingFacts } from '@/api/briefing';
 import { StatCard } from '@/components/ui/StatCard';
 import { StatusDot } from '@/components/ui/StatusDot';
-import { HeroAmount } from '@/components/ui/HeroAmount';
 import { Skeleton } from '@/components/ui/skeleton';
 import { datesInRange, getCategoryColor } from '@/lib/utils';
 import { formatChange, formatRange } from './format';
@@ -24,11 +23,12 @@ export function PulseBand({ facts }: { facts: SpendingFacts | undefined }) {
 
   if (!facts || !current) {
     return (
-      <div role="status" className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+      <div role="status" className="grid grid-cols-2 gap-3 md:gap-4">
         <span className="sr-only">Loading…</span>
-        <Skeleton className="col-span-2 h-[132px] rounded-lg" />
-        <Skeleton className="h-[132px] rounded-lg" />
-        <Skeleton className="h-[132px] rounded-lg" />
+        <Skeleton className="h-[112px] rounded-group" />
+        <Skeleton className="h-[112px] rounded-group" />
+        <Skeleton className="h-[112px] rounded-group" />
+        <Skeleton className="h-[112px] rounded-group" />
       </div>
     );
   }
@@ -58,16 +58,13 @@ export function PulseBand({ facts }: { facts: SpendingFacts | undefined }) {
       : 'No income recorded this month';
 
   return (
-    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+    <div className="grid grid-cols-2 gap-3 md:gap-4">
       <StatCard
-        className="col-span-2"
-        hero
-        color="warm"
         label="Spent this month"
-        value={<HeroAmount value={current.spending} className="text-3xl lg:text-5xl" />}
+        value={formatMoney(current.spending)}
         subtext={`${formatRange(current.start, current.end)} · ${spentNote}`}
         sparklineData={cumulative}
-        sparklineSize={{ width: 100, height: 40 }}
+        sparklineSize={{ width: 80, height: 28 }}
         href={evidenceLink(current)}
       />
       <StatCard
@@ -87,6 +84,7 @@ export function PulseBand({ facts }: { facts: SpendingFacts | undefined }) {
         subtext={netNote}
         href={evidenceLink(current, undefined, 'income')}
       />
+      <BiggestMoverTile facts={facts} />
     </div>
   );
 }

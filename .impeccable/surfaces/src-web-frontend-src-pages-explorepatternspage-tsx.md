@@ -5,34 +5,19 @@ primary_target: "src/web/frontend/src/pages/ExplorePatternsPage.tsx"
 related_targets: []
 ---
 
-# Explore surface brief
+## Direction contract (HIG alignment, Direction B, 2026-10-01; replaces the 2026-09-25 contracts)
 
-Scope: `/explore` (index). Mode: Operate. Audience: the operator and trusted users checking where their money went this month and whether anything needs a look. Job: glance at the month in one viewport, then drill into a pattern and on to evidence. Constraints: shared spending facts only (partial/indicative status visible), existing component owners (StatCard, PageCard, ChartCard, HighlightCard, Tabs, ActivityRowShell, Badge, ChoiceChip), optional LLM degrades to nothing. `/explore/insights` redirects here.
+THESIS: Explore is patterns. On a phone the index is a Health-app-style summary list. Each section is a row with a small preview that opens its own pushed page (?section=). With room, the full dashboard shows everything at once. It refuses the one-screen phone lenses, drill sheets, the warm-glow spent hero and the teal-glow health card.
 
-## Direction contract
+OWN-WORLD: Direction B. Owners:
+- NavBar (large "Explore" on the index; signals and health are pushed pages back to Explore; Merchants carries its own bar)
+- HealthSpectrum (the screen's one spectrum card: health score and grade, linking to /explore/health)
+- ListGroup/ListRow (the phone summary: daily read, Worth a look, Patterns with a six-month sparkline and a category-mix bar)
+- StatCard pulse tiles (spent, vs last month, income, biggest mover; plain labels)
+- PageCard sections, Tabs pattern modes, ListDetail (phone sections; Merchants as a split view with MerchantProfile behind DetailHeader)
 
-THESIS: Explore is a dashboard, not a report: a pulse band answers "how is this month going" at a glance, and patterns sit below as full-width chart groups behind mode tabs. It refuses the stacked single-column question list and the sub-tab split between "patterns" and "insights".
+LAYOUT md+: health card (5 cols, its own height) beside four pulse tiles (7 cols); the daily read and Worth a look share a flex row (Worth a look takes the row when there's no read); then Patterns in Over time / By category / By merchant / Recurring, and trip impact.
 
-OWN-WORLD: cashe's Spectrum Instrument unchanged: near-black ink cards with 1px borders, category colours on every chart/dot/row tint, teal→coral spectrum for tone, one warm-glow hero stat, one teal-glow health highlight, Plus Jakarta titles, mono eyebrows, tabular mono money.
+PHONE SECTIONS: read (DailyReadCard); time (spending over time, income vs spending, your usual week); category (where it went, what changed, what drove it); merchant (ranking, most visited, All merchants); recurring; trip.
 
-STORY: The visitor sees month-to-date spend, the change against the same days last month, income and net flow, and the biggest mover; reads a short AI note if enabled; spots unusual charges and new merchants; sees a financial health score with its five pillars; then switches modes to explore trends, categories, merchants and recurring charges, each linking to evidence.
-
-FIRST VIEWPORT: Desktop, full content width. Row 1 on 4 cols: a double-width warm-glow hero "Spent this month" (HeroAmount + running-total sparkline), then "vs. last month" and "Income"; every tile is a CardLink to its evidence. Row 2 on 12 cols, both columns equal height: left 7 = AI daily read above a three-row "Worth a look" summary; right 5 = "Biggest mover" tile above a score-only Financial health summary. The summaries open /explore/signals and /explore/health. Row 3: "Patterns" heading and mode tabs, with the active mode's first chart card starting inside a 1440x900 first screen. Phone: hero full width, vs./income 2-up, then everything stacked.
-
-FORM: Pulse band + bento modes, dealt structure #3 of 7 (THE ROLL), seed key 9112bef3. Signature interaction: mode tabs swap full-width bento groups in place (URL-held), and every tile, pattern row, bar and signal links to its evidence (whole-card CardLink approved by the user 2026-09-25).
-
-FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance
-
-## Phone direction contract (< 768px only; md+ unchanged)
-
-THESIS: One screen that never scrolls. The glance sits on top, one lens panel fills the middle, and the lens bar sits above BottomTabs, following the Home phone contract.
-
-OWN-WORLD: The Spectrum Instrument, with the shared owners PhoneScreen, LensBar and DrillSheet.
-
-STORY: Glance first, lens for depth, and a drill-in for any row, with back returning to the overview.
-
-FIRST VIEWPORT: Glance: ExploreGlance (month-to-date spend, change vs last month, Worth a look and Health as one-tap links to /explore/signals and /explore/health). Lenses: Time, Category, Merchant, Week, one card each (Spending over time with three chips plus More; Where it went; Top merchants; Your usual week), with secondary views (Today's read, Income and spending, What changed, What drove it, Most visited, Trip impact) as LensMore rows opening DrillSheets. Recurring costs moved to Plan's Subs lens (critique 2026-09-26). A desktop ?mode= link lands on its lens. The page header is sr-only on the phone index.
-
-FORM: exp-lens (user pick, decision page 2026-09-26). Mirrors the Home phone pattern (seed 568c139f).
-
-FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance.
+VERIFIED: Playwright on iPhone 15 (summary and the By category section), a 1440px desktop dashboard, and iPad Merchants with an open profile, against the synthetic journey server (2026-10-01).

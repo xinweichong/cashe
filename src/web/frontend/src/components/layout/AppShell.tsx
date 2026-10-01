@@ -11,7 +11,7 @@ import { pageVariants } from '@/lib/motionPresets';
 
 // Tab roots migrated to their own large-title NavBar (P3), which carries the
 // profile menu on a phone. The rest keep the shell's phone bar until they move.
-const ownNavBar = (path: string) => path === '/' || path === '/home' || /^\/(activity|transactions|evidence|plan)(\/|$)/.test(path);
+const ownNavBar = (path: string) => path === '/' || path === '/home' || /^\/(activity|transactions|evidence|plan|explore)(\/|$)/.test(path);
 
 export function AppShell() {
   const location = useLocation();
