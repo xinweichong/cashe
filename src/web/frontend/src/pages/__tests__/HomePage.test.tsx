@@ -162,7 +162,7 @@ test('a failed category breakdown shows a retry without losing the rest of the b
   vi.mocked(api.getCategoryBreakdownV2).mockRejectedValue(new Error('offline'));
   show(<HomePage />);
   expect(await screen.findByText(/Couldn't load the category mix/)).toBeTruthy();
-  expect(screen.getByText('Where the dollars go.')).toBeTruthy();
+  expect(screen.getByRole('heading', { level: 1, name: 'Home' })).toBeTruthy();
 });
 
 test('selecting a category and viewing transactions navigates to its evidence', async () => {
@@ -243,7 +243,7 @@ test('the daily trend runs chronologically over the whole period, even though th
 test('initial load shows the heading and a labelled skeleton, not a bare message', async () => {
   vi.mocked(briefingApi.home).mockReturnValue(new Promise(() => {}));
   show(<HomePage />);
-  expect(screen.getByRole('heading', { name: 'Where the dollars go.' })).toBeTruthy();
+  expect(screen.getByRole('heading', { level: 1, name: 'Home' })).toBeTruthy();
   expect(screen.getByRole('status', { name: 'Preparing your briefing' })).toBeTruthy();
   expect(screen.queryByText('Recorded spending this month')).toBeNull();
 });
@@ -368,4 +368,23 @@ test('capture review queues a deliberate retry and refreshes', async () => {
   fireEvent.click(await screen.findByRole('button', { name: 'Retry' }));
   await waitFor(() => expect(briefingApi.retryCapture).toHaveBeenCalledWith(1));
   expect(await screen.findByText(/Retry queued/)).toBeTruthy();
+});
+
+test('Home leads with the month as its one spectrum card, with budget progress', async () => {
+  vi.mocked(briefingApi.home).mockResolvedValue({ ...home, spending_target: { target: { minor_units: 100000, currency: 'SGD' }, remaining: { minor_units: 98750, currency: 'SGD' } } });
+  const { container } = show(<HomePage />);
+  await screen.findByText(/^Through 2026-09-06/);
+  expect(container.querySelectorAll('.spectrum-fill')).toHaveLength(1);
+  expect(screen.getByText('Budget $1,000.00')).toBeTruthy();
+  expect(screen.getByRole('progressbar', { name: 'Budget used' }).getAttribute('aria-valuenow')).toBe('1');
+});
+
+test('Coming up previews only the next 7 days and hands the rest to Plan', async () => {
+  const charge = (id: number, date: string) => ({ id, label: `Charge ${id}`, date, amount: { minor_units: 1000, currency: 'SGD' as const }, subscription_id: id });
+  vi.mocked(briefingApi.home).mockResolvedValue({ ...home, upcoming: [charge(1, '2026-09-08'), charge(2, '2026-09-13'), charge(3, '2026-09-14')] });
+  show(<HomePage />);
+  expect(await screen.findByText('Charge 1')).toBeTruthy();
+  expect(screen.getByText('Charge 2')).toBeTruthy();
+  expect(screen.queryByText('Charge 3')).toBeNull();
+  expect(screen.getByRole('link', { name: 'See Plan' }).getAttribute('href')).toBe('/plan');
 });

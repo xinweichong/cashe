@@ -9,6 +9,10 @@ import { CommandPalette } from '@/components/CommandPalette';
 import { PullToRefresh } from './PullToRefresh';
 import { pageVariants } from '@/lib/motionPresets';
 
+// Tab roots migrated to their own large-title NavBar (P3), which carries the
+// profile menu on a phone. The rest keep the shell's phone bar until they move.
+const OWN_NAV_BAR = new Set(['/', '/home']);
+
 export function AppShell() {
   const location = useLocation();
   const shouldReduce = useReducedMotion();
@@ -23,10 +27,12 @@ export function AppShell() {
       <Sidebar />
       <div className="flex-1 min-w-0 flex flex-col">
         {/* Phone-only top bar until each tab root carries its own NavBar (plan steps 4–10). */}
-        <header className="md:hidden sticky top-0 z-40 h-12 shrink-0 chrome-frosted border-b-[0.5px] border-separator flex items-center px-4 gap-2">
-          <CasheWordmark size={22} />
-          <div className="ml-auto"><ProfileMenu /></div>
-        </header>
+        {!OWN_NAV_BAR.has(location.pathname) && (
+          <header className="md:hidden sticky top-0 z-40 h-12 shrink-0 chrome-frosted border-b-[0.5px] border-separator flex items-center px-4 gap-2">
+            <CasheWordmark size={22} />
+            <div className="ml-auto"><ProfileMenu /></div>
+          </header>
+        )}
         {/* overflow-x-clip, not hidden: a scroll container here would stop NavBar and Toolbar sticking. */}
         <main className={`flex-1 min-w-0 overflow-x-clip ${TAB_BAR_CLEARANCE}`}>
           <AnimatePresence mode="wait" initial={false}>
