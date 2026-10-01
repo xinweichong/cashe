@@ -17,7 +17,6 @@ const UI_OWNERS = /\/components\/ui\//;
 const NATIVE_BUTTONS: Record<string, [number, string]> = {
   'pages/SettingsPage.tsx': [1, 'learned-override chip remove control inside a tag (retained)'],
   'pages/PlanPage.tsx': [2, 'U19 calendar and week-strip day cells (retained role)'],
-  'dev/PlanLayoutStudy.tsx': [2, 'preview of the same retained calendar and week-strip day cells'],
   'components/charts/CategoryChangeBars.tsx': [1, 'CategoryChangeBarRow owner (approved row)'],
 };
 

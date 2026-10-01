@@ -445,7 +445,7 @@ Current registry (paths relative to `src/web/frontend/src/`):
 | Panel switching | `components/ui/tabs.tsx` | Use actual tabs with matching panel semantics; do not substitute tabs for form values, multi-select filters or navigation links. Route-level selectors (e.g. Explore's NavLinks) keep link semantics and reuse `routeTabClassName`, keyed on `aria-current`. |
 | Category-coloured transaction row/avatar | `components/ui/ActivityRowShell.tsx`, `CategoryAvatar.tsx` | Caller owns money formatting and navigation; shared component owns presentation. |
 | Standard card / chart surface / hero / positive highlight | `components/ui/cards.tsx` | Use the matching role. Raw `Card` is for established structural exceptions, not a new visual system. |
-| Compact KPI / new-experience hero amount | `components/ui/StatCard.tsx`, `HeroAmount.tsx` | Use their actual APIs; retain money precision and quality labels. |
+| Compact KPI | `components/ui/StatCard.tsx` | Use their actual APIs; retain money precision and quality labels. |
 | Text fields | `.input-field` in `index.css`; `components/ui/input.tsx` wrapper | Consolidate the wrapper onto the utility contract; do not create another style string. |
 | Native / custom select | `.select-field`; `components/ui/select.tsx` | Different interaction mechanisms, same theme/geometry intent. Keep native semantics where suitable. |
 | Dialog, sheet, dropdown, select | Existing `components/ui/` Radix wrappers | They own surface (`card-elev`, `border-border`, `elev-md`), backdrop and §14 enter/exit motion (`.pop-motion`, `.overlay-motion`, `.sheet-motion-*` in `index.css`), and the close control is `Button` via `Close asChild`. Do not override surfaces in callers. Interrupting confirmations compose `Dialog` (no separate ConfirmDialog API). |
@@ -573,10 +573,9 @@ Five shared surface roles:
 | `<PageCard>` | Content, tables, lists, SVG visuals | `radius-md`, `elev-none` |
 | `<ChartCard>` | Recharts charts (edge-to-edge content) | `radius-md`, `elev-none` |
 | `<StatCard>` | Compact KPI display | Target `radius-lg`, `elev-none`; actual API uses `color`, not an expense/income `variant` |
-| `<HeroCard>` | Hero numeric surface | `radius-2xl`, warm glow, radial tint and gradient hairline |
-| `<HighlightCard>` | Supported positive-outcome callout | `radius-lg`, teal glow and left-edge wash |
+| `<SpectrumCard>` | The one spectrum card per screen (Direction B) | `rounded-hero`, `.spectrum-fill`, on-brand text; replaced `HeroCard`/`HighlightCard` (removed 2026-10-01) |
 
-`PageCard`, `ChartCard`, `HeroCard` and `HighlightCard` accept `title`, optional `action`, and `children`. `StatCard` accepts `label`, `value`, `color`, optional `delta`, `sparklineData`, `hero`, `subtext` and `className`. Class overrides are for placement, not new surface designs. Current Card resting elevation, StatCard radius and hardcoded highlight treatments differ from the targets; fix them centrally as tracked in the surface audit. Do not paper over those differences in callers.
+`PageCard` and `ChartCard` accept `title`, optional `action`, and `children`. `StatCard` accepts `label`, `value`, `color`, optional `delta`, `sparklineData`, `hero`, `subtext` and `className`. Class overrides are for placement, not new surface designs. Current Card resting elevation, StatCard radius and hardcoded highlight treatments differ from the targets; fix them centrally as tracked in the surface audit. Do not paper over those differences in callers.
 
 ### 7.6 Chart conventions
 

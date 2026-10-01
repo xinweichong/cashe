@@ -409,10 +409,9 @@ Three tiers — use the highest applicable tier, not the lower primitives direct
 | `PageCard` | Content, tables, lists, SVG-based visuals | `CardContent` retains `p-4` padding |
 | `ChartCard` | Recharts chart components | `CardContent className="p-0"` — charts render edge-to-edge |
 | `StatCard` | Compact numeric KPI display | Actual props: `label`, `value`, `color`, optional `delta`, `sparklineData`, `hero`, `subtext` |
-| `HeroCard` | Large prominent stat with gradient wash | Used for savings overview, health score hero |
-| `HighlightCard` | Supported positive-outcome highlight | Teal emphasis, subject to the per-viewport glow budget; not mandatory pairing |
+| `SpectrumCard` (`ui/SpectrumCard.tsx`) | The one spectrum card per screen | Home, Plan and Explore tab roots only; replaced `HeroCard`/`HighlightCard`/`HeroAmount` (removed 2026-10-01) |
 
-`PageCard`, `ChartCard`, `HeroCard` and `HighlightCard` accept `title`, `children` and optional `action`. `StatCard` uses its own API above. `className` permits layout placement, not an unapproved new surface style.
+`PageCard` and `ChartCard` accept `title`, `children` and optional `action`. `StatCard` uses its own API above. `className` permits layout placement, not an unapproved new surface style.
 
 **Tier 3 — Bespoke (use raw `Card`):**
 - Alert card in Analytics — `border-warning/30` semantics, intentionally not abstracted

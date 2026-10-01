@@ -149,8 +149,7 @@ body {
 
 @layer components {
   /* CardLink (components/ui/cards.tsx): whole-card navigation. The wrapped
-     card lifts on hover; plain cards also take the hover fill, glow cards
-     keep their own wash. */
+     card lifts on hover; cards also take the hover fill. */
   .card-link > :first-child {
     transition: transform 150ms ease-out, box-shadow 150ms ease-out, background-color 150ms ease-out;
   }
@@ -158,7 +157,7 @@ body {
     transform: translateY(-1px);
     box-shadow: var(--shadow-elev-xs);
   }
-  .card-link:hover > .bg-card:not([class*="hero-glow"]) {
+  .card-link:hover > .bg-card {
     background-color: var(--color-card-hover);
   }
 
@@ -241,72 +240,6 @@ body {
     animation: skeleton-shimmer 1.5s ease-in-out infinite;
   }
 
-  /* ── Hero glow pulse (one per screen max) ──────────────────────────── */
-  /* Deprecated (HIG alignment): replaced by .spectrum-fill (P11) and
-     .chrome-wash. Removed once HeroCard/HighlightCard callers migrate. */
-
-  .hero-glow-warm,
-  .hero-glow-teal,
-  .hero-glow-coral {
-    position: relative;
-    /* No overflow:hidden here — the box-shadow must bloom evenly past
-       every edge, corners included. Clipping the shadow to the box would
-       cut the round corners flat, since a descendant's box-shadow is
-       clipped by an ancestor's overflow:hidden even though the ancestor's
-       own shadow is not. Only .hero-hairline needs clipping — it gets its
-       own scoped wrapper instead. */
-  }
-
-  /* Scoped clip for the hairline only — keeps the glow box-shadows below
-     unclipped so they bloom uniformly at every
-     corner instead of being cut flat where the hairline's clip box met the
-     rounded edge. */
-  .hero-glow-clip {
-    position: absolute;
-    inset: 0;
-    border-radius: inherit;
-    overflow: hidden;
-    pointer-events: none;
-  }
-
-  .hero-glow-warm {
-    background: radial-gradient(120% 100% at 100% 0%, rgba(251,146,60,.08) 0%, rgba(11,11,20,0) 50%), var(--color-card);
-    /* Static, not pulsing ("Keep glow static", docs/design-language.md):
-       a stronger outer halo listed first, over the base glow. */
-    box-shadow: 0 0 0 1px rgba(251,146,60,.21), 0 0 48px -4px rgba(251,146,60,.35),
-                0 0 0 1px rgba(251,146,60,.14), 0 0 48px -10px rgba(251,146,60,.45),
-                inset 0 1px 0 rgba(251,146,60,.06);
-  }
-
-  .hero-glow-teal {
-    background: radial-gradient(120% 100% at 100% 0%, rgba(0,212,170,.08) 0%, rgba(11,11,20,0) 50%), var(--color-card);
-    box-shadow: 0 0 0 1px rgba(0,212,170,.21), 0 0 48px -4px rgba(0,212,170,.35),
-                0 0 0 1px rgba(0,212,170,.18), 0 0 36px -8px rgba(0,212,170,.40),
-                inset 0 1px 0 rgba(0,212,170,.08);
-  }
-
-  .hero-glow-coral {
-    background: radial-gradient(120% 100% at 100% 0%, rgba(255,107,107,.08) 0%, rgba(11,11,20,0) 50%), var(--color-card);
-    box-shadow: 0 0 0 1px rgba(255,107,107,.21), 0 0 40px -4px rgba(255,107,107,.32),
-                0 0 0 1px rgba(255,107,107,.14), 0 0 40px -10px rgba(255,107,107,.38);
-  }
-
-  /* Hairline top-edge gradient — child of .hero-glow-* */
-  .hero-hairline {
-    position: absolute;
-    top: 0; left: 0; right: 0;
-    height: 1px;
-  }
-  .hero-glow-warm  .hero-hairline {
-    background: linear-gradient(90deg, transparent, rgba(251,146,60,.32) 30%, rgba(255,107,107,.32) 70%, transparent);
-  }
-  .hero-glow-teal  .hero-hairline {
-    background: linear-gradient(90deg, transparent, rgba(0,212,170,.40) 50%, transparent);
-  }
-  .hero-glow-coral .hero-hairline {
-    background: linear-gradient(90deg, transparent, rgba(255,107,107,.40) 50%, transparent);
-  }
-
   /* ── Reduced motion ────────────────────────────────────────────────── */
 
   @media (prefers-reduced-motion: reduce) {
@@ -324,30 +257,7 @@ body {
     }
   }
 
-  /* Quiet diagonal shell wash, theme-aware (replaces the fixed-opacity B2_WASH
-     inline style for the new experience). Dark keeps B2_WASH's original
-     intensities; light uses lower coefficients tuned for a white canvas so the
-     brand colours read as a hint rather than a tint. */
-  .shell-wash {
-    background: linear-gradient(
-      135deg,
-      color-mix(in srgb, var(--color-teal) 8%, transparent) 0%,
-      transparent 30%,
-      transparent 68%,
-      color-mix(in srgb, var(--color-tangerine) 7%, transparent) 86%,
-      color-mix(in srgb, var(--color-coral) 6%, transparent) 100%
-    ), var(--color-background);
-  }
-  :root[data-theme="light"] .shell-wash {
-    background: linear-gradient(
-      135deg,
-      color-mix(in srgb, var(--color-teal) 5%, transparent) 0%,
-      transparent 30%,
-      transparent 68%,
-      color-mix(in srgb, var(--color-tangerine) 4%, transparent) 86%,
-      color-mix(in srgb, var(--color-coral) 3%, transparent) 100%
-    ), var(--color-background);
-  }
+
 }
 
 
@@ -440,8 +350,8 @@ body {
   }
 }
 
-/* Faint radial wash, visible only through frosted chrome. Replaces
-   .shell-wash (B2) and the elev-glow tiers once AppShell migrates (step 3). */
+/* Faint radial wash, visible only through frosted chrome. It replaced the
+   B2 shell wash and the elev-glow tiers (HIG alignment, 2026-10-01). */
 .chrome-wash {
   background:
     radial-gradient(120% 60% at 0% 0%, color-mix(in srgb, var(--color-teal) 10%, transparent), transparent 60%),
