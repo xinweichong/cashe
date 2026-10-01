@@ -24,7 +24,11 @@ A visual and interaction redesign of the web dashboard, following Apple's Human 
 
 - Home, Activity, Plan, Explore, Evidence, Review, Settings, sign-in, set-password, onboarding and the admin panel rebuilt on the components above; every page now scrolls naturally (the fixed-height phone "lens" screens and viewport grids are gone)
 - Type: Plus Jakarta Sans for titles, Inter for everything else, JetBrains Mono for money only — no mono eyebrow labels
-- Home previews the next 7 days and links to Plan; Activity's filters live in one Filters sheet at every size; Plan details open beside the page on iPad/desktop; Merchants is a list with profiles
+- Home is "now" only: the month's spectrum card, Needs a look (only what actually does, or "All caught up") and This month, with one row each linking to Plan, Activity and Explore; the category, trend and change detail lives on Explore
+- Settings and the subscription detail use grouped rows: password changes and category edits open sheets, sessions and connections use text actions, and a subscription's actions are labelled rows (Pause tracking, Mark as cancelled, Delete) instead of icons
+- Plan shows savings once beside the projection, folds its estimate explanations into disclosures, and offers to add a subscription when the timeline is empty; Review folds each group's explanation into "About this"
+- Plainer wording throughout: dates in words, correct singular/plural counts, and "Added to cashe" / "Where it came from" in place of capture jargon
+- Activity's filters live in one Filters sheet at every size; Plan details open beside the page on iPad/desktop; Merchants is a list with profiles
 
 ### Removed
 
@@ -32,6 +36,9 @@ A visual and interaction redesign of the web dashboard, following Apple's Human 
 
 ### Fixed
 
+- Amounts in zero-decimal currencies (JPY, KRW, VND) showed 100× too small in Activity (¥45 as ¥0.45), and Review flagged the correct records; also present in 3.0.0
+- On the first days of a month the health score read "100 Excellent" and month comparisons flagged a jump against a single day; both now wait for a week of data
+- Category initials were hard to read in light mode; trips and subscriptions used their own "S$" format instead of the shared one
 - Budget, goal and category rows could stay invisible behind a stalled stagger animation; rows now render at rest
 - Opening a dialog from a context-menu item no longer fights the menu for focus
 - Set-password and admin form labels are tied to their fields; onboarding checkboxes use teal rather than the foreground-coloured accent token
