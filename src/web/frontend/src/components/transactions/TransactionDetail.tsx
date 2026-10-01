@@ -190,7 +190,8 @@ export function TransactionDetail({
         {/* View mode: all fields */}
         {!editing && (
           <div className="space-y-3">
-            <QuickCategoryPicker tx={tx} categories={categories ?? []} />
+            {/* Spending categories don't apply to income. */}
+            {tx.type !== 'income' && <QuickCategoryPicker tx={tx} categories={categories ?? []} />}
             <DetailRow label="Date" value={formatDateTime(tx.transaction_date)} />
             <DetailRow label="Type" value={typeLabel} />
             <DetailRow label="Source" value={sourceLabel} />

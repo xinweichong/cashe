@@ -130,9 +130,9 @@ export function SubscriptionsSection({ selectedSubId, onSelectSub }: Subscriptio
                   )}
                 </div>
               </div>
-              <span className="font-mono text-sm tabular-nums shrink-0 ml-2">
-                {sub.last_amount != null ? formatCurrency(sub.last_amount) : <span className={muted}>No charge yet</span>}
-              </span>
+              {sub.last_amount != null
+                ? <span className="font-mono text-sm tabular-nums shrink-0 ml-2">{formatCurrency(sub.last_amount)}</span>
+                : <span className={`text-sm shrink-0 ml-2 ${muted}`}>No charge yet</span>}
             </SelectableRow>
             );
           })}

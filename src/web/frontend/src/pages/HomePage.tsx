@@ -142,8 +142,8 @@ export function HomePage() {
       {!!toReview && <ListRow
         to={review_count >= unresolved ? '/review' : withReturn(evidenceLink(facts.current, undefined, 'unresolved'))}
         leading={dot(<StatusDot tone="warm" />)}
-        title={`${plural(toReview, 'purchase')} to review`}
-        subtitle="Missing an amount, currency rate or date"
+        title={`${plural(toReview, 'record')} to review`}
+        subtitle="Missing a category, amount, currency rate or date"
         trailing="chevron"
       />}
       {!!recurring_suggestion_count && <ListRow to="/review" leading={dot(<StatusDot tone="calm" />)} title={plural(recurring_suggestion_count, 'possible subscription')} subtitle="Confirm or dismiss" trailing="chevron" />}

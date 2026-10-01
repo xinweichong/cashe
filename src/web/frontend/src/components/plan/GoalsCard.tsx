@@ -22,9 +22,9 @@ function GoalSummaryRow({ g, onSelect }: { g: GoalProgress; onSelect: () => void
           <span className="text-sm font-semibold text-foreground truncate">{g.name}</span>
           {isComplete && <Badge tone="saved" className="shrink-0">Complete</Badge>}
         </div>
-        <p className="text-xs text-muted font-mono">{formatCurrencyWhole(g.saved_amount)} of {formatCurrencyWhole(g.target_amount)}</p>
+        <p className="text-xs text-muted tabular-nums">{formatCurrencyWhole(g.saved_amount)} of {formatCurrencyWhole(g.target_amount)}</p>
       </div>
-      <span className="text-sm font-mono tabular-nums text-muted shrink-0">{g.percent.toFixed(0)}%</span>
+      <span className="text-sm tabular-nums text-muted shrink-0">{g.percent.toFixed(0)}%</span>
     </SelectableRow>
   );
 }
@@ -70,7 +70,7 @@ export function GoalsCard({ onSelect }: { onSelect: (id: number) => void }) {
     <PageCard
       title="Goals"
       contentClassName="p-0"
-      action={<Button variant="ghost" size="sm" onClick={() => setShowAddForm(!showAddForm)}>{showAddForm ? 'Cancel' : '+ Add goal'}</Button>}
+      action={<Button variant="ghost" size="sm" className="text-teal" onClick={() => setShowAddForm(!showAddForm)}>{showAddForm ? 'Cancel' : '+ Add goal'}</Button>}
     >
       {isLoading ? (
         <p className="px-4 py-4 text-center text-sm text-muted">Catching up…</p>

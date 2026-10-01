@@ -19,10 +19,10 @@ function BudgetSummaryRow({ b, onSelect }: { b: BudgetProgressV2; onSelect: () =
     <SelectableRow onClick={onSelect} className="flex-col items-stretch gap-1.5 py-3">
       <div className="flex items-center justify-between gap-2">
         <span className="text-sm font-medium text-foreground truncate">{b.label}</span>
-        <span className="text-xs text-muted font-mono capitalize shrink-0">{b.period}</span>
+        <span className="text-xs text-muted capitalize shrink-0">{b.period}</span>
       </div>
       <ProgressBar percent={b.percent} label={`${b.label} budget used`} tone={toneName === 'warn' ? 'warm' : toneName} />
-      <div className="flex justify-between text-xs text-muted font-mono">
+      <div className="flex justify-between text-xs text-muted tabular-nums">
         <span><span style={{ color }} className="font-medium">{formatCurrency(spent)}</span> of {formatCurrency(budgetAmount)}</span>
         <span>{b.status === 'over_budget' ? `${formatCurrency(spent - budgetAmount)} over` : `${formatCurrency(remaining)} left`}</span>
       </div>
@@ -89,7 +89,7 @@ export function BudgetsCard({ onSelect }: { onSelect: (id: number) => void }) {
     <PageCard
       title="Budgets"
       contentClassName="p-0"
-      action={<Button variant="ghost" size="sm" onClick={() => setShowAddForm(!showAddForm)}>{showAddForm ? 'Cancel' : '+ Add budget'}</Button>}
+      action={<Button variant="ghost" size="sm" className="text-teal" onClick={() => setShowAddForm(!showAddForm)}>{showAddForm ? 'Cancel' : '+ Add budget'}</Button>}
     >
       {isLoading ? (
         <p className="px-4 py-4 text-center text-sm text-muted">Catching up…</p>

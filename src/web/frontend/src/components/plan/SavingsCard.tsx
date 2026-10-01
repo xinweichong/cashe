@@ -24,15 +24,14 @@ export function SavingsCard() {
   const monthLabel = new Date(`${current.start}T00:00:00Z`).toLocaleString('en-SG', { month: 'long', year: 'numeric', timeZone: 'UTC' });
   const notYetToGoals = saved ? minorToMajor(saved.minor_units, saved.currency) - overview.allocated_to_goals : null;
   return (
-    <ListGroup title={`Savings, ${monthLabel}`}>
+    <ListGroup title={`Savings, ${monthLabel}`} footer="Saved is this month’s income minus spending; toward goals is what you’ve set aside for them.">
       <ListRow
         title="Saved"
-        subtitle="Income minus spending"
         {...(saved
           ? { amount: <span className={saved.minor_units < 0 ? undefined : 'text-success'}>{formatMoney(saved)}</span> }
           : { value: current.income ? 'Shows once records are reviewed' : 'No income recorded yet' })}
       />
-      <ListRow title="Toward goals" subtitle="Added by you" amount={formatCurrency(overview.allocated_to_goals)} />
+      <ListRow title="Toward goals" amount={formatCurrency(overview.allocated_to_goals)} />
       {notYetToGoals != null && notYetToGoals > 0 && (
         <ListRow title="Not yet toward a goal" amount={formatCurrency(notYetToGoals)} />
       )}

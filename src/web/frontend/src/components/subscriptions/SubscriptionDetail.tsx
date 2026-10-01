@@ -277,6 +277,7 @@ export function SubscriptionDetail({ subId, onClose }: SubscriptionDetailProps) 
                     type="button"
                     variant="ghost"
                     size="sm"
+                    className="text-teal"
                     aria-expanded={showLinkPicker}
                     onClick={() => setShowLinkPicker((v) => !v)}
                   >
