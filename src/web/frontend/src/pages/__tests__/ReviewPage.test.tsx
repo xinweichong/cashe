@@ -37,8 +37,9 @@ test('spending failures leave capture review usable and can be retried', async (
   show();
   expect(screen.getByText('Loading spending review…')).toBeTruthy();
   fireEvent.click(await screen.findByRole('button', { name: 'Retry' }));
-  expect(await screen.findByText('No unresolved spending records.')).toBeTruthy();
-  expect(screen.getByText('No capture issues on this page.')).toBeTruthy();
+  // With every group empty, Review says so once instead of listing empty groups.
+  expect(await screen.findByText('All clear')).toBeTruthy();
+  expect(screen.queryByText('No unresolved spending records.')).toBeNull();
 });
 
 test('empty later pages retain a way back after corrections', async () => {

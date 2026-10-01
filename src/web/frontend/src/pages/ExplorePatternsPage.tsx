@@ -164,6 +164,23 @@ function SpendingOverTime({ compactChips = false }: { compactChips?: boolean }) 
   const { data: monthFacts } = useQuery({ queryKey: ['explore-month-facts'], queryFn: () => briefingApi.month() });
   const [selected, setSelected] = useState<string[]>([]);
   const initialized = useRef(false);
+  // Early in a month there are no movers yet; fall back to the month's
+  // biggest categories so the chart isn't empty until a chip is picked.
+  const { data: breakdown } = useQuery({
+    queryKey: ['explore-breakdown', monthFacts?.current.start, monthFacts?.current.end],
+    queryFn: () => api.getCategoryBreakdownV2(monthFacts!.current.start, monthFacts!.current.end),
+    enabled: !!monthFacts && !monthFacts.category_changes.length,
+  });
+  useEffect(() => {
+    if (!initialized.current && monthFacts && !monthFacts.category_changes.length && breakdown) {
+      const top = Object.entries(breakdown.by_category).sort((a, b) => b[1].minor_units - a[1].minor_units).slice(0, 3).map(([c]) => c);
+      if (top.length) {
+        initialized.current = true;
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setSelected(top);
+      }
+    }
+  }, [monthFacts, breakdown]);
   useEffect(() => {
     // Default to at most three selectable categories (the top movers this
     // period), once — later toggles are the user's own choice, not reset

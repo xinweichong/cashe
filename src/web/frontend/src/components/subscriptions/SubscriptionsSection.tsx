@@ -3,10 +3,9 @@ import { Plus } from 'lucide-react';
 import { api } from '@/api/client';
 import { PageCard } from '@/components/ui/cards';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { SelectableRow } from '@/components/ui/selectable-row';
 import { StatusDot } from '@/components/ui/StatusDot';
-import { formatCurrency, minorToMajor } from '@/lib/utils';
+import { formatCurrency, formatShortDate, minorToMajor } from '@/lib/utils';
 import { useState } from 'react';
 import { SubscriptionForm } from './SubscriptionForm';
 import { FREQUENCY_LABELS } from '@/lib/subscriptionFrequency';
@@ -97,22 +96,24 @@ export function SubscriptionsSection({ selectedSubId, onSelectSub }: Subscriptio
             {summary.possibly_cancelled_count === 1 ? '' : 's'} may have been cancelled
           </p>
         )}
-        <div className="divide-y divide-border">
-          {subs.map((sub) => (
+        <div>
+          {subs.map((sub) => {
+            const selected = selectedSubId === sub.id;
+            // On the teal selection, secondary text follows on-teal.
+            const muted = selected ? 'text-on-teal/80' : 'text-muted';
+            return (
             <SelectableRow
               key={sub.id}
               onClick={() => onSelectSub(sub.id)}
-              selected={selectedSubId === sub.id}
-              className="justify-between rounded-none"
+              selected={selected}
+              className="justify-between"
             >
               <div className="flex flex-col gap-0.5 min-w-0">
-                <span className="text-sm font-medium text-foreground truncate">
+                <span className="text-sm font-medium truncate">
                   {sub.label ?? sub.merchant}
                 </span>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <Badge variant="outline" className="text-muted">
-                    {FREQUENCY_LABELS[sub.frequency]}
-                  </Badge>
+                <div className={`flex items-center gap-2 flex-wrap text-xs ${muted}`}>
+                  <span>{FREQUENCY_LABELS[sub.frequency]}</span>
                   {sub.status === 'possibly_cancelled' && (
                     <StatusDot
                       tone="active"
@@ -122,22 +123,19 @@ export function SubscriptionsSection({ selectedSubId, onSelectSub }: Subscriptio
                       })()}`}
                     />
                   )}
-                  {sub.status === 'paused' && <span className="text-xs text-muted">Paused in Cashe</span>}
-                  {sub.status === 'cancelled' && (
-                    <span className="text-xs text-muted">Cancelled</span>
-                  )}
+                  {sub.status === 'paused' && <span>· Tracking paused</span>}
+                  {sub.status === 'cancelled' && <span>· Cancelled</span>}
                   {sub.next_expected_date && (sub.status === 'active' || sub.status === 'possibly_cancelled') && (
-                    <span className="text-xs text-muted">
-                      Next {sub.next_expected_date.slice(0, 10)}
-                    </span>
+                    <span>· Next {formatShortDate(sub.next_expected_date)}</span>
                   )}
                 </div>
               </div>
-              <span className="text-sm tabular-nums text-foreground shrink-0 ml-2">
-                {sub.last_amount != null ? formatCurrency(sub.last_amount) : '—'}
+              <span className="font-mono text-sm tabular-nums shrink-0 ml-2">
+                {sub.last_amount != null ? formatCurrency(sub.last_amount) : <span className={muted}>No charge yet</span>}
               </span>
             </SelectableRow>
-          ))}
+            );
+          })}
           {subs.length === 0 && (
             <p className="px-4 py-4 text-center text-sm text-muted">No subscriptions yet</p>
           )}

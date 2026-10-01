@@ -18,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { ExternalLink } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import { NavBar } from '@/components/ui/nav-bar';
 import { ListGroup, ListRow } from '@/components/ui/list';
 import { Toolbar, ToolbarAction } from '@/components/ui/toolbar';
@@ -217,7 +217,7 @@ export function TransactionDetail({
                   onClick={() => navigate(`/merchants/${encodeURIComponent(tx.merchant!)}`)}
                 >
                   View merchant profile
-                  <ExternalLink className="w-3 h-3" />
+                  <ChevronRight aria-hidden className="w-3 h-3" />
                 </Button>
               </div>
             )}

@@ -36,6 +36,9 @@ import { TelegramStep, GmailStep, AppleWalletStep } from '@/components/onboardin
 import { useSettings } from '@/hooks/useSettings';
 
 
+/** Signed-in devices shown before "Show all", most recently used first. */
+const SESSION_PREVIEW = 3;
+
 const CAT_TYPES = [
   { value: 'needs',   label: 'Needs'   },
   { value: 'wants',   label: 'Wants'   },
@@ -248,6 +251,10 @@ export function SettingsPage() {
     queryFn: () => api.listSessions(),
   });
 
+  const [showAllSessions, setShowAllSessions] = useState(false);
+  const sortedSessions = useMemo(() => [...(sessions ?? [])].sort((a, b) => b.last_used_at.localeCompare(a.last_used_at)), [sessions]);
+  const visibleSessions = showAllSessions ? sortedSessions : sortedSessions.slice(0, SESSION_PREVIEW);
+
   const removeSession = useMutation({
     mutationFn: (token: string) => api.logoutSession(token),
     onSuccess: () => refetchSessions(),
@@ -322,7 +329,7 @@ export function SettingsPage() {
           title="Signed-in devices"
           footer={sessions && sessions.length > 1 ? undefined : 'Only this device is signed in.'}
         >
-          {sessions && sessions.length > 0 ? sessions.map((s) => (
+          {sessions && sessions.length > 0 ? visibleSessions.map((s) => (
             <ListRow
               key={s.token}
               title={s.user_agent ? parseUserAgent(s.user_agent) : 'Unknown device'}
@@ -339,6 +346,12 @@ export function SettingsPage() {
               }
             />
           )) : <ListRow title="No signed-in devices" />}
+          {sessions && sessions.length > SESSION_PREVIEW && (
+            <ListRow
+              title={<span className="text-teal">{showAllSessions ? 'Show fewer' : `Show all ${sessions.length} devices`}</span>}
+              onClick={() => setShowAllSessions((v) => !v)}
+            />
+          )}
           {sessions && sessions.length > 1 && (
             <ListRow destructive title="Sign out all other devices" onClick={() => logoutAllOthers.mutate()} disabled={logoutAllOthers.isPending} />
           )}
@@ -467,11 +480,12 @@ export function SettingsPage() {
         <ListGroup
           title="Alerts"
           action={<Button type="button" variant="ghost" size="sm" className="text-teal" onClick={saveSettings}>Save</Button>}
-          footer={settingsError ? <span className="text-destructive">{settingsError}</span> : undefined}
+          footer={settingsError
+            ? <span className="text-destructive">{settingsError}</span>
+            : 'Unusual purchase flags a purchase this many times a merchant’s usual amount (1–10). Spending pace alerts when this month’s pace passes this share of last month (50–300%).'}
         >
           <ListRow
             title={<label htmlFor="anomaly-multiplier">Unusual purchase</label>}
-            subtitle="Flag a purchase this many times a merchant’s usual amount (1–10)"
             trailing={
               <input
                 id="anomaly-multiplier"
@@ -484,7 +498,6 @@ export function SettingsPage() {
           />
           <ListRow
             title={<label htmlFor="velocity-threshold">Spending pace (%)</label>}
-            subtitle="Alert when this month’s pace passes this share of last month (50–300)"
             trailing={
               <input
                 id="velocity-threshold"

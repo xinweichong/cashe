@@ -10,6 +10,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { LoadFailed } from '@/components/ui/LoadFailed';
 import { invalidateSpendingQueries } from '@/hooks/useTransactions';
 import { frequencyLabel } from '@/lib/subscriptionFrequency';
+import { ListGroup, ListRow } from '@/components/ui/list';
+import { CheckCircle2 } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
 
 const sourceLabels: Record<string, string> = { telegram_nl: 'Telegram entry', gmail: 'Gmail', wallet_request: 'Wallet request', apple_wallet: 'Apple Wallet' };
@@ -23,6 +25,14 @@ function About({ children }: { children: ReactNode }) {
       <p className="max-w-prose text-muted">{children}</p>
     </details>
   );
+}
+
+/** True once a group has had items, so resolving the last one keeps its
+ * confirmation and Undo on screen instead of the group vanishing. */
+function useSeen(hasItems: boolean): boolean {
+  const [seen, setSeen] = useState(false);
+  if (hasItems && !seen) setSeen(true);
+  return seen || hasItems;
 }
 
 const count = (n: number, one: string, many: string, verb: [string, string] = ['needs', 'need']) => `${n} ${n === 1 ? one : many} ${n === 1 ? verb[0] : verb[1]} review`;
@@ -39,10 +49,28 @@ export function ReviewPage() {
   } });
   const retry = useMutation({ mutationFn: ({ id, type }: { id: number; type: 'capture' | 'followup' }) => type === 'capture' ? briefingApi.retryCapture(id) : briefingApi.retryFollowup(id), onSuccess: () => invalidateSpendingQueries(client) });
   const resolve = useMutation({ mutationFn: ({ id, handled }: { id: number; handled: boolean }) => briefingApi.resolveCapture(id, handled), onSuccess: () => invalidateSpendingQueries(client) });
+  // The groups' own first-page queries (same keys, so no extra requests):
+  // when every one is loaded and empty, the page says so once.
+  const [search] = useSearchParams();
+  const spendingOffset = Number(search.get('spending_offset')) || 0;
+  const spending = useQuery({ queryKey: ['spending-review', spendingOffset], queryFn: () => briefingApi.spendingReview(spendingOffset) });
+  const duplicates = useQuery({ queryKey: ['duplicate-review'], queryFn: () => briefingApi.duplicateReview() });
+  const refunds = useQuery({ queryKey: ['refund-match-review'], queryFn: () => briefingApi.refundMatchReview() });
+  const recurring = useQuery({ queryKey: ['recurring-review', 0], queryFn: () => briefingApi.recurringReview(0) });
+  const captureSeen = useSeen(!!query.data && (query.data.capture.length > 0 || page > 0));
+  const followupSeen = useSeen(!!query.data && (query.data.followups.length > 0 || page > 0));
+  const allClear = !!query.data && !captureSeen && !followupSeen
+    && [spending.data, duplicates.data, refunds.data, recurring.data].every((d) => d && d.total === 0)
+    && spendingOffset === 0;
   return <div className="mx-auto max-w-3xl md:px-2">
     <NavBar large title="Review" back={isPhone ? { label: 'Back', onClick: () => navigate(-1) } : undefined} />
     <div className="space-y-6 px-4 pb-8">
-    <p className="-mt-1 px-1 text-muted">Spending records, recurring suggestions, and capture follow-ups that need attention.</p>
+    <p className="-mt-1 px-1 text-muted">Purchases, possible subscriptions and captured messages that need a decision.</p>
+    {allClear && (
+      <ListGroup>
+        <ListRow leading={<CheckCircle2 aria-hidden className="h-5 w-5 text-success" />} title="All clear" subtitle="Nothing needs review right now." />
+      </ListGroup>
+    )}
     <SpendingReviewList />
     <DuplicateReviewList />
     <RefundMatchReviewList />
@@ -51,18 +79,18 @@ export function ReviewPage() {
     {retry.isError && <p role="alert" className="text-destructive">Couldn’t queue the retry. Please try again.</p>}
     {retry.isSuccess && <p role="status">Retry queued. Processing normally runs within two minutes.</p>}
     {query.isError ? <div role="alert"><LoadFailed onRetry={() => void query.refetch()} /></div> : !query.data ? <div role="status"><span className="sr-only">Loading capture review…</span><Skeleton className="h-20 w-full" /></div> : <>
-      <PageCard title="Captured messages">
-        <label className="min-h-11 flex items-center gap-2"><input type="checkbox" checked={includeHandled} onChange={event => { setIncludeHandled(event.target.checked); setPage(0); }} />Show handled Telegram entries</label>
+      {(captureSeen || includeHandled) && <PageCard title="Captured messages">
         <About>After entering a missing transaction or deciding no entry is needed, mark the Telegram input handled. Its original input and processing status are retained.</About>
         {query.data.capture.map(item => <div key={item.id} className="py-4 border-b border-border last:border-0 flex items-center gap-4 justify-between"><div><p>{sourceLabels[item.source] || 'Bank alert'} · {item.status}{item.handled ? ' · Handled' : ''}</p><p className="text-sm text-muted">{item.source === 'telegram_nl' ? 'No draft was completed. Use /add or send a new entry in Telegram. Parsing is not retried automatically.' : item.status === 'unrecognized' ? 'The request could not be parsed. Check the source or Shortcut fields before retrying.' : item.attempts >= 5 ? 'Automatic retries have stopped. Retry after resolving the cause.' : 'Pending or temporarily failed processing.'}</p></div>{item.source === 'telegram_nl' ? <Button variant="outline" disabled={resolve.isPending} onClick={() => resolve.mutate({ id: item.id, handled: !item.handled })}>{item.handled ? 'Return to Review' : 'Mark handled'}</Button> : <Button variant="outline" disabled={retry.isPending} onClick={() => retry.mutate({ id: item.id, type: 'capture' })}>Retry</Button>}</div>)}
         {!query.data.capture.length && <p className="text-muted">No capture issues on this page.</p>}
-      </PageCard>
-      <PageCard title="Transaction follow-ups">
+      </PageCard>}
+      {followupSeen && <PageCard title="Transaction follow-ups">
         {query.data.followups.map(item => <div key={item.id} className="py-4 border-b border-border last:border-0 flex items-center gap-4 justify-between"><div><p>{effectLabels[item.kind] || 'Follow-up'} · {item.status}</p><Link to={`/transactions/${item.transaction_id}`} className="text-teal min-h-11 inline-flex items-center">Open transaction</Link><p className="text-sm text-muted">{item.attempts >= 5 ? 'Automatic retries have stopped.' : 'The transaction is stored; this follow-up is pending.'}</p></div><Button variant="outline" disabled={retry.isPending} onClick={() => retry.mutate({ id: item.id, type: 'followup' })}>Retry</Button></div>)}
         {!query.data.followups.length && <p className="text-muted">No pending follow-ups on this page.</p>}
-      </PageCard>
+      </PageCard>}
       {(page > 0 || query.data.capture.length >= 50 || query.data.followups.length >= 50) && <div className="flex justify-between items-center"><Button variant="ghost" className="min-h-11 text-teal" disabled={!page} onClick={() => setPage(page - 1)}>Previous</Button><span className="text-sm text-muted">Page {page + 1}</span><Button variant="ghost" className="min-h-11 text-teal" disabled={query.data.capture.length < 50 && query.data.followups.length < 50} onClick={() => setPage(page + 1)}>Next</Button></div>}
-      <p className="text-sm text-muted">Showing up to 50 items per group per page. <Link className="text-teal" to="/settings">Manage source connections</Link>.</p>
+      <label className="flex min-h-11 items-center gap-2 px-1 text-sm text-muted"><input type="checkbox" checked={includeHandled} onChange={event => { setIncludeHandled(event.target.checked); setPage(0); }} />Show handled Telegram entries</label>
+      <p className="px-1 text-sm text-muted">Up to 50 items per group per page. <Link className="inline-flex min-h-11 items-center text-teal" to="/settings">Manage connections</Link></p>
     </>}
     </div>
   </div>;
@@ -75,6 +103,8 @@ function SpendingReviewList() {
   const query = useQuery({ queryKey: ['spending-review', offset], queryFn: () => briefingApi.spendingReview(offset) });
   const move = (next: number) => { const value = new URLSearchParams(search); value.set('spending_offset', String(next)); setSearch(value); };
   const returnTo = `/review${search.size ? `?${search}` : ''}`;
+  const seen = useSeen(!!query.data && (query.data.total > 0 || offset > 0));
+  if (query.data && !seen) return null;
   const reasons = {
     missing_date: 'The date is missing or unreadable; period comparisons remain unavailable.',
     unresolved_money: 'The amount or currency conversion cannot be resolved. Check the original amount and exchange rate.',
@@ -111,6 +141,7 @@ function DuplicateReviewList() {
     mutationFn: ({ aId, bId }: { aId: number; bId: number }) => briefingApi.dismissDuplicate(aId, bId),
     onSuccess: async () => { await client.invalidateQueries({ queryKey: ['duplicate-review'] }); },
   });
+  const seenDuplicates = useSeen(!!query.data && query.data.total > 0);
   const merge = useMutation({
     mutationFn: ({ survivorId, loserId }: { survivorId: number; loserId: number }) => briefingApi.mergeDuplicates(survivorId, loserId),
     // A merge changes which transaction records exist, so every spending
@@ -122,6 +153,7 @@ function DuplicateReviewList() {
     mutationFn: (mergeId: number) => briefingApi.undoDuplicateMerge(mergeId),
     onSuccess: () => invalidateSpendingQueries(client),
   });
+  if (query.data && !seenDuplicates) return null;
   return <PageCard title="Possible duplicates">
     <About>Two records from different sources that look like the same purchase. Keep whichever one you want as the record — its evidence, trip, and any billing match carry over. Keep separate if they're actually different.</About>
     {merge.isSuccess && !undo.isSuccess && <p role="status" className="py-2">Merged. <Button type="button" variant="link" size="sm" className="h-auto min-h-11 p-0 align-baseline" disabled={undo.isPending} onClick={() => undo.mutate(merge.data.merge_id)}>Undo</Button></p>}
@@ -160,6 +192,8 @@ function RefundMatchReviewList() {
     // special-casing — a stale total is worse than one extra refetch.
     onSuccess: () => invalidateSpendingQueries(client),
   });
+  const seenRefunds = useSeen(!!query.data && query.data.total > 0);
+  if (query.data && !seenRefunds) return null;
   return <PageCard title="Refund matches">
     <About>A likely purchase for an unlinked refund, based on matching merchant, currency, and amount within 180 days. Confirm to link it as evidence, or dismiss if it's wrong.</About>
     {resolve.isError && <p role="alert" className="text-destructive">Couldn’t update this match. Please try again.</p>}
@@ -182,6 +216,7 @@ function RecurringReviewList() {
   const client = useQueryClient();
   const [offset, setOffset] = useState(0);
   const query = useQuery({ queryKey: ['recurring-review', offset], queryFn: () => briefingApi.recurringReview(offset) });
+  const seenRecurring = useSeen(!!query.data && (query.data.total > 0 || offset > 0));
   const resolve = useMutation({
     mutationFn: ({ id, action }: { id: string; action: 'accept' | 'dismiss' }) => briefingApi.resolveRecurring(id, action),
     onSuccess: async () => {
@@ -191,6 +226,7 @@ function RecurringReviewList() {
       await invalidateSpendingQueries(client);
     },
   });
+  if (query.data && !seenRecurring) return null;
   return <PageCard title="Recurring suggestions">
     <About>These patterns may repeat. Accept to track a schedule, then review its billing date and amount. Provider billing is unchanged. Dismissal handles this suggestion; later patterns may still appear.</About>
     {resolve.isError && <div role="alert" className="text-destructive">
