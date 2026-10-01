@@ -27,6 +27,7 @@ A visual and interaction redesign of the web dashboard, following Apple's Human 
 - Home is "now" only: the month's spectrum card, Needs a look (only what actually does, or "All caught up") and This month, with one row each linking to Plan, Activity and Explore; the category, trend and change detail lives on Explore
 - Settings and the subscription detail use grouped rows: password changes and category edits open sheets, sessions and connections use text actions, and a subscription's actions are labelled rows (Pause tracking, Mark as cancelled, Delete) instead of icons
 - Plan shows savings once beside the projection, folds its estimate explanations into disclosures, and offers to add a subscription when the timeline is empty; Review folds each group's explanation into "About this"
+- The Add sheet saves from its header, labels every field, opens a decimal keypad, and takes an optional SGD rate for foreign currencies; Review shows only groups with items, or All clear
 - Plainer wording throughout: dates in words, correct singular/plural counts, and "Added to cashe" / "Where it came from" in place of capture jargon
 - Activity's filters live in one Filters sheet at every size; Plan details open beside the page on iPad/desktop; Merchants is a list with profiles
 
@@ -39,6 +40,8 @@ A visual and interaction redesign of the web dashboard, following Apple's Human 
 - Amounts in zero-decimal currencies (JPY, KRW, VND) showed 100× too small in Activity (¥45 as ¥0.45), and Review flagged the correct records; also present in 3.0.0
 - On the first days of a month the health score read "100 Excellent" and month comparisons flagged a jump against a single day; both now wait for a week of data
 - Category initials were hard to read in light mode; trips and subscriptions used their own "S$" format instead of the shared one
+- Screens disagreed: the health page graded a month the card called too early, Plan showed savings Home hid, and one record needing review was counted twice; income needing a category was called a purchase
+- Phone details could leave their Delete row under the tab bar; small buttons were under 44pt on touch screens; pressing Esc straight after opening a detail on desktop could be missed
 - Budget, goal and category rows could stay invisible behind a stalled stagger animation; rows now render at rest
 - Opening a dialog from a context-menu item no longer fights the menu for focus
 - Set-password and admin form labels are tied to their fields; onboarding checkboxes use teal rather than the foreground-coloured accent token
