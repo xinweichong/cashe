@@ -1,5 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useLocation } from 'react-router-dom';
+import { NavBar } from '@/components/ui/nav-bar';
+import { useIsPhone } from '@/hooks/useIsPhone';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useQueryClient, useMutation, useQuery } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import { PageCard } from '@/components/ui/cards';
@@ -28,7 +30,6 @@ import { useCurrentUser, useInvalidateCurrentUser } from '@/hooks/useCurrentUser
 import { useAuth } from '@/hooks/useAuthContext';
 import { api, type Category, type SessionInfo } from '@/api/client';
 import { getCategoryColor } from '@/lib/utils';
-import { staggerContainerVariants, staggerItemVariants } from '@/lib/motionPresets';
 import {
   Pencil, Trash2, Plus, X, ChevronDown,
   CheckCircle2, Wifi, WifiOff, AlertTriangle,
@@ -73,6 +74,8 @@ function relativeTime(iso: string): string {
 export function SettingsPage() {
   const qc = useQueryClient();
   const { hash } = useLocation();
+  const navigate = useNavigate();
+  const isPhone = useIsPhone();
   const { data: currentUser } = useCurrentUser();
   const invalidateCurrentUser = useInvalidateCurrentUser();
   const { logout } = useAuth();
@@ -302,22 +305,14 @@ export function SettingsPage() {
   };
 
   return (
-    <div className="p-4 space-y-4 md:h-full md:overflow-hidden md:grid md:gap-4 md:p-6 md:space-y-0 page-grid-settings">
-
-      {/* ── Title ── */}
-      <div className="area-title">
-        <div className="flex flex-col gap-1 pb-5 border-b border-border">
-          <div className="text-xs uppercase tracking-[0.22em] text-muted font-mono font-semibold">
-            Settings
-          </div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-foreground font-display">
-            Your preferences.
-          </h1>
-        </div>
-      </div>
+    <div className="mx-auto max-w-[1200px] md:px-2">
+      <NavBar large title="Settings" back={isPhone ? { label: 'Back', onClick: () => navigate(-1) } : undefined} />
+      {/* A naturally scrolling page in two columns from lg (HIG alignment):
+          account and connections, then categories and preferences. */}
+      <div className="grid items-start gap-6 px-4 pb-8 lg:grid-cols-2">
 
       {/* ── LEFT PANEL: Account + Connections ── */}
-      <div className="area-left grid-scroll-panel space-y-4">
+      <div className="min-w-0 space-y-6">
 
         {/* Account */}
         <PageCard title="Account">
@@ -561,12 +556,11 @@ export function SettingsPage() {
       </div>
 
       {/* ── RIGHT PANEL: Categories + Preferences ── */}
-      <div className="area-right grid-scroll-panel space-y-4">
+      <div className="min-w-0 space-y-6">
 
         {/* Categories */}
         <PageCard
           title="Categories"
-          headerClassName="border-b border-border"
           contentClassName="p-0"
           action={
             <Button size="sm" variant="ghost" onClick={() => { setShowAddCategory(true); setCatError(''); }}>
@@ -575,18 +569,13 @@ export function SettingsPage() {
             </Button>
           }
         >
-          <motion.div
-            className="divide-y divide-border"
-            variants={staggerContainerVariants}
-            initial="initial"
-            animate="animate"
-          >
+          {/* Rows render at rest (no stagger entrance); a removed category fades out. */}
+          <div className="divide-y divide-separator">
             <AnimatePresence>
               {categories?.map((cat: Category) => (
                 <motion.div
                   key={cat.name}
                   className="px-4 py-3"
-                  variants={staggerItemVariants}
                   exit={{ opacity: 0, transition: { duration: 0.15 } }}
                 >
                   {editingCategory === cat.name ? (
@@ -709,7 +698,7 @@ export function SettingsPage() {
             {(!categories || categories.length === 0) && (
               <div className="p-6 text-center text-muted text-sm">No categories yet</div>
             )}
-          </motion.div>
+          </div>
         </PageCard>
 
         {/* Feature Toggles */}
@@ -830,6 +819,7 @@ export function SettingsPage() {
         </DialogContent>
       </Dialog>
 
+      </div>
     </div>
   );
 }

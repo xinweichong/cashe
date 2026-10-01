@@ -13,7 +13,7 @@ export function ExplorePage() {
   const path = useLocation().pathname.replace(/\/$/, '');
   const pushed = PUSHED[path];
   return (
-    <section className="explore-page">
+    <section>
       {path === '/explore' && <NavBar large title="Explore" trailing={isPhone ? <ProfileMenu /> : undefined} />}
       {pushed && <NavBar title={pushed} back={{ label: 'Explore', to: '/explore' }} />}
       <Outlet />

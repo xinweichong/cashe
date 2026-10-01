@@ -213,38 +213,6 @@ body {
   .sheet-motion-bottom[data-state="open"] { animation: sheet-in-bottom var(--dur-base) var(--ease-out-expo); }
   [class*="sheet-motion-"][data-state="closed"] { animation: overlay-out var(--dur-fast) ease-in; }
 
-  /* ── Grid layout utilities ─────────────────────────────────────────────── */
-
-  /* Applied to any grid cell whose content may overflow — scrolls independently */
-  .grid-scroll-panel {
-    overflow-y: auto;
-    min-height: 0;
-    padding: 12px;
-    margin: -12px;
-    width: calc(100% + 24px);
-  }
-
-  /* Grid area name assignments (apply on children of a named-areas grid) */
-  .area-title   { grid-area: title;   }
-  .area-left    { grid-area: left;    }
-  .area-right   { grid-area: right;   }
-
-  /* Per-page grid templates -------------------------------------------------- */
-
-  /* Settings: title | left=categories+overrides | right=toggles+thresholds */
-  .page-grid-settings {
-    grid-template-areas: "title" "left" "right";
-    grid-template-columns: 1fr;
-    grid-template-rows: auto auto auto;
-  }
-  @media (min-width: 768px) {
-    .page-grid-settings {
-      grid-template-areas: "title title" "left right";
-      grid-template-columns: 1fr 1fr;
-      grid-template-rows: auto 1fr;
-    }
-  }
-
   /* ── Motion utilities ──────────────────────────────────────────────── */
 
   .card-hover {
@@ -381,8 +349,6 @@ body {
   }
 }
 
-/* Home and Explore scroll naturally; Activity keeps its list/detail panels. */
-.explore-page .grid-scroll-panel { overflow: visible; }
 
 :root { color-scheme: dark; }
 :root[data-theme="light"] {

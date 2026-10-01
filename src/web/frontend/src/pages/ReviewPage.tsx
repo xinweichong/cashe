@@ -1,5 +1,7 @@
 import { useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { NavBar } from '@/components/ui/nav-bar';
+import { useIsPhone } from '@/hooks/useIsPhone';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { briefingApi, formatMoney, type DuplicateSide } from '@/api/briefing';
 import { PageCard } from '@/components/ui/cards';
@@ -14,6 +16,8 @@ const effectLabels: Record<string, string> = { trip: 'Trip assignment', recurrin
 
 export function ReviewPage() {
   const client = useQueryClient();
+  const navigate = useNavigate();
+  const isPhone = useIsPhone();
   const [includeHandled, setIncludeHandled] = useState(false);
   const [page, setPage] = useState(0);
   const query = useQuery({ queryKey: ['capture-review', page, includeHandled], queryFn: async () => {
@@ -22,8 +26,10 @@ export function ReviewPage() {
   } });
   const retry = useMutation({ mutationFn: ({ id, type }: { id: number; type: 'capture' | 'followup' }) => type === 'capture' ? briefingApi.retryCapture(id) : briefingApi.retryFollowup(id), onSuccess: () => invalidateSpendingQueries(client) });
   const resolve = useMutation({ mutationFn: ({ id, handled }: { id: number; handled: boolean }) => briefingApi.resolveCapture(id, handled), onSuccess: () => invalidateSpendingQueries(client) });
-  return <div className="max-w-4xl mx-auto p-4 md:p-8 space-y-6">
-    <header className="space-y-1"><Link to="/home" className="text-teal min-h-11 inline-flex items-center">Back to briefing</Link><h1 className="font-display text-2xl font-semibold">Review</h1><p className="text-muted">Spending records, recurring suggestions, and capture follow-ups that need attention.</p></header>
+  return <div className="mx-auto max-w-3xl md:px-2">
+    <NavBar large title="Review" back={isPhone ? { label: 'Back', onClick: () => navigate(-1) } : undefined} />
+    <div className="space-y-6 px-4 pb-8">
+    <p className="-mt-1 px-1 text-muted">Spending records, recurring suggestions, and capture follow-ups that need attention.</p>
     <SpendingReviewList />
     <DuplicateReviewList />
     <RefundMatchReviewList />
@@ -45,6 +51,7 @@ export function ReviewPage() {
       <div className="flex justify-between items-center"><Button variant="outline" disabled={!page} onClick={() => setPage(page - 1)}>Previous</Button><span>Page {page + 1}</span><Button variant="outline" disabled={query.data.capture.length < 50 && query.data.followups.length < 50} onClick={() => setPage(page + 1)}>Next</Button></div>
       <p className="text-sm text-muted">Showing up to 50 items per group per page. <Link className="text-teal" to="/settings">Manage source connections</Link>.</p>
     </>}
+    </div>
   </div>;
 }
 
@@ -74,8 +81,8 @@ function SpendingReviewList() {
       {!query.data.items.length && <p className="py-4 text-muted">{query.data.total ? 'No spending records on this page. Return to an earlier page.' : 'No unresolved spending records.'}</p>}
     </>}
     <nav aria-label="Spending review pages" className="flex justify-between items-center gap-3 pt-4">
-      <Button variant="outline" className="min-h-11" disabled={!offset} onClick={() => move(Math.max(0, offset - 50))}>Previous spending records</Button>
-      <Button variant="outline" className="min-h-11" disabled={!query.data || query.isError || offset + 50 >= query.data.total} onClick={() => move(offset + 50)}>Next spending records</Button>
+      <Button variant="ghost" className="min-h-11 text-teal" aria-label="Previous spending records" disabled={!offset} onClick={() => move(Math.max(0, offset - 50))}>Previous</Button>
+      <Button variant="ghost" className="min-h-11 text-teal" aria-label="Next spending records" disabled={!query.data || query.isError || offset + 50 >= query.data.total} onClick={() => move(offset + 50)}>Next</Button>
     </nav>
   </PageCard>;
 }
@@ -192,8 +199,8 @@ function RecurringReviewList() {
       {!query.data.items.length && <p className="py-4 text-muted">{query.data.total ? 'No suggestions on this page. Return to an earlier page.' : 'No pending recurring suggestions.'}</p>}
     </>}
     <nav aria-label="Recurring suggestion pages" className="flex justify-between gap-3 pt-4">
-      <Button variant="outline" className="min-h-11" disabled={!offset} onClick={() => setOffset(Math.max(0, offset - 50))}>Previous suggestions</Button>
-      <Button variant="outline" className="min-h-11" disabled={!query.data || query.isError || offset + 50 >= query.data.total} onClick={() => setOffset(offset + 50)}>Next suggestions</Button>
+      <Button variant="ghost" className="min-h-11 text-teal" aria-label="Previous suggestions" disabled={!offset} onClick={() => setOffset(Math.max(0, offset - 50))}>Previous</Button>
+      <Button variant="ghost" className="min-h-11 text-teal" aria-label="Next suggestions" disabled={!query.data || query.isError || offset + 50 >= query.data.total} onClick={() => setOffset(offset + 50)}>Next</Button>
     </nav>
   </PageCard>;
 }
