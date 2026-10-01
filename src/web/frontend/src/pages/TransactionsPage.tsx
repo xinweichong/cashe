@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
-import { useInfiniteQuery, useQuery, keepPreviousData } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Check, Pencil, Plus, Search, SlidersHorizontal, Tag, Trash2, X } from 'lucide-react';
+import { Check, Pencil, Plane, Plus, Search, SlidersHorizontal, Tag, Trash2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { NavBar } from '@/components/ui/nav-bar';
@@ -93,12 +93,23 @@ export function TransactionsPage() {
   const [categoryFor, setCategoryFor] = useState<Transaction | 'selection' | null>(null);
   const [typeForSelection, setTypeForSelection] = useState(false);
   const [deleting, setDeleting] = useState<Transaction | null>(null);
+  const [tripFor, setTripFor] = useState<Transaction | null>(null);
   const { data: categories } = useCategories();
   const briefing = useHomeBriefing();
   const { data: settings } = useSettings();
   const { data: trips = [] } = useTrips({ enabled: settings?.trips_enabled === true });
   const updateTx = useUpdateTransaction();
   const deleteTx = useDeleteTransaction();
+  const qc = useQueryClient();
+  // Same invalidation as the detail page's trip membership toggle.
+  const enlist = useMutation({
+    mutationFn: ({ tripId, txId }: { tripId: number; txId: number }) => api.enlistTransaction(tripId, txId),
+    onSuccess: (_data, { tripId, txId }) => {
+      qc.invalidateQueries({ queryKey: ['transaction-trips', txId] });
+      qc.invalidateQueries({ queryKey: ['trip-transactions', tripId] });
+      qc.invalidateQueries({ queryKey: ['trip-summary', tripId] });
+    },
+  });
 
   const returnTo = searchParams.get('returnTo');
   const listRef = useRef<HTMLDivElement>(null);
@@ -371,6 +382,7 @@ export function TransactionsPage() {
   );
 
   // ── Row actions (swipe, context menu, ⌫ on md+) ────────────────────────────
+  const tripsAvailable = settings?.trips_enabled === true && trips.length > 0;
   const applyCategory = (name: string) => {
     if (categoryFor === 'selection') handleBulkCategorize(name);
     else if (categoryFor) updateTx.mutate({ id: categoryFor.id, data: { category: name } }, { onSuccess: () => toast('Category changed.') });
@@ -390,13 +402,14 @@ export function TransactionsPage() {
       <RowMenu items={[
         { label: 'Open', icon: Pencil, onSelect: () => navigate(`${activityPath}/${tx.id}${location.search}`) },
         { label: 'Change category', icon: Tag, onSelect: () => setCategoryFor(tx) },
+        { label: 'Add to trip', icon: Plane, onSelect: () => setTripFor(tx), hidden: !tripsAvailable },
         { separator: true },
         { label: 'Delete', icon: Trash2, destructive: true, onSelect: () => setDeleting(tx) },
       ]}>
         <div>{row}</div>
       </RowMenu>
     </SwipeRow>
-  ), [activityPath, location.search, navigate, deleteTx]);
+  ), [activityPath, location.search, navigate, deleteTx, tripsAvailable]);
 
   // ── Header: quick views, search, filters ───────────────────────────────────
   const lens: ActivityLens = needsReview ? 'review' : type === 'income' ? 'income' : type === 'refund' ? 'refund' : 'all';
@@ -550,6 +563,21 @@ export function TransactionsPage() {
         <ListGroup>
           {(Object.keys(TYPE_LABELS) as TxType[]).map((t) => (
             <ListRow key={t} onClick={() => { setTypeForSelection(false); handleBulkSetType(t); }} title={TYPE_LABELS[t]} />
+          ))}
+        </ListGroup>
+      </TaskSheet>
+
+      <TaskSheet open={tripFor !== null} onOpenChange={(open) => !open && setTripFor(null)} title="Add to trip"
+        description={tripFor ? `${txName(tripFor)}, ${signedAmount(tripFor)}` : undefined}>
+        <ListGroup>
+          {trips.map((trip) => (
+            <ListRow key={trip.id} title={trip.name} subtitle={trip.destination ?? undefined} disabled={enlist.isPending}
+              onClick={() => {
+                if (!tripFor) return;
+                const tx = tripFor;
+                enlist.mutate({ tripId: trip.id, txId: tx.id }, { onSuccess: () => toast(`Added to ${trip.name}.`), onError: () => toast("Couldn't add to the trip.") });
+                setTripFor(null);
+              }} />
           ))}
         </ListGroup>
       </TaskSheet>

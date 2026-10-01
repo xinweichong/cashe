@@ -37,7 +37,7 @@ export function SubscriptionsSection({ selectedSubId, onSelectSub }: Subscriptio
   return (
     <>
       {hasReviewItems && (
-        <PageCard title="Needs attention">
+        <PageCard title="Needs attention" contentClassName="p-0">
           <div className="space-y-3">
             {review!.price_changes.map((change) => (
               <SelectableRow
@@ -72,6 +72,7 @@ export function SubscriptionsSection({ selectedSubId, onSelectSub }: Subscriptio
       )}
       <PageCard
         title="Subscriptions"
+        contentClassName="p-0"
         action={
           <div className="flex items-center gap-2">
             {summary && (
@@ -91,7 +92,7 @@ export function SubscriptionsSection({ selectedSubId, onSelectSub }: Subscriptio
         }
       >
         {summary && summary.possibly_cancelled_count > 0 && (
-          <p className="text-xs text-warning mb-3">
+          <p className="px-4 pt-3 pb-2 text-xs text-warning">
             ⚠ {summary.possibly_cancelled_count} subscription
             {summary.possibly_cancelled_count === 1 ? '' : 's'} may have been cancelled
           </p>
@@ -138,7 +139,7 @@ export function SubscriptionsSection({ selectedSubId, onSelectSub }: Subscriptio
             </SelectableRow>
           ))}
           {subs.length === 0 && (
-            <p className="text-sm text-muted py-4 text-center">No subscriptions yet</p>
+            <p className="px-4 py-4 text-center text-sm text-muted">No subscriptions yet</p>
           )}
         </div>
       </PageCard>

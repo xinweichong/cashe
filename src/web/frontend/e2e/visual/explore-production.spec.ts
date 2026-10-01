@@ -40,12 +40,12 @@ test('merged Explore dashboard: pulse band, signals and health above the pattern
       if (viewport.name === 'desktop') {
         await expect(page.getByText('Spent this month')).toBeVisible();
         await expect(page.getByText('Worth a look')).toBeVisible();
-        await expect(page.getByText('Financial health')).toBeVisible();
+        await expect(page.getByRole('link', { name: /Financial health/ })).toBeVisible();
       } else {
-        // Phone: the glance carries spend, and signals/health as links.
-        await expect(page.getByText(/^Spent · /)).toBeVisible();
-        await expect(page.getByRole('link', { name: /Worth a look/ })).toBeVisible();
-        await expect(page.getByRole('link', { name: /Health/ })).toBeVisible();
+        // Phone: the summary list, led by the health score spectrum card (HIG alignment).
+        await expect(page.getByRole('link', { name: /Financial health/ })).toBeVisible();
+        await expect(page.getByRole('region', { name: 'Worth a look' })).toBeVisible();
+        await expect(page.getByRole('region', { name: 'Patterns' })).toBeVisible();
       }
       if (viewport.name === 'desktop') {
         // The first Patterns chart card starts inside a 1440×900 first screen.
@@ -53,9 +53,11 @@ test('merged Explore dashboard: pulse band, signals and health above the pattern
         expect((await chart.boundingBox())!.y).toBeLessThan(900);
         await page.screenshot({ path: `e2e/screenshots/explore-first-screen-${theme}.png` });
       }
-      await expect(page.locator('.recharts-line').first()).toBeVisible();
-      // Phone keeps income vs spending one tap away, in a drill-in.
-      if (viewport.name === 'desktop') await expect(page.locator('.recharts-bar-rectangle').first()).toBeVisible();
+      // Phone keeps the charts one tap away, in each section's page.
+      if (viewport.name === 'desktop') {
+        await expect(page.locator('.recharts-line').first()).toBeVisible();
+        await expect(page.locator('.recharts-bar-rectangle').first()).toBeVisible();
+      }
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
       expect(overflow).toBeLessThanOrEqual(0);
       await page.waitForTimeout(600);
@@ -74,7 +76,7 @@ test('Worth a look and Financial health open their full views, with a way back',
   await expect(page).toHaveURL(/\/explore\/signals$/);
   await expect(page.getByRole('link', { name: /Kinokuniya/ })).toBeVisible();
   await page.screenshot({ path: 'e2e/screenshots/explore-signals-desktop.png', fullPage: true });
-  await page.getByRole('link', { name: 'Back to Explore' }).click();
+  await page.locator('header').getByRole('link', { name: 'Explore', exact: true }).click();
   await page.getByRole('link', { name: /Financial health 91 out of 100/ }).click();
   await expect(page).toHaveURL(/\/explore\/health$/);
   await expect(page.getByText('Savings Rate')).toBeVisible();
@@ -100,20 +102,20 @@ test('Over time mode charts the default top-mover categories', async ({ page }) 
 });
 
 test('By category keeps the chart stable and reveals selection detail beneath it', async ({ page }) => {
-  // Phone shows By category as a lens; see explore-phone.spec.ts.
+  // Phone shows By category as a pushed section; see hig-phone.spec.ts.
   for (const viewport of [{ width: 1440, height: 900, name: 'desktop' }]) {
     await mockAuthenticatedExplore(page);
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
     await page.goto('/explore?mode=by-category');
     await expect(page.getByRole('tab', { name: 'By category' })).toHaveAttribute('aria-selected', 'true');
-    const mainCard = page.getByText('What changed', { exact: true }).locator('xpath=ancestor::div[contains(@class, "rounded-md")][1]');
+    const mainCard = page.getByRole('region', { name: 'What changed' });
     await expect(mainCard).toBeVisible();
     await expect(page.getByText('Where it went')).toBeVisible();
     const before = (await mainCard.boundingBox())!;
 
     await mainCard.getByRole('button').first().click();
-    const detail = page.getByRole('button', { name: 'Clear selection' }).locator('xpath=ancestor::div[contains(@class, "rounded-md")][1]');
+    const detail = page.getByRole('button', { name: 'Clear selection' }).locator('xpath=ancestor::section[1]');
     await expect(detail).toBeVisible();
     const after = (await mainCard.boundingBox())!;
     const detailBox = (await detail.boundingBox())!;
@@ -123,22 +125,22 @@ test('By category keeps the chart stable and reveals selection detail beneath it
   }
 });
 
-test('phone pattern lenses stay inside the viewport and every lens is reachable', async ({ page }) => {
+test('phone Patterns rows stay inside the viewport and each opens its section', async ({ page }) => {
   // Regression: the four desktop mode tabs used to spill past a narrow
-  // viewport. On phone they are now the thumb-band lens bar, which divides
-  // the full width, so every lens is reachable without horizontal scroll.
+  // viewport. On a phone the patterns are summary rows (HIG alignment), each
+  // opening its own page, so nothing needs horizontal scroll.
   await mockAuthenticatedExplore(page);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/explore');
-  const tabList = page.getByRole('tablist', { name: 'Explore views' });
-  const listBox = (await tabList.boundingBox())!;
-  expect(listBox.x + listBox.width).toBeLessThanOrEqual(390);
-
-  // Recurring costs live in Plan's Subs lens on the phone.
-  await expect(page.getByRole('tab', { name: 'Recurring' })).toHaveCount(0);
-  const weekTab = page.getByRole('tab', { name: 'Week' });
-  await weekTab.click();
-  await expect(weekTab).toHaveAttribute('aria-selected', 'true');
+  const patterns = page.getByRole('region', { name: 'Patterns' });
+  const box = (await patterns.boundingBox())!;
+  expect(box.x + box.width).toBeLessThanOrEqual(390);
+  for (const [row, title] of [['Over time', 'Over time'], ['By merchant', 'By merchant'], ['Recurring', 'Recurring']] as const) {
+    await patterns.getByRole('button', { name: new RegExp(`^${row}`) }).click();
+    await expect(page.getByRole('heading', { level: 1, name: title })).toBeVisible();
+    await page.goBack();
+    await expect(patterns).toBeVisible();
+  }
 });
 
 test('Over time: step to a day, break it down by category, then merchants with day-scoped evidence', async ({ page }) => {

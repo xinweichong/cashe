@@ -67,7 +67,8 @@ for (const theme of ['dark', 'light'] as const) {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/settings');
     await page.getByRole('button', { name: 'Profile menu' }).click();
-    const item = page.getByRole('menuitem', { name: 'Settings' });
+    // On md+ Settings and Review live in the sidebar (P2), so check an appearance item.
+    const item = page.getByRole('menuitemradio', { name: 'Follow system' });
     await expect(item).toBeVisible();
     await item.focus();
     await page.waitForTimeout(300);
@@ -103,7 +104,7 @@ for (const viewport of [{ width: 390, height: 844, size: '16px' }, { width: 1440
         return { size: c.fontSize, shadow: c.boxShadow, radius: c.borderRadius };
       });
       expect(s.size).toBe(viewport.size);
-      expect(s.radius).toBe('6px');
+      expect(s.radius).toBe('10px'); // Direction B filled field
       expect(s.shadow).not.toBe('none');
     }
   });

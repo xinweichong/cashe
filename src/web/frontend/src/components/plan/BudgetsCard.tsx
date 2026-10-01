@@ -88,12 +88,13 @@ export function BudgetsCard({ onSelect }: { onSelect: (id: number) => void }) {
   return (
     <PageCard
       title="Budgets"
+      contentClassName="p-0"
       action={<Button variant="ghost" size="sm" onClick={() => setShowAddForm(!showAddForm)}>{showAddForm ? 'Cancel' : '+ Add budget'}</Button>}
     >
       {isLoading ? (
-        <p className="text-muted text-sm py-4 text-center">Catching up…</p>
+        <p className="px-4 py-4 text-center text-sm text-muted">Catching up…</p>
       ) : progress.length === 0 ? (
-        <p className="text-muted text-sm py-4 text-center">No budgets yet. Add one to start tracking.</p>
+        <p className="px-4 py-4 text-center text-sm text-muted">No budgets yet. Add one to start tracking.</p>
       ) : (
         <div>
           {/* Rows render at rest (no stagger entrance); a removed row fades out. */}
@@ -106,7 +107,7 @@ export function BudgetsCard({ onSelect }: { onSelect: (id: number) => void }) {
           </AnimatePresence>
         </div>
       )}
-      {showAddForm && <AddBudgetForm onAdd={() => setShowAddForm(false)} />}
+      {showAddForm && <div className="px-4 pb-4"><AddBudgetForm onAdd={() => setShowAddForm(false)} /></div>}
     </PageCard>
   );
 }

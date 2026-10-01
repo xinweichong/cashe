@@ -69,12 +69,13 @@ export function GoalsCard({ onSelect }: { onSelect: (id: number) => void }) {
   return (
     <PageCard
       title="Goals"
+      contentClassName="p-0"
       action={<Button variant="ghost" size="sm" onClick={() => setShowAddForm(!showAddForm)}>{showAddForm ? 'Cancel' : '+ Add goal'}</Button>}
     >
       {isLoading ? (
-        <p className="text-muted text-sm py-4 text-center">Catching up…</p>
+        <p className="px-4 py-4 text-center text-sm text-muted">Catching up…</p>
       ) : goals.length === 0 ? (
-        <p className="text-muted text-sm py-4 text-center">No goals yet. Add one to start tracking your savings.</p>
+        <p className="px-4 py-4 text-center text-sm text-muted">No goals yet. Add one to start tracking your savings.</p>
       ) : (
         <div>
           {/* Rows render at rest (no stagger entrance); a removed row fades out. */}
@@ -87,7 +88,7 @@ export function GoalsCard({ onSelect }: { onSelect: (id: number) => void }) {
           </AnimatePresence>
         </div>
       )}
-      {showAddForm && <AddGoalForm onAdd={() => setShowAddForm(false)} />}
+      {showAddForm && <div className="px-4 pb-4"><AddGoalForm onAdd={() => setShowAddForm(false)} /></div>}
     </PageCard>
   );
 }

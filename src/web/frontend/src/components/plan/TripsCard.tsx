@@ -77,16 +77,17 @@ export function TripsCard({ onSelect }: { onSelect: (id: number) => void }) {
       <ActiveTripCard showEndButton />
       <PageCard
         title="Trips"
+        contentClassName="p-0"
         action={<Button variant="ghost" size="sm" onClick={() => setShowCreateForm((v) => !v)}>{showCreateForm ? 'Cancel' : '+ New Trip'}</Button>}
       >
         {isLoading ? (
-          <Skeleton className="h-24" />
+          <div className="p-4"><Skeleton className="h-24" /></div>
         ) : trips.length === 0 ? (
-          <p className="text-muted text-sm text-center py-8">No trips yet. Create one to start grouping transactions.</p>
+          <p className="px-4 py-8 text-center text-sm text-muted">No trips yet. Create one to start grouping transactions.</p>
         ) : (
           trips.map((trip) => <TripSummaryRow key={trip.id} trip={trip} onSelect={() => onSelect(trip.id)} />)
         )}
-        {showCreateForm && <CreateTripForm onAdd={() => setShowCreateForm(false)} />}
+        {showCreateForm && <div className="px-4 pb-4"><CreateTripForm onAdd={() => setShowCreateForm(false)} /></div>}
       </PageCard>
     </>
   );

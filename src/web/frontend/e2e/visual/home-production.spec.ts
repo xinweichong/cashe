@@ -23,7 +23,7 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
     await page.goto('/');
     const phone = viewport.width < 768;
     // Phone Home leads with the compact 112px ring beside its legend.
-    await expect(phone ? page.getByRole('tablist', { name: 'Home views' }) : page.getByText('Where the dollars go.')).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Home' })).toBeVisible();
 
     const sectors = page.locator('.recharts-pie-sector');
     await expect(sectors.first()).toBeVisible();
@@ -49,29 +49,20 @@ for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 
   });
 }
 
-test('production Home hero glow is static, never an infinite pulse', async ({ page }) => {
-  // Regression for a real bug: .hero-glow-*::after used to run an
-  // `infinite` opacity keyframe, and the reduced-motion override only
-  // shortened the animation-duration rather than stopping the loop — so a
-  // reduced-motion user saw the glow flicker several times a second instead
-  // of a static halo. Checked in both motion modes since the fix makes the
-  // glow unconditionally static, not just reduced-motion-safe.
-  await mockAuthenticatedHome(page);
-  await page.goto('/');
-  // The loading skeleton also renders a HeroCard; measure the loaded one.
-  await expect(page.getByText(/^Through 2026-09-10/)).toBeVisible();
-  const glow = page.locator('.hero-glow-warm, .hero-glow-teal, .hero-glow-coral').first();
-  await expect(glow).toBeVisible();
-  const animationName = await glow.evaluate((el) => getComputedStyle(el, '::after').animationName);
-  expect(animationName).toBe('none');
-
-  await page.emulateMedia({ reducedMotion: 'reduce' });
-  await page.reload();
-  await expect(page.getByText(/^Through 2026-09-10/)).toBeVisible();
-  const glowReduced = page.locator('.hero-glow-warm, .hero-glow-teal, .hero-glow-coral').first();
-  await expect(glowReduced).toBeVisible();
-  const animationNameReduced = await glowReduced.evaluate((el) => getComputedStyle(el, '::after').animationName);
-  expect(animationNameReduced).toBe('none');
+test('production Home spectrum card is static, never an animated pulse', async ({ page }) => {
+  // Regression lineage: the old .hero-glow-* pulse used to loop (and flicker
+  // under reduced motion). Its replacement, the spectrum card (HIG alignment,
+  // 2026-10-01), must never animate, with or without reduced motion.
+  for (const reducedMotion of ['no-preference', 'reduce'] as const) {
+    await mockAuthenticatedHome(page);
+    await page.emulateMedia({ reducedMotion });
+    await page.goto('/');
+    await expect(page.getByText(/^Through 2026-09-10/)).toBeVisible();
+    const card = page.locator('.spectrum-fill').first();
+    await expect(card).toBeVisible();
+    expect(await card.evaluate((el) => getComputedStyle(el).animationName)).toBe('none');
+    expect(await page.locator('.spectrum-fill').count()).toBe(1); // one spectrum card per screen
+  }
 });
 
 test('initial Home load renders visible shape-matched skeletons in light theme', async ({ page }) => {
@@ -102,7 +93,7 @@ test('Home category selection survives the evidence round trip', async ({ page }
   await page.getByRole('link', { name: /View transactions/ }).click();
   await expect(page).toHaveURL(/\/evidence\?/);
   await expect(page.getByText('FairPrice')).toBeVisible();
-  await page.getByRole('link', { name: 'Back to briefing' }).click();
+  await page.locator('header').getByRole('link', { name: 'Home', exact: true }).click();
   await expect(page).toHaveURL(/category=Food/);
   await expect(page.getByRole('button', { name: 'Clear selection' })).toBeVisible();
 });

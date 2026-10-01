@@ -1,13 +1,20 @@
-import { useEffect, type RefObject } from 'react';
+import { useEffect, useLayoutEffect, useRef, type RefObject } from 'react';
 
 // Mac list conventions for a split view's list column (P7): ↑/↓ move focus
 // between rows (selection follows only on ↩, the row's own activation),
 // ⌫/Delete asks to delete the selected item, Esc closes the detail, and
 // ⌘F focuses the page's search field ([data-list-search]).
+//
+// The callbacks live in refs updated during layout, so the listeners are
+// registered once and a key pressed right after a selection already sees
+// the new detail's close/delete actions.
 export function useListKeyboard(
   listRef: RefObject<HTMLElement | null>,
   { onDelete, onEscape, enabled = true }: { onDelete?: () => void; onEscape?: () => void; enabled?: boolean },
 ) {
+  const actions = useRef({ onDelete, onEscape });
+  useLayoutEffect(() => { actions.current = { onDelete, onEscape }; });
+
   useEffect(() => {
     const list = listRef.current;
     if (!enabled || !list) return;
@@ -23,13 +30,14 @@ export function useListKeyboard(
         const next = current === -1 ? 0 : Math.min(all.length - 1, Math.max(0, current + (e.key === 'ArrowDown' ? 1 : -1)));
         all[next].focus();
         all[next].scrollIntoView({ block: 'nearest' });
-      } else if ((e.key === 'Backspace' || e.key === 'Delete') && onDelete) {
+      } else if ((e.key === 'Backspace' || e.key === 'Delete') && actions.current.onDelete) {
         e.preventDefault();
-        onDelete();
+        actions.current.onDelete();
       }
     };
     const onWindowKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && onEscape && !document.querySelector('[role="dialog"], [role="menu"]')) onEscape();
+      const { onEscape: escape } = actions.current;
+      if (e.key === 'Escape' && escape && !document.querySelector('[role="dialog"], [role="menu"]')) escape();
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f') {
         const search = document.querySelector<HTMLElement>('[data-list-search]');
         if (search) { e.preventDefault(); search.focus(); }
@@ -41,5 +49,5 @@ export function useListKeyboard(
       list.removeEventListener('keydown', onListKey);
       window.removeEventListener('keydown', onWindowKey);
     };
-  }, [listRef, onDelete, onEscape, enabled]);
+  }, [listRef, enabled]);
 }

@@ -21,13 +21,13 @@ function LocationProbe() {
   return <div data-testid="location-search">{location.search}</div>;
 }
 
-const { getTransactionsV2, getDailyTotalsV2, getCategories, getSettings, getTrips, home, bulkCorrectTransactions, bulkUndoTransactions, deleteTransaction } = vi.hoisted(() => ({
+const { getTransactionsV2, getDailyTotalsV2, getCategories, getSettings, getTrips, home, bulkCorrectTransactions, bulkUndoTransactions, deleteTransaction, enlistTransaction } = vi.hoisted(() => ({
   getTransactionsV2: vi.fn(), getDailyTotalsV2: vi.fn(), getCategories: vi.fn(),
   getSettings: vi.fn(), getTrips: vi.fn(), home: vi.fn(),
-  bulkCorrectTransactions: vi.fn(), bulkUndoTransactions: vi.fn(), deleteTransaction: vi.fn(),
+  bulkCorrectTransactions: vi.fn(), bulkUndoTransactions: vi.fn(), deleteTransaction: vi.fn(), enlistTransaction: vi.fn(),
 }));
 vi.mock('@/api/client', () => ({
-  api: { getTransactionsV2, getDailyTotalsV2, getCategories, getSettings, getTrips, bulkCorrectTransactions, bulkUndoTransactions, deleteTransaction },
+  api: { getTransactionsV2, getDailyTotalsV2, getCategories, getSettings, getTrips, bulkCorrectTransactions, bulkUndoTransactions, deleteTransaction, enlistTransaction },
 }));
 vi.mock('@/api/briefing', () => ({ briefingApi: { home } }));
 
@@ -275,4 +275,23 @@ it('deletes a row from its context menu only after confirming', async () => {
   expect(await screen.findByRole('dialog', { name: 'Delete transaction?' })).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
   await waitFor(() => expect(deleteTransaction).toHaveBeenCalledWith(1));
+});
+
+it('adds a row to a trip from its context menu when trips are enabled', async () => {
+  getCategories.mockResolvedValue([]);
+  home.mockResolvedValue({ review_count: 0 });
+  getDailyTotalsV2.mockResolvedValue([]);
+  getTransactionsV2.mockImplementation(async (params?: Record<string, unknown>) =>
+    (params?.offset ?? 0) === 0 ? [txV2(1, 'Cafe', 3)] : [],
+  );
+  enlistTransaction.mockResolvedValue({ status: 'ok' });
+  getSettings.mockResolvedValue({ trips_enabled: true });
+  getTrips.mockResolvedValue([{ id: 7, name: 'Bali', destination: 'Indonesia', start_date: '2026-09-01', end_date: null, primary_currency: 'SGD', status: 'active', created_at: '', updated_at: '' }]);
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(<QueryClientProvider client={client}><MemoryRouter initialEntries={['/transactions']}><Routes><Route path="/transactions/:transactionId?" element={<TransactionsPage />} /></Routes></MemoryRouter></QueryClientProvider>);
+
+  fireEvent.contextMenu(await screen.findByText('Cafe'));
+  fireEvent.click(await screen.findByRole('menuitem', { name: 'Add to trip' }));
+  fireEvent.click(await screen.findByRole('button', { name: /Bali/ }));
+  await waitFor(() => expect(enlistTransaction).toHaveBeenCalledWith(7, 1));
 });
