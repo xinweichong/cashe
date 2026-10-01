@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import * as ContextMenuPrimitive from '@radix-ui/react-context-menu';
 import type { LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -29,9 +29,23 @@ interface RowMenuProps {
 
 export function RowMenu({ items, children, disabled = false }: RowMenuProps) {
   const [open, setOpen] = useState(false);
+  // An item that opens its own dialog (Delete's confirmation) must wait for
+  // the menu to close: otherwise the menu's focus return and the dialog's
+  // focus trap pull focus back and forth. Run it once the menu has closed,
+  // and skip the focus return, since the dialog takes focus.
+  const pending = useRef<(() => void) | null>(null);
+  const skipFocusReturn = useRef(false);
   const visible = items.filter((item) => !('label' in item) || !item.hidden);
+  const onOpenChange = (next: boolean) => {
+    setOpen(next);
+    if (!next && pending.current) {
+      const action = pending.current;
+      pending.current = null;
+      setTimeout(action, 0);
+    }
+  };
   return (
-    <ContextMenuPrimitive.Root modal onOpenChange={setOpen}>
+    <ContextMenuPrimitive.Root modal onOpenChange={onOpenChange}>
       {open && <div aria-hidden className="overlay-motion fixed inset-0 z-40 bg-scrim backdrop-blur-[3px]" data-state="open" />}
       <ContextMenuPrimitive.Trigger
         asChild
@@ -43,6 +57,7 @@ export function RowMenu({ items, children, disabled = false }: RowMenuProps) {
       <ContextMenuPrimitive.Portal>
         <ContextMenuPrimitive.Content
           collisionPadding={12}
+          onCloseAutoFocus={(e) => { if (skipFocusReturn.current) { skipFocusReturn.current = false; e.preventDefault(); } }}
           className="pop-motion z-50 min-w-[14rem] overflow-hidden rounded-[14px] bg-card-elev text-sm text-foreground shadow-elev-md origin-[--radix-context-menu-content-transform-origin]"
         >
           {visible.map((item, i) =>
@@ -52,7 +67,7 @@ export function RowMenu({ items, children, disabled = false }: RowMenuProps) {
                 <ContextMenuPrimitive.Item
                   key={item.label}
                   disabled={item.disabled}
-                  onSelect={item.onSelect}
+                  onSelect={() => { pending.current = item.onSelect; skipFocusReturn.current = true; }}
                   className={cn(
                     'flex min-h-11 cursor-default select-none items-center justify-between gap-6 px-3.5 outline-none',
                     'border-t-[0.5px] border-separator first:border-t-0 [[role=separator]+&]:border-t-0',

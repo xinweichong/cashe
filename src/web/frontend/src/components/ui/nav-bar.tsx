@@ -44,7 +44,7 @@ export function NavBar({ title, large = false, back, trailing, className }: NavB
       <span className="truncate">{back.label}</span>
     </>
   );
-  const backClass = 'pressable inline-flex min-h-11 max-w-[40%] items-center gap-0.5 rounded-[8px] pr-2 text-base text-teal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
+  const backClass = 'pressable inline-flex min-h-11 max-w-full items-center gap-0.5 rounded-[8px] pr-2 text-base text-teal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
 
   return (
     <>

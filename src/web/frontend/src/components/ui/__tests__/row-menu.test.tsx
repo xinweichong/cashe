@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { Pencil, Trash2 } from 'lucide-react';
 import { RowMenu } from '../row-menu';
 
@@ -30,12 +30,14 @@ describe('<RowMenu> (P9)', () => {
     expect(screen.queryByRole('menuitem', { name: 'Add to trip' })).toBeNull();
   });
 
-  it('runs the chosen action and styles Delete as destructive', () => {
+  it('runs the chosen action once the menu has closed, and styles Delete as destructive', async () => {
     const { onDelete } = open();
     const del = screen.getByRole('menuitem', { name: 'Delete' });
     expect(del.className).toContain('text-destructive');
     fireEvent.click(del);
-    expect(onDelete).toHaveBeenCalledOnce();
+    // Deferred so a dialog the action opens doesn't fight the menu for focus.
+    await waitFor(() => expect(onDelete).toHaveBeenCalledOnce());
+    expect(screen.queryByRole('menu')).toBeNull();
   });
 
   it('lifts the row while the menu is open', () => {

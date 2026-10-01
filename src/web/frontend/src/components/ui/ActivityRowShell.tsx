@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { KeyboardEvent, ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { cn, getCategoryColor } from '@/lib/utils';
 import { CategoryAvatar } from '@/components/ui/CategoryAvatar';
@@ -13,10 +13,10 @@ interface ActivityRowShellProps {
   href?: string;
   /** Row toggles/opens in place rather than navigating (Activity's list, which manages selection/detail state itself). */
   onClick?: () => void;
-  /** Overrides the category-initial avatar — e.g. Activity's bulk-selection checkbox. Receives the row's own computed category color so it never drifts from the pill/background tint. */
+  /** Overrides the category-initial avatar — e.g. Activity's bulk-selection checkbox. Receives the row's own computed category color so it never drifts from the category label. */
   avatarSlot?: (categoryColor: string) => ReactNode;
   title: ReactNode;
-  /** The row's primary meta text (timestamp, date) — the category name itself is appended automatically as a tinted pill. */
+  /** The row's primary meta text (timestamp, date) — the category name itself is appended automatically. */
   metaPrimary: ReactNode;
   /** Pre-formatted, already-signed amount text — this component never formats money itself (Home's reporting-SGD values and Activity's original-currency values are not interchangeable; see docs plan §3). */
   amount: ReactNode;
@@ -26,12 +26,16 @@ interface ActivityRowShellProps {
 }
 
 /**
- * The shared visual shell behind every transaction-like row in the app —
- * Activity/Finance's TransactionRow and Home's Recent activity both render
- * through this so the two never drift in appearance again. Purely
- * presentational: callers own money formatting and navigation semantics
- * (href vs. onClick); this only owns layout, the category tint/hover
- * treatment, the avatar, and the category pill.
+ * The shared shell behind every transaction-like row (Activity, Evidence,
+ * Explore's "Worth a look"). Purely presentational: callers own money
+ * formatting and navigation semantics (href vs. onClick).
+ *
+ * Direction B (P4, HIG alignment 2026-10-01): the grouped-list row. Square,
+ * on the group's card surface, separated by hairlines inset to the text
+ * start; pressed and hover fills; the opened row is a teal fill that becomes
+ * an inset pill on md+; a multi-select row (avatarSlot) takes a neutral fill
+ * instead. Category identity lives in the avatar, so the meta line is plain
+ * text. Rows stack below an 18rem group width (Larger text, 200% zoom).
  */
 export function ActivityRowShell({
   id, category, isIncome = false, selected = false, href, onClick,
@@ -39,54 +43,44 @@ export function ActivityRowShell({
 }: ActivityRowShellProps) {
   const categoryColor = getCategoryColor(category ?? 'Other');
   const isClickable = !!href || !!onClick;
+  const multiSelect = !!avatarSlot;
+  const onTeal = selected && !multiSelect;
 
   const rowClassName = cn(
-    'grid gap-3 items-center px-3.5 py-2.5 border-b border-border/30 last:border-b-0',
-    'transition-[background,transform] duration-[150ms]',
-    trailing ? 'grid-cols-[36px_1fr_auto_auto]' : 'grid-cols-[36px_1fr_auto]',
-    isClickable && 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+    'separator-inset flex w-full min-h-row items-center gap-3 bg-card px-3 py-2 text-left text-sm',
+    '@max-[18rem]:flex-wrap',
+    isClickable && 'pressable cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
+    onTeal && 'bg-teal text-on-teal hover:bg-teal active:bg-teal md:mx-1 md:my-0.5 md:w-[calc(100%-0.5rem)] md:rounded-inset',
+    selected && multiSelect && 'bg-fill-press',
     className,
   );
-  const rowStyle = { background: `${categoryColor}${selected ? '1A' : '0D'}` };
-  const onMouseEnter = isClickable ? (e: React.MouseEvent<HTMLElement>) => {
-    e.currentTarget.style.background = `${categoryColor}1A`;
-    e.currentTarget.style.transform = 'translateY(-1px)';
-  } : undefined;
-  const onMouseLeave = isClickable ? (e: React.MouseEvent<HTMLElement>) => {
-    e.currentTarget.style.background = `${categoryColor}${selected ? '1A' : '0D'}`;
-    e.currentTarget.style.transform = '';
-  } : undefined;
+  const muted = onTeal ? 'text-on-teal/80' : 'text-muted';
+  const style = { '--separator-inset': '3.5rem' } as React.CSSProperties;
 
   const content = (
     <>
-      {avatarSlot ? avatarSlot(categoryColor) : <CategoryAvatar category={category} isIncome={isIncome} />}
-      <div className="min-w-0">
-        <div className="text-sm font-medium tracking-[-0.005em] truncate">{title}</div>
-        <div className="font-mono text-2xs text-muted uppercase tracking-[0.06em] mt-0.5 flex items-center gap-1.5 flex-wrap">
-          <span>{metaPrimary}</span>
-          {category && (
-            <span
-              className="px-1 py-0.5 rounded text-2xs font-semibold font-mono uppercase tracking-[0.08em]"
-              style={{ color: categoryColor, background: `${categoryColor}1F` }}
-            >
-              {category}
-            </span>
-          )}
-        </div>
-      </div>
-      <div className="text-right shrink-0">
-        <div data-testid="tx-amount" className={cn('font-bold tracking-tight text-sm font-display', isIncome && 'text-teal')}>
+      <span className="flex w-8 shrink-0 justify-center">
+        {avatarSlot ? avatarSlot(categoryColor) : <CategoryAvatar category={category} isIncome={isIncome} className="rounded-full" />}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate font-medium">{title}</span>
+        <span className={cn('block truncate text-xs', muted)}>
+          {metaPrimary}{category && <> · {category}</>}
+        </span>
+      </span>
+      <span className="shrink-0 text-right @max-[18rem]:basis-full @max-[18rem]:pl-11 @max-[18rem]:text-left">
+        <span data-testid="tx-amount" className={cn('block font-mono text-sm font-medium tabular-nums', isIncome && !onTeal && 'text-success')}>
           {amount}
-        </div>
-        {amountSub && <div className="text-2xs text-muted font-mono mt-0.5 truncate max-w-[80px]">{amountSub}</div>}
-      </div>
+        </span>
+        {amountSub && <span className={cn('block max-w-[6rem] truncate text-xs', muted)}>{amountSub}</span>}
+      </span>
       {trailing}
     </>
   );
 
   if (href) {
     return (
-      <Link id={id} to={href} className={rowClassName} style={rowStyle} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
+      <Link id={id} to={href} className={rowClassName} style={style} data-list-row="" aria-current={selected ? 'page' : undefined}>
         {content}
       </Link>
     );
@@ -95,13 +89,15 @@ export function ActivityRowShell({
     <div
       id={id}
       className={rowClassName}
-      style={rowStyle}
-      onMouseEnter={onMouseEnter}
-      onMouseLeave={onMouseLeave}
+      style={style}
+      data-list-row={isClickable ? '' : undefined}
       onClick={onClick}
       role={isClickable ? 'button' : undefined}
       tabIndex={isClickable ? 0 : undefined}
-      onKeyDown={isClickable ? (e) => {
+      aria-current={selected && !multiSelect ? 'true' : undefined}
+      aria-pressed={multiSelect ? selected : undefined}
+      onKeyDown={isClickable ? (e: KeyboardEvent) => {
+        if (e.target !== e.currentTarget) return; // never let a nested control activate the row
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick?.(); }
       } : undefined}
     >

@@ -21,13 +21,13 @@ function LocationProbe() {
   return <div data-testid="location-search">{location.search}</div>;
 }
 
-const { getTransactionsV2, getDailyTotalsV2, getCategories, getSettings, getTrips, home, bulkCorrectTransactions, bulkUndoTransactions } = vi.hoisted(() => ({
+const { getTransactionsV2, getDailyTotalsV2, getCategories, getSettings, getTrips, home, bulkCorrectTransactions, bulkUndoTransactions, deleteTransaction } = vi.hoisted(() => ({
   getTransactionsV2: vi.fn(), getDailyTotalsV2: vi.fn(), getCategories: vi.fn(),
   getSettings: vi.fn(), getTrips: vi.fn(), home: vi.fn(),
-  bulkCorrectTransactions: vi.fn(), bulkUndoTransactions: vi.fn(),
+  bulkCorrectTransactions: vi.fn(), bulkUndoTransactions: vi.fn(), deleteTransaction: vi.fn(),
 }));
 vi.mock('@/api/client', () => ({
-  api: { getTransactionsV2, getDailyTotalsV2, getCategories, getSettings, getTrips, bulkCorrectTransactions, bulkUndoTransactions },
+  api: { getTransactionsV2, getDailyTotalsV2, getCategories, getSettings, getTrips, bulkCorrectTransactions, bulkUndoTransactions, deleteTransaction },
 }));
 vi.mock('@/api/briefing', () => ({ briefingApi: { home } }));
 
@@ -101,7 +101,9 @@ it('sends the type filter and reflects it in the URL', async () => {
   renderPage();
   await screen.findByText('Nothing captured this period.');
 
-  fireEvent.click(screen.getByRole('button', { name: 'Refund' }));
+  // Filters live in a task sheet (HIG alignment, 2026-10-01).
+  fireEvent.click(screen.getByRole('button', { name: 'Filters' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Refund' }));
 
   await waitFor(() => expect(getTransactionsV2).toHaveBeenCalledWith(
     expect.objectContaining({ type: 'refund' }),
@@ -118,7 +120,8 @@ it('sends needs_review=true when the Needs review toggle is active', async () =>
   renderPage();
   await screen.findByText('Nothing captured this period.');
 
-  fireEvent.click(screen.getByRole('button', { name: 'Needs review' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Filters' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Needs review' }));
 
   await waitFor(() => expect(getTransactionsV2).toHaveBeenCalledWith(
     expect.objectContaining({ needs_review: 'true' }),
@@ -147,6 +150,7 @@ it('hydrates filters from the URL on mount and shows a trip picker only when tri
   await waitFor(() => expect(getTransactionsV2).toHaveBeenCalledWith(
     expect.objectContaining({ merchant_search: 'coffee', type: 'refund', trip_id: '7' }),
   ));
+  fireEvent.click(await screen.findByRole('button', { name: /^Filters/ }));
   expect(await screen.findByLabelText('Trip')).toHaveValue('7');
   expect((screen.getByPlaceholderText(/search/i) as HTMLInputElement).value).toBe('coffee');
 });
@@ -206,7 +210,9 @@ it('bulk-categorizes selected rows using their loaded revisions, then offers und
   fireEvent.click(screen.getByRole('button', { name: 'Select' }));
   fireEvent.click(screen.getByText('Cafe'));
   fireEvent.click(screen.getByText('Shop'));
-  fireEvent.change(screen.getByLabelText('Set category for selected'), { target: { value: 'Transport' } });
+  // The selection toolbar's Category opens a sheet of categories.
+  fireEvent.click(screen.getByRole('button', { name: 'Category' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Transport' }));
 
   await waitFor(() => expect(bulkCorrectTransactions).toHaveBeenCalled());
   expect(bulkCorrectTransactions.mock.calls[0][0]).toEqual({
@@ -244,9 +250,29 @@ it('reports a per-row conflict from a bulk action without losing the rows that s
   fireEvent.click(screen.getByRole('button', { name: 'Select' }));
   fireEvent.click(screen.getByText('Cafe'));
   fireEvent.click(screen.getByText('Shop'));
-  fireEvent.change(screen.getByLabelText('Set category for selected'), { target: { value: 'Transport' } });
+  // The selection toolbar's Category opens a sheet of categories.
+  fireEvent.click(screen.getByRole('button', { name: 'Category' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Transport' }));
 
   await waitFor(() => expect(bulkCorrectTransactions).toHaveBeenCalled());
   // Only the row that actually succeeded is offered for undo.
   expect(await screen.findByText(/Updated 1\./)).toBeInTheDocument();
+});
+
+it('deletes a row from its context menu only after confirming', async () => {
+  getCategories.mockResolvedValue([]);
+  home.mockResolvedValue({ review_count: 0 });
+  getDailyTotalsV2.mockResolvedValue([]);
+  getTransactionsV2.mockImplementation(async (params?: Record<string, unknown>) =>
+    (params?.offset ?? 0) === 0 ? [txV2(1, 'Cafe', 3)] : [],
+  );
+  deleteTransaction.mockResolvedValue(undefined);
+
+  renderPage();
+  fireEvent.contextMenu(await screen.findByText('Cafe'));
+  fireEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }));
+  expect(deleteTransaction).not.toHaveBeenCalled();
+  expect(await screen.findByRole('dialog', { name: 'Delete transaction?' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+  await waitFor(() => expect(deleteTransaction).toHaveBeenCalledWith(1));
 });

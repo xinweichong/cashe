@@ -449,9 +449,10 @@ body {
 @utility pressable {
   transition: background-color var(--dur-fast) ease-out, transform var(--dur-fast) var(--ease-out-expo);
   -webkit-tap-highlight-color: transparent;
-  &:active { background-color: var(--color-fill-press); }
+  /* The current item (aria-current) keeps its selection fill. */
+  &:active:not([aria-current]) { background-color: var(--color-fill-press); }
   @media (hover: hover) and (pointer: fine) {
-    &:hover:not(:active) { background-color: var(--color-fill-hover); }
+    &:hover:not(:active):not([aria-current]) { background-color: var(--color-fill-hover); }
   }
 }
 @utility pressable-scale {

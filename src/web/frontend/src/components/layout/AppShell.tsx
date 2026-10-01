@@ -11,7 +11,7 @@ import { pageVariants } from '@/lib/motionPresets';
 
 // Tab roots migrated to their own large-title NavBar (P3), which carries the
 // profile menu on a phone. The rest keep the shell's phone bar until they move.
-const OWN_NAV_BAR = new Set(['/', '/home']);
+const ownNavBar = (path: string) => path === '/' || path === '/home' || /^\/(activity|transactions|evidence)(\/|$)/.test(path);
 
 export function AppShell() {
   const location = useLocation();
@@ -27,7 +27,7 @@ export function AppShell() {
       <Sidebar />
       <div className="flex-1 min-w-0 flex flex-col">
         {/* Phone-only top bar until each tab root carries its own NavBar (plan steps 4–10). */}
-        {!OWN_NAV_BAR.has(location.pathname) && (
+        {!ownNavBar(location.pathname) && (
           <header className="md:hidden sticky top-0 z-40 h-12 shrink-0 chrome-frosted border-b-[0.5px] border-separator flex items-center px-4 gap-2">
             <CasheWordmark size={22} />
             <div className="ml-auto"><ProfileMenu /></div>

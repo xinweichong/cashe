@@ -51,7 +51,8 @@ test('Evidence rows link to the transaction with a returnTo back to this exact e
 test('Back returns to a safe internal returnTo and is not sent to the evidence API', async () => {
   show('/evidence?start=2026-09-01&end=2026-09-06&category=Food&returnTo=%2Fhome%3Fcategory%3DFood');
   await screen.findByText('FairPrice');
-  expect(screen.getByRole('link', { name: 'Back to briefing' }).getAttribute('href')).toBe('/home?category=Food');
+  // The back button names where it returns to (P3 nav bar).
+  expect(screen.getByRole('link', { name: 'Home' }).getAttribute('href')).toBe('/home?category=Food');
   const sent = vi.mocked(briefingApi.evidence).mock.calls[0][0] as URLSearchParams;
   expect(sent.has('returnTo')).toBe(false);
 });
@@ -59,5 +60,5 @@ test('Back returns to a safe internal returnTo and is not sent to the evidence A
 test('an off-site returnTo falls back to the briefing', async () => {
   show('/evidence?start=2026-09-01&end=2026-09-06&returnTo=%2F%2Fevil.example');
   await screen.findByText('FairPrice');
-  expect(screen.getByRole('link', { name: 'Back to briefing' }).getAttribute('href')).toBe('/home');
+  expect(screen.getByRole('link', { name: 'Home' }).getAttribute('href')).toBe('/home');
 });

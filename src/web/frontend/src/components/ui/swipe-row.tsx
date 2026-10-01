@@ -53,12 +53,16 @@ function SwipeRowTouch({ leadingActions = [], trailingActions = [], children }: 
   const reduceMotion = useReducedMotion();
   const [side, setSide] = useState<'leading' | 'trailing' | null>(null);
   const [confirming, setConfirming] = useState<SwipeAction | null>(null);
+  // Actions are visible only while a drag or an open row needs them, so a row
+  // that doesn't fill its slot (the md+ inset selection pill) never shows
+  // their colour around its edges.
+  const [dragging, setDragging] = useState(false);
 
   const leadWidth = leadingActions.length * ACTION_WIDTH;
   const trailWidth = trailingActions.length * ACTION_WIDTH;
   const settle = (to: number) => animate(x, to, reduceMotion ? { duration: 0 } : sheetSpring);
 
-  const close = () => { setSide(null); setConfirming(null); settle(0); };
+  const close = () => { setSide(null); setConfirming(null); setDragging(false); settle(0); };
 
   useEffect(() => {
     if (!side) return;
@@ -122,8 +126,8 @@ function SwipeRowTouch({ leadingActions = [], trailingActions = [], children }: 
         </div>
       ) : (
         <>
-          <div aria-hidden={side !== 'leading'} className="absolute inset-y-0 left-0 flex">{actionButtons(leadingActions, side === 'leading')}</div>
-          <div aria-hidden={side !== 'trailing'} className="absolute inset-y-0 right-0 flex">{actionButtons(trailingActions, side === 'trailing')}</div>
+          <div aria-hidden={side !== 'leading'} className={cn('absolute inset-y-0 left-0 flex', !dragging && !side && 'invisible')}>{actionButtons(leadingActions, side === 'leading')}</div>
+          <div aria-hidden={side !== 'trailing'} className={cn('absolute inset-y-0 right-0 flex', !dragging && !side && 'invisible')}>{actionButtons(trailingActions, side === 'trailing')}</div>
           <motion.div
             className="relative z-10 touch-pan-y bg-card"
             style={{ x }}
@@ -135,7 +139,8 @@ function SwipeRowTouch({ leadingActions = [], trailingActions = [], children }: 
             dragConstraints={{ left: trailWidth ? -FREE_TRAVEL : 0, right: leadWidth ? FREE_TRAVEL : 0 }}
             dragElastic={0}
             onPointerDown={onPointerDown}
-            onDragEnd={onDragEnd}
+            onDragStart={() => setDragging(true)}
+            onDragEnd={(e, info) => { setDragging(false); onDragEnd(e, info); }}
           >
             {children}
           </motion.div>

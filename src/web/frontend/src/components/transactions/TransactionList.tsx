@@ -30,18 +30,19 @@ interface TransactionListProps {
   selectionMode?: boolean;
   selectedIds?: Set<number>;
   onToggleSelect?: (id: number) => void;
-  /** Pin each day header while its rows scroll (desktop). The phone list
-   * sits in a short card, where a pinned header only hides rows. */
+  /** Pin each day header below the collapsed nav bar while its rows scroll. */
   stickyDayHeaders?: boolean;
-  /** Phone rows: time only, source only when manual (see TransactionRow). */
+  /** Rows: time only, source only when manual (see TransactionRow). */
   compactRows?: boolean;
+  /** Wraps each row, e.g. in swipe actions and a context menu (Activity). */
+  renderRow?: (tx: Transaction, row: React.ReactNode) => React.ReactNode;
 }
 
 function TransactionRowSkeleton() {
   return (
     <div
       data-testid="tx-skeleton"
-      className="flex items-center gap-3 px-4 py-3 border-b border-border/50"
+      className="separator-inset flex min-h-row items-center gap-3 bg-card px-3 py-2"
     >
       <Skeleton className="h-8 w-8 rounded-full" />
       <div className="flex-1 space-y-1.5">
@@ -57,12 +58,12 @@ function DayHeader({ dayKey, total, sticky }: { dayKey: string; total: DailyTota
   return (
     <div
       data-testid="tx-day-header"
-      className={`flex items-baseline justify-between px-4 py-1.5 bg-muted/30 border-b border-border/30${sticky ? ' sticky top-0 z-10' : ''}`}
+      className={`flex items-baseline justify-between px-1 pb-1.5 pt-4 first:pt-0${sticky ? ' sticky top-11 z-10 chrome-frosted' : ''}`}
     >
-      <span className="text-2xs font-mono uppercase tracking-[0.08em] text-muted font-semibold">
+      <span className="text-xs font-semibold text-muted">
         {formatDayHeading(dayKey)}
       </span>
-      <span className="text-2xs font-mono text-muted" data-testid="tx-day-total">
+      <span className="font-mono text-xs tabular-nums text-muted" data-testid="tx-day-total">
         {total
           ? `${formatCurrency(total.spending.minor_units / 100, total.spending.currency)}${total.status !== 'complete' ? ' *' : ''}`
           : '···'}
@@ -89,13 +90,18 @@ function groupByDay(transactions: Transaction[]): Row[] {
 
 // Memoised so changing the selection re-renders only the rows whose
 // `selected` flips, not every loaded row.
-const ListRow = memo(function ListRow({ tx, index, selected, selectable, compact, onActivate }: {
+const ListRow = memo(function ListRow({ tx, index, selected, selectable, compact, onActivate, renderRow }: {
   tx: Transaction; index: number; selected: boolean; selectable: boolean; compact: boolean;
   onActivate: (tx: Transaction) => void;
+  renderRow?: (tx: Transaction, row: React.ReactNode) => React.ReactNode;
 }) {
+  const row = <TransactionRow tx={tx} onClick={() => onActivate(tx)} selected={selected} selectable={selectable} compact={compact} />;
   return (
     <motion.div
       data-tx-row-id={tx.id}
+      // Rows sit inside these wrappers, so the hairline is drawn between wrappers.
+      className="separator-inset"
+      style={{ '--separator-inset': '3.5rem' } as React.CSSProperties}
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, transition: { duration: 0.12 } }}
@@ -105,7 +111,7 @@ const ListRow = memo(function ListRow({ tx, index, selected, selectable, compact
         delay: index < STAGGER_LIMIT ? index * 0.025 : 0,
       }}
     >
-      <TransactionRow tx={tx} onClick={() => onActivate(tx)} selected={selected} selectable={selectable} compact={compact} />
+      {renderRow && !selectable ? renderRow(tx, row) : row}
     </motion.div>
   );
 });
@@ -121,8 +127,9 @@ export function TransactionList({
   selectionMode = false,
   selectedIds,
   onToggleSelect,
-  stickyDayHeaders = true,
+  stickyDayHeaders = false,
   compactRows = false,
+  renderRow,
 }: TransactionListProps) {
   const observerRef = useRef<HTMLDivElement>(null);
   const rows = useMemo(() => groupByDay(transactions), [transactions]);
@@ -152,7 +159,7 @@ export function TransactionList({
 
   if (transactions.length === 0 && isLoading) {
     return (
-      <div>
+      <div className="overflow-hidden rounded-group bg-card">
         {Array.from({ length: 8 }).map((_, i) => (
           <TransactionRowSkeleton key={i} />
         ))}
@@ -168,25 +175,36 @@ export function TransactionList({
     );
   }
 
+  // Direction B: each day is a section header over its own inset group.
+  const days: { day: string; txs: Extract<Row, { kind: 'tx' }>[] }[] = [];
+  for (const row of rows) {
+    if (row.kind === 'header') days.push({ day: row.day, txs: [] });
+    else days[days.length - 1].txs.push(row);
+  }
+
   return (
     <div>
-      <AnimatePresence>
-        {rows.map((row) =>
-          row.kind === 'header' ? (
-            <DayHeader key={`day-${row.day}`} dayKey={row.day} total={dailyTotals?.get(row.day)} sticky={stickyDayHeaders} />
-          ) : (
-            <ListRow
-              key={row.tx.id}
-              tx={row.tx}
-              index={row.index}
-              selected={selectionMode ? !!selectedIds?.has(row.tx.id) : row.tx.id === selectedTransactionId}
-              selectable={selectionMode}
-              compact={compactRows}
-              onActivate={activate}
-            />
-          )
-        )}
-      </AnimatePresence>
+      {days.map(({ day, txs }) => (
+        <section key={`day-${day}`} aria-label={formatDayHeading(day)}>
+          <DayHeader dayKey={day} total={dailyTotals?.get(day)} sticky={stickyDayHeaders} />
+          <div className="@container overflow-hidden rounded-group bg-card">
+            <AnimatePresence initial={false}>
+              {txs.map((row) => (
+                <ListRow
+                  key={row.tx.id}
+                  tx={row.tx}
+                  index={row.index}
+                  selected={selectionMode ? !!selectedIds?.has(row.tx.id) : row.tx.id === selectedTransactionId}
+                  selectable={selectionMode}
+                  compact={compactRows}
+                  onActivate={activate}
+                  renderRow={renderRow}
+                />
+              ))}
+            </AnimatePresence>
+          </div>
+        </section>
+      ))}
       {hasMore && (
         <div ref={observerRef} className="py-4 text-center text-muted text-xs">
           {isLoading ? 'Catching up…' : 'Load more'}
