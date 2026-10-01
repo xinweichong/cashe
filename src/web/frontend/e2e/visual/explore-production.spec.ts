@@ -2,8 +2,7 @@ import { test, expect } from '@playwright/test';
 
 // Exercises the real authenticated route (App -> AppShell -> ExplorePage ->
 // ExplorePatternsPage) with mocked network, not just isolated component
-// tests — see e2e/visual/home-production.spec.ts for why this matters
-// (AppShell's layout isn't present in unit tests).
+// tests, since AppShell's layout isn't present in unit tests.
 
 import { mockAuthenticatedExplore } from '../fixtures/mocks';
 
@@ -164,4 +163,27 @@ test('Over time: step to a day, break it down by category, then merchants with d
   await page.screenshot({ path: 'e2e/screenshots/explore-day-investigation.png', fullPage: true });
   await page.getByRole('button', { name: 'Clear day' }).click();
   await expect(day).toHaveCount(0);
+});
+
+// Recharts sweeps the donut in on its own timer, so a screenshot taken as the
+// first sector mounts can catch a half-drawn ring. A complete ring's sectors
+// span about 85% of the chart's height; a mid-sweep or broken one about half.
+test('Explore By category renders a complete donut ring', async ({ page }) => {
+  await mockAuthenticatedExplore(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/explore?mode=by-category');
+  const sectors = page.locator('.recharts-pie-sector');
+  await expect(sectors.first()).toBeVisible();
+  const chart = page.locator('.recharts-wrapper').filter({ has: sectors.first() }).first();
+  const chartBox = (await chart.boundingBox())!;
+  const sweptHeight = async () => {
+    let top = Infinity, bottom = -Infinity;
+    for (const box of await Promise.all((await sectors.all()).map((s) => s.boundingBox()))) {
+      if (!box) continue;
+      top = Math.min(top, box.y);
+      bottom = Math.max(bottom, box.y + box.height);
+    }
+    return bottom - top;
+  };
+  await expect.poll(sweptHeight, { timeout: 5000 }).toBeGreaterThan(chartBox.height * 0.7);
 });

@@ -23,7 +23,7 @@ interface CategoryChangeBarRowProps {
  * that needs to interleave per-item content — Home's evidence links — can
  * still share this row's rendering instead of re-implementing it.
  */
-export function CategoryChangeBarRow({ datum, max, selected, onSelect }: CategoryChangeBarRowProps) {
+function CategoryChangeBarRow({ datum, max, selected, onSelect }: CategoryChangeBarRowProps) {
   const widthPct = (Math.abs(datum.change.minor_units) / max) * 50;
   const isIncrease = datum.change.minor_units >= 0;
   return (
