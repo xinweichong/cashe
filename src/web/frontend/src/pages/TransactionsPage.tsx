@@ -27,7 +27,7 @@ import { useSettings } from '@/hooks/useSettings';
 import { useTrips } from '@/components/plan/planHooks';
 import { useHomeBriefing } from '@/hooks/useBriefing';
 import { api, type Transaction, type TransactionV2, type DailyTotalV2, type BulkTransactionResultItemV2 } from '@/api/client';
-import { formatCurrency, isCreditType, localDayKey } from '@/lib/utils';
+import { formatCurrency, isCreditType, localDayKey, minorToMajor } from '@/lib/utils';
 
 const PAGE_SIZE = 20;
 
@@ -51,7 +51,7 @@ function transactionV2ToLegacy(tx: TransactionV2): Transaction {
     id: tx.id,
     source: tx.source,
     source_id: '',
-    amount: (tx.original.minor_units ?? 0) / 100,
+    amount: minorToMajor(tx.original.minor_units ?? 0, tx.original.currency),
     currency: tx.original.currency,
     exchange_rate: tx.conversion.rate !== null ? Number(tx.conversion.rate) : null,
     merchant: tx.merchant,

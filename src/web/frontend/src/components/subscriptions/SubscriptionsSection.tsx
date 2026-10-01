@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { SelectableRow } from '@/components/ui/selectable-row';
 import { StatusDot } from '@/components/ui/StatusDot';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, minorToMajor } from '@/lib/utils';
 import { useState } from 'react';
 import { SubscriptionForm } from './SubscriptionForm';
 import { FREQUENCY_LABELS } from '@/lib/subscriptionFrequency';
@@ -47,8 +47,8 @@ export function SubscriptionsSection({ selectedSubId, onSelectSub }: Subscriptio
               >
                 <p className="font-medium text-foreground">{change.label} price changed</p>
                 <p className="text-xs text-muted">
-                  {formatCurrency(change.old_amount.minor_units / 100, change.old_amount.currency)} →{' '}
-                  {formatCurrency(change.new_amount.minor_units / 100, change.new_amount.currency)}
+                  {formatCurrency(minorToMajor(change.old_amount.minor_units, change.old_amount.currency), change.old_amount.currency)} →{' '}
+                  {formatCurrency(minorToMajor(change.new_amount.minor_units, change.new_amount.currency), change.new_amount.currency)}
                   {' · '}
                   {change.annualized_impact.minor_units >= 0 ? '+' : '−'}
                   {formatCurrency(Math.abs(change.annualized_impact.minor_units) / 100, change.annualized_impact.currency)}/year

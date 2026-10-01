@@ -295,3 +295,20 @@ it('adds a row to a trip from its context menu when trips are enabled', async ()
   fireEvent.click(await screen.findByRole('button', { name: /Bali/ }));
   await waitFor(() => expect(enlistTransaction).toHaveBeenCalledWith(7, 1));
 });
+
+it('shows a zero-decimal currency at its real size (¥45, not ¥0.45)', async () => {
+  getCategories.mockResolvedValue([]);
+  home.mockResolvedValue({ review_count: 0 });
+  getDailyTotalsV2.mockResolvedValue([]);
+  getTransactionsV2.mockImplementation(async (params?: Record<string, unknown>) =>
+    (params?.offset ?? 0) === 0
+      ? [{ ...txV2(1, 'Lawson Shibuya', 1), original: { minor_units: 45, currency: 'JPY' }, reporting: null,
+          conversion: { status: 'unresolved', rate: null, source: null, quoted_at: null } }]
+      : [],
+  );
+
+  renderPage();
+  await screen.findByText('Lawson Shibuya');
+  expect(screen.getByText(/¥45(?!\.)/)).toBeTruthy();
+  expect(screen.queryByText(/¥0\.45/)).toBeNull();
+});
