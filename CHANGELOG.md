@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Privacy policy and terms of service** — public pages at `/privacy` and `/terms` (reachable signed out, for the login screen and Google's OAuth consent screen), linked from the login screen and Settings → About
+
 ## [3.1.0] - 2026-10-01
 
 A visual and interaction redesign of the web dashboard, following Apple's Human Interface Guidelines for structure and behaviour in cashe's own look ("Direction B"). No data, API or Telegram changes. Plan: `docs/plans/2026-09-30-hig-alignment.md`.

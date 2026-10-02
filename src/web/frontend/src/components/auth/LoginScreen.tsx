@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -77,6 +78,15 @@ export function LoginScreen() {
             </Button>
           </form>
         </div>
+
+        <nav aria-label="Legal" className="flex justify-center gap-4">
+          <Button variant="link" size="sm" className="h-auto min-h-11 p-0 text-muted" asChild>
+            <Link to="/privacy">Privacy</Link>
+          </Button>
+          <Button variant="link" size="sm" className="h-auto min-h-11 p-0 text-muted" asChild>
+            <Link to="/terms">Terms</Link>
+          </Button>
+        </nav>
       </motion.div>
     </div>
   );
