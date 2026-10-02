@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 // Google's OAuth consent screen can link to them.
 
 const EFFECTIVE_DATE = '2 October 2026';
-const CONTACT_EMAIL = 'CONTACT_EMAIL_TODO';
+const CONTACT_EMAIL = 'xwchong@gmail.com';
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
