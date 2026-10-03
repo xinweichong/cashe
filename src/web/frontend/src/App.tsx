@@ -48,6 +48,8 @@ const SettingsPage = lazyRoute(() => import('@/pages/SettingsPage').then(m => m.
 const MerchantsPage = lazyRoute(() => import('@/pages/MerchantsPage').then(m => m.MerchantsPage));
 const OnboardingPage = lazy(() => import('@/pages/OnboardingPage').then(m => ({ default: m.OnboardingPage })));
 const AdminPage = lazy(() => import('@/pages/AdminPage').then(m => ({ default: m.AdminPage })));
+const PrivacyPage = lazy(() => import('@/pages/LegalPage').then(m => ({ default: m.PrivacyPage })));
+const TermsPage = lazy(() => import('@/pages/LegalPage').then(m => ({ default: m.TermsPage })));
 const SetPasswordPage = lazy(() => import('@/pages/SetPasswordPage').then(m => ({ default: m.SetPasswordPage })));
 const DevPreviewPage = import.meta.env.DEV
   ? lazy(() => import('@/dev/DevPreviewPage').then(m => ({ default: m.DevPreviewPage })))
@@ -168,6 +170,9 @@ export default function App() {
               {/* Admin routes bypass the regular user auth flow entirely */}
               <Route path="/admin" element={<AdminPage />} />
               <Route path="/admin/*" element={<AdminPage />} />
+              {/* Public: linked from the login screen and Google's OAuth consent screen */}
+              <Route path="/privacy" element={<PrivacyPage />} />
+              <Route path="/terms" element={<TermsPage />} />
               {/* Dev-only, auth-free visual harness for shared primitives — never registered in a production build */}
               {DevPreviewPage && <Route path="/dev/preview" element={<DevPreviewPage />} />}
               <Route

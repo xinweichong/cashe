@@ -409,6 +409,11 @@ export function SettingsPage() {
           </ListGroup>
         )}
 
+        <ListGroup title="About">
+          <ListRow title="Privacy policy" trailing="chevron" to="/privacy" />
+          <ListRow title="Terms of service" trailing="chevron" to="/terms" />
+        </ListGroup>
+
         <ListGroup title="Account actions">
           <ListRow destructive title="Sign out" onClick={logout} />
         </ListGroup>
