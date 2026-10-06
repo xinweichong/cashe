@@ -4,7 +4,7 @@ import { useAuth } from '@/hooks/useAuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { CasheWordmark, B1_WASH } from '@/components/ui/Brand';
-import { motion } from 'framer-motion';
+import { m } from 'motion/react';
 import { fadeUpVariants } from '@/lib/motionPresets';
 
 export function LoginScreen() {
@@ -28,7 +28,7 @@ export function LoginScreen() {
 
   return (
     <div className="h-dvh overflow-hidden flex items-center justify-center px-4" style={{ background: B1_WASH }}>
-      <motion.div
+      <m.div
         className="relative w-full max-w-sm space-y-8"
         variants={fadeUpVariants}
         initial="initial"
@@ -87,7 +87,7 @@ export function LoginScreen() {
             <Link to="/terms">Terms</Link>
           </Button>
         </nav>
-      </motion.div>
+      </m.div>
     </div>
   );
 }

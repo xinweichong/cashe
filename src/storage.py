@@ -452,10 +452,13 @@ class Storage:
         last_capture_processed_at = self._conn.execute(
             "SELECT MAX(updated_at) FROM source_events WHERE status = 'processed'"
         ).fetchone()[0]
+        # CURRENT_TIMESTAMP is UTC with no zone; say so, or clients read it as local.
+        def utc(value):
+            return value and value.replace(" ", "T") + "+00:00"
         return {
-            "oldest_queued_at": oldest_queued_at,
+            "oldest_queued_at": utc(oldest_queued_at),
             "exhausted_retry_count": exhausted_retry_count,
-            "last_capture_processed_at": last_capture_processed_at,
+            "last_capture_processed_at": utc(last_capture_processed_at),
         }
 
     @_locked
@@ -3122,10 +3125,13 @@ class Storage:
         expected_amount = minor / 100 if minor is not None else None
         with self._conn:
             self._conn.execute(
+                # A linked charge is a billed period: the horizon pass anchors on
+                # schedule_period_date and fails on a missing one.
                 """INSERT INTO upcoming_transactions
-                       (subscription_id, expected_date, expected_amount, matched_transaction_id, status)
-                   VALUES (?, ?, ?, ?, 'matched')""",
-                (sub_id, expected_date, expected_amount, tx_id),
+                       (subscription_id, expected_date, expected_amount, matched_transaction_id, status,
+                        schedule_period_date)
+                   VALUES (?, ?, ?, ?, 'matched', ?)""",
+                (sub_id, expected_date, expected_amount, tx_id, expected_date),
             )
 
     def _pending_planned_charge(self, upcoming_id: int):

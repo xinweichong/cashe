@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { m, AnimatePresence } from 'motion/react';
 import { type Transaction, type DailyTotalV2 } from '@/api/client';
 import { TransactionRow } from './TransactionRow';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -97,7 +97,7 @@ const ListRow = memo(function ListRow({ tx, index, selected, selectable, compact
 }) {
   const row = <TransactionRow tx={tx} onClick={() => onActivate(tx)} selected={selected} selectable={selectable} compact={compact} />;
   return (
-    <motion.div
+    <m.div
       data-tx-row-id={tx.id}
       // Rows sit inside these wrappers, so the hairline is drawn between wrappers.
       className="separator-inset"
@@ -112,7 +112,7 @@ const ListRow = memo(function ListRow({ tx, index, selected, selectable, compact
       }}
     >
       {renderRow && !selectable ? renderRow(tx, row) : row}
-    </motion.div>
+    </m.div>
   );
 });
 

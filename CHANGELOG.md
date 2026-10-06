@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.0] - 2026-10-06
+
+### Added
+
+- **Landing page** — signed-out visitors at `/` now see a public landing page: a hero with moving lines and the capture sources, a product tour of Home, Activity, Plan and Explore beside a pinned phone (pinned above the captions on phones), privacy principles and a sign-in call to action. Sign In opens the login screen at `/login`; other signed-out links still show the login screen in place. Tour screenshots use an invented demo account (`scripts/showcase_server.py`)
+- **Prerendered landing page** — the build renders the landing page to HTML, served to visitors without a session so it paints before the app loads (Lighthouse mobile performance 92, from 82)
+- **Rolling totals** — the spending total on Home and the projection on Plan roll their digits to a new value when it changes
+
+### Changed
+
+- Animation runs on the `motion` package (formerly `framer-motion`), with its features loaded after first paint
+
+### Fixed
+
+- Signing in could occasionally bounce straight back to an empty login screen
+- The daily subscription job failed for any subscription with a charge linked by hand, so it stopped scheduling that subscription's upcoming charges; migration 25 repairs affected rows
+- "Last capture" on Home showed eight hours early in Singapore time
+- Evidence opened from Explore now returns to the same Explore view, not Home
+
 ## [3.1.1] - 2026-10-03
 
 ### Added

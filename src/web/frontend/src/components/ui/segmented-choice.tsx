@@ -1,5 +1,5 @@
 import { useId } from "react"
-import { motion } from "framer-motion"
+import { m } from "motion/react"
 
 import { cn } from "@/lib/utils"
 import { thumbSpring } from "@/lib/motionPresets"
@@ -33,7 +33,7 @@ function SegmentedChoice<T extends string>({ name, value, onValueChange, options
               checked ? "font-semibold text-foreground" : "text-muted hover:text-foreground"
             )}
           >
-            {checked && <motion.span aria-hidden layoutId={`${id}-thumb`} transition={thumbSpring} className={segmentThumbClassName} />}
+            {checked && <m.span aria-hidden layoutId={`${id}-thumb`} transition={thumbSpring} className={segmentThumbClassName} />}
             <input
               type="radio"
               name={name}

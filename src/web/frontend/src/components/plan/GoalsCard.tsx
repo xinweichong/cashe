@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { motion, AnimatePresence } from 'framer-motion';
+import { m, AnimatePresence } from 'motion/react';
 import { X } from 'lucide-react';
 import { api, type GoalProgress } from '@/api/client';
 import { PageCard } from '@/components/ui/cards';
@@ -81,9 +81,9 @@ export function GoalsCard({ onSelect }: { onSelect: (id: number) => void }) {
           {/* Rows render at rest (no stagger entrance); a removed row fades out. */}
           <AnimatePresence>
             {goals.map((g) => (
-              <motion.div key={g.id} exit={{ opacity: 0, transition: { duration: 0.15 } }}>
+              <m.div key={g.id} exit={{ opacity: 0, transition: { duration: 0.15 } }}>
                 <GoalSummaryRow g={g} onSelect={() => onSelect(g.id)} />
-              </motion.div>
+              </m.div>
             ))}
           </AnimatePresence>
         </div>

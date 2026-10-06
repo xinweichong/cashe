@@ -1,7 +1,7 @@
 import { ProfileMenu } from './ProfileMenu';
 import { Suspense } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
-import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
+import { AnimatePresence, m, useReducedMotion } from 'motion/react';
 import { Sidebar } from './Sidebar';
 import { BottomTabs, TAB_BAR_CLEARANCE } from './BottomTabs';
 import { CasheWordmark } from '@/components/ui/Brand';
@@ -36,7 +36,7 @@ export function AppShell() {
         {/* overflow-x-clip, not hidden: a scroll container here would stop NavBar and Toolbar sticking. */}
         <main className={`flex-1 min-w-0 overflow-x-clip ${TAB_BAR_CLEARANCE}`}>
           <AnimatePresence mode="wait" initial={false}>
-            <motion.div
+            <m.div
               key={pageKey}
               variants={shouldReduce ? undefined : pageVariants}
               initial={shouldReduce ? false : 'initial'}
@@ -57,7 +57,7 @@ export function AppShell() {
                   <Outlet />
                 </Suspense>
               </PullToRefresh>
-            </motion.div>
+            </m.div>
           </AnimatePresence>
         </main>
       </div>

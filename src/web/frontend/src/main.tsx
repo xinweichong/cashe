@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import App from './App';
+import App, { preloadLanding } from './App';
+import { prerenderedLanding } from './lib/prerender';
 import './index.css';
 import { applyTextSize, readTextSize } from './lib/textSize';
 
@@ -16,8 +17,12 @@ if (/iPad|iPhone|iPod/.test(navigator.userAgent)) {
   viewport?.setAttribute('content', `${viewport.getAttribute('content')}, maximum-scale=1`);
 }
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>
-);
+// A prerendered landing page stays on screen until its chunk has arrived, so
+// the first render replaces it with the same page instead of a splash.
+(prerenderedLanding ? preloadLanding().catch(() => {}) : Promise.resolve()).then(() => {
+  createRoot(document.getElementById('root')!).render(
+    <StrictMode>
+      <App />
+    </StrictMode>
+  );
+});

@@ -474,6 +474,17 @@ MIGRATIONS = (
     (24, (
         _default_category_types,
     )),
+    (25, (
+        # Charges linked directly to a subscription were inserted without the
+        # schedule_period_date migration 20 introduced, which made the horizon
+        # pass raise for that subscription. Same backfill rule as migration 20.
+        lambda conn: conn.execute(
+            "UPDATE upcoming_transactions SET schedule_period_date = expected_date "
+            "WHERE schedule_period_date IS NULL"
+        ) if conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='upcoming_transactions'"
+        ).fetchone() else None,
+    )),
 )
 
 

@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState, type PointerEvent, type ReactNode } from 'react';
-import { animate, motion, useDragControls, useMotionValue, useReducedMotion, type PanInfo } from 'framer-motion';
+import { animate, m, useDragControls, useMotionValue, useReducedMotion, type PanInfo } from 'motion/react';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { sheetSpring } from '@/lib/motionPresets';
 import { cn } from '@/lib/utils';
@@ -128,7 +128,7 @@ function SwipeRowTouch({ leadingActions = [], trailingActions = [], children }: 
         <>
           <div aria-hidden={side !== 'leading'} className={cn('absolute inset-y-0 left-0 flex', !dragging && !side && 'invisible')}>{actionButtons(leadingActions, side === 'leading')}</div>
           <div aria-hidden={side !== 'trailing'} className={cn('absolute inset-y-0 right-0 flex', !dragging && !side && 'invisible')}>{actionButtons(trailingActions, side === 'trailing')}</div>
-          <motion.div
+          <m.div
             className="relative z-10 touch-pan-y bg-card"
             style={{ x }}
             drag="x"
@@ -143,7 +143,7 @@ function SwipeRowTouch({ leadingActions = [], trailingActions = [], children }: 
             onDragEnd={(e, info) => { setDragging(false); onDragEnd(e, info); }}
           >
             {children}
-          </motion.div>
+          </m.div>
         </>
       )}
     </div>

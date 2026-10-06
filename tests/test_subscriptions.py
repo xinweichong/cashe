@@ -65,6 +65,22 @@ class TestUpcomingGeneration:
         pending = [u for u in upcoming if u["status"] == "pending"]
         assert sorted(u["expected_date"] for u in pending) == ["2026-05-15", "2026-06-15", "2026-07-15"]
 
+    def test_directly_linked_past_charge_anchors_generation(self, storage, sub_id):
+        # A charge linked by hand has a schedule period like any other row, so
+        # the horizon pass treats it as the latest billed period instead of
+        # failing on a missing one (it raised TypeError on max(None, None)).
+        for day in ("2026-03-15", "2026-04-15"):
+            tx = storage.insert_transaction(source="uob_card", source_id=f"spotify-{day}", amount=11.98,
+                                            merchant="Spotify", transaction_date=f"{day}T09:00:00")
+            storage.link_transaction_to_subscription(sub_id, tx)
+        with patch('src.subscriptions.local_now', return_value=datetime(2026, 5, 1)):
+            SubscriptionMatcher(storage).run()
+        upcoming = storage.list_upcoming_transactions(sub_id)
+        assert all(u["schedule_period_date"] for u in upcoming)
+        pending = [u for u in upcoming if u["status"] == "pending"]
+        assert sorted(u["expected_date"] for u in pending) == ["2026-05-15", "2026-06-15", "2026-07-15"]
+        assert all(u["expected_amount"] == 11.98 for u in pending)
+
     def test_does_not_generate_for_cancelled_subscription(self, storage, sub_id):
         storage.update_subscription(sub_id, status="cancelled")
         matcher = SubscriptionMatcher(storage)

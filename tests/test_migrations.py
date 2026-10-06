@@ -13,7 +13,7 @@ def test_migrations_preserve_old_transactions_and_are_idempotent():
     assert conn.execute("SELECT * FROM transactions").fetchall() == [
         (42, "original-id", 1.25, None, None, None, None, None, None, None, None, 1, None, 0)
     ]
-    assert conn.execute("SELECT version FROM schema_migrations").fetchall() == [(1,), (2,), (3,), (4,), (5,), (6,), (7,), (8,), (9,), (10,), (11,), (12,), (13,), (14,), (15,), (16,), (17,), (18,), (19,), (20,), (21,), (22,), (23,), (24,)]
+    assert conn.execute("SELECT version FROM schema_migrations").fetchall() == [(1,), (2,), (3,), (4,), (5,), (6,), (7,), (8,), (9,), (10,), (11,), (12,), (13,), (14,), (15,), (16,), (17,), (18,), (19,), (20,), (21,), (22,), (23,), (24,), (25,)]
     assert conn.execute("SELECT COUNT(*) FROM source_events").fetchone()[0] == 0
     conn.close()
 
@@ -222,4 +222,23 @@ def test_init_db_adds_late_baseline_columns_to_an_old_database(tmp_path):
     old.close()
     conn = init_db(path)
     assert {"color", "type"} <= {row[1] for row in conn.execute("PRAGMA table_info(categories)")}
+    conn.close()
+
+
+def test_linked_charges_without_a_schedule_period_are_backfilled(tmp_path):
+    # Direct links stored before the fix had no schedule_period_date; the
+    # migration gives them their charge date, as migration 20 did.
+    conn = init_db(str(tmp_path / 'user.db'))
+    sub = conn.execute("INSERT INTO subscriptions (merchant, frequency) VALUES ('Gym', 'monthly')").lastrowid
+    conn.execute(
+        "INSERT INTO upcoming_transactions (subscription_id, expected_date, status) VALUES (?, '2026-04-21', 'matched')",
+        (sub,),
+    )
+    conn.execute("DELETE FROM schema_migrations WHERE version = 25")
+    conn.commit()
+
+    migrate(conn)
+
+    row = conn.execute("SELECT schedule_period_date FROM upcoming_transactions").fetchone()
+    assert row[0] == '2026-04-21'
     conn.close()

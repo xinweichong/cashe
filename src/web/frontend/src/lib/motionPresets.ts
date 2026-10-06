@@ -1,4 +1,4 @@
-import type { Variants } from 'framer-motion'
+import type { Variants } from 'motion/react'
 
 // Mirrors --ease-out-expo in index.css.
 export const EASE_OUT_EXPO = [0.16, 1, 0.3, 1] as const
