@@ -452,10 +452,13 @@ class Storage:
         last_capture_processed_at = self._conn.execute(
             "SELECT MAX(updated_at) FROM source_events WHERE status = 'processed'"
         ).fetchone()[0]
+        # CURRENT_TIMESTAMP is UTC with no zone; say so, or clients read it as local.
+        def utc(value):
+            return value and value.replace(" ", "T") + "+00:00"
         return {
-            "oldest_queued_at": oldest_queued_at,
+            "oldest_queued_at": utc(oldest_queued_at),
             "exhausted_retry_count": exhausted_retry_count,
-            "last_capture_processed_at": last_capture_processed_at,
+            "last_capture_processed_at": utc(last_capture_processed_at),
         }
 
     @_locked
