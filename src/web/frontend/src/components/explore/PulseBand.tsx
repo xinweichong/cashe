@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/api/client';
-import { evidenceLink, formatMoney, type SpendingFacts } from '@/api/briefing';
+import { formatMoney, type SpendingFacts } from '@/api/briefing';
+import { useEvidenceLink } from './useEvidenceLink';
 import { StatCard } from '@/components/ui/StatCard';
 import { StatusDot } from '@/components/ui/StatusDot';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -14,6 +15,7 @@ import { formatChange, formatRange } from './format';
  * tile opens the evidence behind it.
  */
 export function PulseBand({ facts }: { facts: SpendingFacts | undefined }) {
+  const evidenceHref = useEvidenceLink();
   const current = facts?.current;
   const { data: daily } = useQuery({
     queryKey: ['explore-daily-totals', current?.start, current?.end],
@@ -70,7 +72,7 @@ export function PulseBand({ facts }: { facts: SpendingFacts | undefined }) {
         subtext={`${formatRange(current.start, current.end)} · ${spentNote}`}
         sparklineData={cumulative}
         sparklineSize={{ width: 80, height: 28 }}
-        href={evidenceLink(current)}
+        href={evidenceHref(current)}
       />
       <StatCard
         label="vs. last month"
@@ -87,7 +89,7 @@ export function PulseBand({ facts }: { facts: SpendingFacts | undefined }) {
         value={current.income ? formatMoney(current.income) : 'None yet'}
         color={current.income ? 'teal' : 'default'}
         subtext={netNote}
-        href={evidenceLink(current, undefined, 'income')}
+        href={evidenceHref(current, undefined, 'income')}
       />
       <BiggestMoverTile facts={facts} />
     </div>
@@ -96,6 +98,7 @@ export function PulseBand({ facts }: { facts: SpendingFacts | undefined }) {
 
 /** The category that moved most against the same days last month. */
 export function BiggestMoverTile({ facts }: { facts: SpendingFacts | undefined }) {
+  const evidenceHref = useEvidenceLink();
   if (!facts) return <Skeleton className="h-[112px] rounded-lg" />;
   const top = facts.category_changes[0];
   return (
@@ -105,7 +108,7 @@ export function BiggestMoverTile({ facts }: { facts: SpendingFacts | undefined }
         ? <span className="inline-flex items-center gap-2 min-w-0"><StatusDot color={getCategoryColor(top.category)} /><span className="truncate">{top.category}</span></span>
         : 'None'}
       subtext={top ? `${formatChange(top.change)} vs. the same days last month` : 'No category changed against last month'}
-      href={top ? evidenceLink(facts.comparison_current, top.category) : undefined}
+      href={top ? evidenceHref(facts.comparison_current, top.category) : undefined}
     />
   );
 }
