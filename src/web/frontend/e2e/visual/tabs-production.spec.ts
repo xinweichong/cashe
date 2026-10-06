@@ -28,31 +28,22 @@ async function tealOf(page: Page) {
   });
 }
 
-test('Explore route selector marks the current view with the Tabs active recipe', async ({ page }) => {
+// Explore's Spending patterns and Insights merged into one dashboard
+// (2026-09-25), which removed the route selector and the Insight period
+// tabs. Its pattern modes are now the same-panel switch to hold to U05.
+test('Explore pattern modes are a labelled tab set that drives ?mode=', async ({ page }) => {
   await mockShell(page, true);
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto('/explore/insights');
-  const nav = page.getByRole('navigation', { name: 'Explore views' });
-  const current = nav.getByRole('link', { name: 'Insights' });
-  await expect(current).toHaveAttribute('aria-current', 'page');
-  expect(await current.evaluate((el) => getComputedStyle(el).color)).toBe(await tealOf(page));
-  const other = nav.getByRole('link', { name: 'Spending patterns' });
-  expect(await other.evaluate((el) => getComputedStyle(el).color)).not.toBe(await tealOf(page));
-});
-
-test('Analytics (Explore Insights) period switch is a labelled tab set', async ({ page }) => {
-  await mockShell(page, true);
-  await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto('/explore/insights');
-  const list = page.getByRole('tablist', { name: 'Insight period' });
+  await page.goto('/explore');
+  const list = page.getByRole('tablist', { name: 'Explore patterns' });
   await expect(list).toBeVisible();
-  await list.getByRole('tab', { name: 'Weekly' }).click();
-  await expect(list.getByRole('tab', { name: 'Weekly' })).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByRole('tabpanel', { name: 'Weekly' })).toContainText('Archived AI text');
-  await expect(page.getByRole('tablist', { name: 'Comparison range' })).toBeVisible();
+  await expect(list.getByRole('tab', { name: 'Over time' })).toHaveAttribute('aria-selected', 'true');
+  await list.getByRole('tab', { name: 'By category' }).click();
+  await expect(list.getByRole('tab', { name: 'By category' })).toHaveAttribute('aria-selected', 'true');
+  await expect(page).toHaveURL(/[?&]mode=by-category/);
   await page.mouse.move(0, 0);
   await page.waitForTimeout(400);
-  const daily = list.getByRole('tab', { name: 'Daily' });
-  expect(await daily.evaluate((el) => getComputedStyle(el).color)).not.toBe(await tealOf(page));
-  await page.screenshot({ path: 'e2e/screenshots/tabs-analytics-insights.png' });
+  const inactive = list.getByRole('tab', { name: 'Over time' });
+  expect(await inactive.evaluate((el) => getComputedStyle(el).color)).not.toBe(await tealOf(page));
+  await page.screenshot({ path: 'e2e/screenshots/tabs-explore-patterns.png' });
 });
