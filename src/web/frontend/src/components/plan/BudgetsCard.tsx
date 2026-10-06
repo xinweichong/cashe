@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { motion, AnimatePresence } from 'framer-motion';
+import { m, AnimatePresence } from 'motion/react';
 import { api, type BudgetProgressV2 } from '@/api/client';
 import { PageCard } from '@/components/ui/cards';
 import { Button } from '@/components/ui/button';
@@ -100,9 +100,9 @@ export function BudgetsCard({ onSelect }: { onSelect: (id: number) => void }) {
           {/* Rows render at rest (no stagger entrance); a removed row fades out. */}
           <AnimatePresence>
             {progress.map((b) => (
-              <motion.div key={b.id} exit={{ opacity: 0, transition: { duration: 0.15 } }}>
+              <m.div key={b.id} exit={{ opacity: 0, transition: { duration: 0.15 } }}>
                 <BudgetSummaryRow b={b} onSelect={() => onSelect(b.id)} />
-              </motion.div>
+              </m.div>
             ))}
           </AnimatePresence>
         </div>

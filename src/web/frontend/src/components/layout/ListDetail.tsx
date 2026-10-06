@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type PointerEvent, type ReactNode } from 'react';
-import { AnimatePresence, animate, motion, useDragControls, useMotionValue, useReducedMotion, useTransform, type PanInfo } from 'framer-motion';
+import { AnimatePresence, animate, m, useDragControls, useMotionValue, useReducedMotion, useTransform, type PanInfo } from 'motion/react';
 import { useIsPhone } from '@/hooks/useIsPhone';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { useListKeyboard } from '@/hooks/useListKeyboard';
@@ -104,7 +104,7 @@ export function ListDetail({ list, detail, onClose, emptyDetail, onDeleteSelecte
   return (
     <StackContext.Provider value={{ back, label: backLabel }}>
       <div className={isPhone ? 'relative' : inspector ? 'flex min-h-0 items-start' : cn('flex min-h-0', viewportHeight)}>
-        <motion.section
+        <m.section
           ref={listRef}
           aria-label={listLabel}
           aria-hidden={covered ? true : undefined}
@@ -115,10 +115,10 @@ export function ListDetail({ list, detail, onClose, emptyDetail, onDeleteSelecte
             : 'w-[22rem] shrink-0 overflow-y-auto overscroll-contain border-r-[0.5px] border-separator lg:w-[24rem]'}
         >
           {list}
-        </motion.section>
+        </m.section>
         <AnimatePresence initial={false} custom={ownPop}>
           {detail && (
-            <motion.section
+            <m.section
               key="detail"
               aria-label={detailLabel}
               className={isPhone
@@ -144,7 +144,7 @@ export function ListDetail({ list, detail, onClose, emptyDetail, onDeleteSelecte
               onDragEnd={onDragEnd}
             >
               {detail}
-            </motion.section>
+            </m.section>
           )}
         </AnimatePresence>
         {!detail && !isPhone && !inspector && (

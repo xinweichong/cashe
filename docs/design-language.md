@@ -496,6 +496,12 @@ Current registry (paths relative to `src/web/frontend/src/`):
 | Navigation stack and split view (P6, P7) | `components/layout/ListDetail.tsx`, `stackContext.ts` (`useStackBack`), `hooks/useListKeyboard.ts` | One component for every list with details, where the detail is a route. On a phone the detail is pushed over the inert, still-mounted list (which shifts −30% and dims). Back comes from `useStackBack`, the browser, or an edge swipe in the home-screen app. On md+ the list and detail are side-by-side regions with Mac list keys. Replaced `SlideOver`, `DrillSheet`, `PhoneScreen`, `useDrill`, `EdgeGrip` and `useDragDismiss`, all removed in step 7 once the four tabs had migrated. |
 | Overlay history | `hooks/useHistoryEntry.ts` | Used by `TaskSheet`: Back closes the overlay, and a refused close (an unsaved form) restores the entry. |
 
+**Approved 2026-10-06 (UI polish proposal).**
+
+| Role | Owner | Use |
+|---|---|---|
+| Rolling money figure | `components/ui/AnimatedMoney.tsx`: `AnimatedMoney` | The `SpectrumCard` value on Home and Plan only, one per screen. Takes a `Money` and formats it with `formatMoney`. Digits roll to a new value with `thumbSpring` when it changes after mount; mounting never animates, and reduced motion jumps. Screen readers get only the final value through a polite live region. Not for lists, rows or totals that change while the viewer edits them. |
+
 Still not shared: a common category label (ActivityRowShell and Finance keep their own), and a public calendar date-cell primitive (Plan keeps one in-file recipe). Existing examples are references, not permission to clone them.
 
 Layout/width, content and documented semantic colour may vary by caller. New fills, radii, selection styles, motion variants or arbitrary component sizing need a shared documented owner, not accumulating `className` overrides. Keep role distinctions: read-only badges, multi-select filters, single-choice form controls, calendar dates and tabs must not be collapsed into one misleading semantic control.
@@ -820,7 +826,7 @@ Voice rules apply (§8): past-tense, period, no exclamation marks, no "Successfu
 
 ## 14 · Motion
 
-Source of truth for presets: [`src/lib/animations.tsx`](../src/web/frontend/src/lib/animations.tsx).
+Source of truth for presets: [`src/lib/motionPresets.ts`](../src/web/frontend/src/lib/motionPresets.ts). Motion is the `motion` package (`motion/react`, formerly `framer-motion`); `App.tsx` wraps the app in `LazyMotion strict` with `domMax` loaded after first paint, so components use `m.*`, never `motion.*`.
 
 ### 14.1 Presets
 
@@ -833,7 +839,7 @@ Source of truth for presets: [`src/lib/animations.tsx`](../src/web/frontend/src/
 | `fadeUpVariants` | gentle in, 0.12s ease-in out | Form expands, card entrances |
 | `fadeVariants` | 0.15s in, 0.1s out | Reduced-motion stand-in for slides |
 | `staggerContainer/ItemVariants` | 0.04s children | Lists — cap staggering at 10 items (`STAGGER_LIMIT`) |
-| `AnimatedCurrency` | 0.7s ease-out count-up | Hero numerics only — one count-up per page |
+| `AnimatedMoney` | `thumbSpring` digit roll on change, none on mount | Spectrum card money only — one per page (§7.0) |
 
 ### 14.2 Rules
 
@@ -896,4 +902,4 @@ The application follows the system light/dark preference by default. Profile →
 
 Dark muted text is now `#A8A1B5`. Light surfaces use background `#F6F5F8`, card `#FFFFFF`, foreground `#201C2C`, muted `#625C70`, and interactive teal `#007A63`. Brand gradients retain their spectrum and use dark `--color-on-brand` text. Primary and muted tokens meet 4.5:1 against neutral background/card/elevated surfaces in both themes; this is not a whole-interface accessibility certification. Category colors, opacity variants, charts, enlarged text, and device layouts still require rendered review.
 
-Charts consume `useChartTheme()` from `lib/chartTheme.ts`: axis, tooltip, cursor, legend, tracks, and text use centralized explicit hex colors for each theme. Never hardcode those colors in chart components. Framer Motion follows reduced-motion preference globally; CSS animations and transitions are suppressed when requested.
+Charts consume `useChartTheme()` from `lib/chartTheme.ts`: axis, tooltip, cursor, legend, tracks, and text use centralized explicit hex colors for each theme. Never hardcode those colors in chart components. Motion follows reduced-motion preference globally; CSS animations and transitions are suppressed when requested.

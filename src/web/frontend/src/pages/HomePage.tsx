@@ -8,6 +8,7 @@ import { StatusDot } from '@/components/ui/StatusDot';
 import { ListGroup, ListRow } from '@/components/ui/list';
 import { NavBar } from '@/components/ui/nav-bar';
 import { SpectrumCard, SpectrumCardSkeleton } from '@/components/ui/SpectrumCard';
+import { AnimatedMoney } from '@/components/ui/AnimatedMoney';
 import { LoadFailed, RetryLink } from '@/components/ui/LoadFailed';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ProfileMenu } from '@/components/layout/ProfileMenu';
@@ -117,7 +118,7 @@ export function HomePage() {
       <SpectrumCard
         label={monthName(facts.current.start)}
         meta={spending_target ? `Budget ${formatMoney(spending_target.target)}` : 'So far'}
-        value={formatMoney(facts.current.spending)}
+        value={<AnimatedMoney value={facts.current.spending} />}
         caption={spendingCaption}
         progress={spending_target && spending_target.target.minor_units > 0 ? facts.current.spending.minor_units / spending_target.target.minor_units : undefined}
         progressLabel="Budget used"

@@ -1,4 +1,4 @@
-import { useReducedMotion } from 'framer-motion';
+import { useReducedMotion } from 'motion/react';
 import { useTheme } from '@/hooks/useTheme';
 import type { CSSProperties } from 'react';
 

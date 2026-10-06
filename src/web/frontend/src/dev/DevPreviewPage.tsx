@@ -14,6 +14,7 @@ import { PALETTE } from '@/lib/utils';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ListGroup, ListRow } from '@/components/ui/list';
 import { SpectrumCard } from '@/components/ui/SpectrumCard';
+import { AnimatedMoney } from '@/components/ui/AnimatedMoney';
 import { Toolbar, ToolbarAction } from '@/components/ui/toolbar';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
@@ -148,6 +149,7 @@ export function DevPreviewPage() {
 // so Playwright can capture them in both themes without app data.
 function DirectionBSheet() {
   const [tab, setTab] = useState('month');
+  const [spent, setSpent] = useState(99_950);
   return (
     <section data-testid="section-direction-b" className="space-y-6">
       <h2 className="font-display text-lg font-semibold">Direction B owners</h2>
@@ -156,6 +158,10 @@ function DirectionBSheet() {
         <SpectrumCard label="September" meta="Budget S$3,000" value="S$2,184.30" caption="S$815.70 left" progress={0.72} progressLabel="Budget used" />
         <SpectrumCard label="Next 30 days" value="S$184.20" caption="9 charges · 2 unpriced" status="estimated" />
         <SpectrumCard label="September" value="S$2,184.30" caption="3 foreign amounts not converted yet" progress={0.72} status="partial" />
+      </div>
+      <div className="max-w-xs space-y-2" data-testid="animated-money-sample">
+        <SpectrumCard label="October" value={<AnimatedMoney value={{ minor_units: spent, currency: 'SGD' }} />} valueSuffix="so far" caption="Rolls to the new total" />
+        <Button variant="outline" size="sm" onClick={() => setSpent(s => s + 1_250)}>Add S$12.50</Button>
       </div>
       <div className="max-w-md" data-testid="list-sample">
         <ListGroup title="Grouped list" footer="Rows: navigation, value, selected, disabled, destructive.">

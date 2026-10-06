@@ -3,7 +3,7 @@ import { NavBar } from '@/components/ui/nav-bar';
 import { useIsPhone } from '@/hooks/useIsPhone';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useQueryClient, useMutation, useQuery } from '@tanstack/react-query';
-import { motion, AnimatePresence } from 'framer-motion';
+import { m, AnimatePresence } from 'motion/react';
 import { PageCard } from '@/components/ui/cards';
 import { CategoryColorPicker, CategoryIconPicker } from '@/components/categories/CategoryPickers';
 import { Button } from '@/components/ui/button';
@@ -435,7 +435,7 @@ export function SettingsPage() {
               const learned = overridesByCategory.get(cat.name)?.length ?? 0;
               const keywordCount = cat.keywords?.split(',').filter((k) => k.trim()).length ?? 0;
               return (
-                <motion.div key={cat.name} exit={{ opacity: 0, transition: { duration: 0.15 } }}>
+                <m.div key={cat.name} exit={{ opacity: 0, transition: { duration: 0.15 } }}>
                   <ListRow
                     leading={
                       <span
@@ -456,7 +456,7 @@ export function SettingsPage() {
                     onClick={() => startEdit(cat)}
                     aria-label={`Edit ${cat.name}`}
                   />
-                </motion.div>
+                </m.div>
               );
             })}
           </AnimatePresence>

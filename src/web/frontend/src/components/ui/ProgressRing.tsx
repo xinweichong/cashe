@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { motion } from 'framer-motion';
+import { m } from 'motion/react';
 import { springs } from '@/lib/motionPresets';
 
 // A circular progress track. `children` are SVG nodes drawn on top (e.g. a
@@ -27,7 +27,7 @@ export function ProgressRing({ percent, color, size, radius, strokeWidth, track 
     <svg width={size} height={size} className="shrink-0" {...svgProps}>
       <circle cx={centre} cy={centre} r={radius} fill="none" stroke={track} strokeWidth={strokeWidth} />
       {animated
-        ? <motion.circle {...arc} initial={{ strokeDashoffset: circumference }} animate={{ strokeDashoffset: offset }} transition={springs.gentle} />
+        ? <m.circle {...arc} initial={{ strokeDashoffset: circumference }} animate={{ strokeDashoffset: offset }} transition={springs.gentle} />
         : <circle {...arc} strokeDashoffset={offset} />}
       {children}
     </svg>

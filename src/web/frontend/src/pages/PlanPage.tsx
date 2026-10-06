@@ -11,6 +11,7 @@ import { ListGroup, ListRow } from '@/components/ui/list';
 import { NavBar } from '@/components/ui/nav-bar';
 import { SegmentedChoice } from '@/components/ui/segmented-choice';
 import { SpectrumCard, SpectrumCardSkeleton } from '@/components/ui/SpectrumCard';
+import { AnimatedMoney } from '@/components/ui/AnimatedMoney';
 import { DetailHeader } from '@/components/ui/detail-panel';
 import { PageCard } from '@/components/ui/cards';
 import { useIsDesktop } from '@/hooks/useIsDesktop';
@@ -142,7 +143,7 @@ function ProjectionMonth() {
       <SpectrumCard
         label={`${month} projection`}
         meta="Recorded so far"
-        value={formatMoney(projected ?? data.recorded_actual)}
+        value={<AnimatedMoney value={projected ?? data.recorded_actual} />}
         caption={projected
           ? target ? `${gap} ${over ? 'over' : 'under'} your ${formatMoney(target)} target` : 'Projected for the month · no monthly target set'
           : 'A projection needs about 4 weeks of history'}

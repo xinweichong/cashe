@@ -1,6 +1,6 @@
 import * as React from "react"
 import * as TabsPrimitive from "@radix-ui/react-tabs"
-import { motion } from "framer-motion"
+import { m } from "motion/react"
 
 import { cn } from "@/lib/utils"
 import { thumbSpring } from "@/lib/motionPresets"
@@ -71,7 +71,7 @@ const TabsTrigger = React.forwardRef<
       className={cn(tabTriggerBase, "data-[state=active]:font-semibold data-[state=active]:text-foreground", className)}
       {...props}
     >
-      {active && <motion.span aria-hidden layoutId={`${thumb.id}-thumb`} transition={thumbSpring} className={segmentThumbClassName} />}
+      {active && <m.span aria-hidden layoutId={`${thumb.id}-thumb`} transition={thumbSpring} className={segmentThumbClassName} />}
       {children}
     </TabsPrimitive.Trigger>
   )

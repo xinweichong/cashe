@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { m, AnimatePresence } from 'motion/react';
 import { CasheWordmark } from '@/components/ui/Brand';
 import { useCurrentUser, useInvalidateCurrentUser } from '@/hooks/useCurrentUser';
 import { api } from '@/api/client';
@@ -127,7 +127,7 @@ export function OnboardingPage() {
         {/* Step card */}
         <div className="rounded-hero bg-card p-6">
           <AnimatePresence mode="wait">
-            <motion.div
+            <m.div
               key={currentStep}
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
@@ -135,7 +135,7 @@ export function OnboardingPage() {
               transition={{ duration: 0.2 }}
             >
               {renderStep()}
-            </motion.div>
+            </m.div>
           </AnimatePresence>
         </div>
 

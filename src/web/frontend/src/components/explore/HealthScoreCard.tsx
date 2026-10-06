@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { m } from 'motion/react';
 import { useQuery } from '@tanstack/react-query';
 import { briefingApi, formatMoney } from '@/api/briefing';
 import { PageCard } from '@/components/ui/cards';
@@ -141,7 +141,7 @@ export function HealthScoreCard() {
                 <span className="text-sm font-semibold tabular-nums" style={{ color }}>{pillar.score}/{pillar.max}</span>
               </div>
               <div className="h-1.5 rounded-full bg-foreground/10 overflow-hidden">
-                <motion.div
+                <m.div
                   className="h-full rounded-full"
                   style={{ backgroundColor: color }}
                   initial={{ width: 0 }}

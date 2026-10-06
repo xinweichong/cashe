@@ -1,7 +1,7 @@
 import {
   useCallback, useRef, useState,
 } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, m } from 'motion/react';
 import { ToastContext } from '@/hooks/useToastContext';
 
 const DISMISS_MS = 3000;
@@ -21,7 +21,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       {children}
       <AnimatePresence mode="wait">
         {toast && (
-          <motion.div
+          <m.div
             key="toast"
             role="status"
             aria-live="polite"
@@ -31,7 +31,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
             className="fixed z-[60] bottom-[calc(80px+env(safe-area-inset-bottom))] left-1/2 -translate-x-1/2 md:bottom-6 md:left-auto md:right-6 md:translate-x-0 px-4 py-2.5 rounded-md bg-card-elev border border-border shadow-elev-md text-sm text-foreground"
           >
             {toast.message}
-          </motion.div>
+          </m.div>
         )}
       </AnimatePresence>
     </ToastContext.Provider>

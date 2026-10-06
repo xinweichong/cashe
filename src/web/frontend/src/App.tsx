@@ -1,4 +1,4 @@
-import { MotionConfig } from 'framer-motion';
+import { LazyMotion, MotionConfig } from 'motion/react';
 import { ThemeProvider } from '@/hooks/ThemeProvider';
 import { lazy, Suspense, useEffect, useState, type ComponentType } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
@@ -15,6 +15,8 @@ import { setCategoryColors } from '@/lib/utils';
 import { ToastProvider } from '@/components/ui/toast';
 import { useSettings } from '@/hooks/useSettings';
 import { useCategories } from '@/hooks/useCategories';
+
+const loadMotionFeatures = () => import('@/lib/motionFeatures').then(r => r.default);
 
 // A lazy route that can start downloading before it renders. If its chunk
 // has already arrived when a route mounts, it renders directly instead of
@@ -160,6 +162,7 @@ function AppContent() {
 
 export default function App() {
   return (
+    <LazyMotion features={loadMotionFeatures} strict>
     <MotionConfig reducedMotion="user">
     <ThemeProvider>
     <QueryClientProvider client={queryClient}>
@@ -190,5 +193,6 @@ export default function App() {
     </QueryClientProvider>
     </ThemeProvider>
     </MotionConfig>
+    </LazyMotion>
   );
 }
