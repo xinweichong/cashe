@@ -91,6 +91,7 @@ def create_dashboard_app(
     host_base_url: str = "",
     llm_service=None,
     timezone: str = DEFAULT_TIMEZONE,
+    static_dist: str | None = None,
 ) -> FastAPI:
     app = FastAPI(title="Expense Tracker Dashboard")
     app.add_middleware(GZipMiddleware, minimum_size=500)
@@ -1555,7 +1556,7 @@ def create_dashboard_app(
 
     # Serve React SPA
 
-    static_dist = os.path.join(os.path.dirname(__file__), "dist")
+    static_dist = static_dist or os.path.join(os.path.dirname(__file__), "dist")
     if os.path.isdir(static_dist):
         app.mount(
             "/assets",
@@ -1564,13 +1565,25 @@ def create_dashboard_app(
         )
 
         @app.get("/{full_path:path}")
-        async def serve_spa(full_path: str):
+        async def serve_spa(full_path: str, request: Request):
             # Unknown API paths are a 404, not the SPA shell with a 200.
             if full_path == "api" or full_path.startswith("api/"):
                 raise HTTPException(status_code=404, detail="Not found")
+            if full_path == "":
+                return await _root_page(request)
             file_path = os.path.join(static_dist, full_path)
             if os.path.isfile(file_path):
                 return FileResponse(file_path)
             return FileResponse(os.path.join(static_dist, "index.html"))
+
+        # Signed-out visitors to / get the landing page already rendered
+        # (scripts/prerender-landing.mjs), so it paints before any script runs.
+        # The answer depends on the session cookie, so caches must not share it.
+        async def _root_page(request: Request):
+            landing = os.path.join(static_dist, "landing.html")
+            session = request.cookies.get("session")
+            signed_in = bool(session and await _db(verify_session, session))
+            page = "index.html" if signed_in or not os.path.isfile(landing) else "landing.html"
+            return FileResponse(os.path.join(static_dist, page), headers={"Cache-Control": "no-cache", "Vary": "Cookie"})
 
     return app

@@ -48,9 +48,11 @@ const ExploreSignalsPage = lazyRoute(() => import('@/pages/ExploreDetailPages').
 const ExploreHealthPage = lazyRoute(() => import('@/pages/ExploreDetailPages').then(m => m.ExploreHealthPage));
 // The public marketing surface. At `/` its chunk starts downloading while the
 // session check runs, since a signed-out visitor sees it first (~5 KB gzip).
-const loadLanding = () => import('@/landing/LandingPage').then(m => ({ default: m.LandingPage }));
-const landingChunk = window.location.pathname === '/' ? loadLanding() : null;
-const LandingPage = lazy(() => landingChunk ?? loadLanding());
+const LandingPage = lazyRoute(() => import('@/landing/LandingPage').then(m => m.LandingPage));
+if (window.location.pathname === '/') LandingPage.preload().catch(() => {});
+// main.tsx waits for this before replacing a prerendered landing page.
+// eslint-disable-next-line react-refresh/only-export-components
+export const preloadLanding = () => LandingPage.preload();
 const SettingsPage = lazyRoute(() => import('@/pages/SettingsPage').then(m => m.SettingsPage));
 const MerchantsPage = lazyRoute(() => import('@/pages/MerchantsPage').then(m => m.MerchantsPage));
 const OnboardingPage = lazy(() => import('@/pages/OnboardingPage').then(m => ({ default: m.OnboardingPage })));

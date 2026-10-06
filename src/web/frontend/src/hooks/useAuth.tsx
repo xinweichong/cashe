@@ -1,4 +1,5 @@
 import { useState, useEffect, type ReactNode } from 'react';
+import { prerenderedLanding } from '@/lib/prerender';
 import { useQueryClient } from '@tanstack/react-query';
 import { api } from '@/api/client';
 import { AuthContext } from '@/hooks/useAuthContext';
@@ -23,7 +24,9 @@ function broadcastLogout() {
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [loading, setLoading] = useState(true);
+  // A prerendered landing page means the server found no session, so the
+  // landing page renders at once; the ping below still confirms it.
+  const [loading, setLoading] = useState(!prerenderedLanding);
   const queryClient = useQueryClient();
 
   useEffect(() => {
