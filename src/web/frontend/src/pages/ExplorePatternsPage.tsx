@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/api/client';
-import { briefingApi, evidenceLink, formatMoney, type Money, type SpendingFacts } from '@/api/briefing';
+import { briefingApi, formatMoney, type Money, type SpendingFacts } from '@/api/briefing';
 import { Button } from '@/components/ui/button';
 import { StatusDot } from '@/components/ui/StatusDot';
 import { ChoiceChip } from '@/components/ui/choice-chip';
@@ -16,6 +16,7 @@ import { CategoryDonut } from '@/components/charts/CategoryDonut';
 import { CategoryTrendLine } from '@/components/charts/CategoryTrendLine';
 import { IncomeExpenseBar } from '@/components/charts/IncomeExpenseBar';
 import { PulseBand } from '@/components/explore/PulseBand';
+import { useEvidenceLink } from '@/components/explore/useEvidenceLink';
 import { DailyReadCard } from '@/components/explore/DailyReadCard';
 import { WorthALookSummary } from '@/components/explore/WorthALookCard';
 import { HealthSpectrum } from '@/components/explore/HealthScoreCard';
@@ -53,6 +54,7 @@ function useMonthFacts() {
 }
 
 function WhatChanged() {
+  const evidenceHref = useEvidenceLink();
   const [selected, setSelected] = useState<string | null>(null);
   const { data, isError, refetch } = useMonthFacts();
   const drivers = data?.category_changes ?? [];
@@ -76,8 +78,8 @@ function WhatChanged() {
               <span className="text-sm font-medium">{formatChange(selectedDriver.change)} change</span>
             </div>
             <div className="flex gap-6">
-              <Link className="text-teal underline min-h-11 inline-flex items-center" to={evidenceLink(data.comparison_current, selectedDriver.category)}>This period</Link>
-              <Link className="text-teal underline min-h-11 inline-flex items-center" to={evidenceLink(data.previous, selectedDriver.category)}>Previous period</Link>
+              <Link className="text-teal underline min-h-11 inline-flex items-center" to={evidenceHref(data.comparison_current, selectedDriver.category)}>This period</Link>
+              <Link className="text-teal underline min-h-11 inline-flex items-center" to={evidenceHref(data.previous, selectedDriver.category)}>Previous period</Link>
             </div>
           </div>
         </PageCard>
@@ -94,6 +96,7 @@ const FREQUENCY_SENTENCE: Record<string, string> = {
 };
 
 function WhatDroveIt() {
+  const evidenceHref = useEvidenceLink();
   const { data, isError, refetch } = useMonthFacts();
   const top = data?.top_category_driver;
   const freq = top?.frequency_driver;
@@ -123,7 +126,7 @@ function WhatDroveIt() {
           {freq && <p className="text-sm">{FREQUENCY_SENTENCE[freq.classification]}</p>}
           {top.merchant_driver && data && (
             <p className="text-sm text-muted">
-              Biggest mover: <Link className="text-foreground underline" to={merchantProfileLink(top.merchant_driver.merchant)}>{top.merchant_driver.merchant}</Link> ({formatChange(top.merchant_driver.change)}). <Link className="text-teal underline" to={evidenceLink(data.comparison_current, top.category, 'spending', top.merchant_driver.merchant)}>View transactions</Link>
+              Biggest mover: <Link className="text-foreground underline" to={merchantProfileLink(top.merchant_driver.merchant)}>{top.merchant_driver.merchant}</Link> ({formatChange(top.merchant_driver.change)}). <Link className="text-teal underline" to={evidenceHref(data.comparison_current, top.category, 'spending', top.merchant_driver.merchant)}>View transactions</Link>
             </p>
           )}
           {top.one_off_driver && (
@@ -136,6 +139,7 @@ function WhatDroveIt() {
 }
 
 function WhereItWent({ facts }: { facts: SpendingFacts | undefined }) {
+  const evidenceHref = useEvidenceLink();
   const navigate = useNavigate();
   const [selected, setSelected] = useState<string | null>(null);
   const period = facts?.current;
@@ -151,7 +155,7 @@ function WhereItWent({ facts }: { facts: SpendingFacts | undefined }) {
         data={totals}
         selected={selected}
         onSelect={setSelected}
-        onViewTransactions={(category) => period && navigate(evidenceLink(period, category))}
+        onViewTransactions={(category) => period && navigate(evidenceHref(period, category))}
         showLegend
       />
     </QuestionCard>
@@ -159,6 +163,7 @@ function WhereItWent({ facts }: { facts: SpendingFacts | undefined }) {
 }
 
 function SpendingOverTime({ compactChips = false }: { compactChips?: boolean }) {
+  const evidenceHref = useEvidenceLink();
   const [allChips, setAllChips] = useState(false);
   const { data: categories } = useCategories();
   const { data: monthFacts } = useQuery({ queryKey: ['explore-month-facts'], queryFn: () => briefingApi.month() });
@@ -299,11 +304,11 @@ function SpendingOverTime({ compactChips = false }: { compactChips?: boolean }) 
                       label={m.merchant}
                       value={m.total.minor_units}
                       max={Math.max(1, ...dayMerchantsData.map((x) => x.total.minor_units))}
-                      href={evidenceLink(dayPeriod, category, 'spending', m.merchant)}
+                      href={evidenceHref(dayPeriod, category, 'spending', m.merchant)}
                       secondaryHref={merchantProfileLink(m.merchant)}
                     />
                   ))}</QueryState>
-                  <Link className="text-sm text-teal min-h-11 inline-flex items-center" to={evidenceLink(dayPeriod, category)}>All {category} on this day</Link>
+                  <Link className="text-sm text-teal min-h-11 inline-flex items-center" to={evidenceHref(dayPeriod, category)}>All {category} on this day</Link>
                 </div>
               )}
             </div>
@@ -336,6 +341,7 @@ function WhatDoesANormalWeekLookLike() {
 }
 
 function MerchantRanking({ facts }: { facts: SpendingFacts | undefined }) {
+  const evidenceHref = useEvidenceLink();
   const [category, setCategory] = useState('');
   const { data: categories } = useCategories();
   const period = facts?.current;
@@ -363,7 +369,7 @@ function MerchantRanking({ facts }: { facts: SpendingFacts | undefined }) {
       <QueryState data={data} isError={isError} onRetry={() => void refetch()}>{(data) => !data.length ? <p className="text-muted">{category ? `No ${category} spending this month yet.` : 'No spending this month yet.'}</p> :
         data.map(m => <RankedBar key={m.merchant} label={m.merchant} value={m.total.minor_units} max={max}
           color={category ? getCategoryColor(category) : undefined}
-          href={period ? evidenceLink(period, category || undefined, 'spending', m.merchant) : undefined}
+          href={period ? evidenceHref(period, category || undefined, 'spending', m.merchant) : undefined}
           secondaryHref={merchantProfileLink(m.merchant)} />)}</QueryState>
     </PageCard>
   );

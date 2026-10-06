@@ -73,7 +73,8 @@ def build(data_dir: str):
         storage.add_category(name, "", icon=icon, cat_type=cat_type)
     today = local_now()
     for i, (days_ago, merchant, category, amount) in enumerate(SYNTHETIC):
-        when = (today - timedelta(days=days_ago)).replace(hour=12, minute=0, second=0, microsecond=0)
+        # Clamped to this month, so month-to-date views hold every row on the 1st too.
+        when = (today - timedelta(days=min(days_ago, today.day - 1))).replace(hour=12, minute=0, second=0, microsecond=0)
         storage.create_manual_transaction(
             source_id=f"manual_journey{i}", amount=amount,
             transaction_date=when.strftime("%Y-%m-%dT%H:%M:%S"),
