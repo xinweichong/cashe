@@ -1,6 +1,6 @@
 import { MAIN_DESTINATIONS } from '@/lib/navigation';
 import { NavLink } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { m } from 'motion/react';
 import { thumbSpring } from '@/lib/motionPresets';
 import { useAttentionCount } from '@/hooks/useAttentionCount';
 import { cn } from '@/lib/utils';
@@ -42,7 +42,7 @@ export function BottomTabs() {
             >
               {({ isActive }) => (
                 <>
-                  {isActive && <motion.span aria-hidden layoutId="tab-bar-selection" transition={thumbSpring} className="absolute inset-0 -z-10 rounded-[18px] bg-fill-press" />}
+                  {isActive && <m.span aria-hidden layoutId="tab-bar-selection" transition={thumbSpring} className="absolute inset-0 -z-10 rounded-[18px] bg-fill-press" />}
                   <Icon aria-hidden className="h-[22px] w-[22px]" />
                   {/* Tab labels stay put at large text sizes, as on iOS. */}
                   <span className="text-[11px] leading-none">{label}</span>

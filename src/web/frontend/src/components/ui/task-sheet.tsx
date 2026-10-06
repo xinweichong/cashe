@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
-import { animate, motion, useDragControls, useMotionValue, useReducedMotion, type PanInfo } from 'framer-motion';
+import { animate, m, useDragControls, useMotionValue, useReducedMotion, type PanInfo } from 'motion/react';
 import { SheetOverlay, SheetPortal } from '@/components/ui/sheet';
 import { ToolbarAction } from '@/components/ui/toolbar';
 import { useIsPhone } from '@/hooks/useIsPhone';
@@ -155,7 +155,7 @@ function PhoneSheet({ detents, initialDetent, onDismiss, header, children }: {
 
   return (
     <DialogPrimitive.Content asChild>
-      <motion.div
+      <m.div
         data-detent={detent}
         className="sheet-motion-bottom fixed inset-x-0 bottom-0 z-50 flex flex-col rounded-t-hero bg-card-elev px-3 text-foreground shadow-sheet focus:outline-none"
         style={{ height, y }}
@@ -172,7 +172,7 @@ function PhoneSheet({ detents, initialDetent, onDismiss, header, children }: {
           {header}
         </div>
         <div className={cn('flex min-h-0 flex-1 flex-col', detent === 'medium' && 'pb-[45dvh]')}>{children}</div>
-      </motion.div>
+      </m.div>
     </DialogPrimitive.Content>
   );
 }

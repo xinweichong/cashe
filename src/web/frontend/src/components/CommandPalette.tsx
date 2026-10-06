@@ -2,7 +2,7 @@ import { MAIN_DESTINATIONS } from '@/lib/navigation';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { motion } from 'framer-motion';
+import { m } from 'motion/react';
 import { Command } from 'cmdk';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { api } from '@/api/client';
@@ -54,7 +54,7 @@ export function CommandPalette() {
         style={{ boxShadow: 'var(--shadow-glow-teal)', backdropFilter: 'blur(20px)' }}
       >
         <DialogTitle className="sr-only">Command palette</DialogTitle>
-        <motion.div
+        <m.div
           initial={{ opacity: 0, scale: 0.97, y: -8 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.97, y: -8 }}
@@ -111,7 +111,7 @@ export function CommandPalette() {
               )}
             </Command.List>
           </Command>
-        </motion.div>
+        </m.div>
       </DialogContent>
     </Dialog>
   );

@@ -1,4 +1,4 @@
-import { motion, useReducedMotion } from 'framer-motion';
+import { m, useReducedMotion } from 'motion/react';
 import { cn } from '@/lib/utils';
 import { springs } from '@/lib/motionPresets';
 import type { BadgeTone } from '@/components/ui/badge';
@@ -28,7 +28,7 @@ export function ProgressBar({ percent, label, tone = 'saved', className }: Progr
       aria-valuetext={`${rounded}%`}
       className={cn('h-1.5 w-full overflow-hidden rounded-pill bg-foreground/10', className)}
     >
-      <motion.div
+      <m.div
         className={cn('h-full rounded-pill', TONE_FILL[tone])}
         initial={reduceMotion ? false : { width: 0 }}
         animate={{ width: `${Math.min(Math.max(percent, 0), 100)}%` }}

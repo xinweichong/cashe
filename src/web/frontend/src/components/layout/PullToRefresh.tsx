@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, m } from 'motion/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { RefreshCw } from 'lucide-react';
 
@@ -59,7 +59,7 @@ export function PullToRefresh({ children }: { children: React.ReactNode }) {
     >
       <AnimatePresence>
         {(pull > 0 || refreshing) && (
-          <motion.div
+          <m.div
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{
               opacity: refreshing ? 1 : Math.min(pull / TRIGGER, 1),
@@ -72,7 +72,7 @@ export function PullToRefresh({ children }: { children: React.ReactNode }) {
               className={`w-4 h-4 text-teal ${refreshing ? 'animate-spin' : ''}`}
               style={refreshing ? undefined : { transform: `rotate(${pull * 4}deg)` }}
             />
-          </motion.div>
+          </m.div>
         )}
       </AnimatePresence>
       {children}
