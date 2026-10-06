@@ -37,17 +37,20 @@ test('production Plan pairs the month calendar with the agenda on desktop and ke
   await expect(page.getByText(/^Charges on/)).toHaveCount(0);
 });
 
-test('production Plan keeps a week strip with an explicit calendar toggle in the phone timeline', async ({ page }) => {
+test('phone Plan is one screen: Soon lists charges with a calendar toggle, and views switch in place', async ({ page }) => {
+  // Phone quick view (2026-10-06): the projection stays put while Soon,
+  // Budgets, Goals and Subs switch beneath it from the thumb band.
   await page.setViewportSize({ width: 390, height: 844 });
   await mockAuthenticatedPlan(page);
   await page.goto('/plan');
-  // On phone the week strip sits inline in Upcoming (HIG alignment, no drill-in).
-  await expect(page.getByTestId('week-strip')).toBeVisible();
+  await expect(page.getByRole('tablist', { name: 'Plan views' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /Broadband/ })).toBeVisible();
   await expect(page.getByTestId('month-calendar')).toHaveCount(0);
-  await page.getByRole('button', { name: 'View calendar' }).click();
+  await page.getByRole('button', { name: 'Show calendar' }).click();
   await expect(page.getByTestId('month-calendar')).toBeVisible();
   await page.getByRole('button', { name: 'Hide calendar' }).click();
   await expect(page.getByTestId('month-calendar')).toHaveCount(0);
+  expect(await page.evaluate(() => document.documentElement.scrollHeight - window.innerHeight)).toBeLessThanOrEqual(0);
 });
 
 test('selecting a day outside the loaded agenda window fetches its own bounded detail', async ({ page }) => {

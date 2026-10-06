@@ -27,7 +27,7 @@ import { useSettings } from '@/hooks/useSettings';
 import { useTrips } from '@/components/plan/planHooks';
 import { useHomeBriefing } from '@/hooks/useBriefing';
 import { api, type Transaction, type TransactionV2, type DailyTotalV2, type BulkTransactionResultItemV2 } from '@/api/client';
-import { formatCurrency, isCreditType, localDayKey, minorToMajor } from '@/lib/utils';
+import { cn, formatCurrency, isCreditType, localDayKey, minorToMajor } from '@/lib/utils';
 
 const PAGE_SIZE = 20;
 
@@ -444,20 +444,9 @@ export function TransactionsPage() {
     />
   );
 
-  const list = (
-    <div ref={listRef} tabIndex={-1} aria-label="Transactions" className="focus-visible:outline-none">
-      {navBar}
-      {selectionMode && (
-        <Toolbar
-          title={`${selectedIds.size} selected`}
-          trailing={<>
-            <ToolbarAction disabled={!selectedIds.size || bulkCorrect.isPending} onClick={() => setCategoryFor('selection')}>Category</ToolbarAction>
-            <ToolbarAction disabled={!selectedIds.size || bulkCorrect.isPending} onClick={() => setTypeForSelection(true)}>Type</ToolbarAction>
-            <ToolbarAction tone="strong" onClick={toggleSelectionMode} disabled={bulkCorrect.isPending}>Done</ToolbarAction>
-          </>}
-        />
-      )}
-      <div className="space-y-3 px-4 pb-8 pt-1">
+  // Search, filters and the view switch: inline on md+, in the thumb band on a phone.
+  const controls = (
+    <>
         <div className="flex gap-2">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" aria-hidden />
@@ -494,6 +483,24 @@ export function TransactionsPage() {
             { value: 'refund', label: 'Refunds' },
           ]}
         />
+    </>
+  );
+
+  const list = (
+    <div ref={listRef} tabIndex={-1} aria-label="Transactions" className="focus-visible:outline-none">
+      {navBar}
+      {selectionMode && (
+        <Toolbar
+          title={`${selectedIds.size} selected`}
+          trailing={<>
+            <ToolbarAction disabled={!selectedIds.size || bulkCorrect.isPending} onClick={() => setCategoryFor('selection')}>Category</ToolbarAction>
+            <ToolbarAction disabled={!selectedIds.size || bulkCorrect.isPending} onClick={() => setTypeForSelection(true)}>Type</ToolbarAction>
+            <ToolbarAction tone="strong" onClick={toggleSelectionMode} disabled={bulkCorrect.isPending}>Done</ToolbarAction>
+          </>}
+        />
+      )}
+      <div className={cn('space-y-3 px-4 pt-1', isPhone ? 'pb-[120px]' : 'pb-8')}>
+        {!isPhone && controls}
         {lastBulkUndo && (
           <p role="status" className="px-1 text-sm text-muted">
             Updated {lastBulkUndo.ids.length}.{' '}
@@ -522,6 +529,13 @@ export function TransactionsPage() {
           />
         )}
       </div>
+      {/* Phone thumb band (approved 2026-10-06): the list scrolls beneath it,
+          just above the tab bar. Hidden while a detail is pushed over the list. */}
+      {isPhone && selectedId === undefined && (
+        <div className="chrome-frosted fixed inset-x-0 bottom-[calc(68px+env(safe-area-inset-bottom))] z-40 flex flex-col gap-2 border-t-[0.5px] border-separator px-4 pt-2 pb-2">
+          {controls}
+        </div>
+      )}
     </div>
   );
 

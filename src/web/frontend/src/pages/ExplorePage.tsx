@@ -1,6 +1,5 @@
 import { Outlet, useLocation } from 'react-router-dom';
 import { NavBar } from '@/components/ui/nav-bar';
-import { ProfileMenu } from '@/components/layout/ProfileMenu';
 import { useIsPhone } from '@/hooks/useIsPhone';
 
 // Each Explore route's nav bar (P3, 2026-10-01): the index is a tab root with
@@ -14,7 +13,8 @@ export function ExplorePage() {
   const pushed = PUSHED[path];
   return (
     <section>
-      {path === '/explore' && <NavBar large title="Explore" trailing={isPhone ? <ProfileMenu /> : undefined} />}
+      {/* On a phone the index is one screen and carries its own title (PhoneScreen). */}
+      {path === '/explore' && !isPhone && <NavBar large title="Explore" />}
       {pushed && <NavBar title={pushed} back={{ label: 'Explore', to: '/explore' }} />}
       <Outlet />
     </section>

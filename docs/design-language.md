@@ -502,6 +502,15 @@ Current registry (paths relative to `src/web/frontend/src/`):
 |---|---|---|
 | Rolling money figure | `components/ui/AnimatedMoney.tsx`: `AnimatedMoney` | The `SpectrumCard` value on Home and Plan only, one per screen. Takes a `Money` and formats it with `formatMoney`. Digits roll to a new value with `thumbSpring` when it changes after mount; mounting never animates, and reduced motion jumps. Screen readers get only the final value through a polite live region. Not for lists, rows or totals that change while the viewer edits them. |
 
+**Approved 2026-10-06 (phone quick view).** After comparing the HIG redesign with next-level on iPhone, phone tab roots return to one screen each, with colour back on figures. iPad and desktop are unchanged.
+
+| Role | Owner | Use |
+|---|---|---|
+| One-screen phone tab | `components/layout/PhoneScreen.tsx`: `PhoneScreen`, `PhoneSummaryLine` | Home, Plan and Explore below `md`. The large-title `NavBar`, a summary (the spectrum card, then a summary line: a status on the left, a change or count on the right), one view, and the `Tabs` switcher in the thumb band above the tab bar. Only the chosen view mounts. A tall view scrolls inside itself with a bottom fade; the Larger text size scrolls the page instead. |
+| Money colour roles | `lib/moneyTone.ts`: `MONEY_TONE_CLASS`, `changeTone`; `ListRow amountTone` | Tangerine for spend totals, teal for money in or left and spending that went down, coral for spending that went up and overspend, honey for estimates. Per-purchase amounts stay neutral. Never inside the spectrum card. |
+| Category name colour | `getCategoryTextColor` in `lib/utils.ts` | A category's colour mixed 60/40 with the foreground, for category names as text (about 4.5:1 in both themes). Phone rows only (`max-md:`). |
+| Activity thumb band | `pages/TransactionsPage.tsx` | On a phone, search, Filters and the view switch sit in a frosted strip fixed above the tab bar; the list scrolls beneath it. Hidden while a detail is pushed. |
+
 Still not shared: a common category label (ActivityRowShell and Finance keep their own), and a public calendar date-cell primitive (Plan keeps one in-file recipe). Existing examples are references, not permission to clone them.
 
 Layout/width, content and documented semantic colour may vary by caller. New fills, radii, selection styles, motion variants or arbitrary component sizing need a shared documented owner, not accumulating `className` overrides. Keep role distinctions: read-only badges, multi-select filters, single-choice form controls, calendar dates and tabs must not be collapsed into one misleading semantic control.

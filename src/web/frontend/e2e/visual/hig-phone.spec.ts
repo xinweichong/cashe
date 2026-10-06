@@ -68,11 +68,12 @@ test('phone Plan opens a charge as its own page', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Edit estimate' })).toBeVisible();
 });
 
-test('phone Explore opens a section as a pushed page and Back returns to the summary', async ({ page }) => {
+test('phone Explore opens a section as a pushed page and Back returns to the screen', async ({ page }) => {
   await mockAuthenticatedExplore(page);
   await page.setViewportSize(PHONE);
   await page.goto('/explore');
-  await page.getByRole('button', { name: /^By category/ }).click();
+  await page.getByRole('tab', { name: 'Category' }).click();
+  await page.getByRole('button', { name: 'What changed and why' }).click();
   await expect(page).toHaveURL(/section=category/);
   await expect(page.getByRole('heading', { level: 1, name: 'By category' })).toBeVisible();
   await page.goBack();

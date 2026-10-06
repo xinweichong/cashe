@@ -147,6 +147,12 @@ export function getCategoryColor(category: string): string {
   return DEFAULT_CATEGORY_COLORS[category] ?? '#7A7488';
 }
 
+/** A category's colour for text: mixed 60/40 with the foreground so a
+ * category name stays readable (about 4.5:1) in both themes. */
+export function getCategoryTextColor(category: string): string {
+  return `color-mix(in srgb, ${getCategoryColor(category)} 60%, var(--color-foreground))`;
+}
+
 /** Re-exported palette for the category color picker in Settings. */
 export const PALETTE = SPECTRUM_PALETTE;
 
