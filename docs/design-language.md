@@ -769,10 +769,11 @@ A flat table of every token defined in this document, for IDE autocomplete refer
 
 ## 11 · Out of scope (what this doc does not cover)
 
+- **The public landing page (`src/landing/`, approved 2026-10-06).** It is a marketing surface for signed-out visitors and may use Kokonut-derived effects (moving background lines, rotating text) that the app may not. It still uses this doc's colour tokens, type families, `Button`, the wordmark and the spectrum gradient, and respects reduced motion. Nothing in it is precedent for app UI; app code may not import it (ESLint).
 - **Page layouts.** Per-page grid templates, card placements, and information hierarchy live in the application redesign spec.
 - **Backend / API.** This is a pure design language doc. No data model, no endpoints, no parser specs.
 - **Telegram bot UI.** Telegram has its own constraints; only the bot's *copy* needs to follow the voice rules here.
-- **Animation implementation.** Spring presets live in [`src/web/frontend/src/lib/animations.tsx`](../src/web/frontend/src/lib/animations.tsx); the rules for *when and how* to use them are in §14.
+- **Animation implementation.** Spring presets live in [`src/web/frontend/src/lib/motionPresets.ts`](../src/web/frontend/src/lib/motionPresets.ts); the rules for *when and how* to use them are in §14.
 
 ---
 
