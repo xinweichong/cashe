@@ -46,3 +46,15 @@ def test_capture_health_never_exposes_payloads_or_identifiers(storage):
     encoded = str(health)
     assert "secret-source-id" not in encoded
     assert "private-payload-detail" not in encoded
+
+
+def test_timestamps_are_marked_as_utc(storage):
+    # SQLite's CURRENT_TIMESTAMP is UTC without a zone; a browser parses that
+    # as local time, which showed "Last capture" eight hours early in SGT.
+    event = storage.record_source_event("apple_wallet", "evidence-1", "{}", timestamp_precision="second")
+    storage.finish_source_event(event["id"], "processed", transaction_id=None)
+    storage.record_source_event("apple_wallet", "evidence-2", "{}", timestamp_precision="second")
+    stored = storage._conn.execute("SELECT MAX(updated_at) FROM source_events").fetchone()[0]
+    health = storage.get_capture_health()
+    assert health["last_capture_processed_at"] == stored.replace(" ", "T") + "+00:00"
+    assert health["oldest_queued_at"].endswith("+00:00")
