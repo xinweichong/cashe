@@ -46,6 +46,11 @@ const TransactionsPage = lazyRoute(() => import('@/pages/TransactionsPage').then
 const ExplorePatternsPage = lazyRoute(() => import('@/pages/ExplorePatternsPage').then(m => m.ExplorePatternsPage));
 const ExploreSignalsPage = lazyRoute(() => import('@/pages/ExploreDetailPages').then(m => m.ExploreSignalsPage));
 const ExploreHealthPage = lazyRoute(() => import('@/pages/ExploreDetailPages').then(m => m.ExploreHealthPage));
+// The public marketing surface. At `/` its chunk starts downloading while the
+// session check runs, since a signed-out visitor sees it first (~5 KB gzip).
+const loadLanding = () => import('@/landing/LandingPage').then(m => ({ default: m.LandingPage }));
+const landingChunk = window.location.pathname === '/' ? loadLanding() : null;
+const LandingPage = lazy(() => landingChunk ?? loadLanding());
 const SettingsPage = lazyRoute(() => import('@/pages/SettingsPage').then(m => m.SettingsPage));
 const MerchantsPage = lazyRoute(() => import('@/pages/MerchantsPage').then(m => m.MerchantsPage));
 const OnboardingPage = lazy(() => import('@/pages/OnboardingPage').then(m => ({ default: m.OnboardingPage })));
@@ -101,14 +106,25 @@ function CategoryColorLoader() {
 
 function AppContent() {
   const { isAuthenticated, loading } = useAuth();
-  const { data: currentUser, isLoading: userLoading } = useCurrentUser();
+  // Signed out, a stray 401 from this query could land after a successful
+  // login and sign the user straight back out, so it waits for auth.
+  const { data: currentUser, isLoading: userLoading } = useCurrentUser({ enabled: isAuthenticated });
   const { isLoading: settingsLoading } = useSettings({ enabled: isAuthenticated });
 
   if (loading || (isAuthenticated && (userLoading || settingsLoading))) {
     return <SplashScreen />;
   }
 
-  if (!isAuthenticated) return <LoginScreen />;
+  // Signed out: the landing page at `/`, and the login screen everywhere else,
+  // so a deep link still signs in to the page it asked for.
+  if (!isAuthenticated) {
+    return (
+      <Routes>
+        <Route path="/" element={<LandingPage />} />
+        <Route path="*" element={<LoginScreen />} />
+      </Routes>
+    );
+  }
 
   // Forced password change gate (before onboarding)
   if (currentUser?.force_password_change) return <SetPasswordPage />;
@@ -144,6 +160,7 @@ function AppContent() {
             <Route path="merchants/:merchantName" element={<MerchantsPage />} />
           </Route>
           <Route path="home" element={<HomePage />} />
+          <Route path="login" element={<Navigate to="/" replace />} />
           <Route path="evidence" element={<EvidencePage />} />
           <Route path="review" element={<ReviewPage />} />
           <Route path="transactions" element={<LegacyRedirect from="/transactions" to="/activity" />} />
