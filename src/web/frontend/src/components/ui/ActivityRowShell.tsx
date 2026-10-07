@@ -1,6 +1,6 @@
 import type { KeyboardEvent, ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { cn, getCategoryColor } from '@/lib/utils';
+import { cn, getCategoryColor, getCategoryTextColor } from '@/lib/utils';
 import { CategoryAvatar } from '@/components/ui/CategoryAvatar';
 
 interface ActivityRowShellProps {
@@ -65,7 +65,8 @@ export function ActivityRowShell({
       <span className="min-w-0 flex-1">
         <span className="block truncate font-medium">{title}</span>
         <span className={cn('block truncate text-xs', muted)}>
-          {metaPrimary}{category && <> · {category}</>}
+          {/* On a phone the category name takes its colour (phone quick view, 2026-10-06). */}
+          {metaPrimary}{category && <> · <span className={cn(!onTeal && 'max-md:text-[color:var(--category-text)]')} style={{ '--category-text': getCategoryTextColor(category) } as React.CSSProperties}>{category}</span></>}
         </span>
       </span>
       <span className="shrink-0 text-right @max-[18rem]:basis-full @max-[18rem]:pl-11 @max-[18rem]:text-left">

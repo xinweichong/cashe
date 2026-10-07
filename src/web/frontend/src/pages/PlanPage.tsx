@@ -15,9 +15,11 @@ import { AnimatedMoney } from '@/components/ui/AnimatedMoney';
 import { DetailHeader } from '@/components/ui/detail-panel';
 import { PageCard } from '@/components/ui/cards';
 import { useIsDesktop } from '@/hooks/useIsDesktop';
-import { cn, formatShortDate, toDateStr } from '@/lib/utils';
+import { cn, formatCurrencyWhole, formatShortDate, toDateStr } from '@/lib/utils';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { SavingsCard } from '@/components/plan/SavingsCard';
+import { SavingsCard, SavingsTiles } from '@/components/plan/SavingsCard';
+import { PhoneScreen } from '@/components/layout/PhoneScreen';
+import { MONEY_TONE_CLASS } from '@/lib/moneyTone';
 import { BudgetsCard } from '@/components/plan/BudgetsCard';
 import { BudgetDetail } from '@/components/plan/BudgetDetail';
 import { GoalsCard } from '@/components/plan/GoalsCard';
@@ -171,6 +173,47 @@ function ProjectionMonth() {
     </div>
   );
 }
+
+// Plan's phone summary (phone quick view, 2026-10-06): the projection card,
+// its composition bar and one line of coloured parts. Qualifications stay in
+// the md+ layout and the projection's own explanation.
+function PhoneProjection() {
+  const { data, isError, refetch } = useMonthForecast();
+  const { data: briefing } = useHomeBriefing();
+  const target = briefing?.spending_target?.target;
+  if (!data) return isError
+    ? <div role="alert"><LoadFailed onRetry={() => void refetch()} /></div>
+    : <SpectrumCardSkeleton />;
+  const projected = data.projected_total;
+  const month = new Date(`${data.period_start}T00:00:00Z`).toLocaleDateString('en-SG', { month: 'long', timeZone: 'UTC' });
+  const over = !!projected && !!target && projected.minor_units > target.minor_units;
+  const gap = projected && target ? formatMoney({ ...target, minor_units: Math.abs(projected.minor_units - target.minor_units) }) : null;
+  const stacked = !!data.remaining_variable_estimate && !!projected && projected.minor_units > 0;
+  const whole = (m: { minor_units: number }) => formatCurrencyWhole(m.minor_units / 100);
+  return (
+    <div className="space-y-2">
+      <SpectrumCard
+        label={`${month} projection`}
+        meta="Recorded so far"
+        value={<AnimatedMoney value={projected ?? data.recorded_actual} />}
+        caption={projected
+          ? target ? `${gap} ${over ? 'over' : 'under'} your ${formatMoney(target)} target` : 'No monthly target set'
+          : 'Needs about 4 weeks of history'}
+        status={projected ? 'estimated' : 'complete'}
+      />
+      {stacked && <>
+        <ProjectionBar data={data} compact />
+        <p className="flex flex-wrap gap-x-3 px-1 text-xs text-muted">
+          <span><span className={cn('font-mono font-medium', MONEY_TONE_CLASS.in)}>{whole(data.recorded_actual)}</span> recorded</span>
+          <span><span className={cn('font-mono font-medium', MONEY_TONE_CLASS.estimate)}>{whole(data.confirmed_commitments)}</span> scheduled</span>
+          <span><span className={cn('font-mono font-medium', MONEY_TONE_CLASS.spend)}>{whole(data.remaining_variable_estimate!)}</span> rest, est.</span>
+        </p>
+      </>}
+    </div>
+  );
+}
+
+type PlanView = 'soon' | 'budgets' | 'goals' | 'subs' | 'trips';
 
 type PlanWindow = '14' | '30' | '90';
 
@@ -533,7 +576,62 @@ export function PlanPage() {
     </div>
   );
 
-  return <ListDetail variant="inspector" listLabel="Plan" backLabel="Plan" list={page} detail={detail} onClose={closePanel} />;
+  // ── Phone: one screen (approved 2026-10-06, phone quick view) ─────────────
+  const phoneViews = !isPhone ? [] : [
+    { value: 'soon' as const, label: 'Soon', panel: (
+      <div className="space-y-3 pb-2">
+        {!report ? (query.isError ? <LoadFailed onRetry={() => void query.refetch()} /> : <Skeleton className="h-64 rounded-group" />)
+          : !report.enabled ? (
+            <ListGroup><ListRow to="/settings" title="Turn on Subscriptions" subtitle="Upcoming charges come from your subscriptions" trailing="chevron" /></ListGroup>
+          ) : (
+            <ListGroup>
+              <ListRow
+                title={`Next ${days} days`}
+                subtitle={`${report.total} ${report.total === 1 ? 'charge' : 'charges'}${report.unknown_count ? ` · ${report.unknown_count} unpriced` : ''}`}
+                amount={formatMoney(report.known_total)}
+                amountTone="estimate"
+              />
+              {report.items.slice(0, 8).map((item) => (
+                <ListRow
+                  key={item.id}
+                  onClick={() => openPanel('charge', item.id)}
+                  title={item.label}
+                  subtitle={formatShortDate(item.date)}
+                  {...(item.amount ? { amount: formatMoney(item.amount), amountTone: 'estimate' as const } : { value: 'Unknown' })}
+                  trailing="chevron"
+                />
+              ))}
+              {report.total > 8 && <ListRow onClick={() => setDays(90)} title={`${report.total - 8} more`} trailing="chevron" />}
+            </ListGroup>
+          )}
+        <ListGroup><ListRow onClick={() => setShowCalendarMobile(!showCalendarMobile)} title={showCalendarMobile ? 'Hide calendar' : 'Calendar'} aria-label={showCalendarMobile ? 'Hide calendar' : 'Show calendar'} trailing="chevron" /></ListGroup>
+        {showCalendarMobile && <MonthCalendar month={calendarMonth} onMonth={setCalendarMonth} selectedDate={selectedDate} onSelect={selectDate} />}
+      </div>
+    ) },
+    ...(settings?.budgets_enabled ? [{ value: 'budgets' as const, label: 'Budgets', panel: <div className="pb-2"><BudgetsCard onSelect={(id) => openPanel('budget', id)} /></div> }] : []),
+    ...(settings?.goals_enabled ? [{ value: 'goals' as const, label: 'Goals', panel: <div className="space-y-3 pb-2"><SavingsTiles /><GoalsCard onSelect={(id) => openPanel('goal', id)} /></div> }] : []),
+    ...(settings?.subscriptions_enabled || settings?.recurring_enabled ? [{ value: 'subs' as const, label: 'Subs', panel: (
+      <div className="space-y-6 pb-2">
+        {settings.subscriptions_enabled && <SubscriptionsSection selectedSubId={panel?.type === 'subscription' ? panel.id : null} onSelectSub={(id) => openPanel('subscription', id)} />}
+        {settings.recurring_enabled && <RecurringCard />}
+      </div>
+    ) }] : []),
+    ...(settings?.trips_enabled ? [{ value: 'trips' as const, label: 'Trips', panel: <div className="pb-2"><TripsCard onSelect={(id) => openPanel('trip', id)} /></div> }] : []),
+  ];
+  const viewParam = search.get('lens');
+  const phoneView: PlanView = phoneViews.some((v) => v.value === viewParam) ? (viewParam as PlanView) : 'soon';
+  const phonePage = isPhone && (
+    <PhoneScreen
+      navBar={<NavBar large title="Plan" trailing={<ProfileMenu />} />}
+      summary={<PhoneProjection />}
+      views={phoneViews}
+      view={phoneView}
+      onViewChange={(next) => updateParams({ lens: next === 'soon' ? null : next })}
+      label="Plan views"
+    />
+  );
+
+  return <ListDetail variant="inspector" listLabel="Plan" backLabel="Plan" list={phonePage || page} detail={detail} onClose={closePanel} />;
 }
 
 function ChargeActions({ item, onDismissed }: { item: UpcomingPlan['items'][number]; onDismissed: () => void }) {
