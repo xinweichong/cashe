@@ -354,7 +354,7 @@ function QuickCategoryPicker({ tx, categories }: { tx: Transaction; categories: 
   const updateTx = useUpdateTransaction();
   if (categories.length === 0) return null;
   return (
-    <div role="group" aria-labelledby={`quick-category-${tx.id}`} className="overflow-x-auto -mx-1 px-1">
+    <div role="group" aria-labelledby={`quick-category-${tx.id}`}>
       <p id={`quick-category-${tx.id}`} className="mb-1.5 text-xs text-muted">Category</p>
       <div className="flex flex-wrap gap-1.5">
         {categories.map((cat) => {
