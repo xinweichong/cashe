@@ -4,7 +4,8 @@
  *
  * Landing page only. Changes from the original: caller-supplied words, a
  * slower step, m.* for LazyMotion, and one pass that settles on the last word
- * (no endless loop). Screen readers get the full list instead of the motion.
+ * (no endless loop), and each word leaves before the next arrives so the two
+ * never overlap. Screen readers get the full list instead of the motion.
  */
 import { AnimatePresence, m, useReducedMotion } from 'motion/react';
 import { useEffect, useState } from 'react';
@@ -24,7 +25,7 @@ export function DynamicText({ words, label, step = 1100 }: { words: string[]; la
   return (
     <span className="relative inline-flex min-w-[9ch] justify-start">
       <span className="sr-only">{label}</span>
-      <AnimatePresence mode="popLayout" initial={false}>
+      <AnimatePresence mode="wait" initial={false}>
         <m.span
           key={current}
           aria-hidden
@@ -32,7 +33,7 @@ export function DynamicText({ words, label, step = 1100 }: { words: string[]; la
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: -24, opacity: 0 }}
-          transition={{ duration: 0.25, ease: 'easeOut' }}
+          transition={{ duration: 0.18, ease: 'easeOut' }}
         >
           {words[current]}
         </m.span>
