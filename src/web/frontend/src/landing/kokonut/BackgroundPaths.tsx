@@ -9,7 +9,7 @@
  * (about 1.5 s of raster work per second); each group now drifts as one
  * compositor layer, drawn once.
  */
-import { memo, useId } from 'react';
+import { memo, useEffect, useId, useRef, useState } from 'react';
 import './BackgroundPaths.css';
 
 type Kind = 'primary' | 'secondary' | 'accent';
@@ -47,8 +47,19 @@ const GROUPS: { kind: Kind; count: number; width: (i: number) => number; groupOp
 
 export const BackgroundPaths = memo(function BackgroundPaths() {
   const id = useId();
+  // Off screen the drift pauses and gives up its layers, so scrolling the
+  // rest of the page composites nothing that can't be seen.
+  const ref = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(true);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver(([entry]) => setVisible(entry.isIntersecting));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
   return (
-    <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
+    <div ref={ref} aria-hidden data-paused={visible ? undefined : ''} className="landing-drift-root pointer-events-none absolute inset-0 overflow-hidden">
       {GROUPS.map(g => (
         <div key={g.kind} className={`landing-drift landing-drift-${g.kind} absolute inset-0`} style={{ opacity: g.groupOpacity }}>
           <svg className="h-full w-full" fill="none" preserveAspectRatio="xMidYMid slice" viewBox="-2400 -800 4800 1600">

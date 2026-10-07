@@ -46,6 +46,8 @@ const STEPS: Step[] = [
   },
 ];
 
+const SCREENS = STEPS.map((step) => step.screen);
+
 // Desktop and iPad: steps scroll on the left while the phone stays pinned on
 // the right. Phones (P2): the same phone pins to the top half and the
 // captions scroll underneath it. The screen follows the step on the reading line.
@@ -73,7 +75,7 @@ export function ProductTour() {
       <div className="grid md:grid-cols-[minmax(0,1fr)_auto] md:gap-16">
         <div className="sticky top-14 z-10 -mx-4 bg-background px-4 pb-4 pt-2 md:static md:col-start-2 md:row-start-1 md:mx-0 md:bg-transparent md:p-0">
           <div className="md:sticky md:top-[12vh]">
-            <Phone screens={STEPS.map(s => s.screen)} active={active} theme={resolved} />
+            <Phone active={active} theme={resolved} />
           </div>
           {/* Captions slide under the pinned phone on small screens. */}
           <div aria-hidden className="pointer-events-none absolute inset-x-0 top-full h-8 bg-gradient-to-b from-background to-transparent md:hidden" />
@@ -105,15 +107,31 @@ export function ProductTour() {
   );
 }
 
-function Phone({ screens, active, theme }: { screens: Step['screen'][]; active: number; theme: 'light' | 'dark' }) {
-  // Load a screen once the tour reaches the step before it, not up front.
-  const [reached, setReached] = useState(0);
-  if (active > reached) setReached(active);
+function Phone({ active, theme }: { active: number; theme: 'light' | 'dark' }) {
+  // Only the current screen and the one fading out are mounted: every extra
+  // screen, even transparent, is another full-size layer to composite on each
+  // scroll frame. The outgoing screen sits on top and fades out over the new one.
+  const [shown, setShown] = useState(active);
+  const [outgoing, setOutgoing] = useState<number | null>(null);
+  if (active !== shown) { setOutgoing(shown); setShown(active); }
+  useEffect(() => {
+    if (outgoing === null) return;
+    const timer = setTimeout(() => setOutgoing(null), 520);
+    return () => clearTimeout(timer);
+  }, [outgoing]);
+  // Decode the next screen ahead of time, off screen, so it is ready on arrival.
+  useEffect(() => {
+    const next = SCREENS[active + 1];
+    if (!next) return;
+    const img = new Image();
+    img.decoding = 'async';
+    img.src = next[theme];
+  }, [active, theme]);
   return (
     <figure className="mx-auto w-fit">
       <div className="relative aspect-[390/844] h-[46svh] rounded-[2.25rem] border border-border bg-card p-1.5 shadow-elev-md md:h-[min(76vh,46rem)] md:rounded-[3rem] md:p-2.5">
         <div className="relative h-full w-full overflow-hidden rounded-[1.9rem] md:rounded-[2.5rem]">
-          {screens.map((screen, i) => i <= reached + 1 && (
+          {SCREENS.map((screen, i) => (i === active || i === outgoing) && (
             <img
               key={screen.alt}
               src={screen[theme]}
@@ -123,7 +141,7 @@ function Phone({ screens, active, theme }: { screens: Step['screen'][]; active: 
               decoding="async"
               className={cn(
                 'absolute inset-0 h-full w-full object-cover object-top transition-opacity duration-500 ease-out motion-reduce:transition-none',
-                i === active ? 'opacity-100' : 'opacity-0',
+                i === active ? 'opacity-100' : 'z-10 opacity-0',
               )}
             />
           ))}

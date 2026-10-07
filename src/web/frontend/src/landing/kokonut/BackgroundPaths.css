@@ -12,6 +12,9 @@
   to { transform: translateY(var(--drift)); }
 }
 
+/* Off screen (BackgroundPaths observes itself): no animation, no layers. */
+.landing-drift-root[data-paused] .landing-drift { animation-play-state: paused; will-change: auto; }
+
 @media (prefers-reduced-motion: reduce) {
   .landing-drift { animation: none; }
 }

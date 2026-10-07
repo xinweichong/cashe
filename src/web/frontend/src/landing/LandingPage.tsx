@@ -12,7 +12,9 @@ import { ProductTour } from './ProductTour';
 export function LandingPage() {
   return (
     <div className="min-h-dvh bg-background text-foreground">
-      <header className="chrome-frosted sticky top-0 z-30 border-b border-border/60">
+      {/* Opaque rather than frosted: a backdrop blur re-renders whatever scrolls
+          under it on every frame, which a 120Hz screen shows as judder. */}
+      <header className="sticky top-0 z-30 border-b border-border/60 bg-background/95">
         <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4 md:px-8">
           <Link to="/"><CasheWordmark size={22} /></Link>
           <Button asChild size="sm"><Link to="/login">Sign In</Link></Button>
