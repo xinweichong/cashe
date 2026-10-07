@@ -17,7 +17,7 @@ import { PageCard } from '@/components/ui/cards';
 import { useIsDesktop } from '@/hooks/useIsDesktop';
 import { cn, formatCurrencyWhole, formatShortDate, toDateStr } from '@/lib/utils';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { SavingsCard, SavingsTiles } from '@/components/plan/SavingsCard';
+import { SavingsTiles } from '@/components/plan/SavingsCard';
 import { PhoneScreen } from '@/components/layout/PhoneScreen';
 import { MONEY_TONE_CLASS } from '@/lib/moneyTone';
 import { BudgetsCard } from '@/components/plan/BudgetsCard';
@@ -147,7 +147,7 @@ function ProjectionMonth() {
         meta="Recorded so far"
         value={<AnimatedMoney value={projected ?? data.recorded_actual} />}
         caption={projected
-          ? target ? `${gap} ${over ? 'over' : 'under'} your ${formatMoney(target)} target` : 'Projected for the month · no monthly target set'
+          ? `${target ? `${gap} ${over ? 'over' : 'under'} your ${formatMoney(target)} target` : 'No monthly target set'}${data.projected_total_low && data.projected_total_high ? ` · likely ${formatCurrencyWhole(data.projected_total_low.minor_units / 100)}–${formatCurrencyWhole(data.projected_total_high.minor_units / 100)}` : ''}`
           : 'A projection needs about 4 weeks of history'}
         status={projected ? 'estimated' : 'complete'}
       />
@@ -156,9 +156,7 @@ function ProjectionMonth() {
           <p className="max-w-prose text-muted">Not enough recorded history yet to project the rest of this month. A projection needs about 4 weeks of spending.</p>
           <ProjectionComparisonFallback data={data} />
         </> : <>
-          <p className="text-muted">Projected for {formatShortDate(data.period_start)}–{formatShortDate(data.period_end)} · {formatMoney(data.recorded_actual)} spent so far</p>
           <ProjectionComposition data={data} />
-          {data.projected_total_low && data.projected_total_high && <p className="text-muted">Likely range {formatMoney(data.projected_total_low)}–{formatMoney(data.projected_total_high)}</p>}
           {!!data.unpriced_commitment_count && <p className="text-warning">{data.unpriced_commitment_count} upcoming charge{data.unpriced_commitment_count > 1 ? 's have' : ' has'} no known amount and {data.unpriced_commitment_count > 1 ? "aren't" : "isn't"} included.</p>}
           {data.reasons.includes('unresolved_conversion') && <p className="text-warning">Some recorded spending this month has an unresolved currency conversion and is excluded from the actual figure above.</p>}
           <details>
@@ -484,18 +482,13 @@ export function PlanPage() {
               {grouped.map(group => <div key={group.date} id={`agenda-date-${group.date}`} className="scroll-mt-24">
                 <h3 className={cn('px-1 pb-1.5 pt-4 text-xs font-semibold first:pt-0', selectedDate === group.date ? 'text-teal' : 'text-muted')}>{formatShortDate(group.date)}</h3>
                 <ol className={cn('overflow-hidden rounded-group bg-card', selectedDate === group.date && 'ring-2 ring-teal/40')}>
-                  {group.items.map(item => isPhone ? (
+                  {/* One compact row per charge; its actions live in the charge's detail (desktop pass, 2026-10-07). */}
+                  {group.items.map(item => (
                     <li key={item.id} className="separator-inset">
                       <ListRow onClick={() => openPanel('charge', item.id)} title={item.label}
+                        selected={panel?.type === 'charge' && panel.id === item.id}
                         subtitle={`${frequencyLabel(item.frequency)}${item.schedule_status === 'possibly_cancelled' ? ' · needs review' : ''}`}
-                        {...(item.amount ? { amount: formatMoney(item.amount) } : { value: 'Amount unknown' })} trailing="chevron" />
-                    </li>
-                  ) : (
-                    <li key={item.id} className="separator-inset space-y-1 p-4">
-                      <div className="flex justify-between gap-4"><p className="font-medium">{item.label}</p><p className="font-mono tabular-nums">{item.amount ? formatMoney(item.amount) : 'Amount unknown'}</p></div>
-                      {chargeMeta(item)}
-                      <ChargeActions item={item} onDismissed={() => { agendaFocusPending.current = true; }} />
-                      {item.subscription_id != null && <Link to={panelHref('subscription', item.subscription_id)} className="inline-flex min-h-11 items-center text-teal">Review or match schedule for {item.label}</Link>}
+                        {...(item.amount ? { amount: formatMoney(item.amount), amountTone: 'estimate' as const } : { value: 'Amount unknown' })} trailing="chevron" />
                     </li>
                   ))}
                 </ol>
@@ -527,16 +520,13 @@ export function PlanPage() {
   ) : (
     <section aria-labelledby="plan-manage-heading" className="space-y-4">
       <h2 id="plan-manage-heading" className="sr-only">Budgets, goals, subscriptions &amp; trips</h2>
-      <div className="grid items-start gap-6 lg:grid-cols-2">
-        <div className="space-y-6">
-          {settings.budgets_enabled && <BudgetsCard onSelect={(id) => openPanel('budget', id)} />}
-          {settings.subscriptions_enabled && <div id="plan-subscriptions" className="scroll-mt-24"><SubscriptionsSection selectedSubId={panel?.type === 'subscription' ? panel.id : null} onSelectSub={(id) => openPanel('subscription', id)} /></div>}
-          {settings.recurring_enabled && <RecurringCard />}
-        </div>
-        <div className="space-y-6">
-          {settings.goals_enabled && <GoalsCard onSelect={(id) => openPanel('goal', id)} />}
-          {settings.trips_enabled && <TripsCard onSelect={(id) => openPanel('trip', id)} />}
-        </div>
+      {/* Two-up on iPad, one column beside the timeline on desktop. */}
+      <div className="grid items-start gap-6 md:grid-cols-2 lg:grid-cols-1">
+        {settings.budgets_enabled && <BudgetsCard onSelect={(id) => openPanel('budget', id)} />}
+        {settings.goals_enabled && <GoalsCard onSelect={(id) => openPanel('goal', id)} />}
+        {settings.subscriptions_enabled && <div id="plan-subscriptions" className="scroll-mt-24"><SubscriptionsSection selectedSubId={panel?.type === 'subscription' ? panel.id : null} onSelectSub={(id) => openPanel('subscription', id)} /></div>}
+        {settings.recurring_enabled && <RecurringCard />}
+        {settings.trips_enabled && <TripsCard onSelect={(id) => openPanel('trip', id)} />}
       </div>
     </section>
   );
@@ -544,13 +534,17 @@ export function PlanPage() {
   const page = (
     <div className="mx-auto max-w-[1200px] md:px-2">
       <NavBar large title="Plan" trailing={isPhone ? <ProfileMenu /> : undefined} />
-      <div className="space-y-8 px-4 pb-8">
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)] lg:items-start">
+      {/* Two columns from lg (desktop pass, 2026-10-07): the month and its
+          charges on the left, the tools on the right, all in the first screen. */}
+      <div className="grid gap-6 px-4 pb-8 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)] lg:items-start">
+        <div className="min-w-0 space-y-6">
           <ProjectionMonth />
-          {settings?.goals_enabled && <SavingsCard />}
+          {timeline}
         </div>
-        {timeline}
-        {manage}
+        <div className="min-w-0 space-y-6">
+          {settings?.goals_enabled && <SavingsTiles />}
+          {manage}
+        </div>
       </div>
     </div>
   );
@@ -568,7 +562,7 @@ export function PlanPage() {
           {!chargeItem ? <p className="text-muted">This charge isn't on the current page of the timeline.</p> : <>
             <p className="pb-1 pt-2 text-center font-mono text-3xl font-medium tabular-nums">{chargeItem.amount ? formatMoney(chargeItem.amount) : 'Amount unknown'}</p>
             {chargeMeta(chargeItem)}
-            <ChargeActions item={chargeItem} onDismissed={closePanel} />
+            <ChargeActions item={chargeItem} onDismissed={() => { agendaFocusPending.current = true; closePanel(); }} />
             {chargeItem.subscription_id != null && <Link to={panelHref('subscription', chargeItem.subscription_id)} className="inline-flex min-h-11 items-center text-teal">Review or match schedule</Link>}
           </>}
         </div>

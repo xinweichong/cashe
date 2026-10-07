@@ -25,7 +25,7 @@ export function PulseBand({ facts }: { facts: SpendingFacts | undefined }) {
 
   if (!facts || !current) {
     return (
-      <div role="status" className="grid grid-cols-2 gap-3 md:gap-4">
+      <div role="status" className="grid grid-cols-2 gap-3 md:gap-4 xl:grid-cols-4">
         <span className="sr-only">Loading…</span>
         <Skeleton className="h-[112px] rounded-group" />
         <Skeleton className="h-[112px] rounded-group" />
@@ -65,13 +65,13 @@ export function PulseBand({ facts }: { facts: SpendingFacts | undefined }) {
       : 'No income recorded this month';
 
   return (
-    <div className="grid grid-cols-2 gap-3 md:gap-4">
+    <div className="grid grid-cols-2 gap-3 md:gap-4 xl:grid-cols-4">
       <StatCard
         label="Spent this month"
         value={formatMoney(current.spending)}
         subtext={`${formatRange(current.start, current.end)} · ${spentNote}`}
         sparklineData={cumulative}
-        sparklineSize={{ width: 80, height: 28 }}
+        sparklineSize={{ width: 52, height: 24 }}
         href={evidenceHref(current)}
       />
       <StatCard

@@ -31,9 +31,10 @@ test('Home counts what needs a look in plain words and links to the other tabs',
   expect(screen.getByText('3 captures to check')).toBeTruthy();
   expect(screen.getByText('Connect Gmail')).toBeTruthy();
   expect(screen.queryByText(/records?$/)).toBeNull();
-  expect(screen.getByRole('link', { name: /Coming up/ }).getAttribute('href')).toBe('/plan');
-  expect(screen.getByRole('link', { name: /Recent activity/ }).getAttribute('href')).toBe('/activity');
-  expect(screen.getByRole('link', { name: /Where it went/ }).getAttribute('href')).toBe('/explore');
+  // The cockpit's panels hand off to the other tabs (desktop pass, 2026-10-07).
+  expect(screen.getByRole('link', { name: 'Plan' }).getAttribute('href')).toBe('/plan');
+  expect(screen.getByRole('link', { name: 'Activity' }).getAttribute('href')).toBe('/activity');
+  expect(screen.getByRole('link', { name: 'Explore' }).getAttribute('href')).toBe('/explore?mode=by-category');
 });
 
 test('Home surfaces all-history review and recurring suggestion counts', async () => {
@@ -61,23 +62,28 @@ test('a failed briefing does not render a genuine zero', async () => {
 test('partial and undated amounts remain visible as uncertainty', async () => {
   vi.mocked(briefingApi.home).mockResolvedValue({ ...home, facts: { ...home.facts, current: { ...period, status: 'partial', unresolved_count: 1 }, undated_count: 1, change: null, category_changes: [] } });
   show(<HomePage />);
-  expect(await screen.findByText(/Known spending so far/)).toBeTruthy();
+  expect(await screen.findByText('Partial')).toBeTruthy();
   expect(screen.getByText('2 records to review')).toBeTruthy();
-  expect(screen.getByText(/Can’t compare with last month/)).toBeTruthy();
+  expect(screen.getByText('Unavailable')).toBeTruthy();
+  expect(screen.getByText('Some records need review first')).toBeTruthy();
 });
 
 test('early in the month Home holds back the month-on-month comparison', async () => {
   vi.mocked(briefingApi.home).mockResolvedValue(home);
   show(<HomePage />);
-  expect(await screen.findByText('Too early in the month to compare with last month.')).toBeTruthy();
-  expect(screen.queryByText(/more than by this date/)).toBeNull();
+  expect(await screen.findByText('Too early')).toBeTruthy();
+  expect(screen.getByText('Compares from day 7')).toBeTruthy();
+  expect(screen.queryByText('Same days last month')).toBeNull();
 });
 
 test('with a week or more to compare, Home states the change against last month', async () => {
   const week = { ...period, start: '2026-09-01', end: '2026-09-10' };
   vi.mocked(briefingApi.home).mockResolvedValue({ ...home, facts: { ...home.facts, as_of: '2026-09-10', current: week, comparison_current: week } });
   show(<HomePage />);
-  expect(await screen.findByText('$5.00 more than by this date in August.')).toBeTruthy();
+  expect(await screen.findByText('vs August')).toBeTruthy();
+  expect(screen.getByText('$5.00')).toBeTruthy();
+  expect(screen.getByLabelText('up')).toBeTruthy();
+  expect(screen.getByText('Same days last month')).toBeTruthy();
 });
 
 test('Home surfaces a recently increased commitment', async () => {
@@ -104,22 +110,22 @@ test('Home shows the last capture time in words', async () => {
 test('Home shows remaining spending against an overall budget', async () => {
   vi.mocked(briefingApi.home).mockResolvedValue({ ...home, spending_target: { target: { minor_units: 100000, currency: 'SGD' }, remaining: { minor_units: 30000, currency: 'SGD' } } });
   show(<HomePage />);
-  expect(await screen.findByText('Budget left')).toBeTruthy();
-  expect(screen.getByText('Of $1,000.00 this month')).toBeTruthy();
+  expect(await screen.findByText('$300.00 left')).toBeTruthy();
+  expect(screen.getByText('Budget $1,000.00')).toBeTruthy();
 });
 
 test('Home frames an over-budget spend as a warning, not a safe-to-spend figure', async () => {
   vi.mocked(briefingApi.home).mockResolvedValue({ ...home, spending_target: { target: { minor_units: 100000, currency: 'SGD' }, remaining: { minor_units: -5000, currency: 'SGD' } } });
   show(<HomePage />);
-  expect(await screen.findByText('Over budget')).toBeTruthy();
-  expect(screen.getByText('$50.00 over budget')).toBeTruthy();
+  expect(await screen.findByText('$50.00 over budget')).toBeTruthy();
+  expect(screen.queryByText(/left$/)).toBeNull();
 });
 
 test('without an overall budget, Home offers to set one in Plan', async () => {
   vi.mocked(briefingApi.home).mockResolvedValue({ ...home, spending_target: null });
   show(<HomePage />);
-  expect(await screen.findByText('Not set')).toBeTruthy();
-  expect(screen.queryByText('Budget left')).toBeNull();
+  expect((await screen.findByRole('link', { name: 'Set a monthly budget' })).getAttribute('href')).toBe('/plan');
+  expect(screen.getByText('So far')).toBeTruthy();
 });
 
 test('initial load shows the heading and a labelled skeleton, not a bare message', async () => {
@@ -149,9 +155,12 @@ test('Home leads with the month as its one spectrum card, with budget progress',
   expect(screen.getByRole('progressbar', { name: 'Budget used' }).getAttribute('aria-valuenow')).toBe('1');
 });
 
-test('Coming up counts only the next 7 days and hands the timeline to Plan', async () => {
+test('Coming up lists the next charges as estimates and hands them to Plan', async () => {
   const charge = (id: number, date: string) => ({ id, label: `Charge ${id}`, date, amount: { minor_units: 1000, currency: 'SGD' as const }, subscription_id: id });
-  vi.mocked(briefingApi.home).mockResolvedValue({ ...home, upcoming: [charge(1, '2026-09-08'), charge(2, '2026-09-13'), charge(3, '2026-09-14')] });
+  vi.mocked(briefingApi.home).mockResolvedValue({ ...home, upcoming: [charge(1, '2026-09-08'), charge(2, '2026-09-13'), charge(3, '2026-09-14'), charge(4, '2026-09-15'), charge(5, '2026-09-16')] });
   show(<HomePage />);
-  expect(await screen.findByText('2 charges in the next 7 days')).toBeTruthy();
+  const first = await screen.findByRole('link', { name: /Charge 1/ });
+  expect(first.getAttribute('href')).toBe('/plan');
+  expect(screen.getByRole('link', { name: /Charge 4/ })).toBeTruthy();
+  expect(screen.queryByText('Charge 5')).toBeNull(); // four at most
 });
