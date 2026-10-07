@@ -30,7 +30,7 @@ interface PhoneScreenProps<T extends string> {
 
 // The shell's height on a phone: body pads for the status bar and home
 // indicator (index.css) and main pads 80px for the tab bar (TAB_BAR_CLEARANCE).
-const SCREEN_HEIGHT = 'h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-80px)]';
+export const PHONE_SCREEN_HEIGHT = 'h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-80px)]';
 // At the Larger text size one screen leaves a view only a few rows, so the
 // tab scrolls as a page instead and each view takes its natural height.
 const LARGER_TEXT = '[html[data-text-size=larger]_&]:h-auto [html[data-text-size=larger]_&]:overflow-visible';
@@ -77,7 +77,7 @@ function ViewScroller({ children }: { children: ReactNode }) {
 
 export function PhoneScreen<T extends string>({ navBar, summary, views, view, onViewChange, label, className }: PhoneScreenProps<T>) {
   return (
-    <Tabs value={view} onValueChange={(next) => onViewChange(next as T)} className={cn(SCREEN_HEIGHT, 'flex flex-col overflow-hidden', LARGER_TEXT, className)}>
+    <Tabs value={view} onValueChange={(next) => onViewChange(next as T)} className={cn(PHONE_SCREEN_HEIGHT, 'flex flex-col overflow-hidden', LARGER_TEXT, className)}>
       <div className="shrink-0">{navBar}</div>
       <div className="flex min-h-0 flex-1 flex-col gap-3 px-4">
         {summary && <div className="shrink-0">{summary}</div>}

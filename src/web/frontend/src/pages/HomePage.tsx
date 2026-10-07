@@ -17,6 +17,9 @@ import { StatusDot } from '@/components/ui/StatusDot';
 import { ListGroup, ListRow } from '@/components/ui/list';
 import { NavBar } from '@/components/ui/nav-bar';
 import { SpectrumCard, SpectrumCardSkeleton } from '@/components/ui/SpectrumCard';
+import { StatCard } from '@/components/ui/StatCard';
+import { PageCard } from '@/components/ui/cards';
+import { CategoryAvatar } from '@/components/ui/CategoryAvatar';
 import { AnimatedMoney } from '@/components/ui/AnimatedMoney';
 import { LoadFailed, RetryLink } from '@/components/ui/LoadFailed';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -24,25 +27,13 @@ import { ProfileMenu } from '@/components/layout/ProfileMenu';
 import { useIsPhone } from '@/hooks/useIsPhone';
 import { useHomeBriefing } from '@/hooks/useBriefing';
 
-// Home is "now" (HIG alignment, 2026-10-01; distilled after the v3.1 critique):
-// this month so far as the screen's one spectrum card, what needs a look, and
-// the month's other figures. What's coming belongs to Plan, the record to
-// Activity and patterns to Explore, so Home links to each in one row.
+// Home is "now": this month so far as the screen's one spectrum card, with
+// its figures, trend and category mix, what needs a look, what is coming up
+// and the latest purchases. One screen of views on a phone (HomePhone), the
+// cockpit on iPad and desktop (HomeCockpit).
 
-const COMING_UP_DAYS = 7;
 /** Fewer comparable days than this and a month-on-month change is noise. */
 const MIN_COMPARE_DAYS = 7;
-
-// On a phone the two column wrappers dissolve (display: contents) so each
-// group takes its own order in one stack; from lg they are real columns.
-const COLUMNS = 'flex flex-col gap-6 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)] lg:items-start xl:grid-cols-[minmax(0,1fr)_minmax(0,24rem)]';
-const COLUMN = 'contents lg:flex lg:flex-col lg:gap-6';
-
-function addDays(isoDate: string, days: number): string {
-  const d = new Date(`${isoDate}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().slice(0, 10);
-}
 
 function daysInclusive(start: string, end: string): number {
   return Math.round((Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / 86_400_000) + 1;
@@ -110,41 +101,12 @@ export function HomePage() {
     </div>,
   );
 
-  const { facts, spending_target, freshness, recent, upcoming, upcoming_unknown_count, increased_commitments, capture_issue_count, followup_issue_count, review_count, recurring_suggestion_count } = query.data;
-  const overTarget = !!spending_target && spending_target.remaining.minor_units < 0;
+  const { facts, freshness, increased_commitments, capture_issue_count, followup_issue_count, review_count, recurring_suggestion_count } = query.data;
   const unresolved = facts.current.unresolved_count + facts.undated_count;
-  const netFlowNegative = !!facts.current.recorded_net_flow && facts.current.recorded_net_flow.minor_units < 0;
   const refreshing = query.isFetching;
-  const soonUntil = addDays(facts.as_of, COMING_UP_DAYS);
-  const soon = upcoming.filter((item) => item.date <= soonUntil);
   const sourcesNeedCare = freshness.gmail_needs_reconnection || !freshness.gmail_connected;
-  const amountOrUnknown = (money: Money | null | undefined, unknown: string) => money ? { amount: formatMoney(money) } : { value: unknown };
   const captureItems = capture_issue_count + followup_issue_count;
   const toReview = Math.max(unresolved, review_count);
-  const comparable = !!facts.change && daysInclusive(facts.comparison_current.start, facts.comparison_current.end) >= MIN_COMPARE_DAYS;
-  const changeText = facts.change && `${formatMoneyAbs(facts.change)} ${facts.change.minor_units >= 0 ? 'more' : 'less'} than by this date in ${monthName(facts.previous.start)}`;
-
-  // ── The month: spectrum card and what qualifies it ─────────────────────────
-  const spendingCaption = spending_target
-    ? overTarget ? `${formatMoneyAbs(spending_target.remaining)} over budget` : `${formatMoney(spending_target.remaining)} left`
-    : comparable ? changeText ?? undefined : undefined;
-  const month = (
-    <div className="space-y-2">
-      <SpectrumCard
-        label={monthName(facts.current.start)}
-        meta={spending_target ? `Budget ${formatMoney(spending_target.target)}` : 'So far'}
-        value={<AnimatedMoney value={facts.current.spending} />}
-        caption={spendingCaption}
-        progress={spending_target && spending_target.target.minor_units > 0 ? facts.current.spending.minor_units / spending_target.target.minor_units : undefined}
-        progressLabel="Budget used"
-        status={facts.current.status === 'partial' ? 'partial' : 'complete'}
-      />
-      <div className="px-1 text-sm">
-        <p className="text-muted">{facts.current.status === 'partial' ? 'Known spending so far · some amounts or dates need review.' : facts.current.status === 'indicative' ? 'Spending so far · includes estimated currency conversions.' : 'Spending recorded this month'}</p>
-        <p>{!facts.change ? 'Can’t compare with last month while some records need review.' : comparable ? `${changeText}.` : 'Too early in the month to compare with last month.'}</p>
-      </div>
-    </div>
-  );
 
   // ── Needs a look: only what actually does ──────────────────────────────────
   const needsALook = (
@@ -188,69 +150,98 @@ export function HomePage() {
     </ListGroup>
   );
 
-  // ── This month's other figures ─────────────────────────────────────────────
-  const thisMonth = (
-    <ListGroup title="This month">
-      <ListRow
-        to={withReturn(evidenceLink(facts.current, undefined, 'income'))}
-        title="Income"
-        {...amountOrUnknown(facts.current.income, 'None yet')}
-        trailing="chevron"
-      />
-      <ListRow
-        title={netFlowNegative ? 'Spent more than earned' : 'Left after spending'}
-        subtitle={facts.current.recorded_net_flow ? 'Income minus spending' : facts.current.income ? 'Hidden while records need review' : 'Shows once income is recorded'}
-        {...amountOrUnknown(facts.current.recorded_net_flow && (netFlowNegative ? { ...facts.current.recorded_net_flow, minor_units: -facts.current.recorded_net_flow.minor_units } : facts.current.recorded_net_flow), '—')}
-      />
-      {spending_target ? (
-        <ListRow
-          to="/plan"
-          title={overTarget ? 'Over budget' : 'Budget left'}
-          subtitle={`Of ${formatMoney(spending_target.target)} this month`}
-          amount={formatMoneyAbs(spending_target.remaining)}
-          trailing="chevron"
-        />
-      ) : (
-        <ListRow to="/plan" title="Monthly budget" subtitle="Set one in Plan to track pace" value="Not set" trailing="chevron" />
-      )}
-    </ListGroup>
-  );
-
-  // ── Elsewhere: one row each for Plan, Activity and Explore ─────────────────
-  const latest = recent[0];
-  const elsewhere = (
-    <ListGroup footer={upcoming_unknown_count ? `${plural(upcoming_unknown_count, 'expected charge')} without an amount yet. Upcoming amounts are estimates.` : undefined}>
-      <ListRow
-        to="/plan"
-        title="Coming up"
-        subtitle={soon.length ? `${plural(soon.length, 'charge')} in the next ${COMING_UP_DAYS} days` : `Nothing due in the next ${COMING_UP_DAYS} days`}
-        trailing="chevron"
-      />
-      <ListRow
-        to="/activity"
-        title="Recent activity"
-        subtitle={latest ? `Latest: ${latest.merchant || 'Unnamed'}${latest.date ? ` · ${formatShortDate(latest.date)}` : ''}` : 'Nothing captured yet'}
-        {...(latest ? amountOrUnknown(latest.amount, 'Amount unresolved') : {})}
-        trailing="chevron"
-      />
-      <ListRow to="/explore" title="Where it went" subtitle="Categories, merchants and trends" trailing="chevron" />
-    </ListGroup>
-  );
-
   return page(<>
     <p className="-mt-1 text-sm text-muted">As of {formatShortDate(facts.as_of)}{refreshing && <span role="status"> · Updating…</span>}</p>
     {query.isError && <p role="alert" className="text-warning">Couldn’t refresh. This may be out of date. <RetryLink onRetry={() => void query.refetch()} /></p>}
-    <div className={COLUMNS}>
-      <div className={COLUMN}>
-        <div className="order-1">{month}</div>
-        <div className="order-3">{thisMonth}</div>
-      </div>
-      <div className={COLUMN}>
-        <div className="order-2">{needsALook}</div>
-        <div className="order-4">{elsewhere}</div>
-      </div>
-    </div>
+    <HomeCockpit data={query.data} needsALook={needsALook} withReturn={withReturn} />
   </>);
+}
+
+// ── iPad and desktop: the cockpit (approved 2026-10-07, desktop pass) ───────
+// Everything the phone shows across Month, Trend and Changed, side by side:
+// the month card and its figures, the daily trend and category mix, then what
+// needs a look, what is coming up and the latest purchases. Two columns on
+// iPad, twelve on desktop.
+
+function HomeCockpit({ data, needsALook, withReturn }: { data: HomeBriefing; needsALook: ReactNode; withReturn: (href: string) => string }) {
+  const navigate = useNavigate();
+  const [day, setDay] = useState<string | null>(null);
+  const { facts, spending_target, upcoming, recent } = data;
+  const period = facts.current;
+  const breakdown = useQuery({
+    queryKey: ['home-category-breakdown', period.start, period.end],
+    queryFn: () => api.getCategoryBreakdownV2(period.start, period.end),
+  });
+  const trend = useQuery({
+    queryKey: ['home-daily-totals', period.start, period.end],
+    queryFn: () => api.getDailyTotalsV2(period.start, period.end),
+  });
+  const overTarget = !!spending_target && spending_target.remaining.minor_units < 0;
+  const netFlow = period.recorded_net_flow;
+  const negative = !!netFlow && netFlow.minor_units < 0;
+  const comparable = !!facts.change && daysInclusive(facts.comparison_current.start, facts.comparison_current.end) >= MIN_COMPARE_DAYS;
+  const totals = breakdown.data ? Object.entries(breakdown.data.by_category).map(([category, amount]) => ({ category, total: amount.minor_units / 100 })) : [];
+  return (
+    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-12 lg:items-stretch">
+      <div className="md:col-span-2 lg:col-span-5">
+        <SpectrumCard
+          className="h-full"
+          label={monthName(period.start)}
+          meta={spending_target ? `Budget ${formatMoney(spending_target.target)}` : 'So far'}
+          value={<AnimatedMoney value={period.spending} />}
+          caption={spending_target
+            ? overTarget ? `${formatMoneyAbs(spending_target.remaining)} over budget` : `${formatMoney(spending_target.remaining)} left`
+            : <Link to="/plan" className="underline underline-offset-2">Set a monthly budget</Link>}
+          progress={spending_target && spending_target.target.minor_units > 0 ? period.spending.minor_units / spending_target.target.minor_units : undefined}
+          progressLabel="Budget used"
+          status={period.status === 'partial' ? 'partial' : 'complete'}
+        />
+      </div>
+      <StatCard className="lg:col-span-2" label="Income" href={withReturn(evidenceLink(period, undefined, 'income'))}
+        value={period.income ? formatMoney(period.income) : 'None yet'} color={period.income ? 'teal' : 'default'} />
+      <StatCard className="lg:col-span-2" label={negative ? 'Spent more than earned' : 'Left after spending'}
+        value={netFlow ? formatMoneyAbs(netFlow) : '—'} color={!netFlow ? 'default' : negative ? 'coral' : 'teal'} />
+      {/* No change means records need review first; a short month means it's too early. */}
+      <StatCard className="md:col-span-2 lg:col-span-3" label={`vs ${monthName(facts.previous.start)}`}
+        value={!facts.change ? 'Unavailable' : comparable ? <span className="inline-flex items-center gap-1"><SignedChange change={facts.change} /></span> : 'Too early'}
+        color={comparable && facts.change ? (facts.change.minor_units > 0 ? 'coral' : 'teal') : 'default'}
+        subtext={!facts.change ? 'Some records need review first' : comparable ? 'Same days last month' : `Compares from day ${MIN_COMPARE_DAYS}`} />
+
+      <PageCard title="Daily spending" className="md:col-span-2 lg:col-span-8">
+        {trend.data
+          ? <TrendLine data={datesInRange(period.start, period.end).map((date) => {
+              const found = trend.data!.find((d) => d.date === date);
+              return { date, amount: found ? found.spending.minor_units / 100 : 0 };
+            })} selectedDate={day} onSelectDate={setDay} chartHeight={180} />
+          : trend.isError
+            ? <p className="text-sm text-muted">Couldn’t load the daily trend. <RetryLink onRetry={() => void trend.refetch()} /></p>
+            : <Skeleton className="h-[220px] w-full" />}
+      </PageCard>
+      <PageCard title="Where it went" className="lg:col-span-4" action={<Link to="/explore?mode=by-category" className="text-sm text-teal">Explore</Link>}>
+        {breakdown.data
+          ? <CategoryDonut data={totals} selected={null} onSelect={(c) => c && navigate(withReturn(evidenceLink(period, c)))} showLegend size="compact" />
+          : breakdown.isError
+            ? <p className="text-sm text-muted">Couldn’t load the category mix. <RetryLink onRetry={() => void breakdown.refetch()} /></p>
+            : <Skeleton className="h-[112px] w-full" />}
+      </PageCard>
+
+      <div className="lg:col-span-4">{needsALook}</div>
+      <ListGroup className="lg:col-span-4" title="Coming up" action={<Link to="/plan" className="text-teal">Plan</Link>}>
+        {upcoming.length ? upcoming.slice(0, 4).map((item) => (
+          <ListRow key={item.id} to="/plan" title={item.label} subtitle={formatShortDate(item.date)}
+            {...(item.amount ? { amount: formatMoney(item.amount), amountTone: 'estimate' as const } : { value: 'Amount unknown' })} />
+        )) : <ListRow title="Nothing scheduled" subtitle="Subscriptions’ charges appear here" />}
+      </ListGroup>
+      <ListGroup className="lg:col-span-4" title="Latest" action={<Link to="/activity" className="text-teal">Activity</Link>}>
+        {recent.length ? recent.slice(0, 4).map((item) => (
+          <ListRow key={item.id} to={`/activity/${item.id}`} leading={<CategoryAvatar category={item.category} className="rounded-full" />}
+            title={item.merchant || 'Unnamed'}
+            subtitle={<>{item.date ? formatShortDate(item.date) : 'Undated'} · <span style={{ color: getCategoryTextColor(item.category) }}>{item.category}</span></>}
+            {...(item.amount ? { amount: formatMoney(item.amount) } : { value: 'Amount unresolved' })} />
+        )) : <ListRow title="Nothing captured yet" />}
+      </ListGroup>
+    </div>
+  );
 }
 
 // ── Phone: one screen (approved 2026-10-06, phone quick view) ────────────────

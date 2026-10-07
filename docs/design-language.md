@@ -509,7 +509,16 @@ Current registry (paths relative to `src/web/frontend/src/`):
 | One-screen phone tab | `components/layout/PhoneScreen.tsx`: `PhoneScreen`, `PhoneSummaryLine` | Home, Plan and Explore below `md`. The large-title `NavBar`, a summary (the spectrum card, then a summary line: a status on the left, a change or count on the right), one view, and the `Tabs` switcher in the thumb band above the tab bar. Only the chosen view mounts. A tall view scrolls inside itself with a bottom fade; the Larger text size scrolls the page instead. |
 | Money colour roles | `lib/moneyTone.ts`: `MONEY_TONE_CLASS`, `changeTone`; `ListRow amountTone` | Tangerine for spend totals, teal for money in or left and spending that went down, coral for spending that went up and overspend, honey for estimates. Per-purchase amounts stay neutral. Never inside the spectrum card. |
 | Category name colour | `getCategoryTextColor` in `lib/utils.ts` | A category's colour mixed 60/40 with the foreground, for category names as text (about 4.5:1 in both themes). Phone rows only (`max-md:`). |
-| Activity thumb band | `pages/TransactionsPage.tsx` | On a phone, search, Filters and the view switch sit in a frosted strip fixed above the tab bar; the list scrolls beneath it. Hidden while a detail is pushed. |
+| Activity fixed header | `pages/TransactionsPage.tsx`, `PHONE_SCREEN_HEIGHT` | On a phone (revised 2026-10-07), the large title, actions, search, Filters and the view switch stay fixed at the top and only the purchases scroll beneath them, ending above the tab bar. |
+
+**Approved 2026-10-07 (desktop pass).** iPad and desktop get their own compositions of existing parts; no new primitives.
+
+| Role | Owner | Use |
+|---|---|---|
+| Home cockpit | `HomeCockpit` in `pages/HomePage.tsx` | `SpectrumCard` with three linked `StatCard`s, `TrendLine` and compact `CategoryDonut` in `PageCard`s, then Needs a look, Coming up and Latest as `ListGroup`s. Two columns at md, twelve at lg. |
+| Activity summary pane | `components/transactions/ActivitySummary.tsx` | The split view's empty detail: this month from the shared facts as `StatTiles`, `MiniBarChart` and `RankedBar`s. States when the list is narrowed. |
+| Plan columns | `pages/PlanPage.tsx` | From lg, the month and Upcoming on the left, the tools on the right. Charges are compact `ListRow`s; their actions live in the charge detail. |
+| Explore top row | `pages/ExplorePatternsPage.tsx`, `PulseBand`, `WorthALookSummary` | Health card beside four figures (one row from xl); an empty Worth a look is one `ListRow`. |
 
 Still not shared: a common category label (ActivityRowShell and Finance keep their own), and a public calendar date-cell primitive (Plan keeps one in-file recipe). Existing examples are references, not permission to clone them.
 

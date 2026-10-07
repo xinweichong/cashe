@@ -314,9 +314,10 @@ test('worth a look caps the dashboard summary at three rows', async () => {
   expect(within(card).getByText('2 more this month')).toBeTruthy();
 });
 
-test('nothing stands out: worth a look explains what it watches for', async () => {
+test('nothing stands out: worth a look is one row that opens the full list', async () => {
   show();
-  expect(await screen.findByText(/Nothing stands out so far this month/)).toBeTruthy();
+  expect(await screen.findByText('Nothing unusual so far this month')).toBeTruthy();
+  expect(screen.getByRole('link', { name: /Worth a look/ }).getAttribute('href')).toBe('/explore/signals');
   expect(screen.queryByText("Today's read")).toBeNull();
 });
 
