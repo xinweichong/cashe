@@ -1,8 +1,17 @@
-import { type ReactNode } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { useState, type ReactNode } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
-import { evidenceLink, formatMoney, formatMoneyAbs, type Money } from '@/api/briefing';
-import { formatShortDate } from '@/lib/utils';
+import { api } from '@/api/client';
+import { evidenceLink, formatMoney, formatMoneyAbs, type HomeBriefing, type Money } from '@/api/briefing';
+import { cn, datesInRange, formatShortDate, getCategoryTextColor } from '@/lib/utils';
+import { changeTone, MONEY_TONE_CLASS } from '@/lib/moneyTone';
+import { SignedChange } from '@/components/ui/SignedChange';
+import { CategoryDonut } from '@/components/charts/CategoryDonut';
+import { CategoryChangeBars } from '@/components/charts/CategoryChangeBars';
+import { TrendLine } from '@/components/charts/TrendLine';
+import { PhoneScreen, PhoneSummaryLine } from '@/components/layout/PhoneScreen';
+import { useUrlParams } from '@/hooks/useUrlParams';
 import { Button } from '@/components/ui/button';
 import { StatusDot } from '@/components/ui/StatusDot';
 import { ListGroup, ListRow } from '@/components/ui/list';
@@ -41,6 +50,10 @@ function daysInclusive(start: string, end: string): number {
 
 function monthName(isoDate: string): string {
   return new Date(`${isoDate}T00:00:00Z`).toLocaleDateString('en-SG', { month: 'long', timeZone: 'UTC' });
+}
+
+function shortMonth(isoDate: string): string {
+  return new Date(`${isoDate}T00:00:00Z`).toLocaleDateString('en-SG', { month: 'short', timeZone: 'UTC' });
 }
 
 /** "1 Oct, 3:05 pm" for a capture timestamp. */
@@ -82,6 +95,8 @@ export function HomePage() {
       <div className="space-y-6 px-4 pb-8">{children}</div>
     </div>
   );
+
+  if (isPhone) return <HomePhone navBar={navBar} withReturn={withReturn} />;
 
   if (!query.data && query.isError) return page(
     <div role="alert"><LoadFailed onRetry={() => void query.refetch()} /></div>,
@@ -236,4 +251,186 @@ export function HomePage() {
       </div>
     </div>
   </>);
+}
+
+// ── Phone: one screen (approved 2026-10-06, phone quick view) ────────────────
+// The month's spectrum card and a status line, then Month (category mix and
+// figures), Trend and Changed in place, switched from the thumb band.
+
+const HOME_VIEWS = [
+  { value: 'month', label: 'Month' },
+  { value: 'trend', label: 'Trend' },
+  { value: 'changed', label: 'Changed' },
+] as const;
+type HomeView = (typeof HOME_VIEWS)[number]['value'];
+
+function HomePhone({ navBar, withReturn }: { navBar: ReactNode; withReturn: (href: string) => string }) {
+  const query = useHomeBriefing();
+  const navigate = useNavigate();
+  const [search, updateParams] = useUrlParams();
+  const viewParam = search.get('view');
+  const view: HomeView = HOME_VIEWS.some((v) => v.value === viewParam) ? (viewParam as HomeView) : 'month';
+  const [day, setDay] = useState<string | null>(null);
+  const period = query.data?.facts.current;
+  const breakdown = useQuery({
+    queryKey: ['home-category-breakdown', period?.start, period?.end],
+    queryFn: () => api.getCategoryBreakdownV2(period!.start, period!.end),
+    enabled: !!period && view === 'month',
+  });
+  const trend = useQuery({
+    queryKey: ['home-daily-totals', period?.start, period?.end],
+    queryFn: () => api.getDailyTotalsV2(period!.start, period!.end),
+    enabled: !!period && view === 'trend',
+  });
+
+  const panel = (body: ReactNode) => <div className="space-y-3 pb-2">{body}</div>;
+  const views = (data: HomeBriefing | undefined) => HOME_VIEWS.map(({ value, label }) => ({
+    value, label,
+    panel: !data ? panel(<Skeleton className="h-64 rounded-group" />)
+      : value === 'month' ? panel(<HomeMonth data={data} breakdown={breakdown} withReturn={withReturn} onCategory={(c) => navigate(withReturn(evidenceLink(data.facts.current, c)))} />)
+      : value === 'trend' ? <HomeTrend data={data} trend={trend} day={day} onDay={setDay} withReturn={withReturn} />
+      : panel(<HomeChanged data={data} onCategory={(c) => navigate(withReturn(evidenceLink(data.facts.comparison_current, c)))} />),
+  }));
+
+  const data = query.data;
+  return (
+    <PhoneScreen
+      navBar={navBar}
+      summary={data ? <HomeSummary data={data} isError={query.isError} onRetry={() => void query.refetch()} /> : query.isError
+        ? <div role="alert"><LoadFailed onRetry={() => void query.refetch()} /></div>
+        : <div role="status" aria-label="Preparing your briefing"><SpectrumCardSkeleton /></div>}
+      views={views(data)}
+      view={view}
+      onViewChange={(next) => updateParams({ view: next === 'month' ? null : next })}
+      label="Home views"
+    />
+  );
+}
+
+function HomeSummary({ data, isError, onRetry }: { data: HomeBriefing; isError: boolean; onRetry: () => void }) {
+  const { facts, spending_target, freshness, capture_issue_count, followup_issue_count, review_count, recurring_suggestion_count, increased_commitments } = data;
+  const overTarget = !!spending_target && spending_target.remaining.minor_units < 0;
+  const toCheck = capture_issue_count + followup_issue_count + Math.max(facts.current.unresolved_count + facts.undated_count, review_count) + recurring_suggestion_count + increased_commitments.length;
+  const sourcesNeedCare = freshness.gmail_needs_reconnection || !freshness.gmail_connected;
+  const comparable = !!facts.change && daysInclusive(facts.comparison_current.start, facts.comparison_current.end) >= MIN_COMPARE_DAYS;
+  const status = toCheck
+    ? <Link to="/review" className="inline-flex min-h-11 items-center gap-1.5 text-teal"><StatusDot tone="warm" />{toCheck} to check</Link>
+    : sourcesNeedCare
+      ? <Link to="/settings" className="inline-flex min-h-11 items-center gap-1.5 text-teal"><StatusDot tone="warm" />{freshness.gmail_needs_reconnection ? 'Reconnect Gmail' : 'Connect Gmail'}</Link>
+      : <><StatusDot tone="calm" />All caught up</>;
+  const change = isError
+    ? <span role="alert" className="text-warning">Couldn’t refresh · <RetryLink onRetry={onRetry} /></span>
+    : comparable && facts.change
+      ? <><span className={cn('inline-flex items-center gap-0.5 font-mono font-medium', MONEY_TONE_CLASS[changeTone(facts.change.minor_units)])}><SignedChange change={facts.change} /></span>vs {shortMonth(facts.previous.start)}</>
+      : <>As of {formatShortDate(facts.as_of)}</>;
+  return (
+    <>
+      <SpectrumCard
+        label={monthName(facts.current.start)}
+        meta={spending_target ? `Budget ${formatMoney(spending_target.target)}` : 'So far'}
+        value={<AnimatedMoney value={facts.current.spending} />}
+        caption={spending_target ? overTarget ? `${formatMoneyAbs(spending_target.remaining)} over budget` : `${formatMoney(spending_target.remaining)} left` : undefined}
+        progress={spending_target && spending_target.target.minor_units > 0 ? facts.current.spending.minor_units / spending_target.target.minor_units : undefined}
+        progressLabel="Budget used"
+        status={facts.current.status === 'partial' ? 'partial' : 'complete'}
+      />
+      <PhoneSummaryLine start={status} end={change} />
+    </>
+  );
+}
+
+function HomeMonth({ data, breakdown, withReturn, onCategory }: {
+  data: HomeBriefing;
+  breakdown: { data?: { by_category: Record<string, Money> }; isError: boolean; refetch: () => unknown };
+  withReturn: (href: string) => string;
+  onCategory: (category: string) => void;
+}) {
+  const { facts, upcoming, recent } = data;
+  const netFlow = facts.current.recorded_net_flow;
+  const negative = !!netFlow && netFlow.minor_units < 0;
+  const next = upcoming[0];
+  const latest = recent[0];
+  const totals = breakdown.data ? Object.entries(breakdown.data.by_category).map(([category, amount]) => ({ category, total: amount.minor_units / 100 })) : [];
+  return <>
+    <ListGroup>
+      <div className="p-3">
+        {breakdown.data
+          ? <CategoryDonut data={totals} selected={null} onSelect={(c) => c && onCategory(c)} showLegend size="compact" />
+          : breakdown.isError
+            ? <p className="text-sm text-muted">Couldn’t load the category mix. <RetryLink onRetry={() => void breakdown.refetch()} /></p>
+            : <div className="flex items-center gap-3"><Skeleton className="h-[112px] w-[112px] shrink-0 rounded-full" /><Skeleton className="h-24 flex-1" /></div>}
+      </div>
+    </ListGroup>
+    <ListGroup>
+      <ListRow
+        to={withReturn(evidenceLink(facts.current, undefined, 'income'))}
+        title="Income"
+        {...(facts.current.income ? { amount: formatMoney(facts.current.income), amountTone: 'in' as const } : { value: 'None yet' })}
+        trailing="chevron"
+      />
+      <ListRow
+        title={negative ? 'Spent more than earned' : 'Left after spending'}
+        {...(netFlow ? { amount: formatMoneyAbs(netFlow), amountTone: negative ? 'over' as const : 'in' as const } : { value: '—' })}
+      />
+      <ListRow
+        to="/plan"
+        title="Coming up"
+        subtitle={next ? `${next.label} · ${formatShortDate(next.date)}` : 'Nothing scheduled'}
+        {...(next?.amount ? { amount: formatMoney(next.amount), amountTone: 'estimate' as const } : {})}
+        trailing="chevron"
+      />
+      <ListRow
+        to="/activity"
+        title="Latest"
+        subtitle={latest ? <>{latest.merchant || 'Unnamed'} · <span style={{ color: getCategoryTextColor(latest.category) }}>{latest.category}</span></> : 'Nothing captured yet'}
+        {...(latest?.amount ? { amount: formatMoney(latest.amount) } : {})}
+        trailing="chevron"
+      />
+    </ListGroup>
+  </>;
+}
+
+function HomeTrend({ data, trend, day, onDay, withReturn }: {
+  data: HomeBriefing;
+  trend: { data?: { date: string; spending: Money }[]; isError: boolean; refetch: () => unknown };
+  day: string | null;
+  onDay: (day: string) => void;
+  withReturn: (href: string) => string;
+}) {
+  const { start, end } = data.facts.current;
+  // The API lists days newest first and omits empty days; the chart needs every day, in order.
+  const points = trend.data ? datesInRange(start, end).map((date) => {
+    const found = trend.data!.find((d) => d.date === date);
+    return { date, amount: found ? found.spending.minor_units / 100 : 0 };
+  }) : [];
+  const selected = day ?? points.at(-1)?.date ?? null;
+  return (
+    <div className="flex h-full flex-col gap-2 pb-2">
+      <ListGroup className="min-h-0 flex-1 [&>div]:h-full">
+        <div className="flex h-full flex-col p-3">
+          {trend.data
+            ? <TrendLine data={points} selectedDate={selected} onSelectDate={onDay} chartHeight={150} fill />
+            : trend.isError
+              ? <p className="text-sm text-muted">Couldn’t load the daily trend. <RetryLink onRetry={() => void trend.refetch()} /></p>
+              : <Skeleton className="h-full min-h-[150px] w-full" />}
+        </div>
+      </ListGroup>
+      {selected && <ListGroup><ListRow to={withReturn(`/evidence?start=${selected}&end=${selected}&measure=spending`)} title={`${formatShortDate(selected)} records`} trailing="chevron" /></ListGroup>}
+    </div>
+  );
+}
+
+function HomeChanged({ data, onCategory }: { data: HomeBriefing; onCategory: (category: string) => void }) {
+  const { facts } = data;
+  const changes = facts.category_changes.slice(0, 5);
+  return <>
+    <ListGroup>
+      <div className="p-2">
+        {changes.length
+          ? <CategoryChangeBars data={changes} onSelect={onCategory} />
+          : <p className="p-1 text-sm text-muted">{facts.change ? 'No category changes yet.' : 'Resolve records to compare categories.'}</p>}
+      </div>
+    </ListGroup>
+    <ListGroup><ListRow to="/explore?mode=by-category" title="Why it changed" trailing="chevron" /></ListGroup>
+  </>;
 }

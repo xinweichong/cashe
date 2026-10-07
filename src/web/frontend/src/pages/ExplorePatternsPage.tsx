@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/api/client';
@@ -25,8 +25,12 @@ import { DetailHeader } from '@/components/ui/detail-panel';
 import { ListDetail } from '@/components/layout/ListDetail';
 import { formatChange, formatRange } from '@/components/explore/format';
 import { QuestionCard, RankedBar, RecurringCharges } from '@/components/explore/RecurringCharges';
-import { datesInRange, formatShortDate, getCategoryColor } from '@/lib/utils';
-import { ChevronRight } from 'lucide-react';
+import { cn, datesInRange, formatShortDate, getCategoryColor } from '@/lib/utils';
+import { changeTone, MONEY_TONE_CLASS } from '@/lib/moneyTone';
+import { SignedChange } from '@/components/ui/SignedChange';
+import { NavBar } from '@/components/ui/nav-bar';
+import { PhoneScreen, PhoneSummaryLine } from '@/components/layout/PhoneScreen';
+import { ProfileMenu } from '@/components/layout/ProfileMenu';
 import { useIsPhone } from '@/hooks/useIsPhone';
 import { useTrips } from '@/components/plan/planHooks';
 import { useCategories } from '@/hooks/useCategories';
@@ -326,7 +330,8 @@ function WhatDoesANormalWeekLookLike() {
   return (
     <QuestionCard title="Your usual week" isError={isError} onRetry={() => void refetch()} isReady={!!data}>
       {data && <>
-        <p className="text-sm text-muted">Average spend per weekday over the last {data.weeks} complete weeks, {formatRange(data.start, data.end)}.</p>
+        {/* Phones show figures, not sentences (phone quick view). */}
+        <p className="text-sm text-muted max-md:hidden">Average spend per weekday over the last {data.weeks} complete weeks, {formatRange(data.start, data.end)}.</p>
         {busiest && busiest.average.minor_units > 0 && (
           <p className="text-sm mt-1">Busiest: <span className="font-semibold">{WEEKDAY_LABELS[busiest.weekday]}</span>, {formatMoney(busiest.average)} on average.</p>
         )}
@@ -362,7 +367,7 @@ function MerchantRanking({ facts }: { facts: SpendingFacts | undefined }) {
   );
   return (
     <PageCard title="Top merchants" action={categorySelect}>
-      <p className="text-sm text-muted mb-3 flex items-center gap-2">
+      <p className={cn('text-sm text-muted mb-3 flex items-center gap-2', !category && 'max-md:hidden')}>
         {category && <StatusDot color={getCategoryColor(category)} />}
         Ranked by spending this month{category ? ` in ${category}` : ''}.
       </p>
@@ -470,64 +475,25 @@ const SECTION_TITLES: Record<ExploreSection, string> = {
   read: "Today's read", time: 'Over time', category: 'By category', merchant: 'By merchant', recurring: 'Recurring', trip: 'Trip impact',
 };
 
-// The last six months of spending as a line, for the Over time row.
-function MonthsSparkline() {
-  const { data } = useQuery({ queryKey: ['explore-monthly-preview'], queryFn: () => briefingApi.monthly(6), staleTime: 5 * 60_000 });
-  const values = (data ?? []).map((m) => m.spending?.minor_units ?? 0);
-  if (values.length < 2) return null;
-  const max = Math.max(...values, 1);
-  const points = values.map((v, i) => `${(i / (values.length - 1)) * 64},${20 - (v / max) * 18}`).join(' ');
-  return (
-    <svg aria-hidden viewBox="0 0 64 22" className="h-[22px] w-16 shrink-0">
-      <polyline points={points} fill="none" stroke="var(--color-teal)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
+// ── Phone: one screen (approved 2026-10-06, phone quick view) ──────────────
+// The health card and a line of the month's spend and signals, then Time,
+// Category, Merchant and Week, each its chart in place. The longer reads
+// stay one push away as sections.
 
-// This month's category mix as one thin bar, for the By category row.
-function CategoryMixBar({ facts }: { facts: SpendingFacts | undefined }) {
-  const { data } = useQuery({
-    queryKey: ['home-category-breakdown', facts?.current.start, facts?.current.end],
-    queryFn: () => api.getCategoryBreakdownV2(facts!.current.start, facts!.current.end),
-    enabled: !!facts,
-  });
-  const entries = Object.entries(data?.by_category ?? {}).sort((a, b) => b[1].minor_units - a[1].minor_units).slice(0, 5);
-  if (!entries.length) return null;
-  return (
-    <span aria-hidden className="flex h-1.5 w-16 shrink-0 gap-px overflow-hidden rounded-pill">
-      {entries.map(([name, amount]) => <span key={name} style={{ flex: amount.minor_units, background: getCategoryColor(name) }} />)}
-    </span>
-  );
-}
+type ExploreView = 'time' | 'category' | 'merchant' | 'week';
+/** Fewer comparable days than this and a month-on-month change is noise (as on Home). */
+const MIN_COMPARE_DAYS = 7;
 
-function ExploreSummary({ facts, onOpen, hasTrips }: { facts: SpendingFacts | undefined; onOpen: (s: ExploreSection) => void; hasTrips: boolean }) {
-  const dailyRead = useQuery({ queryKey: ['analytics-insight', 'daily'], queryFn: () => api.getAnalyticsInsight(), staleTime: 60 * 60 * 1000 });
+function ExploreSummaryLine({ facts }: { facts: SpendingFacts | undefined }) {
   const signals = useQuery({ queryKey: ['explore-signals'], queryFn: () => briefingApi.signals() });
-  const unusual = signals.data?.unusual.length ?? 0;
-  const newMerchants = signals.data?.new_merchants.length ?? 0;
-  const mover = facts?.category_changes[0];
+  const worth = signals.data ? signals.data.unusual.length + signals.data.new_merchants.length : 0;
+  const comparable = !!facts?.change && (Date.parse(`${facts.comparison_current.end}T00:00:00Z`) - Date.parse(`${facts.comparison_current.start}T00:00:00Z`)) / 86_400_000 + 1 >= MIN_COMPARE_DAYS;
   return (
-    <div className="space-y-6">
-      <HealthSpectrum />
-      {dailyRead.data?.content && (
-        <ListGroup>
-          <ListRow onClick={() => onOpen('read')} title="Daily read" subtitle={dailyRead.data.content.narrative} value="AI" trailing="chevron" />
-        </ListGroup>
-      )}
-      <ListGroup title="Worth a look">
-        <ListRow to="/explore/signals" title={signals.data ? `${unusual} unusual ${unusual === 1 ? 'purchase' : 'purchases'}` : 'Unusual purchases'}
-          subtitle={signals.data ? `${newMerchants} new ${newMerchants === 1 ? 'merchant' : 'merchants'} this month` : undefined} trailing="chevron" />
-        <ListRow onClick={() => onOpen('category')} title="Biggest mover"
-          subtitle={mover ? `${mover.category}, ${formatChange(mover.change)} vs the same days last month` : 'No category changed against last month'} trailing="chevron" />
-      </ListGroup>
-      <ListGroup title="Patterns">
-        <ListRow onClick={() => onOpen('time')} title="Over time" subtitle="Daily, weekly and monthly spending" trailing={<><MonthsSparkline /><ChevronRight aria-hidden className="h-4 w-4 text-muted opacity-60" /></>} />
-        <ListRow onClick={() => onOpen('category')} title="By category" subtitle="Where it went and what changed" trailing={<><CategoryMixBar facts={facts} /><ChevronRight aria-hidden className="h-4 w-4 text-muted opacity-60" /></>} />
-        <ListRow onClick={() => onOpen('merchant')} title="By merchant" subtitle="Top merchants and most visited" trailing="chevron" />
-        <ListRow onClick={() => onOpen('recurring')} title="Recurring" subtitle="Repeat charges and price changes" trailing="chevron" />
-        {hasTrips && <ListRow onClick={() => onOpen('trip')} title="Trip impact" subtitle="How a trip affected the month" trailing="chevron" />}
-      </ListGroup>
-    </div>
+    <PhoneSummaryLine
+      start={facts && <>Spent <span className={cn('font-mono font-medium', MONEY_TONE_CLASS.spend)}>{formatMoney(facts.current.spending)}</span>
+        {comparable && facts.change && <span className={cn('inline-flex items-center gap-0.5 font-mono font-medium', MONEY_TONE_CLASS[changeTone(facts.change.minor_units)])}><SignedChange change={facts.change} /></span>}</>}
+      end={<Link to="/explore/signals" className="inline-flex min-h-11 items-center gap-1.5 text-teal"><StatusDot tone="active" />{worth} worth a look</Link>}
+    />
   );
 }
 
@@ -583,7 +549,7 @@ export function ExplorePatternsPage() {
       <ListDetail
         listLabel="Explore"
         backLabel="Explore"
-        list={<div className="px-4 pb-8"><ExploreSummary facts={facts} onOpen={open} hasTrips={!!trips?.length} /></div>}
+        list={<ExplorePhone facts={facts} onOpen={open} hasTrips={!!trips?.length} />}
         detail={detail}
         onClose={close}
       />
@@ -641,5 +607,37 @@ export function ExplorePatternsPage() {
 
       {!!trips?.length && <TripImpact trips={trips} />}
     </div>
+  );
+}
+
+function ExplorePhone({ facts, onOpen, hasTrips }: { facts: SpendingFacts | undefined; onOpen: (s: ExploreSection) => void; hasTrips: boolean }) {
+  const [search, updateParams] = useUrlParams();
+  const dailyRead = useQuery({ queryKey: ['analytics-insight', 'daily'], queryFn: () => api.getAnalyticsInsight(), staleTime: 60 * 60 * 1000 });
+  const more = (rows: { label: string; section: ExploreSection; show?: boolean }[]) => (
+    <ListGroup>{rows.filter((r) => r.show !== false).map((r) => <ListRow key={r.label} onClick={() => onOpen(r.section)} title={r.label} trailing="chevron" />)}</ListGroup>
+  );
+  const views: { value: ExploreView; label: string; panel: ReactNode }[] = [
+    { value: 'time', label: 'Time', panel: <div className="space-y-3 pb-2"><SpendingOverTime compactChips />{more([
+      { label: 'Daily read', section: 'read', show: !!dailyRead.data?.content },
+      { label: 'Income and spending', section: 'time' },
+    ])}</div> },
+    { value: 'category', label: 'Category', panel: <div className="space-y-3 pb-2"><WhereItWent facts={facts} />{more([{ label: 'What changed and why', section: 'category' }])}</div> },
+    { value: 'merchant', label: 'Merchant', panel: <div className="space-y-3 pb-2"><MerchantRanking facts={facts} />{more([{ label: 'Most visited and all merchants', section: 'merchant' }])}</div> },
+    { value: 'week', label: 'Week', panel: <div className="space-y-3 pb-2"><WhatDoesANormalWeekLookLike />{more([
+      { label: 'Recurring charges', section: 'recurring' },
+      { label: 'Trip impact', section: 'trip', show: hasTrips },
+    ])}</div> },
+  ];
+  const lens = search.get('lens');
+  const view: ExploreView = views.some((v) => v.value === lens) ? (lens as ExploreView) : 'time';
+  return (
+    <PhoneScreen
+      navBar={<NavBar large title="Explore" trailing={<ProfileMenu />} />}
+      summary={<><HealthSpectrum /><ExploreSummaryLine facts={facts} /></>}
+      views={views}
+      view={view}
+      onViewChange={(next) => updateParams({ lens: next === 'time' ? null : next })}
+      label="Explore views"
+    />
   );
 }

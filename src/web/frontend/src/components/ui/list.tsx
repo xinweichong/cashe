@@ -2,6 +2,7 @@ import { useId, type CSSProperties, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { MONEY_TONE_CLASS, type MoneyTone } from '@/lib/moneyTone';
 
 // Approved shared owner (P4, HIG alignment 2026-10-01): the grouped list.
 // An inset group with an 18px outer radius holds square rows separated by
@@ -50,6 +51,8 @@ interface ListRowProps {
   value?: ReactNode;
   /** Pre-formatted money, set in mono. The row never formats money itself. */
   amount?: ReactNode;
+  /** Colour role for `amount` (lib/moneyTone); neutral when omitted. */
+  amountTone?: MoneyTone;
   /** 'chevron' for navigation rows; any node (a Switch, a Badge) otherwise. */
   trailing?: 'chevron' | ReactNode;
   selected?: boolean;
@@ -61,7 +64,7 @@ interface ListRowProps {
 }
 
 export function ListRow({
-  to, onClick, leading, title, subtitle, value, amount, trailing,
+  to, onClick, leading, title, subtitle, value, amount, amountTone, trailing,
   selected = false, destructive = false, disabled = false, id, className, ...aria
 }: ListRowProps) {
   const interactive = !disabled && (!!to || !!onClick);
@@ -90,7 +93,7 @@ export function ListRow({
       {(value || amount || trailing) && (
         <div className="flex shrink-0 items-center gap-2 @max-[18rem]:pl-11">
           {value && <span className={cn('text-sm', muted)}>{value}</span>}
-          {amount && <span className="font-mono text-sm font-medium tabular-nums">{amount}</span>}
+          {amount && <span className={cn('font-mono text-sm font-medium tabular-nums', amountTone && !selected && MONEY_TONE_CLASS[amountTone])}>{amount}</span>}
           {trailing === 'chevron'
             ? <ChevronRight aria-hidden className={cn('h-4 w-4 opacity-60', muted)} />
             : trailing}

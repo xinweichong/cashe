@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.0] - 2026-10-07
+
+### Changed
+
+- **One screen per tab on iPhone** — below the `md` breakpoint, Home, Plan and Explore are one screen each: the spectrum card and a status line on top, one view in the middle, and the view switcher in the thumb band above the tab bar. Home shows Month (category mix and figures), Trend and Changed; Plan keeps the projection while Soon, Budgets, Goals and Subs switch beneath it; Explore opens on the health card with Time, Category, Merchant and Week charts in place. A tall view scrolls inside itself with a fade at its foot; the Larger text size scrolls the page instead. iPad and desktop are unchanged
+- **Activity on iPhone** — search, filters and the All / Review / Income / Refunds switch sit in a frosted band above the tab bar, and category names take their colour
+- **Colour on figures** — spend totals in tangerine, money in, money left and drops in teal, increases and overspend in coral, estimates in honey; individual purchases stay neutral
+- Landing page tour screenshots show the new phone screens
+
+### Fixed
+
+- The landing page's moving lines ran at 15–30 fps on Retina screens; they now move on the GPU at full frame rate
+
 ## [3.2.0] - 2026-10-06
 
 ### Added

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
+import { MONEY_TONE_CLASS } from '@/lib/moneyTone';
 import { cn, getCategoryColor, formatCurrency } from '@/lib/utils';
 import { SelectableRow } from '@/components/ui/selectable-row';
 import { Button } from '@/components/ui/button';
@@ -152,7 +153,8 @@ export function CategoryDonut({ data, selected, onSelect, onViewTransactions, sh
                     aria-hidden
                   />
                   <span className="flex-1 min-w-0 truncate text-sm">{item.category}</span>
-                  <span className="text-sm font-mono tabular-nums text-muted">{formatCurrency(item.total)}</span>
+                  {/* The phone quick view colours spend (lib/moneyTone). */}
+                  <span className={cn('text-sm font-mono tabular-nums', compact ? MONEY_TONE_CLASS.spend : 'text-muted max-md:text-tangerine')}>{formatCurrency(item.total)}</span>
                 </SelectableRow>
                 {isRemaining && remainingExpanded && (
                   <ul className="pl-6 space-y-1 mt-1">

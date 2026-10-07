@@ -1,0 +1,17 @@
+/* Each group of lines drifts as one compositor layer: transform only, so the
+   SVG is rasterized once and never repainted while it moves. */
+.landing-drift {
+  will-change: transform;
+  animation: landing-drift var(--drift-duration) ease-in-out infinite alternate;
+}
+.landing-drift-primary   { --drift: -0.94%; --drift-duration: 4s; }
+.landing-drift-secondary { --drift: -0.63%; --drift-duration: 3s; }
+.landing-drift-accent    { --drift: -0.31%; --drift-duration: 2s; }
+
+@keyframes landing-drift {
+  to { transform: translateY(var(--drift)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-drift { animation: none; }
+}

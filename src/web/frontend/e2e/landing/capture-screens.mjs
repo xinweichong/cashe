@@ -30,8 +30,6 @@ for (const theme of ['light', 'dark']) {
   for (const [name, path] of SCREENS) {
     await page.goto(`${BASE}${path}`);
     await page.waitForLoadState('networkidle');
-    // Early in a month the health score is still "too early", so show the Over time chart.
-    if (name === 'explore') await page.getByRole('button', { name: /Over time/ }).click();
     await page.waitForTimeout(600);
     writeFileSync(`${OUT}${name}-${theme}.webp`, await toWebp(await page.screenshot()));
   }

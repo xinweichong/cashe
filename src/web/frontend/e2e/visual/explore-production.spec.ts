@@ -41,22 +41,21 @@ test('merged Explore dashboard: pulse band, signals and health above the pattern
         await expect(page.getByText('Worth a look')).toBeVisible();
         await expect(page.getByRole('link', { name: /Financial health/ })).toBeVisible();
       } else {
-        // Phone: the summary list, led by the health score spectrum card (HIG alignment).
+        // Phone: one screen (phone quick view), led by the health card, with
+        // the Time view's chart showing without a tap.
         await expect(page.getByRole('link', { name: /Financial health/ })).toBeVisible();
-        await expect(page.getByRole('region', { name: 'Worth a look' })).toBeVisible();
-        await expect(page.getByRole('region', { name: 'Patterns' })).toBeVisible();
+        await expect(page.getByRole('tablist', { name: 'Explore views' })).toBeVisible();
+        await expect(page.getByText('Spending over time', { exact: true })).toBeVisible();
+        expect(await page.evaluate(() => document.documentElement.scrollHeight - window.innerHeight)).toBeLessThanOrEqual(0);
       }
       if (viewport.name === 'desktop') {
         // The first Patterns chart card starts inside a 1440×900 first screen.
         const chart = page.getByText('Spending over time', { exact: true });
         expect((await chart.boundingBox())!.y).toBeLessThan(900);
         await page.screenshot({ path: `e2e/screenshots/explore-first-screen-${theme}.png` });
-      }
-      // Phone keeps the charts one tap away, in each section's page.
-      if (viewport.name === 'desktop') {
-        await expect(page.locator('.recharts-line').first()).toBeVisible();
         await expect(page.locator('.recharts-bar-rectangle').first()).toBeVisible();
       }
+      await expect(page.locator('.recharts-line').first()).toBeVisible();
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
       expect(overflow).toBeLessThanOrEqual(0);
       await page.waitForTimeout(600);
@@ -124,22 +123,26 @@ test('By category keeps the chart stable and reveals selection detail beneath it
   }
 });
 
-test('phone Patterns rows stay inside the viewport and each opens its section', async ({ page }) => {
-  // Regression: the four desktop mode tabs used to spill past a narrow
-  // viewport. On a phone the patterns are summary rows (HIG alignment), each
-  // opening its own page, so nothing needs horizontal scroll.
+test('phone Explore is one screen: each view shows its chart in place, and its rows open sections', async ({ page }) => {
+  // Phone quick view (2026-10-06): Time, Category, Merchant and Week switch
+  // in place from the thumb band; the longer reads stay one push away.
   await mockAuthenticatedExplore(page);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/explore');
-  const patterns = page.getByRole('region', { name: 'Patterns' });
-  const box = (await patterns.boundingBox())!;
+  const views = page.getByRole('tablist', { name: 'Explore views' });
+  const box = (await views.boundingBox())!;
   expect(box.x + box.width).toBeLessThanOrEqual(390);
-  for (const [row, title] of [['Over time', 'Over time'], ['By merchant', 'By merchant'], ['Recurring', 'Recurring']] as const) {
-    await patterns.getByRole('button', { name: new RegExp(`^${row}`) }).click();
-    await expect(page.getByRole('heading', { level: 1, name: title })).toBeVisible();
-    await page.goBack();
-    await expect(patterns).toBeVisible();
+  expect(box.y + box.height).toBeLessThanOrEqual(844);
+  for (const [view, heading] of [['Time', 'Spending over time'], ['Category', 'Where it went'], ['Merchant', 'Top merchants'], ['Week', 'Your usual week']] as const) {
+    await views.getByRole('tab', { name: view }).click();
+    await expect(page.getByText(heading, { exact: true })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollHeight - window.innerHeight)).toBeLessThanOrEqual(0);
   }
+  await expect(page).toHaveURL(/lens=week/);
+  await page.getByRole('button', { name: 'Recurring charges' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Recurring' })).toBeVisible();
+  await page.goBack();
+  await expect(views.getByRole('tab', { name: 'Week' })).toHaveAttribute('aria-selected', 'true');
 });
 
 test('Over time: step to a day, break it down by category, then merchants with day-scoped evidence', async ({ page }) => {
