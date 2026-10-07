@@ -22,9 +22,9 @@ interface Step {
 const STEPS: Step[] = [
   {
     id: 'home', eyebrow: 'Home', title: 'Know where the month stands',
-    body: 'Spending against your budget, what needs a look, and what is coming up, in one glance each morning.',
+    body: 'Spending against your budget, where it went, and what is coming up, on one screen each morning.',
     points: ['Every total opens the transactions behind it', 'Unsure amounts are labelled partial or estimated, never guessed', 'A daily digest on Telegram, if you want one'],
-    screen: { light: homeLight, dark: homeDark, alt: 'cashe Home: October spending against a budget, an all-caught-up check and this month’s income' },
+    screen: { light: homeLight, dark: homeDark, alt: 'cashe Home: October spending against a budget, the category mix, income and the next charge' },
   },
   {
     id: 'activity', eyebrow: 'Activity', title: 'Purchases write themselves down',
@@ -36,13 +36,13 @@ const STEPS: Step[] = [
     id: 'plan', eyebrow: 'Plan', title: 'See the month before it happens',
     body: 'A projection for the rest of the month, with a likely range, built from what you usually spend and what is scheduled.',
     points: ['Upcoming subscription charges on a calendar', 'Monthly and weekly budgets, savings goals and trips', 'Pause or dismiss a charge without touching your provider'],
-    screen: { light: planLight, dark: planDark, alt: 'cashe Plan: an estimated October projection, savings toward goals and upcoming charges' },
+    screen: { light: planLight, dark: planDark, alt: 'cashe Plan: an estimated October projection above the next 30 days of charges' },
   },
   {
     id: 'explore', eyebrow: 'Explore', title: 'Find the patterns',
     body: 'How spending moves over time, by category and by merchant, with the purchases that stand out.',
     points: ['Unusual purchases and first-time merchants', 'Income against spending, month by month', 'A 50/30/20 health score once the month has enough data'],
-    screen: { light: exploreLight, dark: exploreDark, alt: 'cashe Explore: spending over time by category, and income against spending by month' },
+    screen: { light: exploreLight, dark: exploreDark, alt: 'cashe Explore: the health score above spending over time by category' },
   },
 ];
 
