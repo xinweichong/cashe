@@ -557,11 +557,11 @@ export function ExplorePatternsPage() {
   }
 
   return (
-    <div className="mx-auto max-w-[1200px] space-y-8 px-4 pb-8 md:px-6">
-      {/* The health score is the one spectrum card; the month's pulse sits beside it. */}
-      <div className="grid gap-4 md:gap-5 lg:grid-cols-12 lg:items-start">
-        <HealthSpectrum className="lg:col-span-5" />
-        <div className="lg:col-span-7"><PulseBand facts={facts} /></div>
+    <div className="mx-auto max-w-[1200px] space-y-5 px-4 pb-8 md:px-6">
+      {/* The health score is the one spectrum card; the month's four figures share its row (desktop pass, 2026-10-07). */}
+      <div className="grid gap-4 md:gap-5 lg:grid-cols-12 lg:items-stretch">
+        <HealthSpectrum className="lg:col-span-5 xl:col-span-3" />
+        <div className="lg:col-span-7 xl:col-span-9"><PulseBand facts={facts} /></div>
       </div>
 
       {/* Flex, not a fixed grid: with no daily read (no AI, or nothing yet), Worth a look takes the row. */}

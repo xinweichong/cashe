@@ -42,6 +42,10 @@ afterEach(cleanup);
 function show() {
   return render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter><PlanPage /></MemoryRouter></QueryClientProvider>);
 }
+// Charges are compact rows; their meta and actions live in the charge's detail (desktop pass, 2026-10-07).
+async function openCharge(name: RegExp = /Internet/) {
+  fireEvent.click(await screen.findByRole('button', { name }));
+}
 
 test('projection card explains unavailability rather than guessing', async () => {
   show();
@@ -59,7 +63,7 @@ test('projection card shows the projected total, its historical range, and the c
   });
   show();
   expect(await screen.findByText('$300.00')).toBeTruthy();
-  expect(screen.getByText(/\$250\.00.*\$400\.00/)).toBeTruthy();
+  expect(screen.getByText(/likely \$250.*\$400/)).toBeTruthy();
   fireEvent.click(screen.getByText('How this is calculated'));
   expect(screen.getByText('Test assumption one.')).toBeTruthy();
 });
@@ -79,8 +83,10 @@ test('shows uncertain charges and links directly to schedule controls', async ()
   show();
   expect(await screen.findByText('Amount unknown')).toBeTruthy();
   expect(screen.getByText(/Known estimated subtotal/)).toBeTruthy();
-  expect(screen.getByText(/previous charge may be overdue/)).toBeTruthy();
-  expect(screen.getByRole('link', { name: 'Review or match schedule for Internet' }).getAttribute('href')).toBe('/plan?subscription=3');
+  expect(screen.getByText(/needs review/)).toBeTruthy();
+  await openCharge();
+  expect(await screen.findByText(/previous charge may be overdue/)).toBeTruthy();
+  expect(screen.getByRole('link', { name: 'Review or match schedule' }).getAttribute('href')).toBe('/plan?subscription=3');
   expect(screen.getByText(/not a complete forecast/)).toBeTruthy();
 });
 
@@ -116,6 +122,7 @@ test('date-only corrections omit the displayed rounded amount and refresh the ti
   vi.mocked(briefingApi.upcoming).mockResolvedValue({ ...report, items: [{ ...report.items[0], amount: { minor_units: 1201, currency: 'SGD' } }] });
   vi.mocked(briefingApi.updatePlannedCharge).mockResolvedValue({ status: 'ok' });
   show();
+  await openCharge();
   fireEvent.click(await screen.findByRole('button', { name: 'Edit estimate' }));
   fireEvent.change(screen.getByLabelText('Expected date'), { target: { value: '2026-09-10' } });
   fireEvent.click(screen.getByRole('button', { name: 'Save estimate' }));
@@ -127,6 +134,7 @@ test('clearing an amount explicitly restores unknown and failed edits remain edi
   vi.mocked(briefingApi.upcoming).mockResolvedValue({ ...report, items: [{ ...report.items[0], amount: { minor_units: 1200, currency: 'SGD' } }] });
   vi.mocked(briefingApi.updatePlannedCharge).mockRejectedValue(new Error('conflict'));
   show();
+  await openCharge();
   fireEvent.click(await screen.findByRole('button', { name: 'Edit estimate' }));
   fireEvent.change(screen.getByLabelText('Estimated amount (SGD)'), { target: { value: '' } });
   fireEvent.click(screen.getByRole('button', { name: 'Save estimate' }));
@@ -139,6 +147,7 @@ test('clearing an amount explicitly restores unknown and failed edits remain edi
 test('dismissal requires an explicit second action and does not cancel the provider', async () => {
   vi.mocked(briefingApi.dismissPlannedCharge).mockResolvedValue({ status: 'ok' });
   show();
+  await openCharge();
   fireEvent.click(await screen.findByRole('button', { name: 'Dismiss prediction' }));
   expect(briefingApi.dismissPlannedCharge).not.toHaveBeenCalled();
   expect(screen.getByText(/does not cancel your subscription with the provider/)).toBeTruthy();
@@ -160,6 +169,7 @@ test.each([
     items: [{ ...report.items[0], confirmation_source: source }],
   });
   show();
+  await openCharge();
   expect(await screen.findByText(label)).toBeTruthy();
   expect(screen.getByText(/Dates and amounts are estimates, not confirmed charges/)).toBeTruthy();
 });
@@ -196,6 +206,7 @@ test('window, page and calendar view restore from the URL; invalid values fall b
 
 test('cancelling an estimate edit returns focus to the button that opened it', async () => {
   show();
+  await openCharge();
   fireEvent.click(await screen.findByRole('button', { name: 'Edit estimate' }));
   expect(document.activeElement?.getAttribute('type')).toBe('date');
   fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
@@ -205,6 +216,7 @@ test('cancelling an estimate edit returns focus to the button that opened it', a
 test('dismissing a charge that then leaves the timeline moves focus to the agenda', async () => {
   vi.mocked(briefingApi.dismissPlannedCharge).mockResolvedValue({ status: 'ok' });
   show();
+  await openCharge();
   fireEvent.click(await screen.findByRole('button', { name: 'Dismiss prediction' }));
   vi.mocked(briefingApi.upcoming).mockResolvedValue({ ...report, items: [], total: 0 });
   fireEvent.click(screen.getByRole('button', { name: 'Dismiss charge' }));

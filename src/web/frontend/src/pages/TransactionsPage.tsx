@@ -13,9 +13,11 @@ import { RowMenu } from '@/components/ui/row-menu';
 import { SwipeRow } from '@/components/ui/swipe-row';
 import { LoadFailed } from '@/components/ui/LoadFailed';
 import { ListDetail } from '@/components/layout/ListDetail';
+import { PHONE_SCREEN_HEIGHT } from '@/components/layout/PhoneScreen';
 import { ProfileMenu } from '@/components/layout/ProfileMenu';
 import { TransactionList } from '@/components/transactions/TransactionList';
 import { TransactionFilters } from '@/components/transactions/TransactionFilters';
+import { ActivitySummary } from '@/components/transactions/ActivitySummary';
 import { TransactionDetail } from '@/components/transactions/TransactionDetail';
 import { TransactionForm } from '@/components/transactions/TransactionForm';
 import { useCategories } from '@/hooks/useCategories';
@@ -252,6 +254,8 @@ export function TransactionsPage() {
   // listen for scrolls anywhere (capture) and measure rows against the
   // viewport, below the 44px bar.
   const restoredRef = useRef(false);
+  // The phone's own scrolling list, below its fixed header.
+  const scrollerRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     let raf = 0;
     const onScroll = () => {
@@ -260,7 +264,7 @@ export function TransactionsPage() {
         raf = 0;
         const rows = listRef.current?.querySelectorAll<HTMLElement>('[data-tx-row-id]') ?? [];
         for (const row of rows) {
-          if (row.getBoundingClientRect().top >= 40) {
+          if (row.getBoundingClientRect().top >= (scrollerRef.current?.getBoundingClientRect().top ?? 40)) {
             sessionStorage.setItem('activity-scroll-anchor', row.dataset.txRowId ?? '');
             break;
           }
@@ -486,56 +490,66 @@ export function TransactionsPage() {
     </>
   );
 
-  const list = (
+  const selectionToolbar = selectionMode && (
+    <Toolbar
+      title={`${selectedIds.size} selected`}
+      trailing={<>
+        <ToolbarAction disabled={!selectedIds.size || bulkCorrect.isPending} onClick={() => setCategoryFor('selection')}>Category</ToolbarAction>
+        <ToolbarAction disabled={!selectedIds.size || bulkCorrect.isPending} onClick={() => setTypeForSelection(true)}>Type</ToolbarAction>
+        <ToolbarAction tone="strong" onClick={toggleSelectionMode} disabled={bulkCorrect.isPending}>Done</ToolbarAction>
+      </>}
+    />
+  );
+  const listBody = <>
+    {lastBulkUndo && (
+      <p role="status" className="px-1 text-sm text-muted">
+        Updated {lastBulkUndo.ids.length}.{' '}
+        <Button type="button" variant="link" size="sm" className="h-auto min-h-11 p-0 align-baseline" disabled={bulkUndo.isPending} onClick={handleBulkUndo}>
+          {bulkUndo.isPending ? 'Undoing…' : 'Undo'}
+        </Button>
+      </p>
+    )}
+    {reviewCount > 0 && lens !== 'review' && (
+      <p className="px-1 text-sm"><Link to="/review" className="inline-flex min-h-11 items-center text-teal">{reviewCount} waiting in Review</Link></p>
+    )}
+    {isError ? <LoadFailed onRetry={() => refetch()} /> : (
+      <TransactionList
+        transactions={txs}
+        onLoadMore={loadMore}
+        hasMore={!!hasNextPage}
+        isLoading={isLoading || isFetchingNextPage}
+        onTransactionClick={handleTransactionClick}
+        selectedTransactionId={selectedId}
+        dailyTotals={dailyTotals}
+        selectionMode={selectionMode}
+        selectedIds={selectedIds}
+        onToggleSelect={toggleSelect}
+        compactRows
+        renderRow={renderRow}
+      />
+    )}
+  </>;
+
+  // On a phone (approved 2026-10-07): the title, actions, search and view
+  // switch stay fixed and only the purchases scroll, between them and the
+  // tab bar, so the keyboard never covers search and nothing shows through.
+  const list = isPhone ? (
+    <div ref={listRef} tabIndex={-1} aria-label="Transactions" className={cn(PHONE_SCREEN_HEIGHT, 'flex flex-col overflow-hidden focus-visible:outline-none')}>
+      <div className="shrink-0 border-b-[0.5px] border-separator">
+        {navBar}
+        {selectionToolbar}
+        <div className="space-y-2 px-4 pt-1 pb-2">{controls}</div>
+      </div>
+      <div ref={scrollerRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 pt-2 pb-4">{listBody}</div>
+    </div>
+  ) : (
     <div ref={listRef} tabIndex={-1} aria-label="Transactions" className="focus-visible:outline-none">
       {navBar}
-      {selectionMode && (
-        <Toolbar
-          title={`${selectedIds.size} selected`}
-          trailing={<>
-            <ToolbarAction disabled={!selectedIds.size || bulkCorrect.isPending} onClick={() => setCategoryFor('selection')}>Category</ToolbarAction>
-            <ToolbarAction disabled={!selectedIds.size || bulkCorrect.isPending} onClick={() => setTypeForSelection(true)}>Type</ToolbarAction>
-            <ToolbarAction tone="strong" onClick={toggleSelectionMode} disabled={bulkCorrect.isPending}>Done</ToolbarAction>
-          </>}
-        />
-      )}
-      <div className={cn('space-y-3 px-4 pt-1', isPhone ? 'pb-[120px]' : 'pb-8')}>
-        {!isPhone && controls}
-        {lastBulkUndo && (
-          <p role="status" className="px-1 text-sm text-muted">
-            Updated {lastBulkUndo.ids.length}.{' '}
-            <Button type="button" variant="link" size="sm" className="h-auto min-h-11 p-0 align-baseline" disabled={bulkUndo.isPending} onClick={handleBulkUndo}>
-              {bulkUndo.isPending ? 'Undoing…' : 'Undo'}
-            </Button>
-          </p>
-        )}
-        {reviewCount > 0 && lens !== 'review' && (
-          <p className="px-1 text-sm"><Link to="/review" className="inline-flex min-h-11 items-center text-teal">{reviewCount} waiting in Review</Link></p>
-        )}
-        {isError ? <LoadFailed onRetry={() => refetch()} /> : (
-          <TransactionList
-            transactions={txs}
-            onLoadMore={loadMore}
-            hasMore={!!hasNextPage}
-            isLoading={isLoading || isFetchingNextPage}
-            onTransactionClick={handleTransactionClick}
-            selectedTransactionId={selectedId}
-            dailyTotals={dailyTotals}
-            selectionMode={selectionMode}
-            selectedIds={selectedIds}
-            onToggleSelect={toggleSelect}
-            compactRows
-            renderRow={renderRow}
-          />
-        )}
+      {selectionToolbar}
+      <div className="space-y-3 px-4 pt-1 pb-8">
+        {controls}
+        {listBody}
       </div>
-      {/* Phone thumb band (approved 2026-10-06): the list scrolls beneath it,
-          just above the tab bar. Hidden while a detail is pushed over the list. */}
-      {isPhone && selectedId === undefined && (
-        <div className="chrome-frosted fixed inset-x-0 bottom-[calc(68px+env(safe-area-inset-bottom))] z-40 flex flex-col gap-2 border-t-[0.5px] border-separator px-4 pt-2 pb-2">
-          {controls}
-        </div>
-      )}
     </div>
   );
 
@@ -550,7 +564,7 @@ export function TransactionsPage() {
         detail={selectedTransaction && <TransactionDetail key={selectedTransaction.id} transaction={selectedTransaction} onClose={closeDetail} />}
         onClose={closeDetail}
         onDeleteSelected={() => selectedTransaction && setDeleting(selectedTransaction)}
-        emptyDetail={<p className="flex h-full items-center justify-center p-8 text-center text-sm text-muted">Choose a transaction to see its details.</p>}
+        emptyDetail={<ActivitySummary filtered={isFilterNarrowed || lens !== 'all'} />}
       />
 
       <TaskSheet open={showFilters} onOpenChange={setShowFilters} title="Filters" confirm={{ label: 'Done', onClick: () => setShowFilters(false) }}>

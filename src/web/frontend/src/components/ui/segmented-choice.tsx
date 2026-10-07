@@ -28,7 +28,7 @@ function SegmentedChoice<T extends string>({ name, value, onValueChange, options
           <label
             key={option.value}
             className={cn(
-              "relative inline-flex min-h-10 flex-1 cursor-pointer items-center justify-center rounded-[8px] px-3 text-sm font-medium pressable-scale transition-[color,transform]",
+              "relative inline-flex min-h-10 flex-1 cursor-pointer items-center justify-center whitespace-nowrap rounded-[8px] px-3 text-sm font-medium pressable-scale transition-[color,transform]",
               "has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring",
               checked ? "font-semibold text-foreground" : "text-muted hover:text-foreground"
             )}

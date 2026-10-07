@@ -2,6 +2,8 @@ import { useQuery } from '@tanstack/react-query';
 import { Link, useLocation } from 'react-router-dom';
 import { briefingApi, formatMoney } from '@/api/briefing';
 import { CardLink, PageCard } from '@/components/ui/cards';
+import { ListGroup, ListRow } from '@/components/ui/list';
+import { StatusDot } from '@/components/ui/StatusDot';
 import { ActivityRowShell } from '@/components/ui/ActivityRowShell';
 import { Badge } from '@/components/ui/badge';
 import { LoadFailed } from '@/components/ui/LoadFailed';
@@ -101,11 +103,12 @@ export function WorthALookSummary({ className }: { className?: string }) {
       amount: item.amount ? formatMoney(item.amount) : 'Amount unresolved', sub: undefined,
     })),
   ];
+  // With nothing to show it is one row, not a card of explanation (desktop pass, 2026-10-07).
   if (!rows.length) {
     return (
-      <PageCard title="Worth a look" className={className}>
-        <p className="text-sm text-muted">Nothing stands out so far this month. Charges well above a merchant's usual amount, and places you have not paid before, will show up here.</p>
-      </PageCard>
+      <ListGroup className={className}>
+        <ListRow to="/explore/signals" leading={<span className="flex w-8 justify-center"><StatusDot tone="calm" /></span>} title="Worth a look" subtitle="Nothing unusual so far this month" trailing="chevron" />
+      </ListGroup>
     );
   }
   return (

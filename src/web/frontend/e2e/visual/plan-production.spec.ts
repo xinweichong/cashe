@@ -16,7 +16,7 @@ test('production Plan shows the recorded/scheduled/remaining projection breakdow
   await page.goto('/plan');
   await expect(page.getByText('$4,300.00')).toBeVisible();
   await expect(page.getByRole('img', { name: /Recorded.*Scheduled \$500\.00.*estimated remaining/i })).toBeVisible();
-  await expect(page.getByText(/\$4,000\.00.*\$4,700\.00/)).toBeVisible();
+  await expect(page.getByText(/likely \$4,000.*\$4,700/)).toBeVisible();
   await page.screenshot({ path: 'e2e/screenshots/plan-production.png', fullPage: true });
 });
 

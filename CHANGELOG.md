@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.1] - 2026-10-07
+
+### Changed
+
+- **Home on iPad and desktop** — a cockpit that fills the first screen: the month card with income, money left after spending and the change against last month, then the daily trend and category mix, then Needs a look, Coming up and the latest purchases
+- **Activity on iPad and desktop** — until a purchase is chosen, the detail pane summarises this month: figures, spending by day, by category and top merchants
+- **Plan on desktop** — two columns that fit one screen: the projection and upcoming charges on the left, savings, budgets, goals and subscriptions on the right. Charges are compact rows; their edit and dismiss actions open in the charge's detail
+- **Explore on desktop** — the health card shares a row with the month's four figures, and an empty Worth a look is a single row
+- **Activity on iPhone** — the title, actions, search and view switch stay fixed while only the purchases scroll
+- Smoother landing page scrolling: an opaque header instead of a blur, only the current tour screen mounted, and the hero lines paused off screen
+
+### Fixed
+
+- Activity's view switch no longer wraps "Review 2" onto two lines when a scrollbar narrows the list
+- A stray scrollbar no longer appears beside the category chips in a transaction's details
+- The landing page's rotating capture sources no longer draw two words on top of each other mid-change
+
 ## [3.3.0] - 2026-10-07
 
 ### Changed
