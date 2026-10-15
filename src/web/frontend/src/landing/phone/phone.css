@@ -1,0 +1,85 @@
+/* The tour phone. Everything inside is sized in em from the frame's width
+   (a container query unit), so the screens keep the app's proportions at any
+   size and prerender without measuring. Colours are the app's tokens, so the
+   phone follows light and dark like the app. */
+
+.ph-frame {
+  container-type: inline-size;
+  position: relative;
+  aspect-ratio: 390 / 844;
+  max-width: 100%;
+  border-radius: 14% / 6.5%;
+  padding: 3.2%;
+  background: var(--color-card);
+  box-shadow: 0 0 0 1px var(--color-border), 0 30px 60px -20px rgb(0 0 0 / 0.45);
+}
+.ph-glass {
+  position: relative;
+  height: 100%;
+  overflow: hidden;
+  border-radius: 11% / 5.2%;
+  background:
+    radial-gradient(120% 40% at 0% 0%, color-mix(in srgb, var(--color-teal) 10%, transparent), transparent 60%),
+    var(--color-background);
+  font-size: calc(100cqw / 23);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+  line-height: 1.25;
+}
+.ph-status { position: absolute; inset: 0.55em 1.4em auto; display: flex; justify-content: space-between; align-items: center; font-size: 0.78em; font-weight: 600; z-index: 3; }
+.ph-island { position: absolute; top: 0.5em; left: 50%; translate: -50% 0; width: 6.4em; height: 1.75em; border-radius: 1em; background: #000; z-index: 4; }
+.ph-page { position: absolute; inset: 0; padding: 3.1em 0.95em 0; display: flex; flex-direction: column; gap: 0.7em; }
+.ph-title { font-family: var(--font-display); font-weight: 800; font-size: 2.05em; letter-spacing: -0.035em; line-height: 1; }
+
+.ph-hero { border-radius: 1.25em; padding: 1em 1.05em 1.1em; display: grid; gap: 0.25em; color: var(--color-on-brand); }
+.ph-hero-top { display: flex; justify-content: space-between; font-size: 0.8em; font-weight: 700; opacity: 0.85; }
+.ph-hero-big { font-family: var(--font-display); font-weight: 800; font-size: 2.55em; letter-spacing: -0.03em; line-height: 1.05; }
+.ph-hero-sub { font-size: 0.8em; font-weight: 600; }
+.ph-track { height: 0.45em; border-radius: 1em; background: rgb(0 0 0 / 0.15); overflow: hidden; margin-top: 0.4em; }
+.ph-track > span { display: block; height: 100%; background: var(--color-on-brand); border-radius: 1em; }
+
+.ph-line { display: flex; justify-content: space-between; align-items: center; font-size: 0.85em; padding: 0 0.15em; }
+.ph-dot { display: inline-block; width: 0.5em; height: 0.5em; border-radius: 50%; margin-right: 0.45em; vertical-align: middle; }
+
+.ph-group { background: var(--color-card); border-radius: 1.05em; overflow: hidden; }
+.ph-row { display: flex; align-items: center; gap: 0.7em; padding: 0.62em 0.9em; min-height: 3.2em; position: relative; }
+.ph-row + .ph-row::before { content: ''; position: absolute; top: 0; left: 0.9em; right: 0; height: 1px; background: var(--color-separator); }
+.ph-row-main { min-width: 0; flex: 1; display: grid; gap: 0.1em; }
+.ph-row-title { font-size: 0.95em; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ph-row-sub { font-size: 0.78em; color: var(--color-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ph-amt { font-family: var(--font-mono); font-size: 0.9em; flex: none; text-align: right; }
+.ph-amt small { display: block; font-family: var(--font-sans); font-size: 0.8em; color: var(--color-muted); }
+.ph-avatar { width: 2.15em; height: 2.15em; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 0.9em; flex: none; }
+.ph-day { display: flex; justify-content: space-between; font-size: 0.8em; font-weight: 600; color: var(--color-muted); padding: 0.2em 0.2em 0; }
+.ph-day span:last-child { font-family: var(--font-mono); font-weight: 500; }
+
+.ph-mix { display: flex; align-items: center; gap: 1em; padding: 0.8em 0.95em; }
+.ph-donut { width: 5em; height: 5em; flex: none; }
+.ph-legend { flex: 1; display: grid; gap: 0.55em; font-size: 0.85em; }
+.ph-legend div { display: flex; align-items: center; }
+.ph-legend b { margin-left: auto; font-family: var(--font-mono); font-weight: 500; color: var(--color-tangerine); }
+
+.ph-stack { display: flex; height: 0.55em; border-radius: 1em; overflow: hidden; gap: 0.15em; }
+.ph-keys { display: flex; flex-wrap: wrap; gap: 0.3em 0.8em; font-size: 0.75em; color: var(--color-muted); }
+.ph-keys b { font-family: var(--font-mono); font-weight: 500; margin-right: 0.25em; }
+
+.ph-chart { background: var(--color-card); border-radius: 1.05em; padding: 0.8em 0.8em 0.6em; display: grid; gap: 0.5em; }
+.ph-chips { display: flex; gap: 0.35em; }
+.ph-chip { font-size: 0.72em; padding: 0.3em 0.75em; border-radius: 1em; border: 1px solid; }
+
+.ph-switch { position: absolute; left: 0.95em; right: 0.95em; bottom: 5em; z-index: 2; display: flex; padding: 0.2em; border-radius: 0.8em; background: color-mix(in srgb, var(--color-foreground) 7%, var(--color-background)); font-size: 0.85em; }
+.ph-switch span { flex: 1; text-align: center; padding: 0.45em 0; border-radius: 0.65em; color: var(--color-muted); font-weight: 500; }
+.ph-switch span.on { background: var(--color-card); color: var(--color-foreground); font-weight: 600; box-shadow: 0 1px 3px rgb(0 0 0 / 0.15); }
+
+.ph-search { position: absolute; left: 0.95em; right: 0.95em; bottom: 8em; display: flex; align-items: center; gap: 0.5em; padding: 0.6em 0.8em; border-radius: 0.8em; z-index: 2; background: color-mix(in srgb, var(--color-foreground) 7%, var(--color-background)); color: var(--color-muted); font-size: 0.9em; }
+
+.ph-tabbar { position: absolute; left: 0.75em; right: 0.75em; bottom: 0.75em; height: 3.6em; border-radius: 1.8em; display: flex; padding: 0.3em; z-index: 2;
+  background: color-mix(in srgb, var(--color-card) 82%, transparent); box-shadow: 0 0 0 1px var(--color-border), var(--shadow-float); backdrop-filter: blur(12px); }
+.ph-tab { position: relative; flex: 1; display: grid; place-items: center; align-content: center; gap: 0.1em; font-size: 0.68em; color: var(--color-muted); }
+.ph-tab.on { color: var(--color-foreground); font-weight: 600; }
+.ph-tab svg { width: 1.9em; height: 1.9em; stroke-width: 1.6; position: relative; }
+.ph-tab span { position: relative; }
+.ph-tab-pill { position: absolute; inset: 0; border-radius: 1.6em; background: var(--color-fill-press); }
+
+/* Content that fades out under the floating bars, as in the app. */
+.ph-fade { position: absolute; inset: auto 0 0; height: 9em; background: linear-gradient(to bottom, transparent, var(--color-background) 55%); pointer-events: none; z-index: 1; }
