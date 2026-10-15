@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.4.0] - 2026-10-15
+
+### Added
+
+- **A new landing page** — the first screen pairs "cash, caught." with raw purchase messages (a bank alert, a Wallet tap, a Telegram `/cash`) drifting over a contour map in the brand spectrum. One by one they are caught as a merchant, category and amount while the week's total rolls up to "All caught up"
+- **A live phone tour** — See it work glides to a phone that plays Home, Activity, Plan and Explore. It is drawn from the app's own colours rather than screenshots, so it follows light and dark. On iPad and desktop the phone stays pinned while each stretch of scrolling moves to the next page, with pills to jump between them and cards beside it showing each page's key parts. On iPhone each page is a chapter with its cards in a swipeable row and a floating pill bar in the thumb band
+- Landing sections on how purchases arrive (a Wallet tap and its bank email become one record), a total you can filter that says partial when a rate is missing, a three-step setup timeline, and privacy questions
+
+### Changed
+
+- The browser tab and link previews read "cashe · cash, caught."; the home-screen app name stays "cashe"
+
+### Removed
+
+- The landing page's screenshot tour and its capture script
+
 ## [3.3.1] - 2026-10-07
 
 ### Changed
