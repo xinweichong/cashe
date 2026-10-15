@@ -6,8 +6,17 @@ import { test, expect } from '@playwright/test';
 test('landing → Sign In → login → Home', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto('/');
-  await expect(page.getByRole('heading', { level: 1, name: /written down for you/ })).toBeVisible();
-  await expect(page.locator('[data-step]')).toHaveCount(4);
+  await expect(page).toHaveTitle('cashe · cash, caught.');
+  await expect(page.getByRole('heading', { level: 1, name: 'cash, caught.' })).toBeVisible();
+
+  // The tour's pills jump the pinned stage to a page of the app. The page is
+  // prerendered HTML until the app script (loaded after `load`) takes over.
+  await page.waitForLoadState('networkidle');
+  const tour = page.getByRole('navigation', { name: 'Tour of cashe' });
+  await expect(tour.getByRole('link')).toHaveCount(4);
+  await tour.getByRole('link', { name: 'Plan' }).click();
+  await expect(tour.getByRole('link', { name: 'Plan' })).toHaveAttribute('aria-current', 'step');
+  await expect(page.getByRole('heading', { level: 2, name: 'See the month before it happens.' })).toBeVisible();
 
   await page.getByRole('banner').getByRole('link', { name: 'Sign In' }).click();
   await expect(page).toHaveURL(/\/login$/);
